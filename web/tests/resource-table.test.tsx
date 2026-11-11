@@ -95,3 +95,17 @@ it('holds one loader for an entire cursor traversal and discards snapshots from 
   expect(result.current.sourceItems.some(item=>item.name==='Alpha')).toBe(false);
   await waitFor(() => expect(result.current.rows(columns).items[0]?.name).toBe('Other user'));
 });
+
+
+it.each([{status:401},{status:403},{code:'unauthenticated'},{code:'forbidden'}])('clears a completed sorted snapshot when access is rejected: %j', async rejected => {
+  const loadPage = vi.fn(async () => ({items,next_cursor:''}));
+  const {result} = renderHook(() => useResourceTable({items,loadPage,pageSize:10}));
+  act(() => result.current.choose('name'));
+  await waitFor(() => expect(result.current.busy).toBe(false));
+  expect(result.current.rows(columns).total).toBe(1);
+  loadPage.mockRejectedValue(Object.assign(new Error('Access rejected'),rejected));
+  act(() => result.current.refresh());
+  await waitFor(() => expect(result.current.error).toBe('Access rejected'));
+  expect(result.current.rows(columns).total).toBe(0);
+  expect(result.current.sourceItems).toEqual([]);
+});

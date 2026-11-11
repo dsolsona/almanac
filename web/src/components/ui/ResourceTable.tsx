@@ -45,7 +45,13 @@ export function useResourceTable<T extends {id: string}>({items, loadPage, pageS
       } while (cursor);
       setCompleted({scope, items: [...records.values()]});
     })().catch((failure: unknown) => {
-      if (!controller.signal.aborted) setError((snapshot ? 'Couldn’t refresh sorted records. Showing the last complete result. ' : '') + (failure instanceof Error ? failure.message : 'The records could not be sorted. Try again.'));
+      if (!controller.signal.aborted) {
+        const denied = typeof failure === 'object' && failure !== null
+          && (('status' in failure && (failure.status === 401 || failure.status === 403))
+            || ('code' in failure && ['unauthenticated', 'unauthorized', 'forbidden'].includes(String(failure.code))));
+        if (denied) setCompleted(null);
+        setError((snapshot && !denied ? 'Couldn’t refresh sorted records. Showing the last complete result. ' : '') + (failure instanceof Error ? failure.message : 'The records could not be sorted. Try again.'));
+      }
     }).finally(() => { clearTimeout(deadline); if (!controller.signal.aborted) setBusy(false); });
     return () => {clearTimeout(deadline); controller.abort();};
   }, [active, enabled, items, revision, scope]);
