@@ -268,7 +268,15 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
   const [previousCursors, setPreviousCursors] = useState<string[]>([]);
   const [pageSize, setPageSize] = useState(20);
   const agentMetadata = useRef<Promise<Agent[]>>(Promise.resolve([]));
-  const table = useResourceTable({items, loadPage: async (cursor, signal) => {await agentMetadata.current; if (signal.aborted) throw signal.reason; return client.list(200, cursor, signal);}, pageSize, scope: context.session?.user_id ?? '', enabled: !selectedID && !isNew && !!context.session && !context.session.restricted});
+  const table = useResourceTable({items, loadPage: async (cursor, signal) => {
+    const metadata = !cursor && canPreview ? loadAgents(signal) : agentMetadata.current;
+    agentMetadata.current = metadata;
+    const agentItems = await metadata;
+    if (signal.aborted) throw signal.reason;
+    if (agentMetadata.current !== metadata) throw new Error('Agent metadata changed during sorting. Try again.');
+    setAgents(agentItems); setError('');
+    return client.list(200, cursor, signal);
+  }, pageSize, scope: context.session?.user_id ?? '', enabled: !selectedID && !isNew && !!context.session && !context.session.restricted});
   const [updatedAt, setUpdatedAt] = useState('');
   const [sliUsage, setSliUsage] = useState<SliUsage | null>(null);
   const [sliUsageTruncated, setSliUsageTruncated] = useState(false);
@@ -349,9 +357,9 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
     const metadata = canPreview ? loadAgents(request.signal) : Promise.resolve([]);
     agentMetadata.current = metadata;
     void metadata.then(agentItems => {
-      if (!request.signal.aborted && locationKeyRef.current === routeAtRequest && acceptsRead()) setAgents(agentItems);
+      if (!request.signal.aborted && locationKeyRef.current === routeAtRequest && agentMetadata.current === metadata && acceptsRead()) setAgents(agentItems);
     }).catch(reason => {
-      if (!request.signal.aborted && locationKeyRef.current === routeAtRequest && acceptsRead()) {
+      if (!request.signal.aborted && locationKeyRef.current === routeAtRequest && agentMetadata.current === metadata && acceptsRead()) {
         table.readFailed(reason);
         setError(`Agent metadata could not be loaded. ${safeError(reason)}`);
       }

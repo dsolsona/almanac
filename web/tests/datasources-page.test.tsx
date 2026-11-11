@@ -813,7 +813,7 @@ it('loads assigned agent names and health beyond the first 200 agents before sor
   const metadata = new Promise<Response>(resolve => {resolveMetadata = resolve;});
   const fetcher = vi.fn(async (input:RequestInfo|URL) => {
     const url=String(input);
-    if(url.includes('cursor=agents-next')) return metadata;
+    if(url.includes('cursor=agents-next')) return metadata.then(value=>value.clone());
     if(url.startsWith('/api/v1/agents')) return response({items:firstPage,next_cursor:'agents-next'});
     if(url.startsWith('/api/v1/slis')) return response({items:[],next_cursor:''});
     return response({items:sources,next_cursor:''});
@@ -855,4 +855,52 @@ it('keeps a rejected sorted read visible after clearing sorting and recovers thr
   denied=false;
   await user.click(screen.getByRole('button',{name:'Try again'}));
   await screen.findByText('Production metrics');
+});
+
+it('retries failed metadata when retrying a sorted read', async () => {
+  history.replaceState({}, '', '/datasources');
+  installFetch();
+  const originalFetch=fetch;
+  let fail=true, agentReads=0;
+  vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL,init?:RequestInit)=>{
+    if(String(input).startsWith('/api/v1/agents?')) {agentReads++; if(fail) throw new Error('metadata offline');}
+    return originalFetch(input,init);
+  }));
+  render(<DatasourcesPage context={admin}/>);
+  await screen.findByRole('link',{name:'Production metrics'});
+  const user=userEvent.setup();
+  await user.selectOptions(screen.getByRole('combobox',{name:'Sort by'}),'name');
+  await screen.findByRole('button',{name:'Try again'});
+  const before=agentReads;
+  fail=false;
+  await user.click(screen.getByRole('button',{name:'Try again'}));
+  await waitFor(()=>expect(screen.queryByRole('button',{name:'Try again'})).not.toBeInTheDocument());
+  expect(agentReads).toBeGreaterThan(before);
+  await screen.findByRole('link',{name:'Production metrics'});
+});
+
+it.each(['success','failure'])('ignores an older metadata %s after a newer refresh',async(outcome)=>{
+  history.replaceState({}, '', '/datasources');
+  installFetch();
+  const originalFetch=fetch;
+  let finish!: (value:Response)=>void;
+  const old=new Promise<Response>(resolve=>{finish=resolve;});
+  let reads=0;
+  vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL,init?:RequestInit)=>{
+    if(String(input).startsWith('/api/v1/agents?')) {
+      if(++reads===1) return old;
+      return response({items:[{id:agentID,display_name:'Newest collector',enabled:true}],next_cursor:''});
+    }
+    return originalFetch(input,init);
+  }));
+  render(<DatasourcesPage context={admin}/>);
+  await screen.findByRole('link',{name:'Production metrics'});
+  const user=userEvent.setup();
+  await user.click(screen.getByRole('button',{name:'Refresh datasources'}));
+  await screen.findByText('Newest collector');
+  finish(outcome==='failure'?response({code:'forbidden'},403):response({items:[{id:agentID,display_name:'Old collector',enabled:true}],next_cursor:''}));
+  await act(async()=>{await old;});
+  expect(screen.getByText('Newest collector')).toBeVisible();
+  expect(screen.queryByText('Old collector')).not.toBeInTheDocument();
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 });
