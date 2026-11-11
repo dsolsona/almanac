@@ -65,6 +65,8 @@ export function SettingsPage({context,onIssuedLink,onProfileChange,onSessionChan
           if (!controller.signal.aborted) {
             setSessionPolicy(policy);
             setIdleMinutes(String(policy.idle_minutes));
+            // Reconcile only uncertainty that existed when this read began.
+            if (uncertain) setUncertain(false);
           }
         } else if(list) { const query=new URLSearchParams({limit:String(limit)});if(cursors[offset/limit])query.set('cursor',cursors[offset/limit]!);if(search)query.set('q',search);if(status)query.set('status',status);if(roleFilter)query.set('role',roleFilter);const result=await settingsClient.users(query,context,controller.signal);if(!controller.signal.aborted){setPage(result);setNow(Date.now());} }
         else {const user=account?await settingsClient.account(context,controller.signal):await settingsClient.user(id??'',context,controller.signal);if(!controller.signal.aborted){setRecord(user);setName(user.full_name);setEmail(user.email??'');setRole(user.role);setDraftPath(path);if(account)onProfileChange?.(user);}}
