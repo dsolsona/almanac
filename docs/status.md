@@ -9,8 +9,13 @@ reference with zero pixel differences in both themes at 360/1024/1440 px.
 (2.4 min) and all 18 fresh container journeys (5.5 min). The standard 35-day fleet
 performance suite passes six cases (6.9 min): SLI detail cold/in-app p95 is
 250/71 ms, with all four main pages below 1,000 ms. SLO list cold p95 is 528 ms,
-above the preferred 500 ms target. Publication and CodeRabbit monitoring are
-authorized and pending; merge remains unauthorized. Operator data and deployment
+above the preferred 500 ms target. Application `45b84d3` is published in
+[PR #87](https://github.com/dsolsona/almanac/pull/87), with all four required
+CI suites passing in run `43038165943` (466 frontend cases, 89 browser cases,
+18 E2E journeys and real PostgreSQL integration). CodeRabbit's one actionable
+mock disclosure-focus finding is reproduced and corrected; all 89 browser checks
+pass again in 2.2 min. Production application inputs remain identical to `45b84d3`;
+current reviews and checks are on the PR. Merge remains unauthorized. Operator data and deployment
 are unchanged. Larger-fleet/year-long evidence and physical accessibility-device
 testing are not claimed.
 

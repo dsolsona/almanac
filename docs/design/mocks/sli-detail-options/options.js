@@ -115,7 +115,7 @@ document.addEventListener('click', event => {
     if (target instanceof HTMLDetailsElement) target.open = true;
     target.scrollIntoView({ block:'start' });
     const focus = target.querySelector('summary,h2');
-    focus.tabIndex = -1;
+    if (focus.matches('h2')) focus.tabIndex = -1;
     focus.focus({ preventScroll:true });
   }
   const filter = event.target.closest('[data-filter]');

@@ -56,6 +56,13 @@ test('SLI measurements match approved E and expose exact interval values', {tag:
     await actual.keyboard.press('End');await expect(actual.getByRole('tooltip')).toContainText('99.90%');await actual.keyboard.press('Escape');
     await actual.getByRole('button',{name:'Inspect gaps ↓'}).click();await expect(actual.locator('.sli-intervals-table tbody tr')).toHaveCount(3);
     await actual.getByRole('button',{name:'View queries',exact:true}).click();await expect(actual.locator('#sli-definition')).toHaveAttribute('open','');
+    for(const [name,id] of [['Exact values ↓','intervals'],['View queries','definition']]) {
+      await reference.getByRole('button',{name,exact:true}).click();
+      const summary=reference.locator(`#${id} > summary`);
+      await expect(summary).toBeFocused();
+      await reference.keyboard.press('Tab');await reference.keyboard.press('Shift+Tab');
+      await expect(summary).toBeFocused();
+    }
     expect(errors).toEqual([]);
   } finally {await context.close();server.close();}
 });
