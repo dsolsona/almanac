@@ -1,5 +1,9 @@
 # SLI and SLO visual reference
 
+> SLI detail update, 2026-11-11: [ADR-0046](../adr/0046-sli-measurements-and-collection-detail.md)
+> adopts the [E measurement and collection reference](mocks/sli-detail-options/refined.html).
+> The earlier SLI detail tiles are retained only for historical comparison.
+
 > Superseded, 2026-11-04 (ADR-0028 accepted in Crit session `9a46588aaaa4`): the maintainer reviewed the screens built
 > against this reference and approved a new set of [HTML mocks](mocks/README.md)
 > covering SLI, SLO, datasource and agent screens. Under

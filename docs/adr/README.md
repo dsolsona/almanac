@@ -71,3 +71,4 @@ well as benefits. Do not invent alternatives or measurements to justify a choice
 | [ADR-0043](0043-slo-status-from-due-eligible-measurements.md) | SLO status from due eligible measurements | accepted |
 | [ADR-0044](0044-configurable-session-inactivity.md) | Configurable session inactivity | accepted |
 | [ADR-0045](0045-prepared-firecracker-development-workers.md) | Prepared Firecracker development workers | accepted |
+| [ADR-0046](0046-sli-measurements-and-collection-detail.md) | SLI measurements and collection detail | accepted |

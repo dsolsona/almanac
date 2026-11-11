@@ -198,3 +198,8 @@ and [F9-T06](F9-T06.md) records before/after measurements.
 [F3-T12](F3-T12.md) implements useful SLO status from complete due eligible
 measurements under [ADR-0043](../adr/0043-slo-status-from-due-eligible-measurements.md)
 and [plan 0031](../plans/0031-slo-eligible-status.md), stacked above the lean-SLO work.
+
+[F6-T10](F6-T10.md) implements the approved E SLI detail with an integrated
+measurement summary, exact point inspection and aligned collection-state squares
+under [ADR-0046](../adr/0046-sli-measurements-and-collection-detail.md) and
+[plan 0033](../plans/0033-sli-detail-redesign.md).

@@ -1,11 +1,11 @@
 import {useResourceTable, ResourceTableHead, ResourceTableMobileSort, resourceRowClick, type ResourceColumn} from '../components/ui/ResourceTable.tsx';
+import { SliMeasurementsChart, intervalTime } from '../components/charts/SliMeasurementsChart.tsx';
+import { buildMeasurements, countText, measurementLabels, measurementInterval } from './measurements.ts';
+import { SliObjectives } from './SliObjectives.tsx';
 import { useEffect, useMemo, useRef, useState, type FormEvent, type RefObject } from 'react';
 import type { AuthContext } from '../auth/client.ts';
 import { createAgentClient, type Agent } from '../agents/client.ts';
-import { ModuleView } from '../components/ModuleView.tsx';
 import { SliRecentStrip, type SliRecentSample } from '../components/charts/SliRecentStrip.tsx';
-import { ExactValuesTable, type ExactValueRow } from '../components/charts/ExactValuesTable.tsx';
-import type { TimelineChart, Coverage } from '../components/charts/timelineModel.ts';
 import { Button, Combobox, Dialog, FilterSelect, FormActions, FormSection, PageHeader, Pager, Panel, QueryEditor, RefreshButton, SearchField, SegmentedControl, StatusChip, StatusMark, TextField, Toolbar, ToolbarSpacer, type ComboboxOption } from '../components/ui/index.ts';
 import { createDatasourceClient, type Datasource } from '../datasources/client.ts';
 import { createSliClient, SliFailure, type Sli, type SliCreateRequest, type SliObservation, type SliObservationPage } from './client.ts';
@@ -19,7 +19,6 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const SLI_NAME = /^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$/;
 const safeError = (error: unknown) => error instanceof SliFailure ? error.message : 'SLI management is temporarily unavailable.';
 const roleCanWrite = (context: AuthContext) => context.session?.role === 'administrator' || context.session?.role === 'editor';
-const loadTimelineChart = () => import('../components/charts/TimelineChartView.tsx').then((module) => ({ default: module.TimelineChartView }));
 
 function suggestName(value: string) {
   return value.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 63).replace(/-+$/g, '');
@@ -74,19 +73,9 @@ function PageTitle({ title, subtitle, headingRef, isList = false, parentHref = '
   return <div className="sli-page-title"><nav className="app-breadcrumbs" aria-label="Breadcrumb">{isList ? <span aria-current="page">SLIs</span> : <><a href={parentHref} data-app-route>SLIs</a><span aria-hidden="true">/</span><span aria-current="page">{title}</span></>}</nav><h1 ref={headingRef} tabIndex={-1} className="app-page-heading">{title}</h1>{subtitle && <p>{subtitle}</p>}</div>;
 }
 
-function InlineState({ label, value, tone = 'neutral' }: { label: string; value: string; tone?: 'positive' | 'attention' | 'neutral' }) {
-  return <span className={`sli-state sli-state--${tone}`}><span>{label}</span><strong>{value.replaceAll('_', ' ')}</strong></span>;
+function outcomeLabel(value:SliObservation['outcome']):string {
+  return {observed:'Observed',complete_empty:'Complete empty',incomplete:'Incomplete',failed:'Failed'}[value];
 }
-
-function outcomeLabel(value: SliObservation['outcome']): string {
-  switch (value) {
-    case 'observed': return 'Observed';
-    case 'complete_empty': return 'Complete empty';
-    case 'incomplete': return 'Incomplete';
-    case 'failed': return 'Failed';
-  }
-}
-
 function formatTime(value: string | null): string {
   return value ? new Date(value).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'medium', timeZone: 'UTC' }) + ' UTC' : 'Not recorded';
 }
@@ -147,32 +136,6 @@ function makeIdempotencyKey(): string {
 }
 
 type HistoryFilter = 'all' | 'problems';
-function observationCoverage(row: SliObservation): Coverage {
-  if (row.outcome === 'observed') return row.total_count === '0' ? 'zero-traffic' : 'complete';
-  if (row.outcome === 'complete_empty') return 'known-empty';
-  if (row.outcome === 'incomplete') return 'partial';
-  return 'missing';
-}
-// The chart is built from the loaded observation rows only; it never fabricates a range beyond them.
-const CHART_INTERVALS = 1440;
-// The chart plots the most recent intervals whose filled span stays within the lane's point budget; the exact table keeps every loaded row.
-function buildHistoryChart(rows: SliObservation[], cadenceSeconds: number): TimelineChart | null {
-  if (rows.length === 0) return null;
-  const sorted = [...rows].sort((a, b) => Date.parse(a.interval_end) - Date.parse(b.interval_end));
-  const last = Date.parse(sorted[sorted.length - 1]!.interval_end);
-  const ordered = sorted.filter((row) => (last - Date.parse(row.interval_end)) / 1000 < cadenceSeconds * CHART_INTERVALS);
-  const trimmed = ordered.length < sorted.length;
-  // Points sit at interval ends; the range end is exclusive, one cadence past the last end.
-  const start = ordered[0]!.interval_start, end = new Date(Date.parse(ordered[ordered.length - 1]!.interval_end) + cadenceSeconds * 1000).toISOString();
-  if (Date.parse(end) <= Date.parse(start)) return null;
-  const points = ordered.map((row) => {
-    const coverage = observationCoverage(row);
-    const value = coverage === 'complete' ? ((100 * Number(row.good_count)) / Number(row.total_count)).toFixed(4) : null;
-    return { timestamp: row.interval_end, value, coverage };
-  }).filter((point, index, all) => index === 0 || point.timestamp !== all[index - 1]!.timestamp);
-  return { title: 'Measurements', summary: `Good ÷ total for each loaded ${cadenceSeconds}-second interval${trimmed ? ` (most recent ${CHART_INTERVALS} intervals plotted; the exact table keeps every loaded row)` : ''}. Failed and incomplete intervals are gaps; zero traffic is marked.`, start, end, stepMs: cadenceSeconds * 1000, fillExpectedGaps: true, timeZone: 'UTC', showLaneNames: false, lanes: [{ id: 'ratio', label: 'good ÷ total', unit: '%', height: 220, series: [{ id: 'ratio-series', label: 'Observed', points }] }] };
-}
-
 export function SlisPage({ context }: { context: AuthContext }) {
   const agentClient = useRef<ReturnType<typeof createAgentClient> | null>(null);
   if (!agentClient.current) agentClient.current = createAgentClient();
@@ -216,8 +179,10 @@ export function SlisPage({ context }: { context: AuthContext }) {
   const [updatedAt, setUpdatedAt] = useState('');
   const [editOpen, setEditOpen] = useState(false);
   const [historyFilter, setHistoryFilter] = useState<HistoryFilter>('all');
-  const [chartTableOpen, setChartTableOpen] = useState(false);
-  const [chartTablePage, setChartTablePage] = useState(1);
+  const [historyWindow, setHistoryWindow] = useState<{start:string|null;end:string|null}>({start:null,end:null});
+  const [historyStart,setHistoryStart]=useState<string|null>(null);
+  const [supportOpen,setSupportOpen]=useState(false);
+  const supportTrigger=useRef<HTMLElement|null>(null);
   const editTrigger = useRef<HTMLElement>(null);
   useEffect(() => { if (route.kind === 'list' && !loading && !listBusy) journeyContentReady('sli.list', !!error); }, [route.kind, loading, listBusy, items, error]);
   useEffect(() => {
@@ -235,6 +200,8 @@ export function SlisPage({ context }: { context: AuthContext }) {
   const currentLocation = useRef(locationKey);
   const focusHeading = useRef(true);
   const canWrite = roleCanWrite(context);
+  const measurements=useMemo(()=>buildMeasurements(history,historyWindow.start,historyWindow.end,sli?.polling_interval_seconds??60),[history,historyWindow,sli?.polling_interval_seconds]);
+  const exactRows=useMemo(()=>buildMeasurements(history,historyStart,historyWindow.end,sli?.polling_interval_seconds??60).intervals.reverse(),[history,historyStart,historyWindow.end,sli?.polling_interval_seconds]);
 
   useEffect(() => {
     const changed = () => {
@@ -286,8 +253,9 @@ export function SlisPage({ context }: { context: AuthContext }) {
     setNextCursor('');
     setEditOpen(false);
     setHistoryFilter('all');
-    setChartTableOpen(false);
-    setChartTablePage(1);
+    setHistoryWindow({start:null,end:null});
+    setHistoryStart(null);
+    setSupportOpen(false);
     const load = async () => {
       try {
         if (route.kind === 'list') {
@@ -335,7 +303,7 @@ export function SlisPage({ context }: { context: AuthContext }) {
           }
           const historyID = ++historyRequest.current;
           setHistoryBusy(true);
-          void fetchHistory(route.id, historyID, generation, '', request.signal);
+          void fetchHistory(route.id, historyID, generation, '', request.signal, resource.sli.polling_interval_seconds);
           void loadSources(request.signal).then((value) => { if (current()) setSources(value); }).catch(() => { if (current() && !request.signal.aborted) setSourceError('Datasource names could not be loaded.'); });
           // The list projection carries the bounded recent strip and linked objectives; the detail read omits them.
           void findProjection(resource.sli.name, resource.sli.id, request.signal).then((found) => { if (current()) { setProjection(found); setProjectionMissing(!found); } }).catch(() => { if (current() && !request.signal.aborted) setProjectionMissing(true); });
@@ -363,15 +331,26 @@ export function SlisPage({ context }: { context: AuthContext }) {
     setFieldErrors((current) => (current[key] ? { ...current, [key]: undefined } : current));
   }
 
-  async function fetchHistory(id: string, requestID: number, generation: number, cursor = '', signal?: AbortSignal) {
+  async function fetchHistory(id: string, requestID: number, generation: number, cursor = '', signal?: AbortSignal, cadence = sli?.polling_interval_seconds ?? 60) {
     const current = () => generation === routeGeneration.current && requestID === historyRequest.current && !signal?.aborted;
     try {
-      const page = await slis.observations(id, 50, cursor, signal);
+      const requested=cursor?50:Math.max(1,Math.ceil(3600/cadence));
+      const page = await slis.observations(id, Math.min(200,requested), cursor, signal);
       if (!current()) return;
-      setHistory((previous) => cursor ? [...previous, ...page.items] : page.items);
-      setMissing((previous) => cursor ? [...previous, ...page.missing_intervals] : page.missing_intervals);
+      let items=page.items,missingIntervals=page.missing_intervals,next=page.next_cursor,start=page.inspected_start;
+      // The history API counts canonical intervals, including gaps; 15-second cadence needs two pages.
+      if(!cursor&&requested>200&&next&&start&&page.inspected_end&&Date.parse(page.inspected_end)-Date.parse(start)===200*cadence*1000) {
+        const older=await slis.observations(id,requested-200,next,signal);
+        if(!current())return;
+        if(Date.parse(older.inspected_end??'')!==Date.parse(start))throw new Error('Observation history did not continue its inspected range.');
+        items=[...items,...older.items];missingIntervals=[...missingIntervals,...older.missing_intervals];next=older.next_cursor;start=older.inspected_start??start;
+      }
+      setHistory((previous) => cursor ? [...previous, ...items] : items);
+      setMissing((previous) => cursor ? [...previous, ...missingIntervals] : missingIntervals);
+      if(!cursor)setHistoryWindow({start,end:page.inspected_end});
+      if(start)setHistoryStart(previous=>cursor&&previous&&Date.parse(previous)<Date.parse(start)?previous:start);
       setEarliest(page.earliest_queryable_interval_start);
-      setNextCursor(page.next_cursor);
+      setNextCursor(next);
       setHistoryLoaded(true);
     } catch (failure) {
       if (current()) setHistoryError(safeError(failure));
@@ -424,7 +403,6 @@ export function SlisPage({ context }: { context: AuthContext }) {
     const historyID = ++historyRequest.current;
     setPending(true);
     setHistoryBusy(true);
-    setChartTablePage(1);
     setError('');
     setHistoryError('');
     try {
@@ -439,7 +417,7 @@ export function SlisPage({ context }: { context: AuthContext }) {
         void agentClient.current!.get(resource.sli.agent_id).then((value) => { if (generation === routeGeneration.current) { setAgent(value.agent); setAgentError(false); } }).catch(() => { if (generation === routeGeneration.current) setAgentError(true); });
       }
       void findProjection(resource.sli.name, resource.sli.id).then((found) => { if (generation === routeGeneration.current) { setProjection(found); setProjectionMissing(!found); } }).catch(() => { if (generation === routeGeneration.current) setProjectionMissing(true); });
-      await fetchHistory(route.id, historyID, generation);
+      await fetchHistory(route.id, historyID, generation, '', undefined, resource.sli.polling_interval_seconds);
     } catch (failure) {
       if (generation === routeGeneration.current) setError(safeError(failure));
       if (generation === routeGeneration.current && historyID === historyRequest.current) {
@@ -575,115 +553,46 @@ export function SlisPage({ context }: { context: AuthContext }) {
   }
 
   if (route.kind === 'detail' && sli) {
-    const datasource = sources.find((item) => item.id === sli.datasource_id);
-    const latest = sli.latest_observation;
-    const activatedAt = sli.activated_at;
-    const words = sliVocabulary(sli);
-    const lastGood = history.find((row) => row.outcome === 'observed' && row.total_count !== '0');
-    const observedRows = history.filter((row) => row.outcome === 'observed').length;
-    const failedRows = history.filter((row) => row.outcome === 'failed' || row.outcome === 'incomplete').length;
-    const chart = buildHistoryChart(history, sli.polling_interval_seconds);
-    const chartRows: ExactValueRow[] = [...history].sort((a, b) => Date.parse(b.interval_end) - Date.parse(a.interval_end)).map((row) => ({ timestamp: new Date(row.interval_end).toISOString(), lane: 'good ÷ total', series: outcomeLabel(row.outcome), unit: '%', value: observationCoverage(row) === 'complete' ? ((100 * Number(row.good_count)) / Number(row.total_count)).toFixed(4) : null, coverage: observationCoverage(row), details: row.outcome === 'observed' ? `${row.good_count} good / ${row.total_count} total` : row.outcome === 'incomplete' ? `Missing ${row.missing_components.join(', ')}` : row.error_code ?? '—' }));
-    const visibleHistory = historyFilter === 'problems' ? history.filter((row) => row.outcome !== 'observed') : history;
-    const linked = projection?.linked_slos?.items ?? [];
-    const totalLinked = projection?.linked_slos?.total_count ?? 0;
-    const openEdit = () => { editTrigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; setFormError(''); setEditOpen(true); };
-    return <>
-      <Breadcrumb current={sli.display_name} parentHref={listHref} />
-      <div className="sli-detail-head">
-        <div className="sli-detail-head__copy">
-          <h1 ref={titleRef} tabIndex={-1} className="app-page-heading sli-detail-head__title">{sli.display_name}</h1>
-          <div className="sli-detail-head__status"><StatusMark tone={words.tone} label={`${words.label} · ${words.reason}`} /></div>
-          <p className="sli-detail-head__meta"><code>{sli.name}</code> · Ratio · two queries · {datasource?.display_name ?? 'datasource'} · every {sli.polling_interval_seconds} s</p>
+    const datasource=sources.find(item=>item.id===sli.datasource_id),latest=sli.latest_observation,words=sliVocabulary(sli);
+    const latestInterval=latest?measurementInterval(latest):null;
+    const wholeHour=historyWindow.start&&historyWindow.end&&Date.parse(historyWindow.end)-Date.parse(historyWindow.start)===3600_000;
+    const visibleRows=historyFilter==='problems'?exactRows.filter(row=>row.state!=='observed'&&row.state!=='zero'):exactRows;
+    const problems=exactRows.filter(row=>row.state!=='observed'&&row.state!=='zero').length;
+    const withoutRatio=exactRows.filter(row=>row.ratio===null).length;
+    const openDetails=(id:string)=>{const details=document.getElementById(id) as HTMLDetailsElement|null;if(details){details.open=true;details.scrollIntoView?.({block:'start'});details.querySelector('summary')?.focus();}};
+    const openEdit=()=>{editTrigger.current=document.activeElement instanceof HTMLElement?document.activeElement:null;setFormError('');setEditOpen(true);};
+    const date=historyWindow.start?new Date(historyWindow.start).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric',timeZone:'UTC'}):null;
+    return <article className="sli-detail" key={sli.id}>
+      <Breadcrumb current={sli.display_name} parentHref={listHref}/>
+      <div className="sli-detail-head"><div className="sli-detail-head__copy"><h1 ref={titleRef} tabIndex={-1} className="app-page-heading sli-detail-head__title">{sli.display_name}</h1><div className="sli-detail-head__status"><StatusMark tone={words.tone} label={words.label}/><span>{latest?`Latest interval ended ${clockTime(latest.interval_end)} · ${relativeAge(latest.interval_end)}`:words.reason}</span></div></div><div className="sli-detail-head__actions"><RefreshButton label="Refresh SLI" busy={pending} lastRefreshed={updatedAt} onClick={()=>void refreshDetail()}/><Button variant="ghost" onClick={()=>openDetails('sli-definition')}>View queries</Button>{canWrite&&<Button variant="outline" onClick={openEdit}>Edit SLI</Button>}{canWrite&&<Button variant="outline" onClick={()=>navigate(`/slos/new?sli=${sli.id}`)}>New SLO</Button>}</div></div>
+      <p className="sli-definition-line"><strong>Good events ÷ total events.</strong> Each query defines which events count. Measured every {sli.polling_interval_seconds===60?'minute':`${sli.polling_interval_seconds} seconds`}.</p>
+      {error&&<p className="sli-error" role="alert">{error}</p>}{sourceError&&<p className="sli-error" role="alert">{sourceError}</p>}{agentError&&<p className="sli-error" role="alert">Agent name could not be refreshed. Refresh to try again.</p>}
+      <section className="sli-detail-card sli-measurements-panel" aria-labelledby="sli-measurements-title" aria-busy={historyBusy}>
+        <header><h2 id="sli-measurements-title">Measurements</h2><span className="hint">{date&&measurements.intervals.length?`${date} · ${intervalTime({start:historyWindow.start!,end:historyWindow.end!})}`:'No inspected intervals yet'}</span><div className="tools"><Button variant="ghost" onClick={()=>openDetails('sli-intervals')}>Exact values ↓</Button></div></header>
+        <div className="sli-measurements-body">
+          <dl className="sli-measurement-summary"><div><dt>{sli.polling_interval_seconds===60?'Latest minute':'Latest interval'}</dt><dd>{latestInterval?.ratio!==null&&latestInterval?.ratio!==undefined?`${latestInterval.ratio}%`:latestInterval?measurementLabels[latestInterval.state]:'Waiting for data'}</dd><p>{latestInterval?.good!==null&&latestInterval?.good!==undefined&&latestInterval.total!==null?`${countText(latestInterval.good)} / ${countText(latestInterval.total)} good · ${intervalTime(latestInterval)}`:latestInterval?latestInterval.detail:'No observation has been recorded yet; this does not mean the counts are zero. The first saved interval can precede creation.'}</p></div><div><dt>{`Observed requests · ${wholeHour?'this hour':'shown period'}`}</dt><dd>{measurements.ratio!==null?`${measurements.ratio}%`:'—'}</dd><p>{measurements.total!=='0'?`${countText(measurements.bad)} unsuccessful / ${countText(measurements.total)} total`:'No observed traffic in this period.'}</p></div><div><dt>{`Data coverage · ${wholeHour?'this hour':'shown period'}`}</dt><dd className={measurements.counts.failed+measurements.counts.missing+measurements.counts.partial?'is-warning':''}>{measurements.counts.observed+measurements.counts.zero+measurements.counts.empty} <small>/ {measurements.intervals.length} {sli.polling_interval_seconds===60?'min':'intervals'}</small></dd><p>{measurements.counts.failed} query errors · {measurements.counts.missing} missing{measurements.counts.partial?` · ${measurements.counts.partial} partial`:''}{measurements.counts.empty?` · ${measurements.counts.empty} known empty`:''}{measurements.counts.zero?` · ${measurements.counts.zero} zero traffic`:''}</p></div></dl>
+          {!latest&&<p className="sli-first-result">Almanac saves the most recent complete interval, allowing {sli.settling_delay_seconds} seconds for source data to settle. {sli.agent_reachability==='unreachable'||sli.agent_reachability==='disabled'?'The assigned agent is unavailable.':sli.activation_state==='blocked'||sli.collection_progress==='blocked'?'Collection is blocked. Check the agent and datasource.':'The first query runs after the assigned agent receives its configuration and is ready.'}</p>}
+          {historyBusy&&<span className="sr-only" role="status">Refreshing observation history</span>}
+          {historyError&&<p className="sli-error" role="alert">{historyError}</p>}
+          {measurements.intervals.length>0?<SliMeasurementsChart intervals={measurements.intervals}/>:historyLoaded&&!historyError?<p className="sli-muted">No observations have been recorded in this range.</p>:null}
         </div>
-        <div className="sli-detail-head__actions"><RefreshButton label="Refresh SLI" busy={pending} lastRefreshed={updatedAt} onClick={() => void refreshDetail()} />{canWrite && <Button onClick={openEdit}>Edit SLI</Button>}{canWrite && <Button variant="outline" onClick={() => navigate('/slos/new')}>New SLO</Button>}</div>
-      </div>
-      {error && <p className="sli-error" role="alert">{error}</p>}
-      {sourceError && <p className="sli-error" role="alert">{sourceError}</p>}
-      {agentError && <p className="sli-error" role="alert">Agent name could not be refreshed. Refresh to try again.</p>}
-      <div className="sli-tiles">
-        <section className="sli-tile" aria-labelledby="sli-tile-latest"><h2 id="sli-tile-latest" className="sli-tile__key">Latest result</h2>
-          {latest ? <>
-            <p className={`sli-tile__value ${latest.outcome === 'failed' || latest.outcome === 'incomplete' ? 'is-warning' : ''}`}><span className="sli-outcome">{outcomeLabel(latest.outcome)}</span></p>
-            <p className="sli-interval sli-tile__sub">{formatTime(latest.interval_start)} – {formatTime(latest.interval_end)}</p>
-            {latest.outcome === 'observed' ? <div className="sli-counts"><div><span>Good</span><strong>{latest.good_count}</strong></div><div><span>Total</span><strong>{latest.total_count}</strong></div></div>
-              : latest.outcome === 'incomplete' ? <p className="sli-tile__sub">Missing component: {latest.missing_components.join(', ')}</p>
-                : latest.outcome === 'failed' ? <p className="sli-tile__sub">Safe error code: {latest.error_code}</p>
-                  : <p className="sli-tile__sub">Queries completed without a count value.</p>}
-          </> : <><p className="sli-tile__value muted">No sample yet</p><p className="sli-tile__sub">No observation has been recorded yet; this does not mean the counts are zero. Almanac saves the most recent complete interval, allowing {sli.settling_delay_seconds} seconds for the datasource to finish reporting. This result can cover time before the SLI was created.</p><p className="sli-tile__sub">{sli.agent_reachability === 'unreachable' || sli.agent_reachability === 'disabled' ? 'The assigned agent is unavailable.' : sli.activation_state === 'blocked' || sli.collection_progress === 'blocked' ? 'Collection is blocked. Check the agent and datasource.' : 'The first query runs after the assigned agent receives its configuration and is ready.'}</p></>}
-          <p className="sli-muted sli-tile__sub">Last attempt: {formatTime(sli.last_attempt_at)} · Last observation: {formatTime(sli.last_observation_at)}</p>
-        </section>
-        <section className="sli-tile" aria-labelledby="sli-tile-ratio"><h2 id="sli-tile-ratio" className="sli-tile__key">Last good ratio</h2>
-          {lastGood ? <><p className="sli-tile__value">{ratioPercent(lastGood.good_count!, lastGood.total_count!)}</p><p className="sli-tile__sub mono">{count(lastGood.good_count!)} / {count(lastGood.total_count!)} · {clockTime(lastGood.interval_end)}</p></> : <><p className="sli-tile__value muted">—</p><p className="sli-tile__sub">No observed interval with traffic in the loaded history.</p></>}
-        </section>
-        <section className="sli-tile" aria-labelledby="sli-tile-collection"><h2 id="sli-tile-collection" className="sli-tile__key">Collection</h2>
-          <div className="sli-state-list">
-            <InlineState label="Activation" value={sli.activation_state} tone={sli.activation_state === 'active' ? 'positive' : sli.activation_state === 'blocked' ? 'attention' : 'neutral'} />
-            <InlineState label="Agent reachability" value={sli.agent_reachability} tone={sli.agent_reachability === 'connected' ? 'positive' : sli.agent_reachability === 'unreachable' || sli.agent_reachability === 'disabled' ? 'attention' : 'neutral'} />
-            <InlineState label="Collection progress" value={sli.collection_progress} tone={sli.collection_progress === 'running' ? 'positive' : sli.collection_progress === 'blocked' ? 'attention' : 'neutral'} />
-            <InlineState label="Freshness" value={sli.freshness} tone={sli.freshness === 'fresh' ? 'positive' : sli.freshness === 'stale' ? 'attention' : 'neutral'} />
-          </div>
-          <p className="sli-tile__sub">Next scheduled query: {formatTime(sli.next_expected_execution_at)}</p>
-        </section>
-        <section className="sli-tile" aria-labelledby="sli-tile-loaded"><h2 id="sli-tile-loaded" className="sli-tile__key">Loaded history</h2>
-          <p className="sli-tile__value">{observedRows} / {history.length}</p>
-          <p className="sli-tile__sub">intervals observed · {failedRows} failed or incomplete · {missing.length} missing range{missing.length === 1 ? '' : 's'}{nextCursor ? ' · more available' : ''}</p>
-        </section>
-      </div>
-
-      <section className="sli-card" aria-labelledby="sli-measurements-title">
-        <header><h2 id="sli-measurements-title">Measurements</h2><span className="sli-card__hint">good ÷ total per loaded interval · UTC</span><div className="sli-card__tools"><Button variant="outline" aria-expanded={chartTableOpen} aria-controls="sli-measurements-table" onClick={() => setChartTableOpen((open) => !open)}>▦ Table</Button></div></header>
-        <div className="sli-card__body">
-          {historyBusy && <span className="sr-only" role="status">Refreshing observation history</span>}
-          {chart ? <div className="sli-chart"><ModuleView load={loadTimelineChart} componentProps={{ chart, showHeader: false }} fallback={<p role="status">Loading measurement chart…</p>} /></div>
-            : historyLoaded && !historyError ? <p className="sli-muted">No observations have been loaded yet, so there is nothing to plot.</p> : null}
-          <div id="sli-measurements-table" hidden={!chartTableOpen}>{chartTableOpen && <ExactValuesTable rows={chartRows.slice((chartTablePage - 1) * 50, chartTablePage * 50)} page={chartTablePage} totalRows={chartRows.length} onPageChange={setChartTablePage} />}</div>
-        </div>
+        <div className="sli-measurements-legend">{(Object.keys(measurements.counts) as (keyof typeof measurements.counts)[]).filter(state=>measurements.counts[state]>0||['observed','failed','missing'].includes(state)).map(state=><span key={state}><i className={`state-key ${state}`}/>{`${measurements.counts[state]} ${state==='failed'?'query errors':measurementLabels[state].toLowerCase()}`}</span>)}<span>Observed means counts received, not an SLO verdict.</span></div>
+        <div className="sli-detail-inline-note"><span>{measurements.minimum?<>{sli.polling_interval_seconds===60?'Lowest minute':'Lowest interval'} <strong className="mono">{measurements.minimum.ratio}%</strong>{` · ${intervalTime(measurements.minimum)}. Ratios use observed requests only.`}</>:'Ratios use observed requests only.'}</span><Button variant="ghost" onClick={()=>{setHistoryFilter('problems');openDetails('sli-intervals');}}>Inspect gaps ↓</Button></div>
       </section>
-
-      <section className="sli-card" aria-labelledby="sli-history-title">
-        <header><h2 id="sli-history-title">Recent intervals</h2><span className="sli-card__hint">exact counts · newest first{earliest ? ` · history before ${formatTime(earliest)} is unavailable` : ''}</span><div className="sli-card__tools"><SegmentedControl size="sm" label="Show intervals" value={historyFilter} onChange={setHistoryFilter} options={[{ value: 'all', label: 'All loaded', count: history.length }, { value: 'problems', label: 'Failed & missing', count: history.length - observedRows }]} /></div></header>
-        {historyError && <p className="sli-error sli-card__alert" role="alert">{historyError}</p>}
-        {earliest && <p className="sli-muted sli-card__note">History before {formatTime(earliest)} is unavailable.</p>}
-        {missing.length > 0 && <div className="sli-card__note"><strong>Missing intervals</strong><ul>{missing.map((range) => <li key={range.interval_start}>{formatTime(range.interval_start)} – {formatTime(range.interval_end)}</li>)}</ul></div>}
-        {history.length === 0 ? historyLoaded && !historyError && <p className="sli-card__note">No observations have been recorded in this range.</p>
-          : visibleHistory.length === 0 ? <p className="sli-card__note">Every loaded interval was observed.</p>
-            : <div className="sli-table-scroll" role="region" aria-label="Observation history" tabIndex={0}><table className="sli-table"><thead><tr><th scope="col">Interval start (UTC)</th><th scope="col">Interval end (UTC)</th><th scope="col">Outcome</th><th scope="col" className="num">Good count</th><th scope="col" className="num">Total count</th><th scope="col" className="num">Ratio</th><th scope="col">Details</th></tr></thead><tbody>{visibleHistory.map((row) => <tr key={row.observation_id}><td className="sli-mono">{new Date(row.interval_start).toISOString()}</td><td className="sli-mono">{new Date(row.interval_end).toISOString()}</td><td><StatusMark tone={row.outcome === 'observed' ? (row.total_count === '0' ? 'none' : 'healthy') : row.outcome === 'complete_empty' ? 'none' : 'warning'} label={outcomeLabel(row.outcome)} /></td><td className="sli-mono num">{row.good_count ?? '—'}</td><td className="sli-mono num">{row.total_count ?? '—'}</td><td className="sli-mono num">{row.outcome === 'observed' ? ratioPercent(row.good_count!, row.total_count!) : '—'}</td><td>{row.outcome === 'incomplete' ? `Missing ${row.missing_components.join(', ')}` : row.error_code ?? '—'}</td></tr>)}</tbody></table></div>}
-        {nextCursor && <div className="sli-card__footer"><Button variant="outline" onClick={() => void loadMoreHistory()} pending={historyBusy}>Load more intervals</Button></div>}
-      </section>
-
-      <section className="sli-card" aria-labelledby="sli-definition-title">
-        <header><h2 id="sli-definition-title">Definition</h2><span className="sli-card__hint">revision {sli.measurement_revision} · queries are immutable from this screen</span></header>
-        <div className="sli-card__body sli-defgrid">
-          <div><p className="sli-key">Datasource</p><p className="sli-value">{sourceError && !datasource ? 'Datasource name unavailable. Refresh to try again.' : <a href={`/datasources/${sli.datasource_id}`} data-app-route>{datasource?.display_name ?? 'View datasource'}</a>}</p></div>
-          <div><p className="sli-key">Assigned agent</p><p className="sli-value">{context.session?.role !== 'administrator' || context.session.restricted ? 'Agent details are available to administrators.' : agentError && agent?.id !== sli.agent_id ? 'Agent name unavailable. Refresh to try again.' : <a href={`/agents?agent=${sli.agent_id}`} data-app-route>{agent?.id === sli.agent_id ? agent.display_name : 'View assigned agent'}</a>}</p></div>
-          <div><p className="sli-key">Cadence</p><p className="sli-value">{sli.polling_interval_seconds} s intervals · settles {sli.settling_delay_seconds} s</p></div>
-          <div><p className="sli-key">Values</p><p className="sli-value">Ratio · two queries · event counts per interval</p></div>
-          <div><p className="sli-key">Collection activated</p><p className="sli-value">{activatedAt === null ? 'Not activated yet' : formatTime(activatedAt)}</p></div>
-          <div><p className="sli-key">Next scheduled query</p><p className="sli-value">{formatTime(sli.next_expected_execution_at)}</p></div>
-          <div className="sli-defgrid__query"><p className="sli-key">Good count query</p><pre>{sli.good_query}</pre></div>
-          <div className="sli-defgrid__query"><p className="sli-key">Total count query</p><pre>{sli.total_query}</pre></div>
-        </div>
-        <p className="sli-card__note sli-muted">Each result covers a completed {sli.polling_interval_seconds}-second interval. The query runs after a {sli.settling_delay_seconds}-second delay to allow source data to settle.</p>
-      </section>
-
-      <section className="sli-card" aria-labelledby="sli-objectives-title">
-        <header><h2 id="sli-objectives-title">Objectives</h2><span className="sli-card__hint">{projection ? `${totalLinked} SLO${totalLinked === 1 ? '' : 's'} use${totalLinked === 1 ? 's' : ''} this indicator` : projectionMissing ? 'linked objectives could not be read' : 'linked objectives are loading'}</span>{canWrite && <div className="sli-card__tools"><Button variant="outline" onClick={() => navigate('/slos/new')}>+ New SLO</Button></div>}</header>
-        <div className="sli-card__body">{linked.length ? <ul className="sli-linked">{linked.map((objective) => <li key={objective.id}><a href={`/slos/${objective.id}`} data-app-route>{objective.display_name || objective.name}</a><code>{objective.name}</code></li>)}{totalLinked > linked.length && <li className="sli-muted">Showing {linked.length} of {totalLinked}</li>}</ul> : projection ? <p className="sli-muted">No SLO targets this indicator yet.</p> : <span className="sr-only" role="status">Loading linked objectives</span>}</div>
-      </section>
-
-      <details className="sli-settings"><summary>Settings and technical details</summary>
-        <dl className="sli-facts"><div><dt>SLI ID</dt><dd className="sli-mono">{sli.id}</dd></div><div><dt>Assigned agent ID</dt><dd className="sli-mono">{sli.agent_id}</dd></div><div><dt>Measurement revision</dt><dd>{sli.measurement_revision}</dd></div><div><dt>Resource version</dt><dd>{sli.version}</dd></div></dl>
-        <p className="ui-form-note">Measurement queries and history are immutable from this screen. Rename the SLI with Edit SLI.</p>
+      <SliObjectives projection={projection} unavailable={projectionMissing}/>
+      <details className="sli-detail-disclosure" id="sli-intervals"><summary>Recent intervals<span>{exactRows.length} inspected · {withoutRatio} without a ratio · exact values</span></summary>
+        <div className="sli-interval-filter"><SegmentedControl size="sm" label="Show intervals" value={historyFilter} onChange={setHistoryFilter} options={[{value:'all',label:'All loaded',count:exactRows.length},{value:'problems',label:'Failed & missing',count:problems}]}/><span>Newest first · event counts per interval</span></div>
+        {earliest&&<p className="sli-detail-note sli-muted">History before {formatTime(earliest)} is unavailable.</p>}
+        {missing.length>0&&<p className="sr-only">Missing intervals: {missing.map(range=>`${formatTime(range.interval_start)} – ${formatTime(range.interval_end)}`).join('; ')}</p>}
+        {visibleRows.length?<div className="sli-detail-table-wrap" role="region" aria-label="Observation history" tabIndex={0}><table className="sli-intervals-table"><caption>Exact counts · UTC · Observed means counts are available, not that an SLO target was met.</caption><thead><tr><th scope="col">Interval (UTC)</th><th scope="col">Outcome</th><th scope="col">Good</th><th scope="col">Total</th><th scope="col">Good ÷ total</th><th scope="col">Details</th></tr></thead><tbody>{visibleRows.map(row=><tr key={row.start}><td className="mono" title={`${row.start} – ${row.end}`}>{new Date(row.start).toLocaleDateString('en-GB',{day:'2-digit',month:'short',timeZone:'UTC'})} {intervalTime(row).replace(' UTC','')}</td><td><StatusMark tone={row.state==='observed'?'healthy':row.state==='failed'||row.state==='partial'?'warning':'none'} label={measurementLabels[row.state]}/></td><td className="mono">{row.good===null?'—':countText(row.good)}</td><td className="mono">{row.total===null?'—':countText(row.total)}</td><td className="mono">{row.ratio===null?'—':`${row.ratio}%`}</td><td>{row.detail||'—'}</td></tr>)}</tbody></table></div>:historyLoaded&&!historyError?<p className="sli-detail-note">{historyFilter==='problems'?'Every loaded interval has observed counts.':'No exact interval rows are available.'}</p>:null}
+        {nextCursor&&<div className="sli-detail-note"><Button variant="outline" onClick={()=>void loadMoreHistory()} pending={historyBusy}>Load more intervals</Button></div>}
       </details>
-      <Dialog open={editOpen} onClose={() => setEditOpen(false)} title="Edit SLI" triggerRef={editTrigger}>
-        <form className="sli-metadata-form" onSubmit={(event) => { void saveMetadata(event).then((saved) => { if (saved) setEditOpen(false); }); }}>
-          <p className="sli-muted">Identifier <code>{sli.name}</code> · measurement revision {sli.measurement_revision}. Queries, datasource and cadence are immutable here.</p>
-          <TextField id="sli-edit-display-name" label="Display name" value={displayName} onChange={(event) => { setDisplayName(event.target.value); setFormError(''); }} error={formError || undefined} />
-          <div className="sli-actions"><Button variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button><Button type="submit" pending={pending}>Save display name</Button></div>
-        </form>
-      </Dialog>
-    </>;
+      <details className="sli-detail-disclosure" id="sli-definition"><summary>Measurement definition<span>Source, queries and collection timing</span></summary><div className="sli-definition-source"><span>Datasource: <a href={`/datasources/${sli.datasource_id}`} data-app-route>{datasource?.display_name??'View datasource'}</a></span><span>{sli.polling_interval_seconds} s intervals · {sli.settling_delay_seconds} s settling delay</span></div><div className="sli-definition-queries"><div><h3>Good events</h3><pre>{sli.good_query}</pre></div><div><h3>Total events</h3><pre>{sli.total_query}</pre></div><p>Queries return event counts for each completed interval. A {sli.settling_delay_seconds}-second delay allows source data to settle.</p></div></details>
+      <details className="sli-detail-disclosure" id="sli-collection"><summary>Collection diagnostics<span>Agent {sli.agent_reachability} · {sli.collection_progress.replaceAll('_',' ')} · {sli.freshness}</span></summary><dl className="sli-collection-facts"><div><dt>Assigned agent</dt><dd>{context.session?.role!=='administrator'||context.session.restricted?'Agent details are available to administrators.':<a href={`/agents?agent=${sli.agent_id}`} data-app-route>{agent?.id===sli.agent_id?agent.display_name:'View assigned agent'}</a>} · {sli.agent_reachability}</dd></div><div><dt>Configuration</dt><dd>{sli.activation_state}</dd></div><div><dt>Collection progress</dt><dd>{sli.collection_progress.replaceAll('_',' ')}</dd></div><div><dt>Observation freshness</dt><dd>{sli.freshness}</dd></div><div><dt>Collection activated</dt><dd>{sli.activated_at?formatTime(sli.activated_at):'Not activated yet'}</dd></div><div><dt>Last attempt</dt><dd>{formatTime(sli.last_attempt_at)}</dd></div><div><dt>Last observation</dt><dd>{formatTime(sli.last_observation_at)}</dd></div><div><dt>Next scheduled query</dt><dd>{formatTime(sli.next_expected_execution_at)}</dd></div></dl></details>
+      <footer className="sli-detail-footer"><Button variant="ghost" onClick={()=>{supportTrigger.current=document.activeElement as HTMLElement;setSupportOpen(true);}}>Support identifiers</Button></footer>
+      <Dialog open={supportOpen} onClose={()=>setSupportOpen(false)} title="Support identifiers" triggerRef={supportTrigger}><p>For API, CLI and support use. These do not describe measurement quality.</p><dl className="sli-facts"><div><dt>Identifier</dt><dd>{sli.name}</dd></div><div><dt>SLI ID</dt><dd>{sli.id}</dd></div><div><dt>Assigned agent ID</dt><dd>{sli.agent_id}</dd></div><div><dt>Measurement revision</dt><dd>{sli.measurement_revision}</dd></div><div><dt>Resource version</dt><dd>{sli.version}</dd></div></dl><Button variant="outline" onClick={()=>setSupportOpen(false)}>Close</Button></Dialog>
+      <Dialog open={editOpen} onClose={()=>setEditOpen(false)} title="Edit SLI" triggerRef={editTrigger}><form className="sli-metadata-form" onSubmit={event=>{void saveMetadata(event).then(saved=>{if(saved)setEditOpen(false);});}}><p className="sli-muted">Identifier <code>{sli.name}</code> · measurement revision {sli.measurement_revision}. Queries, datasource and cadence are immutable here.</p><TextField id="sli-edit-display-name" label="Display name" value={displayName} onChange={event=>{setDisplayName(event.target.value);setFormError('');}} error={formError||undefined}/><div className="sli-actions"><Button variant="outline" onClick={()=>setEditOpen(false)}>Cancel</Button><Button type="submit" pending={pending}>Save display name</Button></div></form></Dialog>
+    </article>;
   }
 
   const datasourceOptions = [{ value: '', label: 'Any' }, ...sources.map((source) => ({ value: source.id, label: source.display_name }))];

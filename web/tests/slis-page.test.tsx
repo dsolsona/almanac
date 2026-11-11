@@ -13,8 +13,10 @@ const sliID = 'b13e0739-3c86-4a7f-b7e5-c15e9626e71c';
 function source() { return { id: sourceID, name: 'metrics-prod', display_name: 'Production metrics', version: '4', provider: 'prometheus', configuration_format: 'prometheus-http-v1', endpoint: 'https://metrics.example.test', tls: { insecure_skip_verify: false, ca_pem: null }, authentication: { mode: 'bearer', username: null, password_configured: false, token_configured: true }, polling_interval_seconds: 15, settling_delay_seconds: 60, agent_id: '4b13e073-3c86-4a7f-b7e5-c15e9626e71c', created_at: '2026-10-20T12:00:00Z', updated_at: '2026-10-21T12:00:00Z' }; }
 function sli() { return { id: sliID, name: 'request-success', display_name: 'Request success', version: '2', measurement_revision: '1', datasource_id: sourceID, datasource_version: '4', agent_id: '4b13e073-3c86-4a7f-b7e5-c15e9626e71c', agent_reachability: 'connected', collection_progress: 'idle', measurement_kind: 'event_counts', component_mode: 'interval_count', good_query: 'sum(rate(requests_total{status=~"2.."}[1m]))', total_query: 'sum(rate(requests_total[1m]))', polling_interval_seconds: 15, settling_delay_seconds: 60, effective_from: '2026-10-27T12:00:15Z', activated_at: null, activation_state: 'scheduled', freshness: 'fresh', latest_observation: { observation_id: 'f313e073-3c86-4a7f-b7e5-c15e9626e71c', measurement_revision: '1', interval_start: '2026-10-27T11:59:45Z', interval_end: '2026-10-27T12:00:00Z', outcome: 'observed', good_count: '99', total_count: '100', error_code: null, missing_components: [], recorded_at: '2026-10-27T12:00:01Z' }, last_attempt_at: '2026-10-27T12:00:01Z', last_observation_at: '2026-10-27T12:00:01Z', next_expected_execution_at: '2026-10-27T12:00:15Z', datasource_display_name: 'Production metrics', recent_measurements: [], linked_slos: { items: [], total_count: 0 }, created_at: '2026-10-27T11:59:00Z', updated_at: '2026-10-27T12:00:00Z' }; }
 function response(body: unknown, status = 200, headers: Record<string, string> = {}) { return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', ...headers } }); }
-function historyPage(items: unknown[]) { return { items, next_cursor: '', earliest_queryable_interval_start: '2026-10-27T11:00:00Z', inspected_start: '2026-10-27T11:59:45Z', inspected_end: '2026-10-27T12:00:00Z', missing_intervals: [] }; }
+function historyPage(items: unknown[]) { return { items, next_cursor: '', earliest_queryable_interval_start: '2026-10-27T11:00:00Z', inspected_start: items.length?'2026-10-27T11:59:45Z':null, inspected_end: items.length?'2026-10-27T12:00:00Z':null, missing_intervals: [] }; }
 function expectObservedHistory() {
+  const disclosure=document.getElementById('sli-intervals') as HTMLDetailsElement;
+  disclosure.open=true;
   const table = screen.getByRole('table');
   expect(within(table).getByRole('cell', { name: '99' })).toBeVisible();
   expect(within(table).getByRole('cell', { name: '100' })).toBeVisible();
@@ -226,7 +228,9 @@ describe('SLI page', () => {
     }));
     const user = userEvent.setup();
     render(<SlisPage context={editor} />);
-    await screen.findByRole('table');
+    await screen.findByRole('heading', { name:'Measurements' });
+    await waitFor(()=>expect(document.querySelector('.sli-measurement-svg')).not.toBeNull());
+    (document.getElementById('sli-intervals') as HTMLDetailsElement).open=true;
     expectObservedHistory();
     await user.click(screen.getByRole('button', { name: 'Refresh SLI' }));
     await waitFor(() => expect(historyReads).toBe(2));
@@ -248,6 +252,9 @@ describe('SLI page', () => {
     }));
     const user = userEvent.setup();
     render(<SlisPage context={editor} />);
+    await screen.findByRole('heading',{name:'Measurements'});
+    await waitFor(()=>expect(document.querySelector('.sli-measurement-svg')).not.toBeNull());
+    (document.getElementById('sli-intervals') as HTMLDetailsElement).open=true;
     await user.click(await screen.findByRole('button', { name: 'Load more intervals' }));
     expect(screen.getByText('Refreshing observation history')).toHaveClass('sr-only');
     expectObservedHistory();
@@ -262,7 +269,7 @@ describe('SLI page', () => {
     const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input); calls.push({ url, init });
       if (url.startsWith('/api/v1/datasources')) return response({ items: [source()], next_cursor: '' });
-      if (url.startsWith('/api/v1/slis/') && url.endsWith('/observations?limit=50')) return response(historyPage([sli().latest_observation]));
+      if (url.startsWith('/api/v1/slis/') && url.endsWith('/observations?limit=200')) return response(historyPage([sli().latest_observation]));
       if (url === `/api/v1/slis/${sliID}`) return response(sli(), 200, { ETag: `"sli:${sliID}:2"` });
       if (url === '/api/v1/slis' && init?.method === 'POST') return response(sli(), 201, { ETag: `"sli:${sliID}:2"` });
       if (url.startsWith('/api/v1/slis?')) return response({ items: [sli()], next_cursor: '' });
@@ -278,13 +285,14 @@ describe('SLI page', () => {
     await user.click(screen.getByRole('button', { name: 'Create SLI' }));
 
     expect(await screen.findByRole('heading', { name: 'Request success' })).toBeVisible();
+    (document.getElementById('sli-collection') as HTMLDetailsElement).open=true;
     expect(screen.getByText('scheduled')).toBeVisible();
     expect(screen.getAllByText('99').length).toBeGreaterThan(0);
     expect(screen.getAllByText('100').length).toBeGreaterThan(0);
     const create = calls.find((call) => call.url === '/api/v1/slis' && call.init?.method === 'POST');
     expect(JSON.parse(String(create?.init?.body))).toMatchObject({ name: 'request-success', datasource_id: sourceID, measurement_kind: 'event_counts', component_mode: 'interval_count' });
     expect(new Headers(create?.init?.headers).get('X-CSRF-Token')).toBe('csrf-editor');
-    await waitFor(() => expect(calls.some((call) => call.url === `/api/v1/slis/${sliID}/observations?limit=50`)).toBe(true));
+    await waitFor(() => expect(calls.some((call) => call.url === `/api/v1/slis/${sliID}/observations?limit=200`)).toBe(true));
   });
 
   it.each([
@@ -316,7 +324,9 @@ describe('SLI page', () => {
       return response(saved, 200, { ETag: `"sli:${sliID}:2"` });
     }));
     render(<SlisPage context={viewer} />);
-    expect(await screen.findByText(/12:00:45/, { selector: '.sli-interval' })).toBeVisible();
+    await screen.findByRole('heading',{name:'Measurements'});
+    expect(screen.getByText(/12:00:45/, { selector: '.sli-measurement-summary p' })).toBeVisible();
+    (document.getElementById('sli-collection') as HTMLDetailsElement).open=true;
     expect(screen.queryByText('Collection starts')).not.toBeInTheDocument();
     expect(screen.getByText('Collection activated')).toBeVisible();
     expect(screen.getByText('Oct 27, 2026, 12:02:05 PM UTC')).toBeVisible();
@@ -334,6 +344,8 @@ describe('SLI page', () => {
       return response({ ...sli(), activated_at: activatedAt }, 200, { ETag: `"sli:${sliID}:2"` });
     }));
     render(<SlisPage context={viewer} />);
+    await screen.findByRole('heading',{name:'Measurements'});
+    (document.getElementById('sli-collection') as HTMLDetailsElement).open=true;
     const label = await screen.findByText('Collection activated');
     expect(label.nextElementSibling).toHaveTextContent(expected);
   });
@@ -362,12 +374,15 @@ describe('SLI page', () => {
       return response(sli(), 200, { ETag: `"sli:${sliID}:2"` });
     }));
     render(<SlisPage context={admin} />);
+    await screen.findByRole('heading',{name:'Measurements'});
+    (document.getElementById('sli-definition') as HTMLDetailsElement).open=true;
+    (document.getElementById('sli-collection') as HTMLDetailsElement).open=true;
     expect(await screen.findByRole('link', { name: 'View datasource' })).toHaveAttribute('href', `/datasources/${sourceID}`);
     expect(screen.getByRole('link', { name: 'View assigned agent' })).toHaveAttribute('href', `/agents?agent=${sli().agent_id}`);
     await act(async () => { sourceRead.resolve(response({}, 503)); agentRead.resolve(response({}, 503)); });
-    expect(await screen.findByText('Datasource name unavailable. Refresh to try again.')).toBeVisible();
-    expect(await screen.findByText('Agent name unavailable. Refresh to try again.')).toBeVisible();
-    expect(screen.getByRole('heading', { name: 'Latest result' })).toBeVisible();
+    expect(await screen.findByText('Datasource names could not be loaded.')).toBeVisible();
+    expect(await screen.findByText('Agent name could not be refreshed. Refresh to try again.')).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Measurements' })).toBeVisible();
   });
 
   it('links named records for administrators and explains agent access to other roles', async () => {
@@ -381,14 +396,41 @@ describe('SLI page', () => {
     });
     vi.stubGlobal('fetch', fetcher);
     const view = render(<SlisPage context={admin} />);
+    await screen.findByRole('heading',{name:'Measurements'});
+    (document.getElementById('sli-definition') as HTMLDetailsElement).open=true;
+    (document.getElementById('sli-collection') as HTMLDetailsElement).open=true;
     expect(await screen.findByRole('link', { name: 'Production metrics' })).toHaveAttribute('href', `/datasources/${sourceID}`);
     expect(await screen.findByRole('link', { name: 'Local agent' })).toHaveAttribute('href', `/agents?agent=${sli().agent_id}`);
     expect(screen.getByRole('link', { name: 'SLIs' })).toHaveAttribute('href', '/slis');
     expect(screen.getByText('Request success', { selector: '[aria-current="page"]' })).toBeVisible();
     view.unmount(); fetcher.mockClear();
     render(<SlisPage context={viewer} />);
-    expect(await screen.findByText('Agent details are available to administrators.')).toBeVisible();
+    await screen.findByRole('heading',{name:'Measurements'});
+    (document.getElementById('sli-collection') as HTMLDetailsElement).open=true;
+    expect(await screen.findByText(/Agent details are available to administrators./)).toBeVisible();
     expect(fetcher.mock.calls.some(([url]) => String(url).startsWith('/api/v1/agents/'))).toBe(false);
+  });
+
+  it('does not label a reassigned agent with the previous agent name when its read fails', async () => {
+    history.replaceState({}, '', `/slis/${sliID}`);
+    const replacementID='8b13e073-3c86-4a7f-b7e5-c15e9626e71c';
+    let reassigned=false;
+    vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL)=>{
+      const url=String(input);
+      if(url.includes('/observations'))return response(historyPage([]));
+      if(url.startsWith('/api/v1/datasources'))return response({items:[source()],next_cursor:''});
+      if(url.startsWith('/api/v1/agents/'))return reassigned?response({},503):response({id:sli().agent_id,name:'local',display_name:'Local agent',enabled:true,version:'3',created_at:'2026-10-20T12:00:00Z',updated_at:'2026-10-21T12:00:00Z'},200,{ETag:`"agent:${sli().agent_id}:3"`});
+      return response({...sli(),agent_id:reassigned?replacementID:sli().agent_id},200,{ETag:`"sli:${sliID}:2"`});
+    }));
+    render(<SlisPage context={admin}/>);
+    await screen.findByRole('heading',{name:'Measurements'});
+    (document.getElementById('sli-collection') as HTMLDetailsElement).open=true;
+    await screen.findByRole('link',{name:'Local agent'});
+    reassigned=true;
+    await userEvent.click(screen.getByRole('button',{name:'Refresh SLI'}));
+    await screen.findByText('Agent name could not be refreshed. Refresh to try again.');
+    expect(screen.queryByRole('link',{name:'Local agent'})).not.toBeInTheDocument();
+    expect(screen.getByRole('link',{name:'View assigned agent'})).toHaveAttribute('href',`/agents?agent=${replacementID}`);
   });
 
   it('shows SLI list and exact counts to a viewer without mutation controls', async () => {
@@ -585,20 +627,51 @@ describe('SLI page', () => {
     expect(screen.getByRole('heading', { name: 'Checkout' })).toBeVisible();
   });
 
+  it('reads all 240 inspected intervals at 15-second cadence and pins the chart while older rows load', async () => {
+    history.replaceState({},'',`/slis/${sliID}`);
+    const calls:string[]=[];
+    const value={...sli(),effective_from:'2026-10-27T10:00:00Z',activated_at:'2026-10-27T10:00:00Z',activation_state:'active'};
+    vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL)=>{
+      const url=String(input);
+      if(url.includes('/observations')){
+        calls.push(url);
+        if(url.includes('cursor=older'))return response({...historyPage([]),inspected_start:'2026-10-27T11:00:00Z',inspected_end:'2026-10-27T11:10:00Z',next_cursor:'more'});
+        if(url.includes('cursor=more'))return response({...historyPage([{...value.latest_observation,interval_start:'2026-10-27T10:59:45Z',interval_end:'2026-10-27T11:00:00Z',good_count:'0'}]),inspected_start:'2026-10-27T10:59:45Z',inspected_end:'2026-10-27T11:00:00Z'});
+        return response({...historyPage([value.latest_observation]),inspected_start:'2026-10-27T11:10:00Z',inspected_end:'2026-10-27T12:00:00Z',next_cursor:'older'});
+      }
+      if(url.startsWith('/api/v1/datasources'))return response({items:[source()],next_cursor:''});
+      if(url.startsWith('/api/v1/slis?'))return response({items:[value],next_cursor:''});
+      return response(value,200,{ETag:`"sli:${sliID}:2"`});
+    }));
+    render(<SlisPage context={viewer}/>);
+    await waitFor(()=>expect(document.querySelectorAll('.interval-state')).toHaveLength(240));
+    expect(calls[0]).toContain('limit=200');expect(calls[1]).toContain('limit=40');
+    const summary=document.querySelector('.sli-measurement-summary')!;
+    expect(summary).toHaveTextContent('99.00%');expect(summary).toHaveTextContent('1 / 240 intervals');
+    await userEvent.click(screen.getByRole('button',{name:'Exact values ↓'}));
+    await userEvent.click(screen.getByRole('button',{name:'Load more intervals'}));
+    await waitFor(()=>expect(document.querySelectorAll('.sli-intervals-table tbody tr')).toHaveLength(241));
+    expect(summary).toHaveTextContent('99.00%');expect(document.querySelectorAll('.interval-state')).toHaveLength(240);
+  });
+
   it('shows inferred missing ranges separately from retained observations', async () => {
     history.replaceState({}, '', `/slis/${sliID}`);
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
-      if (url.includes('/observations')) return response({ ...historyPage([]), missing_intervals: [{ interval_start: '2026-10-27T11:59:45Z', interval_end: '2026-10-27T12:00:00Z' }] });
+      if (url.includes('/observations')) return response({ ...historyPage([]), inspected_start:'2026-10-27T11:59:45Z',inspected_end:'2026-10-27T12:00:00Z', missing_intervals: [{ interval_start: '2026-10-27T11:59:45Z', interval_end: '2026-10-27T12:00:00Z' }] });
       if (url.startsWith('/api/v1/datasources')) return response({ items: [source()], next_cursor: '' });
       return response(sli(), 200, { ETag: `"sli:${sliID}:2"` });
     }));
     render(<SlisPage context={viewer} />);
-    expect(await screen.findByText('Missing intervals')).toBeVisible();
+    await screen.findByRole('heading',{name:'Measurements'});
+    await waitFor(()=>expect(document.querySelectorAll('.interval-state.missing')).toHaveLength(1));
+    expect(document.getElementById('sli-intervals')).not.toHaveAttribute('open');
+    await userEvent.click(screen.getByRole('button',{name:'Exact values ↓'}));
+    expect(within(screen.getByRole('table')).getByText('Missing',{exact:true})).toBeVisible();
     expect(screen.getByText(/History before/)).toBeVisible();
-    expect(screen.getByText('No observations have been recorded in this range.')).toBeVisible();
-    await userEvent.click(screen.getByText('Settings and technical details'));
-    expect(screen.getByText('Good count query')).toBeVisible();
+    expect(screen.queryByText('No observations have been recorded in this range.')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button',{name:'View queries'}));
+    expect(screen.getByRole('heading',{name:'Good events'})).toBeVisible();
   });
 });
 

@@ -1,13 +1,36 @@
 Consistent resource tables, 2026-11-11: [F1-T23](tasks/F1-T23.md) ports the
 services table to agents, datasources and SLIs, with selectable clickable rows,
 all-column sorting across complete filtered results and 10/20-row pagination.
-SLO pages are unchanged. Final local checks pass 465 frontend tests, Go empty-list
-serialization coverage, 88 browser checks and all 18 isolated E2E journeys; a focused
+SLO pages are unchanged. Before main integration, PR-head CI passes 470 frontend
+tests, Go checks, 88 browser checks and all 18 isolated E2E journeys; a focused
 follow-up verifies actual light/dark themes at 1440/1024/360 px and keyboard links.
 Seeded first visits take 441/477/231 ms and global sorting 109/75/79 ms for
 agents/datasources/SLIs. Full failure history, command durations and large-fleet
 sorting limitations are in the task. [PR #86](https://github.com/dsolsona/almanac/pull/86) is published; CodeRabbit/maintainer
-follow-up is authorized and in progress. Merge is not authorized.
+follow-up is authorized. All review threads and CodeRabbit are resolved on `cbf3042`;
+current main integration and renewed verification are recorded in the task. Merge
+of the PR is not authorized.
+
+SLI detail redesign, 2026-11-11: [F6-T10](tasks/F6-T10.md) implements approved
+mock E under [ADR-0046](adr/0046-sli-measurements-and-collection-detail.md) on
+`feat/sli-detail-redesign`. Measurements now combine the latest result, exact
+period totals, collection coverage, point inspection and the collection-state
+strip; exact rows, queries and diagnostics start collapsed. The original four
+proposals remain available. The measurement panel matches the independent HTML
+reference with zero pixel differences in both themes at 360/1024/1440 px.
+`make check` passed, followed by targeted regression fixes, 89 browser cases
+(2.4 min) and all 18 fresh container journeys (5.5 min). The standard 35-day fleet
+performance suite passes six cases (6.9 min): SLI detail cold/in-app p95 is
+250/71 ms, with all four main pages below 1,000 ms. SLO list cold p95 is 528 ms,
+above the preferred 500 ms target. Application `45b84d3` is published in
+[PR #87](https://github.com/dsolsona/almanac/pull/87), with all four required
+CI suites passing in run `43038165943` (466 frontend cases, 89 browser cases,
+18 E2E journeys and real PostgreSQL integration). CodeRabbit's one actionable
+mock disclosure-focus finding is reproduced and corrected; all 89 browser checks
+pass again in 2.2 min. Production application inputs remain identical to `45b84d3`;
+current reviews and checks are on the PR. Merge remains unauthorized. Operator data and deployment
+are unchanged. Larger-fleet/year-long evidence and physical accessibility-device
+testing are not claimed.
 
 Configurable session inactivity, 2026-11-11: [F1-T22](tasks/F1-T22.md)
 adds Settings → Sessions for administrators, with an eight-hour default and
