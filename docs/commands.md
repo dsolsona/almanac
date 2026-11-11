@@ -62,6 +62,8 @@ the original `almanac` guest; deletion requires an explicit name.
 All linked worktrees automatically use the primary checkout's private VM state;
 plain `make vm-run` works from the checkout you are developing in and reuses the
 same prepared base. No state environment variable or `-C` argument is required.
+`vm-base` includes the guest Tern runtime alongside Docker, Codex and Almanac's
+warmed dependencies, using the laptop's installed Stencil Tern executable.
 `VM_REPO=/path/to/checkout` (or script `--repo`) selects the source
 snapshot for base preparation or first setup/run. Host `gh` and file-based Codex
 logins are copied privately to workers. Base definitions, rebuild semantics and

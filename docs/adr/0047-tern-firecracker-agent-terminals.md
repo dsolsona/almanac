@@ -33,8 +33,11 @@ override for deliberately separate pools, rather than requiring it for daily use
 Use the installed laptop Tern executable as the guest runtime source. Copy it
 only when necessary, through authenticated SSH; keep executable data outside
 the credential-bearing home. Existing prepared dependency bases can receive this
-small runtime addition without repeating application dependency setup. Future
-prepared bases may retain the executable, while removing user state and keys.
+small runtime addition without repeating application dependency setup. Base
+preparation installs the executable and session helper before sealing, while
+removing user state and keys. Runtime-only base preparation requires the local
+Tern executable, and does not require a laptop SSH public key or create a remote
+listener. Worker preparation configures its own services and authorization.
 
 Run separate persistent systemd services as guest user `dev` for the Tern session
 daemon and its remote listener. Bind the listener to the guest's private IPv4

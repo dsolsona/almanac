@@ -20,6 +20,8 @@ production sandbox service.
 - Hardware virtualization, working `/dev/kvm` access and cgroup v2.
 - For automatic login transfer, a file-based Codex host login and the host GitHub
   CLI (`gh`) already authenticated to `github.com`.
+- Stencil Tern installed on the laptop's PATH. `vm-base` copies its executable
+  into the guest image; `vm-run` uses the local app to connect to workers.
 - `bash`, `curl`, `python3`, Git, OpenSSH client, `tar`, coreutils, `flock`,
   `unsquashfs`, `mkfs.ext4`, `mount`, `umount`, `find`, `ip`, `iptables`,
   `ip6tables` and `sudo`.
@@ -79,10 +81,12 @@ make vm-codex VM=api
 ```
 
 `vm-base` creates a fresh seed, installs Docker Engine, Compose, buildx, GitHub
-CLI, tmux and the complete pinned Codex runtime, including its command-execution
-helpers and resources. It runs `make setup`, stops the fixtures and shuts down
+CLI, tmux, the matching Stencil Tern runtime/session helper and the complete
+pinned Codex runtime, including its command-execution helpers and resources.
+It runs `make setup`, stops the fixtures and shuts down
 the seed before copying its disk. The base retains development images, Playwright,
-Go/npm dependencies and Docker build caches. Stopped seeds are preserved.
+Go/npm dependencies and Docker build caches. No worker keys, logins or Tern
+session state enter the base; those are configured after cloning. Stopped seeds are preserved.
 Private local generations live in `.local/firecracker/base-images/`, with an
 atomic `base-image` pointer to the current complete generation.
 An interrupted rebuild can leave an unpublished raw seed copy under
@@ -275,8 +279,8 @@ Local Lua performs this connection without a model request or a custom plugin.
 
 The guest listener binds its private IPv4 address on UDP 8376 with relays disabled.
 Only public laptop SSH keys are authorized; private keys stay on the laptop.
-Existing prepared bases receive the runtime without another application
-`make setup`. Guest services start with the VM, and each clone has its own Tern
+Newly rebuilt bases already contain the runtime. Older prepared bases can still
+receive it without another application `make setup`. Guest services start with the VM, and each clone has its own Tern
 identity and session state. A saved identity mismatch stops connection setup.
 If local connection fails after launch, the VM and agent remain running; use
 `make vm-codex VM=NAME` to reconnect without submitting the task again.

@@ -212,6 +212,7 @@ PY
 ssh_guest() { ssh -F "$state/ssh_config" "$@"; }
 
 check_local_tern() { python3 "$launcher_repo/scripts/firecracker-tern.py" check; }
+check_tern_runtime() { python3 "$launcher_repo/scripts/firecracker-tern.py" check-runtime; }
 
 restore_tern_agent() { ssh_guest dev 'python3 /usr/local/lib/almanac-tern/session.py restore'; }
 
@@ -221,8 +222,8 @@ check_legacy_agent() {
     [[ $status == 1 ]] || fail 'existing tmux Codex session or unknown session state; use vm-codex to attach'
 }
 
-prepare_tern() {
-    local digest remote_digest session_status=0 fingerprint
+install_tern_runtime() {
+    local digest remote_digest session_status=0
     digest=$(sha256sum -- "$(command -v tern)"); digest=${digest%% *}
     remote_digest=$(ssh_guest root 'if test -f /usr/local/lib/almanac-tern/tern; then sha256sum /usr/local/lib/almanac-tern/tern; fi')
     if [[ ${remote_digest%% *} != "$digest" ]]; then
@@ -232,16 +233,24 @@ prepare_tern() {
 systemctl stop almanac-tern-remote.service almanac-tern-session.service
 fi'
         scp -F "$state/ssh_config" "$(command -v tern)" root:/tmp/almanac-tern-runtime
-        ssh_guest root 'install -d -m 755 /usr/local/lib/almanac-tern
+        ssh_guest root 'set -e
+install -d -m 755 /usr/local/lib/almanac-tern
 install -m 755 /tmp/almanac-tern-runtime /usr/local/lib/almanac-tern/tern.new
 mv /usr/local/lib/almanac-tern/tern.new /usr/local/lib/almanac-tern/tern
 rm /tmp/almanac-tern-runtime'
     fi
     scp -F "$state/ssh_config" "$launcher_repo/scripts/firecracker-tern-guest.py" root:/tmp/almanac-tern-session.py
-    ssh_guest root bash -s <<GUEST
-set -euo pipefail
+    ssh_guest root 'set -e
 install -m 644 /tmp/almanac-tern-session.py /usr/local/lib/almanac-tern/session.py
 rm /tmp/almanac-tern-session.py
+/usr/local/lib/almanac-tern/tern --version'
+}
+
+prepare_tern() {
+    local fingerprint
+    install_tern_runtime
+    ssh_guest root bash -s <<GUEST
+set -euo pipefail
 install -d -m 700 -o dev -g dev /home/dev/.local/state/almanac-tern
 for service in session remote; do
     cat > /etc/systemd/system/almanac-tern-\$service.service <<UNIT
@@ -880,6 +889,7 @@ make stop-dev
 test -z "$(docker container ls -aq)"
 GUEST
     ensure_github_cli
+    install_tern_runtime
     local image fingerprint
     fingerprint=$(dependency_fingerprint guest)
     stop
@@ -1105,6 +1115,7 @@ main() {
         fail 'prepare shared dependencies first: ./firecracker-setup.sh base --repo PATH'
     fi
     if [[ $action == run || ( $action == codex && -f $state/tern-address ) ]]; then check_local_tern; fi
+    if [[ $action == base ]]; then check_tern_runtime; fi
     umask 077
     if (( auto_name )); then reserve_random_instance; fi
     mkdir -p "$state"

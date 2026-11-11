@@ -74,6 +74,15 @@ main codex reconnect
 ''', 'test', str(launcher)], env=dict(os.environ, FIRECRACKER_STATE_DIR=directory),
         text=True, capture_output=True, timeout=10)
     assert result.returncode == 0 and result.stdout.splitlines() == ['prepare', 'restore', 'launch', 'connected'], result
+    result = subprocess.run(['bash', '-c', '''source "$1"
+check() { :; }
+check_tern_runtime() { return 1; }
+reserve_network() { :; }
+prepare_base() { :; }
+main base missing-runtime
+''', 'test', str(launcher)], env=dict(os.environ, FIRECRACKER_STATE_DIR=directory),
+        text=True, capture_output=True, timeout=10)
+    assert result.returncode != 0 and not (state / 'instances/missing-runtime').exists(), 'base skipped Tern runtime preflight'
 
 def load(name, filename):
     spec = importlib.util.spec_from_file_location(name, root / 'scripts' / filename)

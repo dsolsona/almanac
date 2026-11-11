@@ -105,6 +105,7 @@ with tempfile.TemporaryDirectory(prefix="almanac-firecracker-") as directory:
 shift
 check() { :; }
 check_local_tern() { :; }
+check_tern_runtime() { :; }
 check_legacy_agent() { :; }
 prepare_tern() { :; }
 connect_tern() { :; }
@@ -187,7 +188,7 @@ main run --prompt -
 
     # Sealing a dependency image must remove seed identity/work without deleting caches.
     seed = Path(directory) / "seed-filesystem"
-    for folder in ("etc/ssh", "var/lib/dbus", "var/lib/docker", "var/lib/containerd",
+    for folder in ("etc/ssh", "var/lib/dbus", "var/lib/docker", "var/lib/containerd", "usr/local/lib/almanac-tern",
                    "home/dev/.codex", "root/.ssh", "tmp", "var/tmp", "var/log"):
         (seed / folder).mkdir(parents=True, exist_ok=True)
     for relative in ("etc/ssh/ssh_host_ed25519_key", "etc/ssh/ssh_host_ed25519_key.pub",
@@ -197,6 +198,8 @@ main run --prompt -
     (seed / "etc/machine-id").write_text("old machine identity")
     (seed / "var/lib/docker/cache-fixture").write_text("warmed dependencies")
     (seed / "var/lib/containerd/image-fixture").write_text("cached images")
+    (seed / 'usr/local/lib/almanac-tern/tern').write_text('Tern runtime')
+    (seed / 'usr/local/lib/almanac-tern/session.py').write_text('Tern session helper')
     for service in ('almanac-tern-session.service', 'almanac-tern-remote.service'):
         units = seed / 'etc/systemd/system'
         (units / 'multi-user.target.wants').mkdir(parents=True, exist_ok=True)
@@ -214,6 +217,8 @@ main run --prompt -
     assert (seed / "etc/machine-id").read_text() == ""
     assert (seed / "var/lib/docker/cache-fixture").read_text() == "warmed dependencies"
     assert (seed / "var/lib/containerd/image-fixture").read_text() == "cached images"
+    assert (seed / 'usr/local/lib/almanac-tern/tern').read_text() == 'Tern runtime'
+    assert (seed / 'usr/local/lib/almanac-tern/session.py').read_text() == 'Tern session helper'
     for service in ('almanac-tern-session.service', 'almanac-tern-remote.service'):
         assert not (seed / 'etc/systemd/system' / service).exists()
         assert not (seed / 'etc/systemd/system/multi-user.target.wants' / service).is_symlink()
@@ -314,9 +319,10 @@ clone_image
             publish = '''source "$1"
 select_instance seed
 start() { :; }
-stop() { :; }
+stop() { test -f "$state/tern-runtime-installed" || { echo 'base did not install Tern before sealing' >&2; exit 1; }; }
 ssh_guest() { cat >/dev/null; }
 ensure_github_cli() { :; }
+install_tern_runtime() { touch "$state/tern-runtime-installed"; }
 dependency_fingerprint() { printf 'fixture-fingerprint\\n'; }
 edit_image() { [[ -z ${FAIL_BASE_EDIT:-} ]]; }
 prepare_base
@@ -433,6 +439,7 @@ newlines, --options and Unicode: café.\n\n'''
 shift
 check() { :; }
 check_local_tern() { :; }
+check_tern_runtime() { :; }
 check_legacy_agent() { :; }
 prepare_tern() { :; }
 connect_tern() { :; }
@@ -901,6 +908,7 @@ with open(os.environ['FAKE_ARGV'], 'w') as f:
     shell_program = '''source "$1"
 check() { :; }
 check_local_tern() { :; }
+check_tern_runtime() { :; }
 check_legacy_agent() { :; }
 prepare_tern() { :; }
 connect_tern() { :; }
@@ -970,6 +978,7 @@ main ssh
             ["bash", "-c", '''source "$1"
 check() { :; }
 check_local_tern() { :; }
+check_tern_runtime() { :; }
 check_legacy_agent() { :; }
 prepare_tern() { :; }
 connect_tern() { :; }

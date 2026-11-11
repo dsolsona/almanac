@@ -48,9 +48,13 @@ def public_keys():
     return '\n'.join(sorted(accepted)) + '\n'
 
 
-def check():
+def check_runtime():
     if not shutil.which('tern') or 'a multiplexing terminal' not in run('--help'):
         raise RuntimeError('install Stencil Tern on the laptop and put its executable on PATH')
+
+
+def check():
+    check_runtime()
     public_keys()
 
 
@@ -183,6 +187,8 @@ def main():
     action = sys.argv[1]
     if action == 'check':
         check()
+    elif action == 'check-runtime':
+        check_runtime()
     elif action == 'keys':
         print(public_keys(), end='')
     elif action == 'connect':
