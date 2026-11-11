@@ -199,7 +199,7 @@ export function SlisPage({ context }: { context: AuthContext }) {
   const [listPreviousCursors, setListPreviousCursors] = useState<string[]>([]);
   const [listSearch, setListSearch] = useState(() => new URL(window.location.href).searchParams.get('q') ?? '');
   const [listDatasourceID, setListDatasourceID] = useState(() => new URL(window.location.href).searchParams.get('datasource_id') ?? '');
-  const table = useResourceTable({items, loadPage: (cursor, signal) => slis.list(200, cursor, signal, listSearch, listDatasourceID), pageSize: listPageSize, scope: `${context.session?.user_id ?? ''}:${listSearch}:${listDatasourceID}`, enabled: route.kind === 'list' && !!context.session && !context.session.restricted});
+  const table = useResourceTable({items, loadPage: async (cursor, signal) => {const page = await slis.list(200, cursor, signal, listSearch, listDatasourceID); if (!signal.aborted) setError(''); return page;}, pageSize: listPageSize, scope: `${context.session?.user_id ?? ''}:${listSearch}:${listDatasourceID}`, enabled: route.kind === 'list' && !!context.session && !context.session.restricted});
   const [draft, setDraft] = useState<CreateDraft>(emptyDraft);
   const [displayName, setDisplayName] = useState('');
   const [loading, setLoading] = useState(true);
@@ -291,6 +291,7 @@ export function SlisPage({ context }: { context: AuthContext }) {
     const load = async () => {
       try {
         if (route.kind === 'list') {
+          void loadSources(request.signal).then((value) => { if (current()) setSources(value); }).catch(() => { if (current() && !request.signal.aborted) setSourceError('Datasources could not be loaded. Try again.'); }).finally(() => { if (current()) setSourceLoading(false); });
           const filters = new URL(window.location.href).searchParams;
           const search = filters.get('q') ?? '';
           const datasourceID = filters.get('datasource_id') ?? '';
@@ -309,7 +310,6 @@ export function SlisPage({ context }: { context: AuthContext }) {
           setListNextCursor(page.next_cursor);
           setUpdatedAt(clockFormat.format(new Date()));
           setLoading(false);
-          void loadSources(request.signal).then((value) => { if (current()) setSources(value); }).catch(() => { if (current() && !request.signal.aborted) setSourceError('Datasources could not be loaded. Try again.'); }).finally(() => { if (current()) setSourceLoading(false); });
         } else if (route.kind === 'create') {
           if (!canWrite) throw new Error('Editor or administrator access is required to create an SLI.');
           try {

@@ -809,14 +809,19 @@ it('loads assigned agent names and health beyond the first 200 agents before sor
   const firstPage = Array.from({length:200}, (_,index) => ({id:`00000000-0000-4000-8000-${String(index+1).padStart(12,'0')}`,display_name:index===0?'Alpha collector':`Unused ${index}`,enabled:true}));
   const lateAgent = {id:agentID,display_name:'Zeta collector',enabled:true,runtime:{reachability:'connected',capabilities:[{provider:'prometheus',configuration_formats:['prometheus-http-v1'],operations:['collect','connection_test','query_preview']}]}};
   const sources = [source(), {...source(),id:'00000000-0000-4000-8000-000000000999',name:'other',display_name:'Other metrics',agent_id:earlyID}];
+  let resolveMetadata!: (value: Response) => void;
+  const metadata = new Promise<Response>(resolve => {resolveMetadata = resolve;});
   const fetcher = vi.fn(async (input:RequestInfo|URL) => {
     const url=String(input);
-    if(url.startsWith('/api/v1/agents')) return response(url.includes('cursor=agents-next')?{items:[lateAgent],next_cursor:''}:{items:firstPage,next_cursor:'agents-next'});
+    if(url.includes('cursor=agents-next')) return metadata;
+    if(url.startsWith('/api/v1/agents')) return response({items:firstPage,next_cursor:'agents-next'});
     if(url.startsWith('/api/v1/slis')) return response({items:[],next_cursor:''});
     return response({items:sources,next_cursor:''});
   });
   vi.stubGlobal('fetch',fetcher);
   render(<DatasourcesPage context={admin}/>);
+  await screen.findByRole('link',{name:'Production metrics'});
+  resolveMetadata(response({items:[lateAgent],next_cursor:''}));
   await screen.findByText('Zeta collector');
   expect(fetcher).toHaveBeenCalledWith('/api/v1/agents?limit=200&cursor=agents-next',expect.objectContaining({signal:expect.any(AbortSignal)}));
   const user=userEvent.setup();

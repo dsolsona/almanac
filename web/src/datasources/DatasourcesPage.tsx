@@ -267,7 +267,8 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
   const [nextCursor, setNextCursor] = useState('');
   const [previousCursors, setPreviousCursors] = useState<string[]>([]);
   const [pageSize, setPageSize] = useState(20);
-  const table = useResourceTable({items, loadPage: (cursor, signal) => client.list(200, cursor, signal), pageSize, scope: context.session?.user_id ?? '', enabled: !selectedID && !isNew && !!context.session && !context.session.restricted});
+  const agentMetadata = useRef<Promise<Agent[]>>(Promise.resolve([]));
+  const table = useResourceTable({items, loadPage: async (cursor, signal) => {await agentMetadata.current; if (signal.aborted) throw signal.reason; return client.list(200, cursor, signal);}, pageSize, scope: context.session?.user_id ?? '', enabled: !selectedID && !isNew && !!context.session && !context.session.restricted});
   const [updatedAt, setUpdatedAt] = useState('');
   const [sliUsage, setSliUsage] = useState<SliUsage | null>(null);
   const [sliUsageTruncated, setSliUsageTruncated] = useState(false);
@@ -345,15 +346,22 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
   const loadList = useCallback((next = '', size = 20, trailAfter?: string[]) => {
     const request = new AbortController(); const routeAtRequest = locationKeyRef.current; const acceptsRead = table.readGuard(); setLoading(true); setError('');
     setSliUsage(null); setSliUsageTruncated(false);
+    const metadata = canPreview ? loadAgents(request.signal) : Promise.resolve([]);
+    agentMetadata.current = metadata;
+    void metadata.then(agentItems => {
+      if (!request.signal.aborted && locationKeyRef.current === routeAtRequest && acceptsRead()) setAgents(agentItems);
+    }).catch(reason => {
+      if (!request.signal.aborted && locationKeyRef.current === routeAtRequest && acceptsRead()) {
+        table.readFailed(reason);
+        setError(`Agent metadata could not be loaded. ${safeError(reason)}`);
+      }
+    });
     void (async () => {
       try {
-        const [page, agentItems] = await Promise.all([
-          client.list(size, next, request.signal),
-          canPreview ? loadAgents(request.signal) : Promise.resolve([]),
-        ]);
+        const page = await client.list(size, next, request.signal);
         if (request.signal.aborted || locationKeyRef.current !== routeAtRequest || !acceptsRead()) return;
         listResultKey.current = routeAtRequest;
-        setItems(page.items); setCursor(next); setNextCursor(page.next_cursor); setAgents(agentItems); setUpdatedAt(clockFormat.format(new Date()));
+        setItems(page.items); setCursor(next); setNextCursor(page.next_cursor); setUpdatedAt(clockFormat.format(new Date()));
         if (trailAfter) setPreviousCursors(trailAfter);
         void loadSliUsage(request.signal).then((result) => { if (!request.signal.aborted && locationKeyRef.current === routeAtRequest) { setSliUsage(result.usage); setSliUsageTruncated(result.truncated); } }).catch(() => undefined);
       } catch (reason) { if (!request.signal.aborted && locationKeyRef.current === routeAtRequest && acceptsRead()) {const denied = table.readFailed(reason); setError(`${safeError(reason)}${!denied && listResultKey.current === routeAtRequest ? ' Showing previous results.' : ''}`);} }

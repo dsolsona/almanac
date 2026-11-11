@@ -616,6 +616,9 @@ it('keeps the pager available when a sorted snapshot recovers an initial list fa
   const user=userEvent.setup();
   await user.selectOptions(screen.getByRole('combobox',{name:'Sort by'}),'name');
   await screen.findByRole('link',{name:'Indicator 00'});
+  await waitFor(()=>expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+  expect(screen.queryByText('Checking datasources')).not.toBeInTheDocument();
+  expect(screen.getByRole('option',{name:source().display_name})).toBeInTheDocument();
   const pager=screen.getByRole('navigation',{name:'SLI result pages'});
   await user.click(within(pager).getByRole('button',{name:'Next ›'}));
   await screen.findByRole('link',{name:'Indicator 10'});
