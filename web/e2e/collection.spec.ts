@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { metricsURL, startAgent, stopAgent } from './support/stack.ts';
+import { metricsURL, startAgent, stopAgent, agentLogs, compose } from './support/stack.ts';
 import { api, expectOk, unique } from './support/api.ts';
 
 // The product's core journey, in the order a new operator follows it: register an agent and run it,
@@ -16,6 +16,19 @@ let datasourceID = '';
 let sourceContainer = '';
 let sourceToken = '';
 let sliID = '';
+
+// Preserve the agent/backend boundary when a real diagnostic or collection fails.
+test.afterEach(async ({}, info) => {
+  if (info.status === info.expectedStatus) return;
+  for (const [name, read] of [
+    ['collector-log', () => sourceContainer ? agentLogs(sourceContainer) : 'Collector not started'],
+    ['backend-log', () => compose('logs', '--no-color', 'app')],
+  ] as const) {
+    try { await info.attach(name, {body: read(), contentType: 'text/plain'}); }
+    catch { await info.attach(name, {body: 'Log unavailable', contentType: 'text/plain'}); }
+  }
+});
+
 
 // The agent keeps running after this file: the restart journey checks that it reconnects.
 // scripts/e2e.sh removes it with the stack.
