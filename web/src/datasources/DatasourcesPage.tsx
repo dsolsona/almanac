@@ -679,7 +679,7 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
           <ToolbarSpacer />{refresh}
         </Toolbar>
         <ResourceTableMobileSort id="datasources-sort" columns={columns} sorting={table}/>
-        {table.error && <p role="alert">{table.error}<Button variant="outline" onClick={table.refresh}>Try again</Button></p>}
+        {table.error && <p role="alert">{table.error}<Button variant="outline" onClick={() => table.active ? table.refresh() : loadList(cursor, pageSize)}>Try again</Button></p>}
         <div className="ui-resource-panel" aria-busy={loading || table.busy || undefined}>
         {table.busy && <span className="sr-only" role="status">Sorting datasources</span>}
         {visible.length === 0 ? <p className="datasource-empty-filter">No datasources match these filters{table.active ? '.' : ' on this page.'}</p> : <table className="ds-table ui-list-table ui-resource-table" aria-label="Datasources">

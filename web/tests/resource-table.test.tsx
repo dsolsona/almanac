@@ -108,4 +108,8 @@ it.each([{status:401},{status:403},{code:'unauthenticated'},{code:'forbidden'}])
   await waitFor(() => expect(result.current.error).toBe('Access rejected'));
   expect(result.current.rows(columns).total).toBe(0);
   expect(result.current.sourceItems).toEqual([]);
+  act(() => result.current.choose(''));
+  expect(result.current.rows(columns).total).toBe(0);
+  expect(result.current.sourceItems).toEqual([]);
+  expect(result.current.error).toBe('Access rejected');
 });

@@ -429,7 +429,7 @@ export function AgentsPage({ context, recheckSession, suspended, draft, onDraftC
           <ToolbarSpacer />{listRefresh}
         </Toolbar>
         <ResourceTableMobileSort id="agents-sort" columns={columns} sorting={table}/>
-        {table.error && <p role="alert">{table.error}<Button variant="outline" onClick={table.refresh}>Try again</Button></p>}
+        {table.error && <p role="alert">{table.error}<Button variant="outline" onClick={() => table.active ? table.refresh() : void load()}>Try again</Button></p>}
         <div className="ui-resource-panel" aria-busy={loading || table.busy || undefined}>
         {table.busy && <span className="sr-only" role="status">Sorting agents</span>}
         {visibleAgents.length === 0 ? <p className="agents-card__note">No agents match these filters{table.active ? '.' : ' on this page.'}</p> : <div className="agents-table-scroll" role="region" aria-label="Agent records" tabIndex={0}><table className="agents-table agents-table--list ui-list-table ui-resource-table"><ResourceTableHead columns={columns} sorting={table}/><tbody>{visibleAgents.map((item) => { const vocabulary = agentVocabulary(item); const collection = collectionSummary(item); return <tr key={item.id} onClick={event => resourceRowClick(event, () => setQuery({agent: item.id, agents_cursor: '', credentials_cursor: ''}))}>

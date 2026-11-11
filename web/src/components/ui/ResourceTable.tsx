@@ -15,6 +15,8 @@ export function useResourceTable<T extends {id: string}>({items, loadPage, pageS
   const [sort, setSort] = useState({field: '', descending: false});
   const [completed, setCompleted] = useState<{scope: string; items: T[]} | null>(null);
   const snapshot = completed?.scope === scope ? completed.items : null;
+  const [rejectedSource, setRejectedSource] = useState<{items: T[]; scope: string} | null>(null);
+  const accessRejected = rejectedSource?.items === items && rejectedSource.scope === scope;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [page, setPage] = useState(0);
@@ -22,7 +24,7 @@ export function useResourceTable<T extends {id: string}>({items, loadPage, pageS
   const loader = useRef(loadPage); loader.current = loadPage;
   const active = !!sort.field && enabled;
   useEffect(() => {
-    if (!active) { setCompleted(null); setError(''); setBusy(false); return; }
+    if (!active) { setCompleted(null); if (!accessRejected) setError(''); setBusy(false); return; }
     const controller = new AbortController();
     const fetchPage = loader.current;
     const deadline = setTimeout(() => {
@@ -44,12 +46,13 @@ export function useResourceTable<T extends {id: string}>({items, loadPage, pageS
         cursor = result.next_cursor;
       } while (cursor);
       setCompleted({scope, items: [...records.values()]});
+      setRejectedSource(null);
     })().catch((failure: unknown) => {
       if (!controller.signal.aborted) {
         const denied = typeof failure === 'object' && failure !== null
           && (('status' in failure && (failure.status === 401 || failure.status === 403))
             || ('code' in failure && ['unauthenticated', 'unauthorized', 'forbidden'].includes(String(failure.code))));
-        if (denied) setCompleted(null);
+        if (denied) {setCompleted(null); setRejectedSource({items, scope});}
         setError((snapshot && !denied ? 'Couldn’t refresh sorted records. Showing the last complete result. ' : '') + (failure instanceof Error ? failure.message : 'The records could not be sorted. Try again.'));
       }
     }).finally(() => { clearTimeout(deadline); if (!controller.signal.aborted) setBusy(false); });
@@ -57,7 +60,7 @@ export function useResourceTable<T extends {id: string}>({items, loadPage, pageS
   }, [active, enabled, items, revision, scope]);
   const choose = (field: string) => { setSort(current => ({field, descending: current.field === field && !current.descending})); setPage(0); };
   function rows(columns: ResourceColumn<T>[], filter: (item: T) => boolean = () => true) {
-    const all = (active ? snapshot ?? (error ? [] : items) : items).filter(filter);
+    const all = (accessRejected ? [] : active ? snapshot ?? (error ? [] : items) : items).filter(filter);
     const column = columns.find(column => column.id === sort.field);
     if (active && snapshot && column) {
       const keys = new Map(all.map(item => [item.id, column.value(item)]));
@@ -74,7 +77,7 @@ export function useResourceTable<T extends {id: string}>({items, loadPage, pageS
     return {items: active ? all.slice(start, start + pageSize) : all, total: all.length, start,
       hasPrevious: boundedPage > 0, hasNext: start + pageSize < all.length};
   }
-  return {sort, choose, active, busy, error, sourceItems: active ? snapshot ?? (error ? [] : items) : items, rows, next: () => setPage(value => value + 1), previous: () => setPage(value => Math.max(0, value - 1)), resetPage: () => setPage(0), refresh: () => setRevision(value => value + 1)};
+  return {sort, choose, active, busy, error, sourceItems: accessRejected ? [] : active ? snapshot ?? (error ? [] : items) : items, rows, next: () => setPage(value => value + 1), previous: () => setPage(value => Math.max(0, value - 1)), resetPage: () => setPage(0), refresh: () => setRevision(value => value + 1)};
 }
 
 type Sorting = {busy?: boolean; sort: {field: string; descending: boolean}; choose: (field: string) => void};
