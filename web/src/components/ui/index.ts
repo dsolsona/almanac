@@ -30,3 +30,6 @@ export { PageHeader, SearchField, Toolbar, ToolbarSpacer, RefreshButton, FilterS
 export { FormSection, FormActions } from './FormSection.tsx';
 
 export { LabelChips } from './LabelChips.tsx';
+
+export {useResourceTable, ResourceTableHead, ResourceTableMobileSort, resourceRowClick} from './ResourceTable.tsx';
+export type {ResourceColumn} from './ResourceTable.tsx';

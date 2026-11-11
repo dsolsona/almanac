@@ -3205,7 +3205,7 @@ type Sli struct {
 	RecentMeasurementWindowStart *time.Time `json:"recent_measurement_window_start,omitempty"`
 
 	// RecentMeasurements Last eligible source-cadence intervals for the current measurement revision; explicit states and exact count strings.
-	RecentMeasurements   *[]SliRecentMeasurement `json:"recent_measurements,omitempty"`
+	RecentMeasurements   *[]SliRecentMeasurement `json:"recent_measurements,omitzero"`
 	SettlingDelaySeconds int                     `json:"settling_delay_seconds"`
 	TotalQuery           string                  `json:"total_query"`
 	UpdatedAt            time.Time               `json:"updated_at"`

@@ -326,7 +326,7 @@ describe('datasource page', () => {
     expect(screen.queryByRole('button', { name: 'New datasource' })).not.toBeInTheDocument();
     expect(calls.some((call) => call.url.startsWith('/api/v1/agents'))).toBe(false);
     // Viewers see the record without administrator-only health or agent columns; auth details stay on the detail page (ADR-0031).
-    expect(screen.getAllByRole('columnheader').map((cell) => cell.textContent)).toEqual(['Datasource', 'Cadence', 'SLIs']);
+    expect(screen.getAllByRole('columnheader').map((cell) => cell.textContent?.replace(/[↕↑↓]/g, ''))).toEqual(['Datasource', 'Cadence', 'SLIs']);
   });
 
   it('keeps First page available while viewing the last page', async () => {
@@ -683,7 +683,7 @@ describe('datasource page', () => {
     const table = await screen.findByRole('table', { name: 'Datasources' });
     // Name-first rows, health as a chip, no count subline (ADR-0031).
     expect(screen.queryByText(/all times UTC/)).not.toBeInTheDocument();
-    expect(within(table).getAllByRole('columnheader').map((cell) => cell.textContent)).toEqual(['Datasource', 'Health', 'Agent', 'Cadence', 'SLIs']);
+    expect(within(table).getAllByRole('columnheader').map((cell) => cell.textContent?.replace(/[↕↑↓]/g, ''))).toEqual(['Datasource', 'Health', 'Agent', 'Cadence', 'SLIs']);
     const rows = within(table).getAllByRole('row').slice(1);
     expect(rows[0]).toHaveTextContent('Active');
     expect(rows[0]).not.toHaveTextContent('agent connected');

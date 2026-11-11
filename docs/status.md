@@ -1,3 +1,14 @@
+Consistent resource tables, 2026-11-11: [F1-T23](tasks/F1-T23.md) ports the
+services table to agents, datasources and SLIs, with selectable clickable rows,
+all-column sorting across complete filtered results and 10/20-row pagination.
+SLO pages are unchanged. Final local checks pass 455 frontend tests, Go empty-list
+serialization coverage, 82 browser checks and all 18 isolated E2E journeys; a focused
+follow-up verifies actual light/dark themes at 1440/1024/360 px and keyboard links.
+Seeded first visits take 441/477/231 ms and global sorting 109/75/79 ms for
+agents/datasources/SLIs. Full failure history, command durations and large-fleet
+sorting limitations are in the task. PR publication and CodeRabbit/maintainer
+follow-up are authorized; merge is not.
+
 Configurable session inactivity, 2026-11-11: [F1-T22](tasks/F1-T22.md)
 adds Settings → Sessions for administrators, with an eight-hour default and
 versioned, audited persistence under [ADR-0044](adr/0044-configurable-session-inactivity.md).

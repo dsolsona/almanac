@@ -1,5 +1,10 @@
 # SPEC-0012: User interface
 
+> Accepted amendment, 2026-11-11: the maintainer selected the services table as
+> the reference for agents, datasources and SLIs, with clickable selectable rows
+> and every column sortable across all filtered results before pagination. Keep
+> SLO pages unchanged. See [F1-T23](../tasks/F1-T23.md) for delivery evidence.
+
 > Accepted amendment, 2026-11-10: [ADR-0043](../adr/0043-slo-status-from-due-eligible-measurements.md) separates SLO age, pending collection and actual gaps. Complete fresh eligible data can show Healthy immediately; show Waiting for data before the first interval is due, Partial data for real coverage gaps, and Budget exhausted for an observed negative budget. Disclose evaluation start, actual measurement cutoff and observed/expected interval counts independently of the status chip. Preserve existing geometry and historical compliance semantics.
 
 > Accepted service catalog amendment, 2026-11-07: [ADR-0036](../adr/0036-service-catalog.md) records approval of the service catalog reference, editable native service identifiers with stable UUIDs, metadata, declared dependencies and SLO-status summaries. It supersedes native service-name immutability only; future OpenSLO source mappings remain explicit and immutable.

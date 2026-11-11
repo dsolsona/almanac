@@ -224,3 +224,21 @@ known-empty, expired and not-applicable labels distinct in charts, tooltips and
 tables. Known-empty, expired and not-applicable samples remain gaps, never numeric
 zero. Synthetic catalogue fixtures must be explicitly labelled and
 must never look like live service data.
+
+
+Resource lists for agents, datasources and SLIs opt into `ResourceTableHead`,
+`ResourceTableMobileSort`, `useResourceTable`, `ui-resource-panel` and
+`ui-resource-table`, using the services table as the visual reference. These
+styles leave the SLO layout unchanged. Column buttons expose `aria-sort`;
+mobile keeps sorting through a select and direction button. Whole-row navigation
+uses `resourceRowClick`; the first cell remains a real link, and selections,
+modifier clicks and inner controls remain independent. The catalogue demonstrates
+these exports with explicitly local records.
+
+Global sorting collects complete cursor pages on demand, then filters, sorts and
+paginates the snapshot. Collection is serial and cancellable; failures and cursor
+cycles are actionable, and incomplete snapshots are never shown as sorted results.
+Names and status labels sort alphabetically, counts and cadence numerically;
+missing values sort last in either direction. SLI recent strips sort by observed
+interval count, and the latest sample sorts by its good-to-total ratio, as stated
+in the column tooltips. This is list ordering only, not an SLO evaluation.

@@ -1,3 +1,4 @@
+import {useResourceTable, ResourceTableHead, ResourceTableMobileSort, resourceRowClick, type ResourceColumn} from '../components/ui/ResourceTable.tsx';
 import { useState } from 'react';
 import { Button, ChoiceChips, Combobox, FilterSelect, FormActions, FormSection, LabelChips, Pager, PageHeader, Panel, RefreshButton, RoleChip, SearchField, SegmentedControl, SelectionSummary, StatusChip, StatusMark, TextareaField, TextField, ThemeChoice, Toolbar, ToolbarSpacer, type ComboboxOption } from '../components/ui/index.ts';
 
@@ -9,7 +10,12 @@ const datasourceExamples: ComboboxOption[] = [
   { id: 'staging', label: 'staging-mimir', tone: 'none', status: 'No agent', detail: 'Prometheus · 60 s cadence · no agent assigned', disabled: true },
 ];
 
+const resourceExamples = [{id:'a',name:'Request success',count:6},{id:'b',name:'Payment authorisation',count:1}];
+const resourceColumns: ResourceColumn<(typeof resourceExamples)[number]>[] = [{id:'name',label:'SLI',value:item=>item.name},{id:'count',label:'SLOs',value:item=>item.count}];
+
 export function OperationalControlsSection() {
+  const resourceTable = useResourceTable({items:resourceExamples,loadPage:async()=>({items:resourceExamples,next_cursor:''}),pageSize:10});
+  const [openedResource,setOpenedResource] = useState('');
   const [filter, setFilter] = useState('all');
   const [service, setService] = useState('');
   const [refreshes, setRefreshes] = useState(0);
@@ -53,6 +59,13 @@ export function OperationalControlsSection() {
         <p className="demo-feedback" role="status">Filter: {filter}. Service: {service || 'any'}. Refreshed {refreshes} times.</p>
         <Pager id="catalogue-page-size" label="Example result pages" position="Page 1 · showing 10 of 10" pageSize={pageSize} onPageSizeChange={setPageSize} hasPrevious={false} hasNext={false} />
       </div>
+    </Panel>
+
+    <Panel heading="Sortable resource table">
+      <p>Illustrative local records. Sort either column or click a row; inner links and selected text remain independent.</p>
+      <ResourceTableMobileSort id="catalogue-resource-sort" columns={resourceColumns} sorting={resourceTable}/>
+      <div className="ui-resource-panel" aria-busy={resourceTable.busy || undefined}><table className="ui-list-table ui-resource-table" aria-label="Sortable resource example"><ResourceTableHead columns={resourceColumns} sorting={resourceTable}/><tbody>{resourceTable.rows(resourceColumns).items.map(item=><tr key={item.id} onClick={event=>resourceRowClick(event,()=>setOpenedResource(item.name))}><td data-label="SLI"><a href="#operational" onClick={()=>setOpenedResource(item.name)}>{item.name}</a><span className="ui-list-table__sub">Local catalogue example</span></td><td data-label="SLOs">{item.count}</td></tr>)}</tbody></table></div>
+      <p role="status">{openedResource ? `Opened ${openedResource}` : 'No row opened.'}</p>
     </Panel>
 
     <Panel heading="Service labels and dependency selection">

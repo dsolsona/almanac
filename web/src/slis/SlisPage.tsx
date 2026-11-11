@@ -1,3 +1,4 @@
+import {useResourceTable, ResourceTableHead, ResourceTableMobileSort, resourceRowClick, type ResourceColumn} from '../components/ui/ResourceTable.tsx';
 import { useEffect, useMemo, useRef, useState, type FormEvent, type RefObject } from 'react';
 import type { AuthContext } from '../auth/client.ts';
 import { createAgentClient, type Agent } from '../agents/client.ts';
@@ -198,6 +199,7 @@ export function SlisPage({ context }: { context: AuthContext }) {
   const [listPreviousCursors, setListPreviousCursors] = useState<string[]>([]);
   const [listSearch, setListSearch] = useState(() => new URL(window.location.href).searchParams.get('q') ?? '');
   const [listDatasourceID, setListDatasourceID] = useState(() => new URL(window.location.href).searchParams.get('datasource_id') ?? '');
+  const table = useResourceTable({items, loadPage: (cursor, signal) => slis.list(200, cursor, signal, listSearch, listDatasourceID), pageSize: listPageSize, scope: `${context.session?.user_id ?? ''}:${listSearch}:${listDatasourceID}`, enabled: route.kind === 'list' && !!context.session && !context.session.restricted});
   const [draft, setDraft] = useState<CreateDraft>(emptyDraft);
   const [displayName, setDisplayName] = useState('');
   const [loading, setLoading] = useState(true);
@@ -684,6 +686,15 @@ export function SlisPage({ context }: { context: AuthContext }) {
 
   const datasourceOptions = [{ value: '', label: 'Any' }, ...sources.map((source) => ({ value: source.id, label: source.display_name }))];
   const hasListFilters = listSearch.trim() !== '' || listDatasourceID !== '';
+  const columns: ResourceColumn<Sli>[] = [
+    {id: 'name', label: 'SLI', value: item => item.display_name},
+    {id: 'health', label: 'Health', value: item => sliVocabulary(item).label},
+    {id: 'recent', label: 'Last 12 intervals', title: 'Sort by the number of observed intervals', value: item => item.recent_measurements?.filter(sample => sample.state === 'observed').length ?? null},
+    {id: 'sample', label: 'Last sample', title: 'Sort by the latest good-to-total ratio; unavailable values last', value: item => {const sample = item.latest_observation; return sample?.outcome === 'observed' && Number(sample.total_count) > 0 ? Number(sample.good_count) / Number(sample.total_count) : null;}},
+    {id: 'slos', label: 'SLOs', value: item => item.linked_slos?.total_count ?? item.linked_slos?.items.length ?? 0},
+  ];
+  const sortedPage = table.rows(columns);
+  const visibleItems = sortedPage.items;
   const paged = Boolean(listCursor || listNextCursor);
   const openCreate = () => { setDraft(emptyDraft); createIntent.current = null; navigate('/slis/new'); };
   return <>
@@ -692,10 +703,14 @@ export function SlisPage({ context }: { context: AuthContext }) {
     {sourceError && <><p className="sli-error" role="alert">{sourceError}</p><Button variant="outline" onClick={() => setLoadRevision((revision) => revision + 1)}>Try again</Button></>}
     {sourceLoading && <span className="sr-only" role="status">Checking datasources</span>}
     <Toolbar className="sli-list-toolbar"><SearchField id="sli-list-search" label="Search SLIs" placeholder="Search by name or datasource" value={listSearch} onChange={(event) => void updateListFilters(event.target.value, listDatasourceID)} shortcut /><FilterSelect id="sli-list-datasource" label="Datasource" options={datasourceOptions} value={listDatasourceID} onChange={(value) => void updateListFilters(listSearch, value)} /><ToolbarSpacer /><RefreshButton label="Refresh SLIs" busy={listBusy} lastRefreshed={updatedAt} onClick={() => void updateListPage(listSearch, listDatasourceID, listPageSize, listCursor, listPreviousCursors)} />{listBusy && <span className="sr-only" role="status">Updating SLI results</span>}</Toolbar>
-    {items.length === 0 ? error || sourceLoading ? null : hasListFilters ? <div className="sli-empty"><p>No SLIs match these filters.</p><Button variant="outline" onClick={() => void updateListFilters('', '')}>Clear filters</Button></div> : <div className="sli-empty">
+    <ResourceTableMobileSort id="slis-sort" columns={columns} sorting={table}/>
+    {table.error && <p role="alert">{table.error}<Button variant="outline" onClick={table.refresh}>Try again</Button></p>}
+    <div className="ui-resource-panel" aria-busy={listBusy || table.busy || undefined}>
+    {table.busy && <span className="sr-only" role="status">Sorting SLIs</span>}
+        {visibleItems.length === 0 ? error || sourceLoading ? null : hasListFilters ? <div className="sli-empty"><p>No SLIs match these filters.</p><Button variant="outline" onClick={() => void updateListFilters('', '')}>Clear filters</Button></div> : <div className="sli-empty">
       {!canWrite ? <p>No SLIs are available to your account.</p> : sourceError ? null : sources.length === 0 ? <><p>{context.session?.role === 'administrator' ? 'Add a Prometheus datasource to create your first SLI.' : 'Ask an administrator to add a Prometheus datasource before creating an SLI.'}</p></> : <p>Create your first SLI from a Prometheus datasource with New SLI.</p>}
     </div>
-      : <div className="sli-table-scroll sli-list-scroll" role="region" aria-label="Service level indicator table" tabIndex={0}><table className="sli-list-table ui-list-table"><thead><tr><th scope="col">SLI</th><th scope="col" className="sli-col-health">Health</th><th scope="col" className="sli-col-recent">Last 12 intervals</th><th scope="col" className="sli-col-sample">Last sample</th><th scope="col" className="sli-col-slos">SLOs</th></tr></thead><tbody>{items.map((item) => {
+      : <div className="sli-table-scroll sli-list-scroll" role="region" aria-label="Service level indicator table" tabIndex={0}><table className="sli-list-table ui-list-table ui-resource-table"><ResourceTableHead columns={columns} sorting={table}/><tbody>{visibleItems.map((item) => {
         const observation = item.latest_observation;
         const linked = item.linked_slos?.items ?? [];
         const totalLinked = item.linked_slos?.total_count ?? linked.length;
@@ -704,7 +719,7 @@ export function SlisPage({ context }: { context: AuthContext }) {
         // One value per cell (ADR-0032): counts, the failure detail and the exact UTC time are in the tooltip.
         const sampleDetail = observation ? `${observation.outcome === 'observed' ? `${count(observation.good_count!)} / ${count(observation.total_count!)} good` : observation.outcome === 'failed' ? `query ${observation.error_code ?? 'failed'}` : observation.outcome === 'incomplete' ? `missing ${observation.missing_components.join(', ')}` : 'no count value'} · interval ending ${shortTime(observation.interval_end)}` : item.next_expected_execution_at ? `first query ${clockTime(item.next_expected_execution_at)}` : undefined;
         const linkedNames = linked.map((objective) => objective.display_name || objective.name).join(', ') + (totalLinked > linked.length ? `, and ${totalLinked - linked.length} more` : '');
-        return <tr key={item.id}>
+        return <tr key={item.id} onClick={event => resourceRowClick(event, () => navigate(`/slis/${item.id}`))}>
           <td data-label="SLI" className="sli-list-name"><a href={`/slis/${item.id}`} data-app-route><strong>{item.display_name}</strong></a><small className="ui-list-table__sub"><span className="sli-list-source">{item.datasource_display_name ? <a href={`/datasources/${item.datasource_id}`} data-app-route>{item.datasource_display_name}</a> : 'datasource name unavailable'}</span></small></td>
           <td data-label="Health" className="sli-col-health"><StatusChip tone={words.tone} label={words.label} reason={words.reason} /><span className="sr-only">{sliListHealth(item)}</span></td>
           <td data-label="Last 12 intervals" className="sli-col-recent"><SliRecentStrip samples={recent} cadenceSeconds={item.polling_interval_seconds} exactValues={false} /></td>
@@ -712,6 +727,7 @@ export function SlisPage({ context }: { context: AuthContext }) {
           <td data-label="SLOs" className="sli-col-slos">{totalLinked > 0 ? <a className="sli-list-count" href={totalLinked === 1 && linked[0] ? `/slos/${linked[0].id}` : `/slis/${item.id}`} data-app-route title={linkedNames} aria-label={`${totalLinked} SLO${totalLinked === 1 ? '' : 's'}: ${linkedNames}`}>{totalLinked} SLO{totalLinked === 1 ? '' : 's'}</a> : canWrite ? <a className="sli-list-create" href="/slos/new" data-app-route>Create SLO</a> : <span className="sli-muted">No SLOs</span>}</td>
         </tr>;
       })}</tbody></table></div>}
-    {(items.length > 0 || listCursor || listNextCursor) && <Pager id="sli-page-size" label="SLI result pages" position={paged ? `Showing ${items.length} on this page` : `Showing ${items.length} of ${items.length}`} pageSize={listPageSize} onPageSizeChange={(size) => void updateListPage(listSearch, listDatasourceID, size, '', [])} hasPrevious={Boolean(listCursor)} hasNext={Boolean(listNextCursor)} busy={listBusy} onPrevious={() => void updateListPage(listSearch, listDatasourceID, listPageSize, listPreviousCursors.at(-1) ?? '', listPreviousCursors.slice(0, -1), true)} onNext={() => void updateListPage(listSearch, listDatasourceID, listPageSize, listNextCursor, [...listPreviousCursors, listCursor], true)} />}
+    {(items.length > 0 || listCursor || listNextCursor) && <Pager id="sli-page-size" label="SLI result pages" position={table.active ? `Showing ${sortedPage.total ? sortedPage.start + 1 : 0}–${sortedPage.start + visibleItems.length} of ${sortedPage.total}` : paged ? `Showing ${items.length} on this page` : `Showing ${items.length} of ${items.length}`} pageSize={listPageSize} onPageSizeChange={(size) => {table.resetPage(); if (table.active) setListPageSize(size); else void updateListPage(listSearch, listDatasourceID, size, '', []);}} hasPrevious={table.active ? sortedPage.hasPrevious : Boolean(listCursor)} hasNext={table.active ? sortedPage.hasNext : Boolean(listNextCursor)} busy={listBusy || table.busy} onPrevious={() => table.active ? table.previous() : void updateListPage(listSearch, listDatasourceID, listPageSize, listPreviousCursors.at(-1) ?? '', listPreviousCursors.slice(0, -1), true)} onNext={() => table.active ? table.next() : void updateListPage(listSearch, listDatasourceID, listPageSize, listNextCursor, [...listPreviousCursors, listCursor], true)} />}
+    </div>
   </>;
 }
