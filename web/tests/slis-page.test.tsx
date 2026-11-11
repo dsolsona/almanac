@@ -601,3 +601,68 @@ describe('SLI page', () => {
     expect(screen.getByText('Good count query')).toBeVisible();
   });
 });
+
+it('keeps the pager available when a sorted snapshot recovers an initial list failure', async () => {
+  history.replaceState({}, '', '/slis?page_size=10');
+  let reads=0;
+  const records=Array.from({length:11},(_,index)=>({...sli(),id:`00000000-0000-4000-8000-${String(index+1).padStart(12,'0')}`,name:`indicator-${index}`,display_name:`Indicator ${String(index).padStart(2,'0')}`}));
+  vi.stubGlobal('fetch',vi.fn(async (input:RequestInfo|URL)=>{
+    if(String(input).startsWith('/api/v1/datasources')) return response({items:[source()],next_cursor:''});
+    if(++reads===1) throw new Error('offline');
+    return response({items:records,next_cursor:''});
+  }));
+  render(<SlisPage context={admin}/>);
+  await screen.findByRole('alert');
+  const user=userEvent.setup();
+  await user.selectOptions(screen.getByRole('combobox',{name:'Sort by'}),'name');
+  await screen.findByRole('link',{name:'Indicator 00'});
+  const pager=screen.getByRole('navigation',{name:'SLI result pages'});
+  await user.click(within(pager).getByRole('button',{name:'Next ›'}));
+  await screen.findByRole('link',{name:'Indicator 10'});
+  expect(screen.queryByRole('link',{name:'Indicator 00'})).not.toBeInTheDocument();
+});
+
+it('clears sorted rows and discards a pending load when the normal refresh is denied', async () => {
+  history.replaceState({}, '', '/slis');
+  let denied=false;
+  let hold=false;
+  const pending=deferredResponse();
+  vi.stubGlobal('fetch',vi.fn(async (input:RequestInfo|URL)=>{
+    const url=String(input);
+    if(url.startsWith('/api/v1/datasources')) return response({items:[source()],next_cursor:''});
+    if(url.includes('limit=200') && hold) return pending.promise;
+    if(denied) return response({code:'forbidden'},403);
+    return response({items:[sli()],next_cursor:''});
+  }));
+  render(<SlisPage context={admin}/>);
+  await screen.findByRole('link',{name:sli().display_name});
+  const user=userEvent.setup();
+  await user.selectOptions(screen.getByRole('combobox',{name:'Sort by'}),'name');
+  await waitFor(()=>expect(screen.getByRole('columnheader',{name:'SLI'})).toHaveAttribute('aria-sort','ascending'));
+  await user.selectOptions(screen.getByRole('combobox',{name:'Sort by'}),'');
+  hold=true;
+  await user.selectOptions(screen.getByRole('combobox',{name:'Sort by'}),'name');
+  denied=true;
+  await user.click(screen.getByRole('button',{name:'Refresh SLIs'}));
+  await waitFor(()=>expect(screen.queryByRole('link',{name:sli().display_name})).not.toBeInTheDocument());
+  await act(async()=>pending.resolve(response({items:[sli()],next_cursor:''})));
+  expect(screen.queryByRole('link',{name:sli().display_name})).not.toBeInTheDocument();
+});
+
+it('does not turn a rejected sorted read into a first-use empty state', async () => {
+  history.replaceState({}, '', '/slis');
+  let denied=false;
+  vi.stubGlobal('fetch',vi.fn(async (input:RequestInfo|URL)=>{
+    if(String(input).startsWith('/api/v1/datasources')) return response({items:[source()],next_cursor:''});
+    if(denied) return response({code:'forbidden'},403);
+    return response({items:[sli()],next_cursor:''});
+  }));
+  render(<SlisPage context={admin}/>);
+  await screen.findByRole('option',{name:'Production metrics'});
+  const user=userEvent.setup();
+  denied=true;
+  await user.selectOptions(screen.getByRole('combobox',{name:'Sort by'}),'name');
+  await waitFor(()=>expect(screen.queryByRole('link',{name:sli().display_name})).not.toBeInTheDocument());
+  expect(screen.getByRole('alert')).toBeVisible();
+  expect(screen.queryByText(/Create your first SLI/)).not.toBeInTheDocument();
+});

@@ -113,3 +113,56 @@ it.each([{status:401},{status:403},{code:'unauthenticated'},{code:'forbidden'}])
   expect(result.current.sourceItems).toEqual([]);
   expect(result.current.error).toBe('Access rejected');
 });
+
+it('identifies retained complete records when a refresh reaches its deadline', async () => {
+  const loadPage=vi.fn(async()=>({items,next_cursor:''}));
+  const {result,unmount}=renderHook(()=>useResourceTable({items,loadPage,pageSize:10}));
+  act(()=>result.current.choose('name'));
+  await waitFor(()=>expect(result.current.busy).toBe(false));
+  vi.useFakeTimers();
+  try {
+    loadPage.mockImplementation(()=>new Promise(()=>{}));
+    act(()=>result.current.refresh());
+    act(()=>vi.advanceTimersByTime(30_000));
+    expect(result.current.error).toContain('Showing the last complete result');
+    expect(result.current.error).toContain('Sorting took too long');
+    expect(result.current.busy).toBe(false);
+    expect(result.current.rows(columns).items).toEqual(items);
+    unmount();
+  } finally {vi.useRealTimers();}
+});
+
+it('fences parent reads and aborts a pending sorted load after an external denial', async () => {
+  let resolve!: (value:{items:Item[];next_cursor:string})=>void;
+  let signal:AbortSignal|undefined;
+  const loadPage=vi.fn(async (_cursor:string,requestSignal:AbortSignal)=>{signal=requestSignal;return {items,next_cursor:''};});
+  const {result}=renderHook(()=>useResourceTable({items,loadPage,pageSize:10}));
+  act(()=>result.current.choose('name'));
+  await waitFor(()=>expect(result.current.busy).toBe(false));
+  const acceptsOldRead=result.current.readGuard();
+  loadPage.mockImplementation((_cursor,requestSignal)=>{signal=requestSignal;return new Promise(done=>{resolve=done;});});
+  act(()=>result.current.refresh());
+  act(()=>{result.current.readFailed(Object.assign(new Error('Access rejected'),{status:403}));});
+  expect(acceptsOldRead()).toBe(false);
+  expect(signal?.aborted).toBe(true);
+  expect(result.current.rows(columns).total).toBe(0);
+  await act(async()=>resolve({items,next_cursor:''}));
+  expect(result.current.rows(columns).total).toBe(0);
+  expect(result.current.error).toBe('Access rejected');
+  expect(result.current.busy).toBe(false);
+  expect(result.current.readGuard()()).toBe(true);
+});
+
+it('keeps rejected base records hidden across query changes until a fresh parent read is confirmed', async () => {
+  const loadPage=async()=>({items,next_cursor:''});
+  const {result,rerender}=renderHook(({scope,records})=>useResourceTable({items:records,loadPage,pageSize:10,scope}),{initialProps:{scope:'first-query',records:items}});
+  act(()=>result.current.choose('name'));
+  await waitFor(()=>expect(result.current.busy).toBe(false));
+  act(()=>{result.current.readFailed(Object.assign(new Error('Access rejected'),{status:403}));result.current.choose('');});
+  rerender({scope:'another-query',records:items});
+  expect(result.current.rows(columns).items).toEqual([]);
+  expect(result.current.error).toBe('Access rejected');
+  rerender({scope:'another-query',records:[...items]});
+  expect(result.current.rows(columns).items).toEqual(items);
+  expect(result.current.error).toBe('');
+});

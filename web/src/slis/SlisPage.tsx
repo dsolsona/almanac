@@ -302,8 +302,9 @@ export function SlisPage({ context }: { context: AuthContext }) {
           setListPageSize(pageSize);
           setListCursor(cursor);
           setListPreviousCursors(Array.isArray(previous) ? previous.slice(0, 1000).filter((value): value is string => typeof value === 'string' && value.length <= 512) : []);
+          const acceptsRead = table.readGuard();
           const page = await slis.list(pageSize, cursor, request.signal, search, datasourceID);
-          if (!current()) return;
+          if (!current() || !acceptsRead()) return;
           setItems(page.items);
           setListNextCursor(page.next_cursor);
           setUpdatedAt(clockFormat.format(new Date()));
@@ -340,7 +341,7 @@ export function SlisPage({ context }: { context: AuthContext }) {
           void findProjection(resource.sli.name, resource.sli.id, request.signal).then((found) => { if (current()) { setProjection(found); setProjectionMissing(!found); } }).catch(() => { if (current() && !request.signal.aborted) setProjectionMissing(true); });
         }
       } catch (failure) {
-        if (current() && !request.signal.aborted) setError(safeError(failure));
+        if (current() && !request.signal.aborted) {if (route.kind === 'list') table.readFailed(failure); setError(safeError(failure));}
       } finally {
         if (current()) setLoading(false);
       }
@@ -476,14 +477,15 @@ export function SlisPage({ context }: { context: AuthContext }) {
     listAbort.current = controller;
     setListBusy(true);
     setError('');
+    const acceptsRead = table.readGuard();
     try {
       const page = await slis.list(pageSize, cursor, controller.signal, search, datasourceID);
-      if (generation !== routeGeneration.current || requestID !== listRequest.current) return;
+      if (generation !== routeGeneration.current || requestID !== listRequest.current || !acceptsRead()) return;
       setItems(page.items);
       setListNextCursor(page.next_cursor);
       setUpdatedAt(clockFormat.format(new Date()));
     } catch (failure) {
-      if (generation === routeGeneration.current && requestID === listRequest.current && !controller.signal.aborted) setError(safeError(failure));
+      if (generation === routeGeneration.current && requestID === listRequest.current && !controller.signal.aborted && acceptsRead()) {table.readFailed(failure); setError(safeError(failure));}
     } finally {
       if (generation === routeGeneration.current && requestID === listRequest.current) setListBusy(false);
     }
@@ -704,10 +706,10 @@ export function SlisPage({ context }: { context: AuthContext }) {
     {sourceLoading && <span className="sr-only" role="status">Checking datasources</span>}
     <Toolbar className="sli-list-toolbar"><SearchField id="sli-list-search" label="Search SLIs" placeholder="Search by name or datasource" value={listSearch} onChange={(event) => void updateListFilters(event.target.value, listDatasourceID)} shortcut /><FilterSelect id="sli-list-datasource" label="Datasource" options={datasourceOptions} value={listDatasourceID} onChange={(value) => void updateListFilters(listSearch, value)} /><ToolbarSpacer /><RefreshButton label="Refresh SLIs" busy={listBusy} lastRefreshed={updatedAt} onClick={() => void updateListPage(listSearch, listDatasourceID, listPageSize, listCursor, listPreviousCursors)} />{listBusy && <span className="sr-only" role="status">Updating SLI results</span>}</Toolbar>
     <ResourceTableMobileSort id="slis-sort" columns={columns} sorting={table}/>
-    {table.error && <p role="alert">{table.error}<Button variant="outline" onClick={() => table.active ? table.refresh() : void updateListPage(listSearch, listDatasourceID, listPageSize, listCursor, listPreviousCursors)}>Try again</Button></p>}
+    {table.error && <p role="alert">{table.error}<Button variant="outline" disabled={listBusy || table.busy} onClick={() => table.active ? table.refresh() : void updateListPage(listSearch, listDatasourceID, listPageSize, listCursor, listPreviousCursors)}>Try again</Button></p>}
     <div className="ui-resource-panel" aria-busy={listBusy || table.busy || undefined}>
     {table.busy && <span className="sr-only" role="status">Sorting SLIs</span>}
-        {visibleItems.length === 0 ? error || sourceLoading ? null : hasListFilters ? <div className="sli-empty"><p>No SLIs match these filters.</p><Button variant="outline" onClick={() => void updateListFilters('', '')}>Clear filters</Button></div> : <div className="sli-empty">
+        {visibleItems.length === 0 ? error || table.error || sourceLoading ? null : hasListFilters ? <div className="sli-empty"><p>No SLIs match these filters.</p><Button variant="outline" onClick={() => void updateListFilters('', '')}>Clear filters</Button></div> : <div className="sli-empty">
       {!canWrite ? <p>No SLIs are available to your account.</p> : sourceError ? null : sources.length === 0 ? <><p>{context.session?.role === 'administrator' ? 'Add a Prometheus datasource to create your first SLI.' : 'Ask an administrator to add a Prometheus datasource before creating an SLI.'}</p></> : <p>Create your first SLI from a Prometheus datasource with New SLI.</p>}
     </div>
       : <div className="sli-table-scroll sli-list-scroll" role="region" aria-label="Service level indicator table" tabIndex={0}><table className="sli-list-table ui-list-table ui-resource-table"><ResourceTableHead columns={columns} sorting={table}/><tbody>{visibleItems.map((item) => {
@@ -727,7 +729,7 @@ export function SlisPage({ context }: { context: AuthContext }) {
           <td data-label="SLOs" className="sli-col-slos">{totalLinked > 0 ? <a className="sli-list-count" href={totalLinked === 1 && linked[0] ? `/slos/${linked[0].id}` : `/slis/${item.id}`} data-app-route title={linkedNames} aria-label={`${totalLinked} SLO${totalLinked === 1 ? '' : 's'}: ${linkedNames}`}>{totalLinked} SLO{totalLinked === 1 ? '' : 's'}</a> : canWrite ? <a className="sli-list-create" href="/slos/new" data-app-route>Create SLO</a> : <span className="sli-muted">No SLOs</span>}</td>
         </tr>;
       })}</tbody></table></div>}
-    {(items.length > 0 || listCursor || listNextCursor) && <Pager id="sli-page-size" label="SLI result pages" position={table.active ? `Showing ${sortedPage.total ? sortedPage.start + 1 : 0}–${sortedPage.start + visibleItems.length} of ${sortedPage.total}` : paged ? `Showing ${items.length} on this page` : `Showing ${items.length} of ${items.length}`} pageSize={listPageSize} onPageSizeChange={(size) => {table.resetPage(); if (table.active) setListPageSize(size); else void updateListPage(listSearch, listDatasourceID, size, '', []);}} hasPrevious={table.active ? sortedPage.hasPrevious : Boolean(listCursor)} hasNext={table.active ? sortedPage.hasNext : Boolean(listNextCursor)} busy={listBusy || table.busy} onPrevious={() => table.active ? table.previous() : void updateListPage(listSearch, listDatasourceID, listPageSize, listPreviousCursors.at(-1) ?? '', listPreviousCursors.slice(0, -1), true)} onNext={() => table.active ? table.next() : void updateListPage(listSearch, listDatasourceID, listPageSize, listNextCursor, [...listPreviousCursors, listCursor], true)} />}
+    {(sortedPage.total > 0 || items.length > 0 || listCursor || listNextCursor) && <Pager id="sli-page-size" label="SLI result pages" position={table.active ? `Showing ${sortedPage.total ? sortedPage.start + 1 : 0}–${sortedPage.start + visibleItems.length} of ${sortedPage.total}` : paged ? `Showing ${items.length} on this page` : `Showing ${items.length} of ${items.length}`} pageSize={listPageSize} onPageSizeChange={(size) => {table.resetPage(); if (table.active) setListPageSize(size); else void updateListPage(listSearch, listDatasourceID, size, '', []);}} hasPrevious={table.active ? sortedPage.hasPrevious : Boolean(listCursor)} hasNext={table.active ? sortedPage.hasNext : Boolean(listNextCursor)} busy={listBusy || table.busy} onPrevious={() => table.active ? table.previous() : void updateListPage(listSearch, listDatasourceID, listPageSize, listPreviousCursors.at(-1) ?? '', listPreviousCursors.slice(0, -1), true)} onNext={() => table.active ? table.next() : void updateListPage(listSearch, listDatasourceID, listPageSize, listNextCursor, [...listPreviousCursors, listCursor], true)} />}
     </div>
   </>;
 }

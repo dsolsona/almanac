@@ -23,7 +23,7 @@ test('resource lists share the services table, sort all results, and open select
  await expectOk(api(page,'POST','/api/v1/services',{name:prefix,display_name:prefix}));
  for(const resource of ['agents','datasources','slis']){
   const started=performance.now();
-  await page.goto(`/${resource}`);
+  await page.goto(`/${resource}`,{waitUntil:'commit'});
   await expect(page.locator('.ui-resource-table tbody tr').first()).toBeVisible();
   const firstVisitMs=performance.now()-started;
   expect(firstVisitMs).toBeLessThan(1000);
@@ -63,10 +63,20 @@ test('resource lists share the services table, sort all results, and open select
   const first=rows.first(),cell=first.locator('td').nth(1),before=page.url();
   await cell.click({modifiers:['Control']});
   expect(page.url()).toBe(before);
-  await first.locator('td').first().evaluate(node=>{const range=document.createRange();range.selectNodeContents(node);getSelection()!.removeAllRanges();getSelection()!.addRange(range);});
-  await cell.dispatchEvent('click');
+  const selectable=cell.locator('.ui-status-chip');
+  const selectedText=(await selectable.textContent())!.trim();
+  // Measure the rendered text edges; the badge's shape and gap are not text.
+  const text=await selectable.evaluate(node=>{
+   const box=node.getBoundingClientRect(),shape=node.querySelector('.ui-status-chip__shape')!.getBoundingClientRect(),style=getComputedStyle(node);
+   return {left:shape.right+parseFloat(style.columnGap),right:box.right-parseFloat(style.paddingRight)-parseFloat(style.borderRightWidth),y:box.y+box.height/2};
+  });
+  await page.mouse.move(text.right-1,text.y);
+  await page.mouse.down();
+  await page.mouse.move(text.left+1,text.y,{steps:12});
+  await page.mouse.up();
+  expect(await page.evaluate(()=>getSelection()?.toString().trim())).toBe(selectedText);
   expect(page.url()).toBe(before);
-  await page.evaluate(()=>getSelection()!.removeAllRanges());
+  await page.getByRole('heading',{level:1}).click();
   const href=await first.locator('td').first().locator('a').first().getAttribute('href');
   await cell.click();
   await expect(page).toHaveURL(new RegExp(href!.replace(/[?]/g,'\\?')+'$'));

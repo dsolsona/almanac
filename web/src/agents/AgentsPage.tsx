@@ -200,14 +200,16 @@ export function AgentsPage({ context, recheckSession, suspended, draft, onDraftC
         setDatasources(null); setDatasourcesPartial(false);
         void api.datasources(state.agent, { signal: controller.signal, limit: 50 }).then((page) => { if (!controller.signal.aborted && generation === readGeneration.current) { setDatasources(page.items); setDatasourcesPartial(Boolean(page.next_cursor)); } }).catch(() => undefined);
       } else {
+        const acceptsRead = table.readGuard();
         const page = await api.list({ signal: controller.signal, limit: pageSize, ...(state.agents_cursor ? { cursor: state.agents_cursor } : {}) });
-        if (controller.signal.aborted || generation !== readGeneration.current) return;
+        if (controller.signal.aborted || generation !== readGeneration.current || !acceptsRead()) return;
         setAgents(page.items); setAgent(null); setAgentDetail(null); setCredentials([]); setAgentNext(page.next_cursor); setCredentialNext('');
         lastSuccessAt.current = new Date().toISOString(); hasCachedData.current = true; setUpdatedAt(clockFormat.format(new Date()));
       }
     } catch (caught) {
       if (controller.signal.aborted || generation !== readGeneration.current) return;
       if (caught instanceof AgentFailure && caught.kind === 'rejected' && ['unauthenticated', 'forbidden'].includes(caught.code)) {
+        table.readFailed(caught);
         setAgents([]); setAgent(null); setCredentials([]); setAgentNext(''); setCredentialNext(''); hasCachedData.current = false; lastSuccessAt.current = '';
         if (caught.code === 'unauthenticated') await recheckSession();
         if (controller.signal.aborted || generation !== readGeneration.current) return;
@@ -429,10 +431,10 @@ export function AgentsPage({ context, recheckSession, suspended, draft, onDraftC
           <ToolbarSpacer />{listRefresh}
         </Toolbar>
         <ResourceTableMobileSort id="agents-sort" columns={columns} sorting={table}/>
-        {table.error && <p role="alert">{table.error}<Button variant="outline" onClick={() => table.active ? table.refresh() : void load()}>Try again</Button></p>}
+        {table.error && <p role="alert">{table.error}<Button variant="outline" disabled={loading || table.busy} onClick={() => table.active ? table.refresh() : void load()}>Try again</Button></p>}
         <div className="ui-resource-panel" aria-busy={loading || table.busy || undefined}>
         {table.busy && <span className="sr-only" role="status">Sorting agents</span>}
-        {visibleAgents.length === 0 ? <p className="agents-card__note">No agents match these filters{table.active ? '.' : ' on this page.'}</p> : <div className="agents-table-scroll" role="region" aria-label="Agent records" tabIndex={0}><table className="agents-table agents-table--list ui-list-table ui-resource-table"><ResourceTableHead columns={columns} sorting={table}/><tbody>{visibleAgents.map((item) => { const vocabulary = agentVocabulary(item); const collection = collectionSummary(item); return <tr key={item.id} onClick={event => resourceRowClick(event, () => setQuery({agent: item.id, agents_cursor: '', credentials_cursor: ''}))}>
+        {visibleAgents.length === 0 ? table.error ? null : <p className="agents-card__note">No agents match these filters{table.active ? '.' : ' on this page.'}</p> : <div className="agents-table-scroll" role="region" aria-label="Agent records" tabIndex={0}><table className="agents-table agents-table--list ui-list-table ui-resource-table"><ResourceTableHead columns={columns} sorting={table}/><tbody>{visibleAgents.map((item) => { const vocabulary = agentVocabulary(item); const collection = collectionSummary(item); return <tr key={item.id} onClick={event => resourceRowClick(event, () => setQuery({agent: item.id, agents_cursor: '', credentials_cursor: ''}))}>
           <td data-label="Agent" className="agents-table__name"><a className="agents-link" href={`/agents?agent=${item.id}`} onClick={event => { if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); setQuery({agent: item.id, agents_cursor: '', credentials_cursor: ''}); }}>{item.name}</a><span className="agents-table__sub ui-list-table__sub">{item.display_name !== item.name ? `${item.display_name} · ` : ''}{item.runtime?.software_version ? `${item.runtime.software_version} · ` : ''}since {dayFormat.format(new Date(item.created_at))}</span></td>
           <td data-label="Status"><StatusChip tone={vocabulary.tone} label={vocabulary.label} reason={vocabulary.reason} /></td>
           <td data-label="Collection"><b className={collection.label === '—' || collection.label === 'Not started' ? 'agents-table__muted' : undefined}>{collection.label}</b><span className="agents-table__sub ui-list-table__sub mono">{collection.sub}</span></td>

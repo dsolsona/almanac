@@ -802,3 +802,52 @@ if (url.startsWith('/api/v1/slis') && usage === 'unavailable') return response({
  });
  expect(document.querySelector('.ds-head__status')).toHaveTextContent(usage === 'empty' ? 'Needs attention' : 'Active');
 });
+
+it('loads assigned agent names and health beyond the first 200 agents before sorting', async () => {
+  history.replaceState({}, '', '/datasources');
+  const earlyID = '00000000-0000-4000-8000-000000000001';
+  const firstPage = Array.from({length:200}, (_,index) => ({id:`00000000-0000-4000-8000-${String(index+1).padStart(12,'0')}`,display_name:index===0?'Alpha collector':`Unused ${index}`,enabled:true}));
+  const lateAgent = {id:agentID,display_name:'Zeta collector',enabled:true,runtime:{reachability:'connected',capabilities:[{provider:'prometheus',configuration_formats:['prometheus-http-v1'],operations:['collect','connection_test','query_preview']}]}};
+  const sources = [source(), {...source(),id:'00000000-0000-4000-8000-000000000999',name:'other',display_name:'Other metrics',agent_id:earlyID}];
+  const fetcher = vi.fn(async (input:RequestInfo|URL) => {
+    const url=String(input);
+    if(url.startsWith('/api/v1/agents')) return response(url.includes('cursor=agents-next')?{items:[lateAgent],next_cursor:''}:{items:firstPage,next_cursor:'agents-next'});
+    if(url.startsWith('/api/v1/slis')) return response({items:[],next_cursor:''});
+    return response({items:sources,next_cursor:''});
+  });
+  vi.stubGlobal('fetch',fetcher);
+  render(<DatasourcesPage context={admin}/>);
+  await screen.findByText('Zeta collector');
+  expect(fetcher).toHaveBeenCalledWith('/api/v1/agents?limit=200&cursor=agents-next',expect.objectContaining({signal:expect.any(AbortSignal)}));
+  const user=userEvent.setup();
+  await user.click(screen.getByRole('button',{name:'Agent'}));
+  await waitFor(()=>expect(document.querySelector('.ds-table tbody tr')).toHaveTextContent('Other metrics'));
+  await user.click(screen.getByRole('button',{name:'Health'}));
+  await waitFor(()=>expect(document.querySelector('.ds-table tbody tr')).toHaveTextContent('Production metrics'));
+  expect(screen.queryByText('Unknown agent')).not.toBeInTheDocument();
+});
+
+it('keeps a rejected sorted read visible after clearing sorting and recovers through refresh', async () => {
+  history.replaceState({}, '', '/datasources');
+  let denied=false;
+  installFetch();
+  const originalFetch=fetch;
+  vi.stubGlobal('fetch',vi.fn(async (input:RequestInfo|URL,init?:RequestInit)=>{
+    if(denied && String(input).startsWith('/api/v1/datasources?')) return response({code:'forbidden'},403);
+    return originalFetch(input,init);
+  }));
+  render(<DatasourcesPage context={admin}/>);
+  await screen.findByText('Production metrics');
+  const user=userEvent.setup();
+  await user.selectOptions(screen.getByRole('combobox',{name:'Sort by'}),'name');
+  await waitFor(()=>expect(screen.getByRole('columnheader',{name:'Datasource'})).toHaveAttribute('aria-sort','ascending'));
+  denied=true;
+  await user.click(screen.getByRole('button',{name:'Refresh datasources'}));
+  await waitFor(()=>expect(screen.queryByText('Production metrics')).not.toBeInTheDocument());
+  await user.selectOptions(screen.getByRole('combobox',{name:'Sort by'}),'');
+  expect(screen.queryByRole('heading',{name:'No datasources yet'})).not.toBeInTheDocument();
+  expect(screen.getAllByRole('alert').length).toBeGreaterThan(0);
+  denied=false;
+  await user.click(screen.getByRole('button',{name:'Try again'}));
+  await screen.findByText('Production metrics');
+});

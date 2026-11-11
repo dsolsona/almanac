@@ -389,6 +389,18 @@ type ServiceCatalogPage struct {
 }
 
 func ListServiceCatalog(ctx context.Context, databaseURL string, input ServiceCatalogInput) (ServiceCatalogPage, error) {
+	var page ServiceCatalogPage
+	// Restart the complete snapshot if an authority row changed concurrently,
+	// using the same bounded retry policy as the other operational readers.
+	err := retryOperationalRead(ctx, func() error {
+		var err error
+		page, err = listServiceCatalogOnce(ctx, databaseURL, input)
+		return err
+	})
+	return page, err
+}
+
+func listServiceCatalogOnce(ctx context.Context, databaseURL string, input ServiceCatalogInput) (ServiceCatalogPage, error) {
 	if input.Now == nil || !serviceText(input.Query, 128, false) || !serviceText(input.Owner, 200, false) {
 		return ServiceCatalogPage{}, ErrObjectiveInvalid
 	}

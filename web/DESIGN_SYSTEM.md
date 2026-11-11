@@ -242,3 +242,11 @@ Names and status labels sort alphabetically, counts and cadence numerically;
 missing values sort last in either direction. SLI recent strips sort by observed
 interval count, and the latest sample sorts by its good-to-total ratio, as stated
 in the column tooltips. This is list ordering only, not an SLO evaluation.
+
+
+Resource pages feed denied ordinary reads into the table's stable `readFailed`
+callback, and guard accepted parent responses with `readGuard`. A rejection clears
+both sorted and fallback rows, aborts the active scan and prevents earlier reads
+from restoring cached data. A newly confirmed read can restore the view. Retry
+controls stay visible when sorting is cleared. Long secondary names wrap within
+200 px, with keyboard-accessible horizontal overflow as a fallback.
