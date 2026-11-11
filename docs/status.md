@@ -15,7 +15,7 @@ and PTY failures remain recorded. [Evidence](evidence/traces-logs/README.md) inc
 nine final datasource renders and four sanitized timing artifacts. CodeRabbit
 functional fixes are verified and replied to; two HTTP credential policy threads
 remain open with visible warnings and a recorded compatibility decision. Native
-backfill, tenant headers and larger/year-long performance are not claimed. Rebased verification is pending; no merge.
+backfill, tenant headers and larger/year-long performance are not claimed. Rebased verification and the datasource-loading correction are recorded in F2-T34 and current PR checks; no merge.
 
 Consistent resource tables, 2026-11-11: [F1-T23](tasks/F1-T23.md) ports the
 services table to agents, datasources and SLIs, with selectable clickable rows,

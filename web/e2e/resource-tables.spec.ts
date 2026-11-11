@@ -26,8 +26,9 @@ test('resource lists share the services table, sort all results, and open select
   await page.goto(`/${resource}`,{waitUntil:'commit'});
   await expect(page.locator('.ui-resource-table tbody tr').first()).toBeVisible();
   const firstVisitMs=performance.now()-started;
-  expect(firstVisitMs).toBeLessThan(1000);
+  console.info('Resource first-visit timing:',JSON.stringify({resource,milliseconds:firstVisitMs}));
   await testInfo.attach(`${resource}-first-visit`,{body:JSON.stringify({milliseconds:firstVisitMs}),contentType:'application/json'});
+  expect(firstVisitMs).toBeLessThan(1000);
   const search=page.getByRole('searchbox');
   await search.fill(prefix+'-');
   const sortLabel=resource==='agents'?'Agent':resource==='datasources'?'Datasource':'SLI';
