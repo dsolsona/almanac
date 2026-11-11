@@ -3,7 +3,12 @@
 set -euo pipefail
 
 repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
-base=${FIRECRACKER_STATE_DIR:-$repo/.local/firecracker}
+launcher_repo=$repo
+primary_repo=$repo
+if IFS= read -r -d '' primary_worktree < <(git -C "$repo" worktree list --porcelain -z 2>/dev/null); then
+    primary_repo=${primary_worktree#worktree }
+fi
+base=${FIRECRACKER_STATE_DIR:-$primary_repo/.local/firecracker}
 state=$base
 name=almanac
 jail=$state/jailer/firecracker/almanac/root
@@ -26,8 +31,8 @@ Usage: ./firecracker-setup.sh ACTION [NAME] [--prompt TEXT|-] [--repo PATH]
   check   Check host prerequisites without changing anything.
   start   Boot the existing guest and wait for SSH.
   ssh     Open a dev shell in the task worktree (starts the guest if necessary).
-  codex   Attach to Codex in tmux (starts the guest if necessary).
-  run     Prepare/start a named guest and launch Codex in background; needs --prompt.
+  codex   Reconnect local Tern to Codex (legacy tmux workers remain attachable).
+  run     Boot a worker, start Codex inside Tern and connect local Tern; needs --prompt.
   collect Retrieve commits, tracked edits and new files without applying them.
   list    List every prepared or partially prepared guest, running or stopped.
   stop    Shut down the guest and remove its network rules; preserve its disk.
@@ -42,7 +47,8 @@ Use --prompt - to read all of stdin, or --prompt "task" for an inline prompt.
 New named guests default to 2 CPUs, 4096 MiB RAM, 80 GiB sparse disk.
 VM_CPUS, VM_MEMORY_MIB and VM_DISK_GIB override these defaults before setup.
 Clones inherit the base disk size; refresh the base when dependencies change.
-FIRECRACKER_STATE_DIR selects the shared private state/cache directory.
+VM state is shared across worktrees in the primary checkout's .local/firecracker/.
+FIRECRACKER_STATE_DIR optionally selects another private state/cache directory.
 See docs/firecracker.md. Run as your normal user; privileged steps use sudo.
 EOF
 }
@@ -205,6 +211,91 @@ PY
 
 ssh_guest() { ssh -F "$state/ssh_config" "$@"; }
 
+check_local_tern() { python3 "$launcher_repo/scripts/firecracker-tern.py" check; }
+
+restore_tern_agent() { ssh_guest dev 'python3 /usr/local/lib/almanac-tern/session.py restore'; }
+
+check_legacy_agent() {
+    local status=0
+    ssh_guest dev 'tmux has-session -t codex 2>/dev/null' || status=$?
+    [[ $status == 1 ]] || fail 'existing tmux Codex session or unknown session state; use vm-codex to attach'
+}
+
+prepare_tern() {
+    local digest remote_digest session_status=0 fingerprint
+    digest=$(sha256sum -- "$(command -v tern)"); digest=${digest%% *}
+    remote_digest=$(ssh_guest root 'if test -f /usr/local/lib/almanac-tern/tern; then sha256sum /usr/local/lib/almanac-tern/tern; fi')
+    if [[ ${remote_digest%% *} != "$digest" ]]; then
+        ssh_guest dev 'if test -f /usr/local/lib/almanac-tern/session.py; then python3 /usr/local/lib/almanac-tern/session.py status; else exit 1; fi' || session_status=$?
+        [[ $session_status == 1 ]] || fail 'Tern runtime differs or cannot be inspected; close its tasks before updating this worker'
+        ssh_guest root 'if test -f /etc/systemd/system/almanac-tern-session.service; then
+systemctl stop almanac-tern-remote.service almanac-tern-session.service
+fi'
+        scp -F "$state/ssh_config" "$(command -v tern)" root:/tmp/almanac-tern-runtime
+        ssh_guest root 'install -d -m 755 /usr/local/lib/almanac-tern
+install -m 755 /tmp/almanac-tern-runtime /usr/local/lib/almanac-tern/tern.new
+mv /usr/local/lib/almanac-tern/tern.new /usr/local/lib/almanac-tern/tern
+rm /tmp/almanac-tern-runtime'
+    fi
+    scp -F "$state/ssh_config" "$launcher_repo/scripts/firecracker-tern-guest.py" root:/tmp/almanac-tern-session.py
+    ssh_guest root bash -s <<GUEST
+set -euo pipefail
+install -m 644 /tmp/almanac-tern-session.py /usr/local/lib/almanac-tern/session.py
+rm /tmp/almanac-tern-session.py
+install -d -m 700 -o dev -g dev /home/dev/.local/state/almanac-tern
+for service in session remote; do
+    cat > /etc/systemd/system/almanac-tern-\$service.service <<UNIT
+[Unit]
+Wants=network-online.target
+After=network-online.target
+[Service]
+User=dev
+WorkingDirectory=/home/dev/almanac/.worktrees/codex
+UMask=0077
+Environment=TERN_CONFIG_DIR=/home/dev/.local/state/almanac-tern/config
+Environment=TERN_DAEMON_SOCKET=/home/dev/.local/state/almanac-tern/session.sock
+Environment=STENCIL_LOG_DIR=/home/dev/.local/state/almanac-tern/logs
+UNIT
+done
+cat >> /etc/systemd/system/almanac-tern-session.service <<'UNIT'
+ExecStart=/usr/local/lib/almanac-tern/tern daemon --socket /home/dev/.local/state/almanac-tern/session.sock
+[Install]
+WantedBy=multi-user.target
+UNIT
+cat >> /etc/systemd/system/almanac-tern-remote.service <<'UNIT'
+ExecStart=/usr/local/lib/almanac-tern/tern remote serve --user --listen $guest:8376 --state-dir /home/dev/.local/state/almanac-tern/remote --authorized-keys /home/dev/.local/state/almanac-tern/authorized_keys --relay none
+[Install]
+WantedBy=multi-user.target
+UNIT
+GUEST
+    python3 "$launcher_repo/scripts/firecracker-tern.py" keys | ssh_guest dev 'umask 077
+cat > /home/dev/.local/state/almanac-tern/authorized_keys.new
+mv /home/dev/.local/state/almanac-tern/authorized_keys.new /home/dev/.local/state/almanac-tern/authorized_keys'
+    ssh_guest root 'systemctl daemon-reload
+systemctl enable --now almanac-tern-session.service almanac-tern-remote.service
+for attempt in $(seq 1 100); do
+    if test -S /home/dev/.local/state/almanac-tern/session.sock; then exit 0; fi
+    systemctl is-active --quiet almanac-tern-session.service || exit 1
+    sleep .1
+done
+exit 1'
+    fingerprint=$(ssh_guest dev '/usr/local/lib/almanac-tern/tern remote host-key --state-dir /home/dev/.local/state/almanac-tern/remote' |
+        python3 -c 'import json,sys; print(json.load(sys.stdin)["fingerprint"])')
+    if [[ -f $state/tern-fingerprint ]]; then
+        [[ $(cat "$state/tern-fingerprint") == "$fingerprint" ]] || fail 'Tern host identity changed; worker and previous trust preserved'
+    fi
+    printf '%s\n' "$fingerprint" > "$state/tern-fingerprint"
+    printf 'dev@%s\n' "$guest" > "$state/tern-address"
+    ssh_guest dev 'touch /home/dev/.codex/almanac-terminal-tern'
+}
+
+connect_tern() {
+    python3 "$launcher_repo/scripts/firecracker-tern.py" connect \
+        "$(cat "$state/tern-address")" "$(cat "$state/tern-fingerprint")" \
+        || fail "local Tern connection failed; VM and Codex preserved. Reconnect: make vm-codex VM=$name"
+    printf '%s: Codex connected in local Tern.\n' "$name"
+}
+
 network_up() {
     # Never reuse an existing interface or replace an operator's firewall policy.
     ! ip link show "$tap" >/dev/null 2>&1 || fail "$tap already exists; stop its VM first"
@@ -346,6 +437,11 @@ for line in open('/proc/self/mountinfo'):
         sys.exit(f'Guest state still contains a mounted filesystem: {mount}; unmount before deleting')
 PY
     stop
+    if [[ -f $state/tern-address ]]; then
+        [[ -s $state/tern-fingerprint ]] || fail 'worker Tern identity is missing; disk preserved'
+        python3 "$launcher_repo/scripts/firecracker-tern.py" forget "$(cat "$state/tern-address")" "$(cat "$state/tern-fingerprint")" \
+            || fail 'could not remove the worker from local Tern; disk preserved for retry'
+    fi
     if [[ $name == almanac ]]; then
         # The legacy guest shares its parent directory with downloads, bases and named guests.
         sudo rm -rf -- "$jail" "$state/bin" "$state/build"
@@ -353,6 +449,7 @@ PY
             "$state/known_hosts" "$state/ssh_config" "$state/image-prepared" "$state/provisioned" \
             "$state/checkout-copied" "$state/ready" "$state/repo.bundle" "$state/repo-head" \
             "$state/checkout.tar.gz" "$state/git-config.json"
+        rm -f -- "$state/tern-address" "$state/tern-fingerprint"
     else
         # Keep failed credential removal discoverable and retryable under the original name.
         rm -f -- "$state/ready"
@@ -535,6 +632,9 @@ for name in ('etc/machine-id', 'var/lib/dbus/machine-id', 'var/lib/systemd/rando
              'var/lib/docker/engine-id', 'var/lib/docker/key.json',
              'var/lib/docker/network/files/local-kv.db'):
     (root / name).unlink(missing_ok=True)
+for service in ('almanac-tern-session.service', 'almanac-tern-remote.service'):
+    for folder in ('etc/systemd/system', 'etc/systemd/system/multi-user.target.wants'):
+        (root / folder / service).unlink(missing_ok=True)
 (root / 'etc/machine-id').write_text('')
 (root / 'etc/machine-id').chmod(0o644)
 PY
@@ -757,6 +857,11 @@ if tmux list-sessions >/dev/null 2>&1; then
     echo 'Close terminal/tmux tasks in this seed before sealing a base; seed preserved' >&2
     exit 1
 fi
+if test -f /usr/local/lib/almanac-tern/session.py; then
+    session_status=0
+    python3 /usr/local/lib/almanac-tern/session.py status || session_status=$?
+    test "$session_status" = 1 || { echo 'Close Tern tasks before sealing a base; seed preserved' >&2; exit 1; }
+fi
 # Only dependency caches may enter the base; refuse a seed used for application data.
 for container in $(docker container ls -aq); do
     test "$(docker inspect -f '{{index .Config.Labels "com.docker.compose.project"}}' "$container")" = almanac-dev || {
@@ -860,7 +965,9 @@ setup() {
 
 launch_agent() {
     local session_status=0
-    ssh_guest dev 'tmux has-session -t codex 2>/dev/null' || session_status=$?
+    ssh_guest dev 'if test -f /home/dev/.codex/almanac-terminal-tern; then
+python3 /usr/local/lib/almanac-tern/session.py status codex
+else tmux has-session -t codex 2>/dev/null; fi' || session_status=$?
     case "$session_status" in
         0)
             [[ -z $prompt ]] || fail 'Codex session already exists; attach with codex NAME instead of replacing its prompt'
@@ -868,22 +975,33 @@ launch_agent() {
         1) ;;
         *) fail 'could not inspect Codex session; existing prompt preserved' ;;
     esac
-    printf '%s' "$prompt" | ssh_guest dev 'umask 077; cat > /home/dev/.codex/almanac-prompt.txt'
+    if [[ -n $prompt ]]; then
+        ssh_guest dev 'rm -f /home/dev/.codex/almanac-prompt.used'
+        printf '%s' "$prompt" | ssh_guest dev 'umask 077; cat > /home/dev/.codex/almanac-prompt.txt'
+    else
+        ssh_guest dev 'umask 077; touch /home/dev/.codex/almanac-prompt.used
+test -e /home/dev/.codex/almanac-prompt.txt || : > /home/dev/.codex/almanac-prompt.txt'
+    fi
     ssh_guest dev bash -s <<'GUEST'
 set -euo pipefail
 cat > /home/dev/.codex/almanac-run <<'RUNNER'
 #!/usr/bin/env bash
 set -euo pipefail
 args=()
-if [[ -s /home/dev/.codex/almanac-prompt.txt ]]; then
+if [[ -s /home/dev/.codex/almanac-prompt.txt && ! -e /home/dev/.codex/almanac-prompt.used ]]; then
     IFS= read -r -d '' prompt < /home/dev/.codex/almanac-prompt.txt || true
     args=(-- "$prompt")
+    touch /home/dev/.codex/almanac-prompt.used
 fi
 exec codex --sandbox danger-full-access --ask-for-approval never \
     -c 'projects."/home/dev/almanac".trust_level="trusted"' "${args[@]}"
 RUNNER
 chmod 700 /home/dev/.codex/almanac-run
-tmux new-session -d -s codex -c /home/dev/almanac/.worktrees/codex /home/dev/.codex/almanac-run
+if [[ -f /home/dev/.codex/almanac-terminal-tern ]]; then
+    python3 /usr/local/lib/almanac-tern/session.py launch
+else
+    tmux new-session -d -s codex -c /home/dev/almanac/.worktrees/codex /home/dev/.codex/almanac-run
+fi
 GUEST
 }
 
@@ -893,6 +1011,11 @@ set -euo pipefail
 if tmux has-session -t codex 2>/dev/null; then
     echo 'Quit Codex in its terminal before collecting; the agent may still be editing files' >&2
     exit 1
+fi
+if test -f /home/dev/.codex/almanac-terminal-tern; then
+    session_status=0
+    python3 /usr/local/lib/almanac-tern/session.py status codex || session_status=$?
+    test "$session_status" = 1 || { echo 'Quit Codex in Tern before collecting; guest preserved' >&2; exit 1; }
 fi
 mkdir -p /home/dev/.codex/almanac-export
 cd /home/dev/almanac/.worktrees/codex
@@ -981,6 +1104,7 @@ main() {
         && { (( auto_name )) || [[ ! -f $state/ready ]]; }; then
         fail 'prepare shared dependencies first: ./firecracker-setup.sh base --repo PATH'
     fi
+    if [[ $action == run || ( $action == codex && -f $state/tern-address ) ]]; then check_local_tern; fi
     umask 077
     if (( auto_name )); then reserve_random_instance; fi
     mkdir -p "$state"
@@ -997,8 +1121,11 @@ main() {
         run)
             setup
             start
+            check_legacy_agent
+            prepare_tern
             launch_agent
-            printf '%s: Codex started in background. Attach: ./firecracker-setup.sh codex %s\n' "$name" "$name"
+            flock -u 9
+            connect_tern
             ;;
         collect)
             [[ -f $state/ready ]] || fail 'run setup first'
@@ -1007,11 +1134,27 @@ main() {
         ssh|codex)
             [[ -f $state/ready ]] || fail 'run setup first'
             start
+            if [[ $action == codex && -f $state/tern-address ]]; then
+                prepare_tern
+                restore_tern_agent
+                launch_agent
+                flock -u 9
+                connect_tern
+                return
+            fi
             if [[ $action == codex ]]; then launch_agent; else configure_guest_codex; fi
             # Interactive sessions must not hold the lifecycle lock.
             flock -u 9
-            if [[ $action == ssh ]]; then ssh_guest -t dev 'cd /home/dev/almanac/.worktrees/codex && exec "$SHELL" -l';
-            else ssh_guest -t dev 'tmux attach-session -t codex'; fi
+            if [[ $action == ssh ]]; then
+                ssh_guest -t dev 'cd /home/dev/almanac/.worktrees/codex && exec "$SHELL" -l'
+            else
+                # tmux 3.4 drops modified Enter without an application keyboard-mode request.
+                ssh_guest -t dev 'tmux -T extkeys \
+                    set-option -s extended-keys on \; \
+                    bind-key -n S-Enter if-shell -F "#{==:#{session_name},codex}" \
+                        "send-keys C-j" "send-keys S-Enter" \; \
+                    attach-session -t codex'
+            fi
             ;;
     esac
 }

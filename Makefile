@@ -42,11 +42,11 @@ Container images
 
 Optional Firecracker microVMs (Linux host; Docker runs inside each VM)
   vm-base               Build/rebuild the shared OS, tools and dependency disk
-  vm-run                Prepare a worker from the base and start background Codex
+  vm-run                Boot a worker, start Codex in Tern and connect local Tern
   vm-setup              Prepare a worker for manual use; Codex is not started
   vm-list               List running, stopped and partially prepared VMs
   vm-start              Boot an existing VM and wait for SSH
-  vm-codex              Attach to the worker's Codex terminal
+  vm-codex              Reconnect Tern to Codex (legacy tmux remains attachable)
   vm-ssh                Open a guest shell in the task worktree
   vm-collect            Retrieve commits/edits/new files without applying them
   vm-stop               Orderly shutdown; keep disk and credentials
@@ -72,7 +72,7 @@ Useful options
   VM_CPUS=2             New named VM vCPUs
   VM_MEMORY_MIB=4096    New named VM memory
   VM_DISK_GIB=80        Base disk size; clones inherit it
-  FIRECRACKER_STATE_DIR Shared private directory for bases and VM state
+  FIRECRACKER_STATE_DIR Optional override; VM state is shared across worktrees
 
 Examples
   make bootstrap
@@ -271,6 +271,7 @@ _test:
 	python3 scripts/check-image-pins.py
 	python3 scripts/local-agent-tty-test.py
 	python3 scripts/firecracker-setup-test.py
+	python3 scripts/firecracker-tern-test.py
 	python3 scripts/make-help-test.py
 	cd web && node scripts/check-local-agent.mjs
 	cd web && npm run typecheck

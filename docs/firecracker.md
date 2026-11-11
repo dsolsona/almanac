@@ -47,8 +47,10 @@ host package manager. Host Docker is not required.
 Each named guest reserves a stable, distinct /30 subnet in `192.168.240.0/20`,
 TAP, MAC address and firewall chain. Allocation is serialized and supports up to
 1,022 names per state directory, excluding the legacy guest's subnet. A reservation stays with a stopped guest so its
-disk can boot with the same network. Use one shared `FIRECRACKER_STATE_DIR` for
-concurrent instances. The original unnamed guest keeps `almfc0` on
+disk can boot with the same network. All linked worktrees automatically share
+the primary checkout's `.local/firecracker/`, so `make vm-run` needs no state
+override and `make vm-list` sees the same workers from every checkout.
+The original unnamed guest keeps `almfc0` on
 `192.168.241.0/30`; its existing disk and SSH configuration are preserved.
 Setup refuses an existing TAP or overlapping route rather than changing it.
 Host IPv4 input rules reject new connections from the guest. Forwarding rules
@@ -260,10 +262,47 @@ Each guest inherits the base's warmed Docker images and dependency caches.
 Several copied ChatGPT auth caches may require fresh logins after token rotation;
 independent guest logins avoid sharing a refresh cache.
 
-Detach from tmux with Ctrl-B then D; attaching again returns to the same Codex
-process while the VM remains running. A stopped VM preserves files, containers,
+`make vm-run` requires [Stencil Tern](https://stencil.so/tern) on the laptop's
+PATH and a public SSH key available through ssh-agent or a standard key file in
+`~/.ssh/`. It boots the worker, installs the matching Tern runtime when missing,
+starts its guest services and launches Codex directly in a `codex` Tern session.
+It retrieves the host fingerprint over authenticated SSH, configures local Tern
+trust, then adds/selects that remote host in the local window. No manual host
+entry or fingerprint copying is required. The local app opens if necessary.
+An invocation from a local Tern pane targets that pane's window; other terminals
+use the first local Tern window through an automatically closing control session.
+Local Lua performs this connection without a model request or a custom plugin.
+
+The guest listener binds its private IPv4 address on UDP 8376 with relays disabled.
+Only public laptop SSH keys are authorized; private keys stay on the laptop.
+Existing prepared bases receive the runtime without another application
+`make setup`. Guest services start with the VM, and each clone has its own Tern
+identity and session state. A saved identity mismatch stops connection setup.
+If local connection fails after launch, the VM and agent remain running; use
+`make vm-codex VM=NAME` to reconnect without submitting the task again.
+An already running Codex session rejects a replacement prompt.
+
+Closing the local window leaves Codex running inside the VM. A stopped VM preserves files, containers,
 images, volumes, login credentials and Codex conversation history, but stops
 processes. Use `codex resume` inside the guest to reopen a previous conversation.
+The initial task is marked consumed before Codex starts so service restoration
+cannot submit it again after a guest restart. Tern restores login shells rather
+than their former commands; `vm-codex` recreates the owned idle Codex pane and
+waits for its real process. It preserves foreground/background work and extra
+panes instead of replacing them. Stop and deletion retain their existing disk
+semantics. Deletion forgets the saved host, disconnects its live window entry
+and removes only the public pin matching that worker's recorded fingerprint.
+Tern 0.9.16 retains pins after its ordinary forget command, so this pin cleanup
+uses Tern's own file lock and preserves other host entries. A different cached
+identity causes deletion to stop with the disk preserved.
+
+Older tmux workers remain attachable through `make vm-codex`; their live
+processes are preserved. Detach from those terminals with Ctrl-B then D.
+Legacy attachment enables extended keys and maps Shift+Enter to a newline in the
+`codex` tmux session. Enter still submits. Other tmux sessions receive their
+original Shift+Enter key. This also repairs existing Codex sessions when attached
+with the updated launcher. Detach and reattach to negotiate extended keys on an
+older connection; the guest base and Codex process can keep running.
 Stop requests an orderly guest reboot; on x86, `reboot=k` makes that exit
 Firecracker rather than boot again. It starts `reboot.target` directly through
 PID 1's private systemd socket, avoiding a missing-system-bus warning in minimal
@@ -279,7 +318,10 @@ logs and SSH keys are preserved.
 
 Generated assets, private keys, SSH configuration, downloads and persistent disks
 stay under the existing ignored `.local/firecracker/` directory. Named guest state
-is in `instances/NAME/`; the original unnamed guest stays at the root. Commit
+is in `instances/NAME/`; the original unnamed guest stays at the root. This is
+the Git primary checkout's directory, shared by its linked worktrees. The source
+snapshot still comes from the checkout where you run `make vm-run`; no `-C` or
+environment override is needed. Commit
 only the script, its test and documentation. Repeating setup preserves a completed
 guest; it does not sync host changes over guest work. A failed image build is
 preserved under the instance's `build/` directory for inspection before a retry.
@@ -293,8 +335,9 @@ Before first setup, `VM_CPUS` and `VM_MEMORY_MIB` can override the defaults.
 Clones inherit the base disk size. `VM_DISK_GIB` selects the first seed's disk size;
 an explicit value for clones must match the base. `VM_DISK_GIB=120 make vm-base`
 builds a new 120 GiB base. Changing variables does not resize an existing guest.
-`FIRECRACKER_STATE_DIR` selects another canonical absolute directory; use the
-same value for every later command. Keep it outside tracked source and private.
+The optional `FIRECRACKER_STATE_DIR` override selects another canonical absolute
+directory. It is only needed for a deliberately separate pool; use the same
+override for its later commands. Keep that directory outside tracked source and private.
 
 ## Preview and retrieve work
 
