@@ -1,0 +1,28 @@
+.sli-inspectable-chart { position:relative; outline-offset:4px; }
+.sli-inspectable-chart:focus-visible { outline:3px solid var(--accent); }
+.sli-measurement-svg { width:100%; height:auto; display:block; overflow:visible; cursor:crosshair; }
+.sli-measurement-svg text { fill:var(--text-3); font:12px var(--mono); }
+.sli-measurement-svg .grid { stroke:var(--grid); stroke-width:1; }
+.sli-measurement-svg .line { stroke:var(--s1); stroke-width:2; stroke-linejoin:round; fill:none; vector-effect:non-scaling-stroke; }
+.sli-measurement-svg .area { fill:var(--good-wash); opacity:.12; }
+.sli-measurement-svg .gap { fill:var(--neutral-wash); stroke:var(--neutral); stroke-width:2; stroke-dasharray:2 4; }
+.sli-measurement-svg .chart-point { fill:var(--s1); }
+.sli-measurement-svg .interval-state.observed { fill:var(--good); }
+.sli-measurement-svg .interval-state.failed,.sli-measurement-svg .interval-state.partial { fill:var(--warn); }
+.sli-measurement-svg .interval-state.missing { fill:var(--neutral-wash); stroke:var(--neutral); stroke-dasharray:2 2; vector-effect:non-scaling-stroke; }
+.sli-measurement-svg .interval-state.zero,.sli-measurement-svg .interval-state.empty { fill:var(--neutral-wash); stroke:var(--neutral); vector-effect:non-scaling-stroke; }
+.sli-measurement-svg .interval-state.empty { fill:var(--surface); }
+.sli-measurement-svg .active-dot { fill:var(--s1); stroke:var(--surface); stroke-width:2; vector-effect:non-scaling-stroke; }
+.sli-measurement-svg .inspection-line { stroke:var(--text-3); stroke-width:1; stroke-dasharray:4 3; vector-effect:non-scaling-stroke; }
+.sli-measurement-svg .inspection-cursor { pointer-events:none; }
+.sli-chart-tooltip { position:absolute; z-index:2; width:264px; max-width:100%; padding:12px 16px; border:1px solid var(--border-strong); border-radius:3px; background:var(--surface); box-shadow:var(--shadow); font-size:13px; cursor:default; }
+.sli-chart-tooltip p { margin:0; }
+.sli-chart-tooltip .small { font-size:13px; color:var(--text-3); }
+.sli-chart-tooltip .tooltip-result { font:600 22px var(--mono); margin:8px 0; }
+.sli-chart-tooltip dl { margin:8px 0 0; }
+.sli-chart-tooltip dl div { display:flex; justify-content:space-between; gap:16px; margin-top:4px; }
+.sli-chart-tooltip dt { color:var(--text-2); }
+.sli-chart-tooltip dd { margin:0; min-width:0; overflow-wrap:anywhere; font-family:var(--mono); text-align:right; }
+.sli-chart-tooltip .tooltip-reason { margin-top:8px; color:var(--text-2); }
+.sli-chart-help { margin:4px 0 8px; font-size:13px; color:var(--text-3); }
+@media (pointer:coarse) { .sli-inspectable-chart .sli-chart-tooltip { position:static; width:100%; margin-top:12px; box-shadow:none; } }

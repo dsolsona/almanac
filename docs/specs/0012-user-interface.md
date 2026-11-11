@@ -1,5 +1,7 @@
 # SPEC-0012: User interface
 
+> Accepted SLI detail amendment, 2026-11-11: [ADR-0046](../adr/0046-sli-measurements-and-collection-detail.md) adopts [mockup E](../design/mocks/sli-detail-options/refined.html). Put the ratio definition near the title; integrate the latest result, inspected-period ratio and collection coverage into one graph panel with exact point inspection and aligned collection states. Keep linked objectives visible and raw intervals, query definitions and diagnostics collapsed. Preserve zero traffic, known empty, partial, failed and missing states, existing permissions, refresh and rename.
+
 > Accepted amendment, 2026-11-10: [ADR-0043](../adr/0043-slo-status-from-due-eligible-measurements.md) separates SLO age, pending collection and actual gaps. Complete fresh eligible data can show Healthy immediately; show Waiting for data before the first interval is due, Partial data for real coverage gaps, and Budget exhausted for an observed negative budget. Disclose evaluation start, actual measurement cutoff and observed/expected interval counts independently of the status chip. Preserve existing geometry and historical compliance semantics.
 
 > Accepted service catalog amendment, 2026-11-07: [ADR-0036](../adr/0036-service-catalog.md) records approval of the service catalog reference, editable native service identifiers with stable UUIDs, metadata, declared dependencies and SLO-status summaries. It supersedes native service-name immutability only; future OpenSLO source mappings remain explicit and immutable.

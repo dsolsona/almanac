@@ -127,6 +127,13 @@ Import controls from `src/components/ui/` and prefer native semantics:
   target classification. Its native details table exposes exact counts, interval
   timestamps and coverage labels from the same list projection; lists pass
   `exactValues={false}` and leave exact counts to the SLI page.
+- `SliMeasurementsChart` is the bounded detail plot under [ADR-0046](../docs/adr/0046-sli-measurements-and-collection-detail.md).
+  Its line and aligned collection squares use the same inspected intervals and exact
+  counts. Received, failed, missing, partial, zero-traffic and known-empty states
+  remain distinct; only nonzero observed counts have ratios. Hover, one keyboard
+  stop with arrow/Home/End/Escape controls, and touch inspection expose exact values.
+  Touch details sit below the plot. Both themes and unavailable states appear in
+  the chart catalogue. Green marks received counts, never an SLO verdict.
 
 Operational controls (ADR-0028), demonstrated in the catalogue's Operational section:
 

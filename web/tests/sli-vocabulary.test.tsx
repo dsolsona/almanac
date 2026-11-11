@@ -16,6 +16,8 @@ describe('SLI health vocabulary', () => {
     ['Query error', 'warning', sli({}, { outcome: 'failed', good_count: null, total_count: null, error_code: 'timeout' })],
     ['Partial data', 'warning', sli({}, { outcome: 'incomplete', good_count: null, missing_components: ['total'] })],
     ['Zero traffic', 'none', sli({}, { good_count: '0', total_count: '0' })],
+    ['Zero traffic', 'none', sli({}, { good_count: '0.000', total_count: '0.000' })],
+    ['Waiting for data', 'none', sli({}, { outcome:'complete_empty',good_count:null,total_count:null })],
   ])('labels %s', (label, tone, item) => {
     expect(sliVocabulary(item)).toMatchObject({ label, tone });
   });

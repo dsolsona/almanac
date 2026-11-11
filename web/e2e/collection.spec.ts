@@ -106,7 +106,7 @@ test('define an SLI and see its first collected interval', async ({ page }) => {
 
   // Settling is fixed at 60 s and the cadence is 15 s, so the first interval lands within ~90 s.
   await reloadUntil(page, async () => {
-    await expect(page.locator('.sli-counts strong')).toHaveText(['99', '100'], { timeout: 2_000 });
+    await expect(page.locator('.sli-measurement-summary > div:first-child p')).toContainText('99 / 100 good', { timeout: 2_000 });
   }, 180_000);
 
   await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'SLIs' }).click();
@@ -114,6 +114,41 @@ test('define an SLI and see its first collected interval', async ({ page }) => {
   await expect(row.getByText('Up to date')).toBeVisible();
   await expect(row.locator('td[data-label="Last sample"] b')).toHaveText('99%');
   await expect(row.getByRole('link', { name: 'Create SLO' })).toBeVisible();
+});
+
+test('inspect exact SLI measurements in both themes and at mobile width',async({page},testInfo)=>{
+  await page.goto(`/slis/${sliID}`);
+  await expect(page.locator('.chart-point').first()).toBeVisible();
+  await expect(page.locator('#sli-intervals')).not.toHaveAttribute('open','');
+  const resource=await expectOk(api(page,'GET',`/api/v1/slis/${sliID}`));
+  expect(resource.body.latest_observation.good_count).toBe('99');
+  expect(resource.body.latest_observation.total_count).toBe('100');
+  for(const width of [1440,360])for(const theme of ['light','dark']){
+    await page.setViewportSize({width,height:1000});
+    await page.evaluate(theme=>localStorage.setItem('almanac-theme',theme),theme);
+    await page.reload();
+    await expect(page.locator('.sli-measurement-summary > div:first-child dd')).toHaveText('99.00%');
+    await expect(page.locator('.chart-point').first()).toBeVisible();
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    const chart=page.getByRole('group',{name:/Interactive measurements/});
+    await chart.focus();await page.keyboard.press('End');
+    // Settling leaves recent slots uncollected; navigate to an actual collected point.
+    const observedIndex=Number(await page.locator('.chart-point').last().getAttribute('data-interval'));
+    const intervalCount=await page.locator('.interval-state').count();
+    for(let i=intervalCount-1;i>observedIndex;i--)await page.keyboard.press('ArrowLeft');
+    await expect(page.getByRole('tooltip')).toContainText('99.00%');
+    await expect(page.getByRole('tooltip')).toContainText('100');
+    await page.keyboard.press('Escape');await expect(page.getByRole('tooltip')).not.toBeVisible();
+    await chart.evaluate(el=>(el as HTMLElement).blur());
+    await page.evaluate(()=>window.scrollTo({top:0,behavior:'instant'}));
+    await page.screenshot({path:testInfo.outputPath(`sli-real-${width}-${theme}.png`),fullPage:true});
+  }
+  await page.getByRole('button',{name:'Exact values ↓'}).click();
+  const table=page.locator('.sli-intervals-table');
+  await expect(table.getByRole('cell',{name:'99',exact:true}).first()).toBeVisible();
+  await expect(table.getByRole('cell',{name:'100',exact:true}).first()).toBeVisible();
+  await page.getByRole('button',{name:'View queries',exact:true}).click();
+  await expect(page.locator('#sli-definition pre').first()).toContainText('vector(99)');
 });
 
 test('rename the SLI from its page', async ({ page }) => {

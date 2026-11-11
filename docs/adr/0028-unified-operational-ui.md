@@ -25,6 +25,10 @@ amendments to SPEC-0012, the visual reference and the design guide apply.
 
 ## Decision
 
+The SLI detail composition below is superseded by
+[ADR-0046](0046-sli-measurements-and-collection-detail.md). The other screens,
+single-column structure and shared control grammar remain governed by this ADR.
+
 1. **One grammar.** (List header and row order superseded by
    [ADR-0031](0031-list-grammar-and-button-roles.md).) Every list uses the same header (Bevan title, mono count
    subline, "Updated hh:mm:ss UTC", Refresh, one primary action), toolbar (search
