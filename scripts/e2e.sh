@@ -11,6 +11,9 @@ export COMPOSE_PROJECT_NAME=almanac-e2e
 export ALMANAC_PORT="${E2E_PORT:-18188}"
 export ALMANAC_METRICS_PORT="${E2E_METRICS_PORT:-18528}"
 export ALMANAC_TRACES_PORT="${E2E_TRACES_PORT:-19528}"
+export ALMANAC_LOKI_PORT=13101
+export ALMANAC_TEMPO_PORT=13201
+export ALMANAC_TEMPO_OTLP_PORT=14319
 export E2E_BASE_URL="https://localhost:${ALMANAC_PORT}"
 export E2E_METRICS_URL="http://localhost:${ALMANAC_METRICS_PORT}"
 export E2E_TRACES_URL="http://localhost:${ALMANAC_TRACES_PORT}"
@@ -22,7 +25,7 @@ down() {
   # Agents started by the suite carry this label; they are not Compose services.
   owned=$(docker ps -aq --filter label=almanac.e2e=owned)
   [ -z "$owned" ] || docker rm -f $owned >/dev/null
-  compose --profile agent down --volumes --remove-orphans >/dev/null 2>&1 || true
+  compose --profile agent --profile sources down --volumes --remove-orphans >/dev/null 2>&1 || true
 }
 
 up() {
@@ -31,7 +34,7 @@ up() {
   compose --profile agent build --quiet agent
   # A rebuild leaves the previous images untagged; remove this project's, never anyone else's.
   docker image prune --force --filter label=com.docker.compose.project="$COMPOSE_PROJECT_NAME" >/dev/null
-  compose up --detach --wait --wait-timeout 120 app
+  compose --profile sources up --detach --wait --wait-timeout 120 app loki tempo sources-ready
 }
 
 case "${1:-}" in

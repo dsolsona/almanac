@@ -7,6 +7,7 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"io"
+	"math"
 	"net"
 	"net/http"
 	"net/netip"
@@ -14,6 +15,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/dsolsona/almanac/internal/telemetry"
 )
@@ -25,6 +28,8 @@ const (
 )
 
 type Config struct {
+	Provider            string
+	CadenceSeconds      int
 	Endpoint            string
 	AuthMode            string
 	Username            string
@@ -36,6 +41,8 @@ type Config struct {
 }
 
 type Client struct {
+	provider string
+	cadence  int
 	endpoint *url.URL
 	authMode string
 	username string
@@ -63,6 +70,7 @@ type SourceError struct {
 
 func (e *SourceError) Error() string { return "prometheus: " + e.Code }
 
+// NewClient constructs a provider-aware HTTP client with bounded requests, TLS and destination checks.
 func NewClient(config Config) (*Client, error) {
 	if ValidateEndpoint(config.Endpoint) != nil ||
 		(config.AuthMode != "" && config.AuthMode != "none" && config.AuthMode != "basic" && config.AuthMode != "bearer") ||
@@ -70,6 +78,20 @@ func NewClient(config Config) (*Client, error) {
 		(config.AuthMode == "bearer" && config.BearerToken == "") ||
 		(config.AuthMode != "basic" && config.Password != "") ||
 		(config.AuthMode != "bearer" && config.BearerToken != "") {
+		return nil, ErrInvalidEndpoint
+	}
+	provider := config.Provider
+	if provider == "" {
+		provider = "prometheus"
+	}
+	if provider != "prometheus" && provider != "victoriatraces" && provider != "tempo" && provider != "loki" {
+		return nil, ErrInvalidEndpoint
+	}
+	cadence := config.CadenceSeconds
+	if cadence == 0 {
+		cadence = 60
+	}
+	if cadence < 15 || cadence > 86400 {
 		return nil, ErrInvalidEndpoint
 	}
 	u, _ := url.Parse(config.Endpoint)
@@ -100,10 +122,10 @@ func NewClient(config Config) (*Client, error) {
 			return safeDialContext(ctx, network, address, allowed)
 		},
 	}
-	client := &http.Client{Transport: telemetry.ClientTransport(transport, "provider.prometheus.request"), Timeout: timeout, CheckRedirect: func(*http.Request, []*http.Request) error {
+	client := &http.Client{Transport: telemetry.ClientTransport(transport, "provider."+provider+".request"), Timeout: timeout, CheckRedirect: func(*http.Request, []*http.Request) error {
 		return http.ErrUseLastResponse
 	}}
-	return &Client{endpoint: u, authMode: config.AuthMode, username: config.Username, password: config.Password, token: config.BearerToken, http: client, allowed: allowed}, nil
+	return &Client{provider: provider, cadence: cadence, endpoint: u, authMode: config.AuthMode, username: config.Username, password: config.Password, token: config.BearerToken, http: client, allowed: allowed}, nil
 }
 
 // CloseIdleConnections releases pooled connections when this client is retired.
@@ -112,7 +134,12 @@ func (c *Client) CloseIdleConnections() {
 	c.http.CloseIdleConnections()
 }
 
+// Query evaluates native counts at a settled cadence boundary; Prometheus retains its instant-query behavior.
 func (c *Client) Query(ctx context.Context, query string) (QueryResult, error) {
+	if c.provider != "prometheus" {
+		end := time.Now().UTC().Add(-60 * time.Second).Truncate(time.Duration(c.cadence) * time.Second)
+		return c.query(ctx, query, end)
+	}
 	return c.query(ctx, query, time.Time{})
 }
 
@@ -124,16 +151,49 @@ func (c *Client) QueryAt(ctx context.Context, query string, at time.Time) (Query
 	return c.query(ctx, query, at.UTC())
 }
 
+// query translates the canonical interval to the native API and rejects unsafe or incomplete responses.
 func (c *Client) query(ctx context.Context, query string, at time.Time) (QueryResult, error) {
 	if c == nil || c.endpoint == nil || strings.TrimSpace(query) == "" || len(query) > MaxQueryBytes {
 		return QueryResult{}, &SourceError{Code: "query"}
 	}
+	if c.provider == "victoriatraces" && hasLogsQLOptions(query) {
+		return QueryResult{}, &SourceError{Code: "query"}
+	}
+
 	u := c.endpoint.Clone()
-	u.Path = strings.TrimRight(u.Path, "/") + "/api/v1/query"
+	path := "/api/v1/query"
+	switch c.provider {
+	case "loki":
+		path = "/loki/api/v1/query"
+	case "victoriatraces":
+		path = "/select/logsql/stats_query"
+	case "tempo":
+		path = "/api/metrics/query"
+	}
+	u.Path = strings.TrimRight(u.Path, "/") + path
+	u.RawPath = ""
 	values := u.Query()
+	if c.provider == "loki" {
+		query = strings.ReplaceAll(query, "$interval", strconv.Itoa(c.cadence)+"s")
+	}
 	values.Set("query", query)
+	if c.provider == "tempo" {
+		values.Del("query")
+		values.Set("q", query)
+	}
+	if c.provider == "victoriatraces" || c.provider == "tempo" {
+		values.Set("start", at.Add(-time.Duration(c.cadence)*time.Second).Format(time.RFC3339Nano))
+		values.Set("end", at.Format(time.RFC3339Nano))
+	}
+	if c.provider == "victoriatraces" {
+		values.Set("allow_partial_response", "0")
+	}
 	if !at.IsZero() {
-		values.Set("time", at.UTC().Format(time.RFC3339Nano))
+		evaluation := at
+		if c.provider == "loki" {
+			evaluation = at.Add(-time.Nanosecond)
+		}
+		values.Set("time", evaluation.UTC().Format(time.RFC3339Nano))
 	}
 	u.RawQuery = values.Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
@@ -177,7 +237,22 @@ func (c *Client) query(ctx context.Context, query string, at time.Time) (QueryRe
 	if err != nil || len(body) > MaxResponse {
 		return QueryResult{}, &SourceError{Code: "incomplete"}
 	}
-	return parseQueryResponse(body)
+	if c.provider == "tempo" {
+		return parseTempoInstant(body, at)
+	}
+	result, parseErr := parseQueryResponse(body)
+	// Loki evaluates one nanosecond before the canonical end to preserve [start,end).
+	// Expose the canonical endpoint used by observation alignment, not its wire shift.
+	if parseErr == nil && c.provider == "loki" {
+		expected := strconv.FormatFloat(float64(at.Add(-time.Nanosecond).UnixMilli())/1000, 'f', 3, 64)
+		for i := range result.Series {
+			if result.Series[i].Time != expected {
+				return QueryResult{}, &SourceError{Code: "query"}
+			}
+			result.Series[i].Time = strconv.FormatInt(at.Unix(), 10)
+		}
+	}
+	return result, parseErr
 }
 
 func parseQueryResponse(body []byte) (QueryResult, error) {
@@ -283,6 +358,117 @@ func destinationAllowed(host string, ip net.IP, allowed []string) bool {
 		prefix, err := netip.ParsePrefix(entry)
 		address, addressErr := netip.ParseAddr(ip.String())
 		if err == nil && addressErr == nil && prefix.Contains(address) {
+			return true
+		}
+	}
+	return false
+}
+
+// ConnectionQuery is a bounded, read-only query in the selected provider language.
+func ConnectionQuery(provider string) string {
+	switch provider {
+	case "victoriatraces":
+		return "* | stats count() as events"
+	case "tempo":
+		return "{} | count_over_time()"
+	default:
+		return "vector(1)"
+	}
+}
+
+// parseTempoInstant validates complete, safe integer counts and anchors them to the requested interval end.
+func parseTempoInstant(body []byte, at time.Time) (QueryResult, error) {
+	var response struct {
+		Series []struct {
+			Labels []struct {
+				Key   string `json:"key"`
+				Value struct {
+					StringValue string `json:"stringValue"`
+				} `json:"value"`
+			} `json:"labels"`
+			Value *float64 `json:"value"`
+		} `json:"series"`
+		Status  jsontext.Value `json:"status"`
+		Metrics *struct {
+			TotalJobs     uint64 `json:"totalJobs"`
+			CompletedJobs uint64 `json:"completedJobs"`
+		} `json:"metrics"`
+		Message string `json:"message"`
+	}
+	if json.Unmarshal(body, &response) != nil || len(response.Series) > MaxSeries || response.Series == nil && response.Metrics == nil {
+		return QueryResult{}, &SourceError{Code: "query"}
+	}
+	if len(response.Status) > 0 && string(response.Status) != "0" && string(response.Status) != `"COMPLETE"` || response.Message != "" || response.Metrics != nil && response.Metrics.TotalJobs != response.Metrics.CompletedJobs {
+		return QueryResult{Class: "incomplete", Series: []Series{}, Message: "The source returned an incomplete preview"}, nil
+	}
+	result := QueryResult{Class: "complete", Series: []Series{}}
+	for _, series := range response.Series {
+		// Protobuf JSON omits scalar zero. Accept it only for an identified count series.
+		if series.Value == nil {
+			for _, label := range series.Labels {
+				if label.Key == "__name__" && label.Value.StringValue == "count_over_time" {
+					series.Value = new(float64(0))
+				}
+			}
+		}
+		if series.Value == nil || math.IsNaN(*series.Value) || math.IsInf(*series.Value, 0) || *series.Value < 0 || *series.Value > 9007199254740991 || math.Trunc(*series.Value) != *series.Value || len(series.Labels) > 32 {
+			return QueryResult{}, &SourceError{Code: "query"}
+		}
+		labels := make(map[string]string, len(series.Labels))
+		for _, label := range series.Labels {
+			if label.Key == "" || len(label.Key) > 128 || len(label.Value.StringValue) > 256 {
+				return QueryResult{}, &SourceError{Code: "incomplete"}
+			}
+			labels[label.Key] = label.Value.StringValue
+		}
+		result.Series = append(result.Series, Series{Labels: labels, Time: strconv.FormatInt(at.Unix(), 10), Value: strconv.FormatFloat(*series.Value, 'f', -1, 64)})
+	}
+	if len(result.Series) == 0 {
+		result.Class = "empty"
+	}
+	return result, nil
+}
+
+// hasLogsQLOptions rejects query-level configuration overrides, including in
+// subqueries. The initial count profile delegates interval and completeness
+// policy to the agent. Quoted search text does not configure query options.
+func hasLogsQLOptions(query string) bool {
+	for i := 0; i < len(query); {
+		if query[i] == '#' {
+			for i < len(query) && query[i] != '\n' {
+				i++
+			}
+			continue
+		}
+		if query[i] == '\'' || query[i] == '"' || query[i] == '`' {
+			quote := query[i]
+			i++
+			for i < len(query) {
+				if query[i] == '\\' && quote != '`' {
+					i += 2
+					continue
+				}
+				if query[i] == quote {
+					i++
+					break
+				}
+				i++
+			}
+			continue
+		}
+		start := i
+		for i < len(query) {
+			r, size := utf8.DecodeRuneInString(query[i:])
+			if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '_' {
+				break
+			}
+			i += size
+		}
+		if start == i {
+			i++
+			continue
+		}
+		if strings.ToLower(query[start:i]) == "options" {
 			return true
 		}
 	}

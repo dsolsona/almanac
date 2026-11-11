@@ -474,6 +474,7 @@ func waitForAgentReconnect(t *testing.T, databaseURL string, client *http.Client
 	t.Fatal("same agent process did not resume ownership and renew after backend restart")
 }
 
+// assertDatasourceDiagnosticJourney exercises the CLI through a real running agent and preserves bounded state evidence on diagnostic failures.
 func assertDatasourceDiagnosticJourney(t *testing.T, databaseURL, binary, dir, baseURL, certFile, endpoint string, caPEM []byte, password string, journey connectedAgentJourney, backendLogs *runtimeLog) {
 	t.Helper()
 	inputPath := filepath.Join(dir, "datasource-input.json")
@@ -503,6 +504,7 @@ func assertDatasourceDiagnosticJourney(t *testing.T, databaseURL, binary, dir, b
 			}
 			evidence := datasourceFailureEvidence(strings.Join(args[:2], " "), output, err)
 			evidence += " " + agentEvidence + " " + datasourceRegistryEvidence(backendLogs, output)
+			evidence += " " + shutdownFailureSnapshot(t, databaseURL, journey.id)
 			if stage == "agents get" {
 				evidence += " " + datasourceAgentStateEvidence(t, databaseURL, journey.id)
 			}

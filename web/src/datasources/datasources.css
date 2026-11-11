@@ -45,14 +45,15 @@
 
 /* Form pieces */
 .ds-form { max-width: none; }
-.ds-providers { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-.ds-provider { display: grid; gap: 4px; padding: 12px 14px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); text-align: left; font: inherit; cursor: pointer; }
+.ds-providers { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.ds-provider { position: relative; display: grid; gap: 4px; padding: 12px 14px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); text-align: left; font: inherit; cursor: pointer; }
 .ds-provider.is-selected { border-color: var(--selection); box-shadow: inset 0 0 0 1px var(--selection); }
-.ds-provider:disabled { background: var(--surface-2); color: var(--text-2); cursor: not-allowed; }
+.ds-provider:focus-within { outline: 3px solid var(--focus-ring); outline-offset: 2px; }
+.ds-provider:has(input:disabled) { background: var(--surface-2); color: var(--text-2); cursor: not-allowed; }
 .ds-provider__title { display: flex; align-items: center; gap: 8px; font-weight: 650; }
 .ds-provider__title::before { content: ''; width: 16px; height: 16px; border: 2px solid var(--border-strong); border-radius: 50%; }
 .ds-provider.is-selected .ds-provider__title::before { border-color: var(--selection); background: var(--selection); box-shadow: inset 0 0 0 3px var(--surface); }
-.ds-provider__text { font-size: .75rem; line-height: 1.5; }
+.ds-provider__text { font-size: .8125rem; line-height: 1.5; }
 .ds-provider__note { color: var(--text-3); font: .6875rem var(--mono); }
 .ds-provider-fixed { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 4px 14px; padding: 8px 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); }
 .ds-provider-fixed strong { font: 600 .875rem var(--mono); }
@@ -92,3 +93,5 @@
   .ds-secret { grid-template-columns: auto minmax(0, 1fr); }
   .ds-secret__actions { grid-column: 1 / -1; grid-row: auto; }
 }
+
+.ds-provider__input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: inherit; }

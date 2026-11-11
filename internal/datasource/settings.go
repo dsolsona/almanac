@@ -61,9 +61,10 @@ func DefaultSettings(name, displayName, endpoint, agentID string) Settings {
 	}
 }
 
+// Validate checks the supported provider profile and transport settings without contacting a source.
 func (s Settings) Validate() error {
 	if !datasourceNameRE.MatchString(s.Name) || strings.TrimSpace(s.DisplayName) == "" || utf8.RuneCountInString(s.DisplayName) == 0 || len(s.DisplayName) > 256 ||
-		s.Provider != PrometheusProvider || s.ConfigurationFormat != PrometheusConfiguration ||
+		!agentprotocol.ValidProvider(s.Provider, s.ConfigurationFormat) ||
 		len(s.Endpoint) == 0 || len(s.Endpoint) > MaximumEndpointBytes || prometheus.ValidateEndpoint(s.Endpoint) != nil ||
 		s.PollingIntervalSeconds < MinimumPollingInterval || s.PollingIntervalSeconds > MaximumPollingInterval ||
 		s.SettlingDelaySeconds != PrometheusSettlingDelay || !canonicalUUID(s.AgentID) ||
@@ -109,12 +110,20 @@ func (s Settings) ClientTLSConfig() (*tls.Config, error) {
 // SupportsOperation reports an explicitly advertised provider operation.
 // It deliberately does not infer support from a provider name or software version.
 func SupportsOperation(capabilities []agentprotocol.Capability, operation string) bool {
+	return SupportsProviderOperation(capabilities, PrometheusProvider, PrometheusConfiguration, operation)
+}
+
+// SupportsProviderOperation requires an explicit matching provider, format and operation capability.
+func SupportsProviderOperation(capabilities []agentprotocol.Capability, provider, format, operation string) bool {
+	if !agentprotocol.ValidProvider(provider, format) {
+		return false
+	}
 	if operation != "collect" && operation != "connection_test" && operation != "query_preview" {
 		return false
 	}
 	for _, capability := range capabilities {
-		if capability.Provider != PrometheusProvider ||
-			!slices.Contains(capability.ConfigurationFormats, PrometheusConfiguration) ||
+		if capability.Provider != provider ||
+			!slices.Contains(capability.ConfigurationFormats, format) ||
 			!slices.Contains(capability.Operations, operation) {
 			continue
 		}
@@ -148,4 +157,13 @@ func validCABundle(value string) bool {
 		remaining = bytes.TrimSpace(rest)
 	}
 	return count > 0 && strings.TrimSpace(value) != ""
+}
+
+// Capabilities describes implementations shipped in this agent, never inferred support.
+func Capabilities() []agentprotocol.Capability {
+	result := make([]agentprotocol.Capability, 0, 4)
+	for _, provider := range []string{"prometheus", "victoriatraces", "tempo", "loki"} {
+		result = append(result, agentprotocol.Capability{Provider: provider, ConfigurationFormats: []string{provider + "-http-v1"}, Operations: []string{"collect", "connection_test", "query_preview"}})
+	}
+	return result
 }

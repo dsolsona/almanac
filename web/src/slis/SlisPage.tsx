@@ -1,4 +1,5 @@
 import {useResourceTable, ResourceTableHead, ResourceTableMobileSort, resourceRowClick, type ResourceColumn} from '../components/ui/ResourceTable.tsx';
+import { providerInfo } from '../datasources/providers.ts';
 import { SliMeasurementsChart, intervalTime } from '../components/charts/SliMeasurementsChart.tsx';
 import { buildMeasurements, countText, measurementLabels, measurementInterval } from './measurements.ts';
 import { SliObjectives } from './SliObjectives.tsx';
@@ -136,6 +137,7 @@ function makeIdempotencyKey(): string {
 }
 
 type HistoryFilter = 'all' | 'problems';
+/** Manage event-count definitions and display observed intervals while preserving source-specific query semantics. */
 export function SlisPage({ context }: { context: AuthContext }) {
   const agentClient = useRef<ReturnType<typeof createAgentClient> | null>(null);
   if (!agentClient.current) agentClient.current = createAgentClient();
@@ -191,6 +193,7 @@ export function SlisPage({ context }: { context: AuthContext }) {
     if (route.kind === 'create') journeyContentReady('management', !!error || !!sourceError);
   }, [route.kind, loading, historyBusy, historyLoaded, error, historyError, sourceError]);
   const nameEdited = useRef(false);
+  const previousSource = useRef<Datasource | undefined>(undefined);
   const routeGeneration = useRef(0);
   const historyRequest = useRef(0);
   const listRequest = useRef(0);
@@ -285,6 +288,7 @@ export function SlisPage({ context }: { context: AuthContext }) {
             if (!current()) return;
             setSources(page);
             const selected = new URL(window.location.href).searchParams.get('datasource');
+            previousSource.current = undefined;
             setDraft({ ...emptyDraft, datasourceID: selected ? (page.some((source) => source.id === selected) ? selected : '') : page.length === 1 ? page[0]!.id : '' });
             nameEdited.current = false;
             if (context.session?.role === 'administrator' && !context.session.restricted) {
@@ -365,7 +369,7 @@ export function SlisPage({ context }: { context: AuthContext }) {
     const problems: Partial<Record<keyof CreateDraft, string>> = {};
     if (!draft.displayName.trim()) problems.displayName = 'Enter a display name.';
     if (!SLI_NAME.test(draft.name)) problems.name = 'Use lowercase letters, numbers, or hyphens for the identifier, starting and ending with a letter or number.';
-    if (!UUID.test(draft.datasourceID)) problems.datasourceID = 'Choose an existing Prometheus datasource.';
+    if (!UUID.test(draft.datasourceID)) problems.datasourceID = 'Choose an existing datasource.';
     if (!draft.goodQuery.trim()) problems.goodQuery = 'Enter a good events query.';
     if (!draft.totalQuery.trim()) problems.totalQuery = 'Enter a total events query.';
     const errors = Object.values(problems);
@@ -496,19 +500,23 @@ export function SlisPage({ context }: { context: AuthContext }) {
   if (error && !sli && route.kind === 'detail') return <><PageTitle title="SLI unavailable" headingRef={titleRef} /><Panel heading="SLI could not be loaded"><p role="alert">{error}</p><Button variant="outline" onClick={() => navigate('/slis')}>Back to SLIs</Button></Panel></>;
 
   if (route.kind === 'create') {
+    const selectedSource = sources.find((source) => source.id === draft.datasourceID);
+    const querySource = selectedSource ?? previousSource.current;
+    const provider = providerInfo(querySource?.provider ?? 'prometheus');
+    const interval = querySource?.polling_interval_seconds ?? 60;
     const agentByID = new Map(agents.map((item) => [item.id, item] as const));
     const options: ComboboxOption[] = sources.map((source) => {
       const agent = agentByID.get(source.agent_id);
       // A disabled agent is not operational whatever its last report said.
       const disabled = agent ? !agent.enabled : false;
       const reach = agent && !disabled ? agent.runtime?.reachability : undefined;
-      const cadence = `Prometheus · ${source.polling_interval_seconds} s cadence`;
+      const cadence = `${providerInfo(source.provider).label} · ${source.polling_interval_seconds} s cadence`;
       return {
         id: source.id,
         label: source.display_name,
-        keywords: `${source.name} prometheus ${agent?.display_name ?? ''}`,
+        keywords: `${source.name} ${source.provider} ${agent?.display_name ?? ''}`,
         tone: disabled ? 'stale' : reach === 'connected' ? 'healthy' : reach ? 'stale' : 'none',
-        status: !agent ? 'Prometheus' : disabled ? 'Agent disabled' : reach === 'connected' ? 'Healthy' : reach === 'unreachable' ? 'Agent unreachable' : reach === 'incompatible' ? 'Agent incompatible' : 'Agent not yet reporting',
+        status: !agent ? providerInfo(source.provider).label : disabled ? 'Agent disabled' : reach === 'connected' ? 'Healthy' : reach === 'unreachable' ? 'Agent unreachable' : reach === 'incompatible' ? 'Agent incompatible' : 'Agent not yet reporting',
         detail: agent ? `${cadence} · agent ${agent.display_name} · ${disabled ? 'disabled' : reach ?? 'not yet reporting'}` : cadence,
         summaryMessage: disabled ? 'The assigned agent is disabled. Collection cannot start until the datasource is moved to an enabled agent.' : reach && reach !== 'connected' ? 'You can still create the SLI. Collection starts when the agent reconnects.' : undefined,
       };
@@ -519,7 +527,7 @@ export function SlisPage({ context }: { context: AuthContext }) {
       {error && <p className="sli-error" role="alert">{error}</p>}
       {!canWrite ? <Panel heading="Access required"><p>Editor or administrator access is required to create SLIs.</p></Panel>
         : sourceError ? <div className="sli-empty"><p role="alert">{sourceError}</p><Button variant="outline" onClick={() => setLoadRevision((revision) => revision + 1)}>Try again</Button></div>
-        : sources.length === 0 ? <div className="sli-empty"><p>{administrator ? 'Add a Prometheus datasource to create an SLI.' : 'Ask an administrator to add a Prometheus datasource before creating an SLI.'}</p>{administrator && <Button onClick={() => navigate('/datasources/new?return=slis')}>Add datasource</Button>}<Button variant="outline" onClick={() => navigate('/slis')}>Back to SLIs</Button></div>
+        : sources.length === 0 ? <div className="sli-empty"><p>{administrator ? 'Add a datasource to create an SLI.' : 'Ask an administrator to add a datasource before creating an SLI.'}</p>{administrator && <Button onClick={() => navigate('/datasources/new?return=slis')}>Add datasource</Button>}<Button variant="outline" onClick={() => navigate('/slis')}>Back to SLIs</Button></div>
           : <form className="ui-form sli-form" onSubmit={(event) => void submitCreate(event)} noValidate>
             <FormSection step={1} title="Identity" hint="What is this indicator?">
               <div className="ui-form-grid">
@@ -528,17 +536,18 @@ export function SlisPage({ context }: { context: AuthContext }) {
               </div>
             </FormSection>
             <FormSection step={2} title="Source" hint="Where does the data live?">
-              <Combobox id="sli-datasource" label="Datasource" options={options} value={draft.datasourceID || null} onChange={(id) => updateDraft('datasourceID', id ?? '')} placeholder="Type a datasource name, provider or agent…" hint="Queries run on the agent assigned to the datasource you pick, at the datasource’s cadence." error={fieldErrors.datasourceID} noMatch={{ text: (term) => `No datasource matches “${term}”.`, ...(administrator ? { action: { label: () => 'Add a datasource', onSelect: () => navigate('/datasources/new?return=slis') } } : {}) }} />
+              <Combobox id="sli-datasource" label="Datasource" options={options} value={draft.datasourceID || null} onChange={(id) => { const next = sources.find((source) => source.id === id); const previous = selectedSource ?? previousSource.current; const previousProvider = previous?.provider ?? 'prometheus'; if (!id) previousSource.current = previous; if (next) previousSource.current = next; if (previousProvider && next && previousProvider !== next.provider) { setDraft((current) => ({ ...current, datasourceID: id ?? '', goodQuery: '', totalQuery: '' })); setFieldErrors({}); setFormError(''); } else updateDraft('datasourceID', id ?? ''); }} placeholder="Type a datasource name, provider or agent…" hint="Queries run on the agent assigned to the datasource you pick, at the datasource’s cadence." error={fieldErrors.datasourceID} noMatch={{ text: (term) => `No datasource matches “${term}”.`, ...(administrator ? { action: { label: () => 'Add a datasource', onSelect: () => navigate('/datasources/new?return=slis') } } : {}) }} />
             </FormSection>
             <FormSection step={3} title="Measurement" hint="What is good, what is total?" tools={<SegmentedControl size="sm" label="Measurement kind" value="event_counts" onChange={() => undefined} options={[{ value: 'event_counts', label: 'Ratio · two queries' }, { value: 'fraction', label: 'Single fraction', disabled: true, title: 'Not available yet · needs collector support' }, { value: 'threshold', label: 'Threshold', disabled: true, title: 'Not available yet · needs collector support' }]} />}>
-              <p className="ui-form-note">The SLI is <b>good ÷ total</b> for every interval. Write a PromQL query for each; both must return one number per interval, and good must be a subset of total.</p>
+              <p className="ui-form-note">The SLI is <b>good ÷ total</b> for every interval. Write a {provider.language} query for each; both must return one integral count per {interval}-second interval, and good must be a subset of total.</p>
               <div className="ui-form-grid sli-queries">
-                <div className={fieldErrors.goodQuery ? 'sli-query--invalid' : undefined}><QueryEditor id="sli-good-query" label="Good events" value={draft.goodQuery} onChange={(value) => updateDraft('goodQuery', value)} aria-invalid={fieldErrors.goodQuery ? true : undefined} aria-describedby={fieldErrors.goodQuery ? 'sli-good-query-error' : undefined} />{fieldErrors.goodQuery && <p className="ui-error" id="sli-good-query-error">{fieldErrors.goodQuery}</p>}</div>
-                <div className={fieldErrors.totalQuery ? 'sli-query--invalid' : undefined}><QueryEditor id="sli-total-query" label="Total events" value={draft.totalQuery} onChange={(value) => updateDraft('totalQuery', value)} aria-invalid={fieldErrors.totalQuery ? true : undefined} aria-describedby={fieldErrors.totalQuery ? 'sli-total-query-error' : undefined} />{fieldErrors.totalQuery && <p className="ui-error" id="sli-total-query-error">{fieldErrors.totalQuery}</p>}</div>
+                <div className={fieldErrors.goodQuery ? 'sli-query--invalid' : undefined}><QueryEditor language={provider.language} placeholder={provider.example.replaceAll('$interval', `${interval}s`)} id="sli-good-query" label="Good events" value={draft.goodQuery} onChange={(value) => updateDraft('goodQuery', value)} aria-invalid={fieldErrors.goodQuery ? true : undefined} aria-describedby={fieldErrors.goodQuery ? 'sli-good-query-error' : undefined} />{fieldErrors.goodQuery && <p className="ui-error" id="sli-good-query-error">{fieldErrors.goodQuery}</p>}</div>
+                <div className={fieldErrors.totalQuery ? 'sli-query--invalid' : undefined}><QueryEditor language={provider.language} placeholder={provider.example.replaceAll('$interval', `${interval}s`)} id="sli-total-query" label="Total events" value={draft.totalQuery} onChange={(value) => updateDraft('totalQuery', value)} aria-invalid={fieldErrors.totalQuery ? true : undefined} aria-describedby={fieldErrors.totalQuery ? 'sli-total-query-error' : undefined} />{fieldErrors.totalQuery && <p className="ui-error" id="sli-total-query-error">{fieldErrors.totalQuery}</p>}</div>
               </div>
+              {querySource && querySource.provider !== 'prometheus' && <p className="ui-form-note">{querySource.provider === 'loki' ? 'Count one log event per request. Use [$interval] in count_over_time; Almanac replaces it with the datasource cadence. Missing results stay unknown; return an explicit zero for no matching good events.' : 'Count one server or root span per request. Sampling and dropped spans change the measured population; Almanac does not extrapolate. Filter individual durations for latency SLOs; do not use a percentile as a count.'} {querySource.provider === 'victoriatraces' ? 'End each component with an ungrouped stats count(); Almanac supplies the interval bounds.' : querySource.provider === 'tempo' ? 'End each component with ungrouped count_over_time(); Almanac supplies the interval bounds.' : ''}</p>}
               <div className="sli-query-foot">
-                <span>Returns more than one series? Wrap it in <code>sum()</code>.</span>
-                <span>Queries return events per interval: use <code>increase()</code> or <code>sum_over_time()</code>, not <code>rate()</code>.</span>
+                <span>{querySource?.provider === 'victoriatraces' ? 'Use ungrouped stats count() for one count. Query options are not supported.' : querySource?.provider === 'tempo' ? 'Use ungrouped count_over_time() for one count.' : 'Returns more than one series? Aggregate it with sum().'}</span>
+                <span>{querySource?.provider === 'loki' ? 'Use count_over_time with [$interval] to count log events.' : querySource?.provider === 'victoriatraces' || querySource?.provider === 'tempo' ? 'Almanac supplies the canonical interval bounds.' : 'Return an explicit integer event count for the interval; rates and interpolated estimates are not counts.'}</span>
               </div>
               <p className="ui-form-note">Create saves a result from recent data already in your datasource, then continues at the datasource’s cadence. The first interval can precede creation.</p>
             </FormSection>
@@ -619,7 +628,7 @@ export function SlisPage({ context }: { context: AuthContext }) {
     <div className="ui-resource-panel" aria-busy={listBusy || table.busy || undefined}>
     {table.busy && <span className="sr-only" role="status">Sorting SLIs</span>}
         {visibleItems.length === 0 ? error || table.error || table.busy || sourceLoading ? null : hasListFilters ? <div className="sli-empty"><p>No SLIs match these filters.</p><Button variant="outline" onClick={() => void updateListFilters('', '')}>Clear filters</Button></div> : <div className="sli-empty">
-      {!canWrite ? <p>No SLIs are available to your account.</p> : sourceError ? null : sources.length === 0 ? <><p>{context.session?.role === 'administrator' ? 'Add a Prometheus datasource to create your first SLI.' : 'Ask an administrator to add a Prometheus datasource before creating an SLI.'}</p></> : <p>Create your first SLI from a Prometheus datasource with New SLI.</p>}
+      {!canWrite ? <p>No SLIs are available to your account.</p> : sourceError ? null : sources.length === 0 ? <><p>{context.session?.role === 'administrator' ? 'Add a datasource to create your first SLI.' : 'Ask an administrator to add a datasource before creating an SLI.'}</p></> : <p>Create your first SLI from a datasource with New SLI.</p>}
     </div>
       : <div className="sli-table-scroll sli-list-scroll" role="region" aria-label="Service level indicator table" tabIndex={0}><table className="sli-list-table ui-list-table ui-resource-table"><ResourceTableHead columns={columns} sorting={table}/><tbody>{visibleItems.map((item) => {
         const observation = item.latest_observation;

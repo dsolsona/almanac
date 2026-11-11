@@ -66,6 +66,7 @@ func handleDatasourceReassignment(ctx context.Context, q *dbgen.Queries, tx pgx.
 	return result, true, nil
 }
 
+// transferDatasourceAssignment changes the assignment only when the destination supports the saved provider profile.
 func transferDatasourceAssignment(ctx context.Context, q *dbgen.Queries, tx pgx.Tx, current dbgen.AlmanacDatasource, target, actor pgtype.UUID, requestID string, now time.Time, secrets *sourcesecret.Adapter) (DatasourceRecord, error) {
 	previous, previousErr := q.GetDatasourceReassignment(ctx, current.ID)
 	if previousErr != nil && !errors.Is(previousErr, pgx.ErrNoRows) {
@@ -84,9 +85,9 @@ func transferDatasourceAssignment(ctx context.Context, q *dbgen.Queries, tx pgx.
 		return DatasourceRecord{}, err
 	}
 	capabilities := decodeCapabilities(capability.Capabilities)
-	supported := datasource.SupportsOperation(capabilities, "collect")
+	supported := datasource.SupportsProviderOperation(capabilities, current.Provider, current.ConfigurationFormat, "collect")
 	if !hasSLIs {
-		supported = datasource.SupportsOperation(capabilities, "connection_test") && datasource.SupportsOperation(capabilities, "query_preview")
+		supported = datasource.SupportsProviderOperation(capabilities, current.Provider, current.ConfigurationFormat, "connection_test") && datasource.SupportsProviderOperation(capabilities, current.Provider, current.ConfigurationFormat, "query_preview")
 	}
 	if !capability.Enabled || !supported {
 		return DatasourceRecord{}, ErrAgentConflict
@@ -251,6 +252,7 @@ func ReconcileDatasourceReassignments(ctx context.Context, databaseURL string, s
 	return notices, nil
 }
 
+// reconcileDatasourceReassignment advances or expires a transfer after checking agent configuration acknowledgement.
 func reconcileDatasourceReassignment(ctx context.Context, conn *readConnection, candidate dbgen.ListReadyDatasourceReassignmentsRow, secrets *sourcesecret.Adapter, clock func() time.Time) ([]ReassignmentNotice, error) {
 	tx, err := conn.Begin(ctx)
 	if err != nil {
@@ -323,7 +325,7 @@ func reconcileDatasourceReassignment(ctx context.Context, conn *readConnection, 
 		return nil, err
 	}
 	state := "waiting_for_configuration"
-	if runtimeErr != nil || !capability.Enabled || (hasSLIs && !datasource.SupportsOperation(decodeCapabilities(capability.Capabilities), "collect")) || !runtime.LastHeartbeatAt.Valid || now.Sub(runtime.LastHeartbeatAt.Time) > 30*time.Second {
+	if runtimeErr != nil || !capability.Enabled || (hasSLIs && !datasource.SupportsProviderOperation(decodeCapabilities(capability.Capabilities), current.Provider, current.ConfigurationFormat, "collect")) || !runtime.LastHeartbeatAt.Valid || now.Sub(runtime.LastHeartbeatAt.Time) > 30*time.Second {
 		state = "replacement_unavailable"
 	} else if runtime.ConfigurationFailureRevision.Valid && runtime.ConfigurationFailureRevision.Int64 >= pending.TargetConfigurationRevision {
 		state = "replacement_unavailable"

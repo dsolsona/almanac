@@ -122,6 +122,64 @@ services:
       - "127.0.0.1:${ALMANAC_TRACES_PORT:-19428}:10428"
     restart: unless-stopped
 
+  sources-init:
+    image: curlimages/curl:8.19.0@sha256:c03110c736db81bbe1be0296f1f1608c81b954b01626bdfb0a8f84e5bd00ff3c
+    profiles: ["sources"]
+    user: "0:0"
+    network_mode: none
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["chown 10001:10001 /tempo /loki && chmod 0700 /tempo /loki"]
+    volumes:
+      - tempo-data:/tempo
+      - loki-data:/loki
+    restart: "no"
+
+  sources-ready:
+    image: curlimages/curl:8.19.0@sha256:c03110c736db81bbe1be0296f1f1608c81b954b01626bdfb0a8f84e5bd00ff3c
+    profiles: ["sources"]
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["while :; do sleep 3600; done"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent --max-time 2 --output /dev/null http://loki:3100/ready && curl --fail --silent --max-time 2 --output /dev/null http://tempo:3200/ready"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    depends_on:
+      loki:
+        condition: service_started
+      tempo:
+        condition: service_started
+    restart: "no"
+
+  loki:
+    image: grafana/loki:3.6.20@sha256:be040ec94865dabe4821ce1c0f109452bd4b5acb566ae376672696eb43caedb7
+    profiles: ["sources"]
+    depends_on:
+      sources-init:
+        condition: service_completed_successfully
+    command: ["-config.file=/etc/loki/almanac.yaml"]
+    volumes:
+      - ./deploy/local/loki.yaml:/etc/loki/almanac.yaml:ro
+      - loki-data:/loki
+    ports:
+      - "127.0.0.1:${ALMANAC_LOKI_PORT:-13100}:3100"
+    restart: unless-stopped
+
+  tempo:
+    image: grafana/tempo:2.10.10@sha256:12b0820f13ffa10ce956b6e9acc3b03f3cffded99109be6cc09d106fe56e5d38
+    profiles: ["sources"]
+    depends_on:
+      sources-init:
+        condition: service_completed_successfully
+    command: ["-config.file=/etc/tempo/almanac.yaml"]
+    volumes:
+      - ./deploy/local/tempo.yaml:/etc/tempo/almanac.yaml:ro
+      - tempo-data:/var/tempo
+    ports:
+      - "127.0.0.1:${ALMANAC_TEMPO_PORT:-13200}:3200"
+      - "127.0.0.1:${ALMANAC_TEMPO_OTLP_PORT:-14318}:4318"
+    restart: unless-stopped
+
   # Seeded dev agent; the explicit `make agent` launcher also builds this image.
   agent:
     image: ${COMPOSE_PROJECT_NAME:-almanac-local}-agent:dev
@@ -174,3 +232,5 @@ volumes:
   victoriametrics-data:
   victoriatraces-data:
   local-agent:
+  loki-data:
+  tempo-data:

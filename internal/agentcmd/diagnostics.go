@@ -58,6 +58,7 @@ func newDiagnosticRunner(agent *client) *diagnosticRunner {
 		commandIDs: make(map[string]time.Time), completed: make(map[string]diagnosticReceipt)}
 }
 
+// start admits a diagnostic only when this agent advertises the exact provider operation.
 func (r *diagnosticRunner) start(parent context.Context, request agentprotocol.DiagnosticRequest) error {
 	if r == nil || r.client == nil || request.Validate() != nil || request.AgentID != r.client.agentID {
 		return errors.New("agent diagnostic request rejected")
@@ -69,9 +70,8 @@ func (r *diagnosticRunner) start(parent context.Context, request agentprotocol.D
 	if request.Operation == "query_preview" && !slices.Contains(r.client.assignments, request.Datasource) {
 		return errors.New("agent diagnostic assignment rejected")
 	}
-	capabilities := []agentprotocol.Capability{{Provider: datasource.PrometheusProvider,
-		ConfigurationFormats: []string{datasource.PrometheusConfiguration}, Operations: []string{"connection_test", "query_preview"}}}
-	if !datasource.SupportsOperation(capabilities, request.Operation) {
+	capabilities := datasource.Capabilities()
+	if !datasource.SupportsProviderOperation(capabilities, request.Datasource.Provider, request.Datasource.ConfigurationFormat, request.Operation) {
 		return errors.New("agent diagnostic capability rejected")
 	}
 	r.mu.Lock()
@@ -186,6 +186,7 @@ func (r *diagnosticRunner) close() {
 	}
 }
 
+// execute runs a bounded native connection or preview query without writing SLI observations.
 func (r *diagnosticRunner) execute(ctx context.Context, request agentprotocol.DiagnosticRequest, generation string) {
 	result := agentprotocol.DiagnosticResult{DiagnosticID: request.DiagnosticID}
 	settings := datasource.Settings{Name: request.Datasource.Name, DisplayName: request.Datasource.Name,
@@ -199,7 +200,7 @@ func (r *diagnosticRunner) execute(ctx context.Context, request agentprotocol.Di
 		result = diagnosticFailure(request.DiagnosticID, "unsupported")
 	} else {
 		endpoint, _ := url.Parse(request.Datasource.Endpoint)
-		source, clientErr := prometheus.NewClient(prometheus.Config{Endpoint: request.Datasource.Endpoint,
+		source, clientErr := prometheus.NewClient(prometheus.Config{Endpoint: request.Datasource.Endpoint, Provider: request.Datasource.Provider, CadenceSeconds: request.Datasource.PollingIntervalSeconds,
 			AuthMode: request.Datasource.AuthenticationMode, Username: request.Datasource.Username,
 			Password: request.Datasource.Password, BearerToken: request.Datasource.BearerToken,
 			TLSConfig: tlsConfig, Timeout: 20 * time.Second, AllowedDestinations: []string{endpoint.Hostname()}})
@@ -209,7 +210,7 @@ func (r *diagnosticRunner) execute(ctx context.Context, request agentprotocol.Di
 			defer source.CloseIdleConnections()
 			query := request.Query
 			if request.Operation == "connection_test" {
-				query = "vector(1)"
+				query = prometheus.ConnectionQuery(request.Datasource.Provider)
 			}
 			observed, queryErr := source.Query(ctx, query)
 			if queryErr != nil {

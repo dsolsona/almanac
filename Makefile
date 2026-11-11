@@ -1,4 +1,4 @@
-.PHONY: setup shell stop-dev build _enter preview generate bootstrap run start stop logs credentials agent agent-seed images publish test test-integration test-browser test-e2e test-perf check verify coverage _test _test_integration _test_browser _coverage _verify_sqlc_generated _verify_generated _report_sizes _ensure_web_assets _disk_check _disk_trim
+.PHONY: loki vt tempo sources-start sources-stop setup shell stop-dev build _enter preview generate bootstrap run start stop logs credentials agent agent-seed images publish test test-integration test-browser test-e2e test-perf check verify coverage _test _test_integration _test_browser _coverage _verify_sqlc_generated _verify_generated _report_sizes _ensure_web_assets _disk_check _disk_trim
 
 .DEFAULT_GOAL := setup
 
@@ -13,6 +13,13 @@ Start and daily use
   stop                  Stop the local app and agent; preserve data
   logs                  Show app logs from the local stack
   credentials           Print the initial administrator password
+
+Optional local datasources
+  loki                  Start Loki and wait for readiness
+  vt                    Start VictoriaTraces and wait for readiness
+  tempo                 Start Tempo and wait for readiness
+  sources-start         Start all three local datasource services
+  sources-stop          Stop optional Loki and Tempo, keeping data
 
 Development tools
   setup                 Build the dev image and install Go/npm dependencies once
@@ -332,3 +339,22 @@ _report_sizes:
 	  binary_gzip_bytes=$$(gzip -n -c bin/almanac | wc -c); \
 	  web_assets_bytes=$$(du -sb web/dist | awk '{print $$1}'); \
 	  printf 'Binary bytes: %s\nGzip binary bytes: %s\nWeb asset bytes: %s\n' "$$binary_bytes" "$$binary_gzip_bytes" "$$web_assets_bytes"
+
+# Optional datasource fixtures; existing application tracing stays available.
+loki:
+	docker compose -f compose.yaml --profile sources up -d --wait --wait-timeout 90 loki
+	docker compose -f compose.yaml --profile sources run --rm --no-deps --entrypoint curl sources-ready --fail --silent --output /dev/null --retry 30 --retry-connrefused --retry-delay 1 --max-time 2 --retry-max-time 60 http://loki:3100/ready
+
+vt:
+	docker compose -f compose.yaml --profile sources up -d --wait --wait-timeout 90 victoriatraces
+	docker compose -f compose.yaml --profile sources run --rm --no-deps --entrypoint curl sources-ready --fail --silent --output /dev/null --retry 30 --retry-connrefused --retry-delay 1 --max-time 2 --retry-max-time 60 http://victoriatraces:10428/health
+
+tempo:
+	docker compose -f compose.yaml --profile sources up -d --wait --wait-timeout 90 tempo
+	docker compose -f compose.yaml --profile sources run --rm --no-deps --entrypoint curl sources-ready --fail --silent --output /dev/null --retry 30 --retry-connrefused --retry-delay 1 --max-time 2 --retry-max-time 60 http://tempo:3200/ready
+
+sources-start:
+	docker compose -f compose.yaml --profile sources up -d --wait --wait-timeout 90 loki tempo victoriatraces sources-ready
+
+sources-stop:
+	docker compose -f compose.yaml --profile sources stop sources-ready loki tempo

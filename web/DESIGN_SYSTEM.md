@@ -121,7 +121,7 @@ Import controls from `src/components/ui/` and prefer native semantics:
   account controls and visibly unavailable planned destinations.
 - `MeasurementChoiceCards` explains the supported event-count mode and keeps
   unsupported collection modes disabled with an availability reason.
-- `QueryEditor` preserves a native labelled textarea with PromQL context and
+- `QueryEditor` preserves a native labelled textarea with provider language context (PromQL, LogsQL, TraceQL or LogQL) and
   scroll-synchronized, screen-reader-hidden line numbers.
 - `SliRecentStrip` plots the bounded interval states without assigning an SLO
   target classification. Its native details table exposes exact counts, interval
