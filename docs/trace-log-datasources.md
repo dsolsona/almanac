@@ -57,7 +57,9 @@ Replace the field names and predicates with those present in your source.
 | Tempo | `{ resource.service.name = "checkout" && kind = server } \| count_over_time()` | `{ resource.service.name = "checkout" && kind = server && status != error } \| count_over_time()` |
 | Loki | `sum(count_over_time({service_name="checkout"}[$interval]))` | `sum(count_over_time({service_name="checkout"} != "error" [$interval])) or vector(0)` |
 
-For Loki, `$interval` expands to the datasource cadence, for example `15s`.
+For Loki, `$interval` expands literally to the datasource cadence, for example
+`15s`, including occurrences inside quoted text. Avoid the token in quoted values
+unless that replacement is intended.
 The good query above uses `or vector(0)` so an interval containing only error logs
 returns zero good events. Use this fallback only when the paired total query
 confirms traffic and source completeness justifies zero; keep the total query
@@ -70,7 +72,12 @@ at the interval end shifted by one nanosecond to preserve `[start,end)` membersh
 LogsQL `options(...)` clauses, including nested clauses, are rejected in this
 initial count profile: they can override interval bounds or partial-response policy.
 Use datasource settings for transport options and the native query for filters and statistics.
-Both components use the same settled interval. Previews use these same semantics,
+Cadence sets VictoriaTraces/Tempo interval bounds and Loki’s `$interval` value;
+Prometheus ranges remain part of the user’s PromQL. Changing cadence does not
+rewrite PromQL or fixed LogQL ranges, so review those queries when changing it.
+Both components use the same settled interval. Diagnostics receive an explicit
+interval end computed from the agent’s backend-adjusted clock by the shared
+scheduler helper; the query client does not read the clock. Previews use these same semantics,
 are bounded and do not write observations. The existing 60-second settling delay
 is retained; this does not guarantee that every upstream ingest pipeline has finished.
 

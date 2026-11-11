@@ -134,15 +134,6 @@ func (c *Client) CloseIdleConnections() {
 	c.http.CloseIdleConnections()
 }
 
-// Query evaluates native counts at a settled cadence boundary; Prometheus retains its instant-query behavior.
-func (c *Client) Query(ctx context.Context, query string) (QueryResult, error) {
-	if c.provider != "prometheus" {
-		end := time.Now().UTC().Add(-60 * time.Second).Truncate(time.Duration(c.cadence) * time.Second)
-		return c.query(ctx, query, end)
-	}
-	return c.query(ctx, query, time.Time{})
-}
-
 // QueryAt evaluates a vector query at the supplied canonical interval end.
 func (c *Client) QueryAt(ctx context.Context, query string, at time.Time) (QueryResult, error) {
 	if at.IsZero() || at.Nanosecond()%1_000 != 0 {
@@ -174,6 +165,7 @@ func (c *Client) query(ctx context.Context, query string, at time.Time) (QueryRe
 	u.RawPath = ""
 	values := u.Query()
 	if c.provider == "loki" {
+		// $interval is a literal template token; replacement also applies inside quoted query text.
 		query = strings.ReplaceAll(query, "$interval", strconv.Itoa(c.cadence)+"s")
 	}
 	values.Set("query", query)

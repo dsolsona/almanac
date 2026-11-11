@@ -58,7 +58,9 @@ existing application tracing remains available.
 - Retain the established HTTP endpoint contract for private/local deployments.
   Show an explicit warning when HTTP carries Basic/Bearer credentials and explain
   that TLS controls apply only to HTTPS. No new persisted transport opt-in is
-  introduced; API/CLI users remain responsible for selecting HTTPS.
+  introduced; API/CLI users remain responsible for selecting HTTPS. The maintainer
+  explicitly confirmed warn-but-allow for private deployments in the review;
+  the HTTP endpoint examples describe optional local fixtures.
 
 ## References
 

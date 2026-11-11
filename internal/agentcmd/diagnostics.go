@@ -11,6 +11,7 @@ import (
 	"github.com/dsolsona/almanac/internal/agentprotocol"
 	"github.com/dsolsona/almanac/internal/datasource"
 	"github.com/dsolsona/almanac/internal/prometheus"
+	"github.com/dsolsona/almanac/internal/sli"
 )
 
 const (
@@ -121,7 +122,9 @@ func (r *diagnosticRunner) start(parent context.Context, request agentprotocol.D
 	r.active[request.DiagnosticID] = active
 	generation := r.client.generation
 	r.mu.Unlock()
-	go r.execute(ctx, request, generation)
+	// Freeze the interval at admission using the shared backend-time alignment.
+	intervalEnd := sli.LatestSettledEnd(now, request.Datasource.PollingIntervalSeconds, request.Datasource.SettlingDelaySeconds)
+	go r.execute(ctx, request, generation, intervalEnd)
 	return nil
 }
 
@@ -187,7 +190,7 @@ func (r *diagnosticRunner) close() {
 }
 
 // execute runs a bounded native connection or preview query without writing SLI observations.
-func (r *diagnosticRunner) execute(ctx context.Context, request agentprotocol.DiagnosticRequest, generation string) {
+func (r *diagnosticRunner) execute(ctx context.Context, request agentprotocol.DiagnosticRequest, generation string, intervalEnd time.Time) {
 	result := agentprotocol.DiagnosticResult{DiagnosticID: request.DiagnosticID}
 	settings := datasource.Settings{Name: request.Datasource.Name, DisplayName: request.Datasource.Name,
 		Provider: request.Datasource.Provider, ConfigurationFormat: request.Datasource.ConfigurationFormat,
@@ -212,7 +215,7 @@ func (r *diagnosticRunner) execute(ctx context.Context, request agentprotocol.Di
 			if request.Operation == "connection_test" {
 				query = prometheus.ConnectionQuery(request.Datasource.Provider)
 			}
-			observed, queryErr := source.Query(ctx, query)
+			observed, queryErr := source.QueryAt(ctx, query, intervalEnd)
 			if queryErr != nil {
 				var sourceErr *prometheus.SourceError
 				if errors.As(queryErr, &sourceErr) {

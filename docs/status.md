@@ -13,8 +13,8 @@ The local E2E Settings cold-load variation (1,049.913 ms against 1,000 ms) remai
 open; final CI timing is 509.303 ms, which does not establish a fix. Previous CLI
 and PTY failures remain recorded. [Evidence](evidence/traces-logs/README.md) includes
 nine final datasource renders and four sanitized timing artifacts. CodeRabbit
-functional fixes are verified and replied to; two HTTP credential policy threads
-remain open with visible warnings and a recorded compatibility decision. Native
+functional fixes are verified and replied to; the HTTP credential policy is confirmed by the maintainer: warn-but-allow for
+private deployments, with HTTPS recommended for credentials. Native
 backfill, tenant headers and larger/year-long performance are not claimed. Rebased verification and the datasource-loading correction are recorded in F2-T34 and current PR checks; no merge.
 
 Consistent resource tables, 2026-11-11: [F1-T23](tasks/F1-T23.md) ports the
