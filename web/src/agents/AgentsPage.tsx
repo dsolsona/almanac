@@ -1,3 +1,4 @@
+import {useResourceTable, ResourceTableHead, ResourceTableMobileSort, resourceRowClick, type ResourceColumn} from '../components/ui/ResourceTable.tsx';
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { AuthContext } from '../auth/client.ts';
@@ -21,7 +22,7 @@ const safeError = 'The request could not be completed. Check the session and try
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const AGENT_NAME = /^[a-z][a-z0-9-]{0,62}$/;
 const agentNameError = 'Use 1–63 lowercase letters, numbers, or hyphens, starting with a letter.';
-const LIMIT = 50;
+const LIMIT = 20;
 function suggestAgentName(displayName: string) {
   const slug = displayName.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
   if (!slug) return '';
@@ -99,6 +100,8 @@ export function AgentsPage({ context, recheckSession, suspended, draft, onDraftC
   const api = clientRef.current;
   const [locationState, setLocationState] = useState(queryState);
   const [agents, setAgents] = useState<Agent[]>([]);
+  const [pageSize, setPageSize] = useState(LIMIT);
+  const table = useResourceTable({items: agents, loadPage: (cursor, signal) => api.list({limit: 200, cursor, signal}), pageSize, scope: context.session?.user_id ?? '', enabled: !locationState.agent && context.session?.role === 'administrator' && !context.session.restricted && !suspended});
   const [agent, setAgent] = useState<Agent | null>(null);
   const [agentDetail, setAgentDetail] = useState<AgentDetail | null>(null);
   useEffect(() => { onBreadcrumbChange?.(agent && agent.id === locationState.agent ? { id: agent.id, name: agent.display_name } : null); }, [agent, locationState.agent, onBreadcrumbChange]);
@@ -159,7 +162,7 @@ export function AgentsPage({ context, recheckSession, suspended, draft, onDraftC
     };
     addEventListener('popstate', update); return () => removeEventListener('popstate', update);
   }, []);
-  useEffect(() => { if (tokenResult) closeToken(false); }, [locationState.agent, locationState.agents_cursor, locationState.credentials_cursor]);
+  useEffect(() => { if (tokenResult) closeToken(false); }, [locationState.agent, locationState.agents_cursor, locationState.credentials_cursor, pageSize]);
   useEffect(() => { if (!throttleUntil || now >= throttleUntil) return; const timer = setInterval(() => setNow(Date.now()), 250); return () => clearInterval(timer); }, [throttleUntil, now]);
   const clearSecrets = useCallback(() => { setTokenResult(null); setCopyNotice(''); }, []);
   useEffect(() => {
@@ -189,7 +192,7 @@ export function AgentsPage({ context, recheckSession, suspended, draft, onDraftC
         if (!UUID.test(state.agent)) throw new Error('Invalid agent identifier.');
         const [detail, historyPage] = await Promise.all([
           api.get(state.agent, { signal: controller.signal }),
-          api.credentials(state.agent, { signal: controller.signal, limit: LIMIT, ...(state.credentials_cursor ? { cursor: state.credentials_cursor } : {}) }),
+          api.credentials(state.agent, { signal: controller.signal, limit: 50, ...(state.credentials_cursor ? { cursor: state.credentials_cursor } : {}) }),
         ]);
         if (controller.signal.aborted || generation !== readGeneration.current) return;
         setAgent(detail.agent); setAgentDetail(detail); setCredentials(historyPage.items); setCredentialNext(historyPage.next_cursor); setAgents([]); setAgentNext('');
@@ -197,14 +200,16 @@ export function AgentsPage({ context, recheckSession, suspended, draft, onDraftC
         setDatasources(null); setDatasourcesPartial(false);
         void api.datasources(state.agent, { signal: controller.signal, limit: 50 }).then((page) => { if (!controller.signal.aborted && generation === readGeneration.current) { setDatasources(page.items); setDatasourcesPartial(Boolean(page.next_cursor)); } }).catch(() => undefined);
       } else {
-        const page = await api.list({ signal: controller.signal, limit: LIMIT, ...(state.agents_cursor ? { cursor: state.agents_cursor } : {}) });
-        if (controller.signal.aborted || generation !== readGeneration.current) return;
+        const acceptsRead = table.readGuard();
+        const page = await api.list({ signal: controller.signal, limit: pageSize, ...(state.agents_cursor ? { cursor: state.agents_cursor } : {}) });
+        if (controller.signal.aborted || generation !== readGeneration.current || !acceptsRead()) return;
         setAgents(page.items); setAgent(null); setAgentDetail(null); setCredentials([]); setAgentNext(page.next_cursor); setCredentialNext('');
         lastSuccessAt.current = new Date().toISOString(); hasCachedData.current = true; setUpdatedAt(clockFormat.format(new Date()));
       }
     } catch (caught) {
       if (controller.signal.aborted || generation !== readGeneration.current) return;
       if (caught instanceof AgentFailure && caught.kind === 'rejected' && ['unauthenticated', 'forbidden'].includes(caught.code)) {
+        table.readFailed(caught);
         setAgents([]); setAgent(null); setCredentials([]); setAgentNext(''); setCredentialNext(''); hasCachedData.current = false; lastSuccessAt.current = '';
         if (caught.code === 'unauthenticated') await recheckSession();
         if (controller.signal.aborted || generation !== readGeneration.current) return;
@@ -215,7 +220,7 @@ export function AgentsPage({ context, recheckSession, suspended, draft, onDraftC
       if (hasCachedData.current && resultKey.current === JSON.stringify(state)) setError(`${safeError} Showing stale results from ${date(lastSuccessAt.current)}.`);
       else { setAgents([]); setAgent(null); setCredentials([]); setAgentNext(''); setCredentialNext(''); hasCachedData.current = false; lastSuccessAt.current = ''; }
     } finally { if (!controller.signal.aborted && generation === readGeneration.current) setLoading(false); }
-  }, [isAdmin, suspended, locationState.agent, locationState.agents_cursor, locationState.credentials_cursor]);
+  }, [isAdmin, suspended, locationState.agent, locationState.agents_cursor, locationState.credentials_cursor, pageSize]);
   useEffect(() => { void load(); return () => readController.current?.abort(); }, [load]);
   useEffect(() => {
     if (!loading && !suspended) journeyContentReady('management', !!error);
@@ -331,11 +336,13 @@ export function AgentsPage({ context, recheckSession, suspended, draft, onDraftC
   if (!context.session || context.session.restricted) return <Panel heading="Agent administration unavailable"><p>Sign in with an unrestricted administrator account to manage agents.</p></Panel>;
   if (!isAdmin) return <Panel heading="Permission required"><p>Agent administration is available to unrestricted administrators.</p></Panel>;
 
-  const vocabularies = new Map(agents.map((item) => [item.id, agentVocabulary(item)] as const));
+  const vocabularies = new Map(table.sourceItems.map((item) => [item.id, agentVocabulary(item)] as const));
   const term = listSearch.trim().toLowerCase();
-  const visibleAgents = agents.filter((item) => (!term || `${item.name} ${item.display_name}`.toLowerCase().includes(term))
-    && (listFilter === 'all' || (listFilter === 'attention' ? vocabularies.get(item.id)?.attention : !item.enabled)));
-  const counts = { connected: agents.filter((item) => vocabularies.get(item.id)?.label === 'Connected').length, unreachable: agents.filter((item) => vocabularies.get(item.id)?.label === 'Unreachable').length, never: agents.filter((item) => vocabularies.get(item.id)?.label === 'Never connected').length, disabled: agents.filter((item) => !item.enabled).length, attention: agents.filter((item) => vocabularies.get(item.id)?.attention).length };
+  const columns: ResourceColumn<Agent>[] = [{id: 'name', label: 'Agent', value: item => item.name}, {id: 'status', label: 'Status', value: item => agentVocabulary(item).label}, {id: 'collection', label: 'Collection', value: item => collectionSummary(item).label}];
+  const sortedPage = table.rows(columns, (item) => (!term || `${item.name} ${item.display_name}`.toLowerCase().includes(term))
+    && (listFilter === 'all' || (listFilter === 'attention' ? agentVocabulary(item).attention : !item.enabled)));
+  const visibleAgents = sortedPage.items;
+  const counts = { connected: table.sourceItems.filter((item) => vocabularies.get(item.id)?.label === 'Connected').length, unreachable: table.sourceItems.filter((item) => vocabularies.get(item.id)?.label === 'Unreachable').length, never: table.sourceItems.filter((item) => vocabularies.get(item.id)?.label === 'Never connected').length, disabled: table.sourceItems.filter((item) => !item.enabled).length, attention: table.sourceItems.filter((item) => vocabularies.get(item.id)?.attention).length };
   const detailVocabulary = agent ? agentVocabulary(agent) : null;
   const runtime = agent?.runtime ?? null;
   const historyComplete = !credentialNext && !locationState.credentials_cursor;
@@ -419,18 +426,23 @@ export function AgentsPage({ context, recheckSession, suspended, draft, onDraftC
       {announceUnconfirmed && <p ref={registrationStatusRef} className="agents-error" role="status" aria-live="polite" tabIndex={-1}>Registration is not confirmed. The agent records currently shown may not include this request.</p>}
       {loading && !hasCachedData.current ? null : agents.length === 0 ? <><Toolbar><ToolbarSpacer />{listRefresh}</Toolbar><Panel heading="Agent records" className="agents-panel"><p>{error && !hasCachedData.current ? 'Agent records could not be loaded.' : intent?.outcome === 'unknown' ? 'No agents are currently visible.' : 'No agents have been registered.'}</p></Panel></> : <>
         <Toolbar>
-          <SearchField id="agents-search" label="Filter agents" placeholder="Filter by name" value={listSearch} onChange={(event) => setListSearch(event.target.value)} />
-          <SegmentedControl label="Filter by status" value={listFilter} onChange={setListFilter} options={[{ value: 'all', label: 'All', count: agents.length }, { value: 'attention', label: 'Needs attention', count: counts.attention }, { value: 'disabled', label: 'Disabled', count: counts.disabled }]} />
+          <SearchField id="agents-search" label="Filter agents" placeholder="Filter by name" value={listSearch} onChange={(event) => {setListSearch(event.target.value); table.resetPage();}} />
+          <SegmentedControl label="Filter by status" value={listFilter} onChange={value => {setListFilter(value); table.resetPage();}} options={[{ value: 'all', label: 'All', count: table.sourceItems.length }, { value: 'attention', label: 'Needs attention', count: counts.attention }, { value: 'disabled', label: 'Disabled', count: counts.disabled }]} />
           <ToolbarSpacer />{listRefresh}
         </Toolbar>
-        {visibleAgents.length === 0 ? <p className="agents-card__note">No agents match these filters on this page.</p> : <div className="agents-table-scroll" role="region" aria-label="Agent records" tabIndex={0}><table className="agents-table agents-table--list ui-list-table"><thead><tr><th scope="col">Agent</th><th scope="col">Status</th><th scope="col">Collection</th></tr></thead><tbody>{visibleAgents.map((item) => { const vocabulary = vocabularies.get(item.id)!; const collection = collectionSummary(item); return <tr key={item.id}>
-          <td data-label="Agent" className="agents-table__name"><button className="agents-link" onClick={() => setQuery({ agent: item.id, agents_cursor: '', credentials_cursor: '' })}>{item.name}</button><span className="agents-table__sub ui-list-table__sub">{item.display_name !== item.name ? `${item.display_name} · ` : ''}{item.runtime?.software_version ? `${item.runtime.software_version} · ` : ''}since {dayFormat.format(new Date(item.created_at))}</span></td>
+        <ResourceTableMobileSort id="agents-sort" columns={columns} sorting={table}/>
+        {table.error && <p role="alert">{table.error}<Button variant="outline" disabled={loading || table.busy} onClick={() => table.active ? table.refresh() : void load()}>Try again</Button></p>}
+        <div className="ui-resource-panel" aria-busy={loading || table.busy || undefined}>
+        {table.busy && <span className="sr-only" role="status">Sorting agents</span>}
+        {visibleAgents.length === 0 ? table.error ? null : <p className="agents-card__note">No agents match these filters{table.active ? '.' : ' on this page.'}</p> : <div className="agents-table-scroll" role="region" aria-label="Agent records" tabIndex={0}><table className="agents-table agents-table--list ui-list-table ui-resource-table"><ResourceTableHead columns={columns} sorting={table}/><tbody>{visibleAgents.map((item) => { const vocabulary = agentVocabulary(item); const collection = collectionSummary(item); return <tr key={item.id} onClick={event => resourceRowClick(event, () => setQuery({agent: item.id, agents_cursor: '', credentials_cursor: ''}))}>
+          <td data-label="Agent" className="agents-table__name"><a className="agents-link" href={`/agents?agent=${item.id}`} onClick={event => { if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); setQuery({agent: item.id, agents_cursor: '', credentials_cursor: ''}); }}>{item.name}</a><span className="agents-table__sub ui-list-table__sub">{item.display_name !== item.name ? `${item.display_name} · ` : ''}{item.runtime?.software_version ? `${item.runtime.software_version} · ` : ''}since {dayFormat.format(new Date(item.created_at))}</span></td>
           <td data-label="Status"><StatusChip tone={vocabulary.tone} label={vocabulary.label} reason={vocabulary.reason} /></td>
           <td data-label="Collection"><b className={collection.label === '—' || collection.label === 'Not started' ? 'agents-table__muted' : undefined}>{collection.label}</b><span className="agents-table__sub ui-list-table__sub mono">{collection.sub}</span></td>
         </tr>; })}</tbody></table></div>}
-        <Pager id="agents-page-size" label="Agent result pages" position={`Showing ${visibleAgents.length} of ${agents.length}${agentNext || locationState.agents_cursor ? ' on this page' : ''}`} pageSize={LIMIT} pageSizes={[LIMIT]} onPageSizeChange={() => undefined} hasPrevious={previousCursors.length > 0} hasNext={Boolean(agentNext)} busy={loading}
-          onPrevious={() => { const previous = previousCursors[previousCursors.length - 1] ?? ''; trailTarget.current = previous; setPreviousCursors((stack) => stack.slice(0, -1)); setQuery({ agents_cursor: previous }); }}
-          onNext={() => { trailTarget.current = agentNext; setPreviousCursors((stack) => [...stack, locationState.agents_cursor]); setQuery({ agents_cursor: agentNext }); }} />
+        <Pager id="agents-page-size" label="Agent result pages" position={table.active ? `Showing ${sortedPage.total ? sortedPage.start + 1 : 0}–${sortedPage.start + visibleAgents.length} of ${sortedPage.total}` : `Showing ${visibleAgents.length} of ${agents.length}${agentNext || locationState.agents_cursor ? ' on this page' : ''}`} pageSize={pageSize} pageSizes={[10,20]} onPageSizeChange={size => { setPageSize(size); table.resetPage(); if (!table.active) {setPreviousCursors([]); setQuery({agents_cursor: ''});} }} hasPrevious={table.active ? sortedPage.hasPrevious : previousCursors.length > 0} hasNext={table.active ? sortedPage.hasNext : Boolean(agentNext)} busy={loading || table.busy}
+          onPrevious={() => { if (table.active) { table.previous(); return; } const previous = previousCursors[previousCursors.length - 1] ?? ''; trailTarget.current = previous; setPreviousCursors((stack) => stack.slice(0, -1)); setQuery({ agents_cursor: previous }); }}
+          onNext={() => { if (table.active) { table.next(); return; } trailTarget.current = agentNext; setPreviousCursors((stack) => [...stack, locationState.agents_cursor]); setQuery({ agents_cursor: agentNext }); }} />
+        </div>
       </>}
     </>}
     {locationState.agent && (agent || lifecycleIntent?.agentID === locationState.agent) && (!loading || hasCachedData.current || !agent) && <AgentLifecycleControls layout={lifecycleLayout} agent={agent} detail={agentDetail} credentials={credentials} context={context} recheckSession={recheckSession} suspended={suspended} selectedAgentID={locationState.agent} navigationScope={JSON.stringify(locationState)} actionAvailable={!loading && !error && locationState.agent === agent?.id} intent={lifecycleIntent} onIntentChange={onLifecycleIntentChange} busy={submitBusy || lifecycleBusy} onBusyChange={setLifecycleBusy} refresh={load} revokeRequest={revokeRequest} onRevokeRequestHandled={consumeRevokeRequest} mutationLock={createLock} onDeleted={() => { setRegistrationNotice('Agent deleted. Its credentials have been revoked.'); setQuery({ agent: '', agents_cursor: '', credentials_cursor: '' }); }} onRegisterReplacement={openRegister} onForbidden={() => { setAgents([]); setAgent(null); setAgentDetail(null); setCredentials([]); setAgentNext(''); setCredentialNext(''); hasCachedData.current = false; lastSuccessAt.current = ''; setError('You are not allowed to perform this credential action. Protected agent records were cleared.'); }} />}

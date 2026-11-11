@@ -77,6 +77,8 @@ actual onboarding/restart verification.
 under [plan 0027](../plans/0027-settings-and-users.md).
 [F1-T22](F1-T22.md) adds the session inactivity policy under
 [plan 0032](../plans/0032-session-inactivity.md).
+[F1-T23](F1-T23.md) ports the services table format, row navigation and global
+sorting to agents, datasources and SLIs.
 
 F2 begins with [F2-T01](F2-T01.md), local VictoriaMetrics and VictoriaTraces fixtures
 under the [first observations plan](../plans/0019-first-observations.md).

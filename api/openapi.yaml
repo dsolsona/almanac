@@ -1721,7 +1721,7 @@ components:
         datasource_display_name: {type: string, nullable: true, description: Present on list projections; omitted from detail and create responses.}
         recent_measurement_window_start: {type: string, format: date-time, nullable: true, description: Earliest eligible interval in the bounded list projection.}
         recent_measurement_window_end: {type: string, format: date-time, nullable: true, description: Latest eligible interval end in the bounded list projection.}
-        recent_measurements: {type: array, maxItems: 12, description: Last eligible source-cadence intervals for the current measurement revision; explicit states and exact count strings., items: {$ref: '#/components/schemas/SliRecentMeasurement'}}
+        recent_measurements: {type: array, x-omitempty: false, x-omitzero: true, maxItems: 12, description: Last eligible source-cadence intervals for the current measurement revision; explicit states and exact count strings., items: {$ref: '#/components/schemas/SliRecentMeasurement'}}
         linked_slos: {$ref: '#/components/schemas/SliLinkedSlos'}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}

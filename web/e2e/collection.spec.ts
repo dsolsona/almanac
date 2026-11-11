@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { metricsURL, startAgent, stopAgent } from './support/stack.ts';
+import { metricsURL, startAgent, stopAgent, agentLogs, compose } from './support/stack.ts';
 import { api, expectOk, unique } from './support/api.ts';
 
 // The product's core journey, in the order a new operator follows it: register an agent and run it,
@@ -16,6 +16,19 @@ let datasourceID = '';
 let sourceContainer = '';
 let sourceToken = '';
 let sliID = '';
+
+// Preserve the agent/backend boundary when a real diagnostic or collection fails.
+test.afterEach(async ({}, info) => {
+  if (info.status === info.expectedStatus) return;
+  for (const [name, read] of [
+    ['collector-log', () => sourceContainer ? agentLogs(sourceContainer) : 'Collector not started'],
+    ['backend-log', () => compose('logs', '--no-color', 'app')],
+  ] as const) {
+    try { await info.attach(name, {body: read(), contentType: 'text/plain'}); }
+    catch { await info.attach(name, {body: 'Log unavailable', contentType: 'text/plain'}); }
+  }
+});
+
 
 // The agent keeps running after this file: the restart journey checks that it reconnects.
 // scripts/e2e.sh removes it with the stack.
@@ -61,7 +74,9 @@ test('connect a datasource through the agent, test it and preview real metrics',
   await page.getByRole('button', { name: 'New datasource', exact: true }).click();
   await page.getByLabel('Display name', { exact: true }).fill(datasourceName);
   await page.getByLabel('Prometheus endpoint', { exact: true }).fill('http://victoriametrics:8428');
-  // With one connected agent the form preselects it; otherwise pick ours from the picker.
+  // Another journey may have registered an eligible agent; select this journey's collector explicitly.
+  const assignment = page.getByRole('region', { name: 'Agent', exact: true });
+  if (await assignment.getByRole('button', { name: 'Change', exact: true }).count()) await assignment.getByRole('button', { name: 'Change', exact: true }).click();
   if (await page.getByLabel('Assigned agent', { exact: true }).count()) {
     await page.getByLabel('Assigned agent', { exact: true }).click();
     await page.locator(`#datasource-agent-option-${agentID}`).click();
@@ -91,7 +106,9 @@ test('define an SLI and see its first collected interval', async ({ page }) => {
   await page.goto('/slis');
   await page.getByRole('button', { name: 'New SLI', exact: true }).click();
   await page.getByLabel('Display name', { exact: true }).fill(sliName);
-  // With one datasource the form preselects it; otherwise pick ours from the picker.
+  // Select this journey's datasource even when the form preselected a parallel fixture.
+  const sourceSelection = page.getByRole('region', {name:'Source',exact:true});
+  if (await sourceSelection.getByRole('button', {name:'Change',exact:true}).count()) await sourceSelection.getByRole('button', {name:'Change',exact:true}).click();
   if (await page.getByLabel('Datasource', { exact: true }).count()) {
     await page.getByLabel('Datasource', { exact: true }).click();
     await page.locator(`#sli-datasource-option-${datasourceID}`).click();

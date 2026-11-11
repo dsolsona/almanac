@@ -1,3 +1,4 @@
+import {useResourceTable, ResourceTableHead, ResourceTableMobileSort, resourceRowClick, type ResourceColumn} from '../components/ui/ResourceTable.tsx';
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type RefObject } from 'react';
 import type { AuthContext } from '../auth/client.ts';
 import { Button, ChoiceChips, Combobox, FormActions, FormSection, PageHeader, Pager, Panel, QueryEditor, RefreshButton, SearchField, SegmentedControl, StatusChip, StatusMark, TextareaField, TextField, Toolbar, ToolbarSpacer, type ComboboxOption, type MarkTone } from '../components/ui/index.ts';
@@ -33,15 +34,28 @@ const safeError = (error: unknown) => error instanceof DatasourceFailure ? error
 const terminal = (value: Diagnostic) => ['succeeded', 'failed', 'canceled', 'timed_out', 'unknown'].includes(value.state);
 
 async function loadAgents(signal: AbortSignal): Promise<Agent[]> {
-  let response: Response;
-  try { response = await fetch('/api/v1/agents?limit=200', { credentials: 'same-origin', cache: 'no-store', signal }); }
-  catch { throw new Error('Agent assignments could not be loaded.'); }
-  if (!response.ok) throw new Error(response.status === 403 ? 'Editor or administrator access is required to manage agent assignments.' : 'Agent assignments could not be loaded.');
-  const value: unknown = await response.json();
-  if (!object(value) || !Array.isArray(value.items) || value.items.length > 200 || !value.items.every((item) => object(item) && typeof item.id === 'string' && UUID.test(item.id) && typeof item.display_name === 'string' && typeof item.enabled === 'boolean')) {
-    throw new Error('The server returned invalid agent assignment data.');
-  }
-  return value.items as Agent[];
+  const bounded = AbortSignal.any([signal, AbortSignal.timeout(30_000)]);
+  const agents = new Map<string, Agent>();
+  const seen = new Set<string>();
+  let cursor = '';
+  do {
+    if (seen.has(cursor)) throw new Error('Agent assignments changed during loading. Refresh and try again.');
+    seen.add(cursor);
+    const params = new URLSearchParams({limit: '200'});
+    if (cursor) params.set('cursor', cursor);
+    let response: Response;
+    try { response = await fetch(`/api/v1/agents?${params}`, { credentials: 'same-origin', cache: 'no-store', signal: bounded }); }
+    catch { throw new Error('Agent assignments could not be loaded.'); }
+    if (!response.ok) throw new DatasourceFailure(response.status === 401 ? 'unauthorized' : response.status === 403 ? 'forbidden' : 'request_failed', response.status === 403 ? 'Editor or administrator access is required to manage agent assignments.' : 'Agent assignments could not be loaded.', response.status);
+    const value: unknown = await response.json();
+    if (!object(value) || !Array.isArray(value.items) || value.items.length > 200 || typeof value.next_cursor !== 'string' || value.next_cursor.length > 512
+      || !value.items.every((item) => object(item) && typeof item.id === 'string' && UUID.test(item.id) && typeof item.display_name === 'string' && typeof item.enabled === 'boolean')) {
+      throw new Error('The server returned invalid agent assignment data.');
+    }
+    for (const item of value.items as Agent[]) agents.set(item.id, item);
+    cursor = value.next_cursor;
+  } while (cursor);
+  return [...agents.values()];
 }
 
 type DatasourceAgentState = 'disabled' | 'unreported' | 'incompatible' | 'unsupported' | 'offline' | 'connected';
@@ -253,6 +267,16 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
   const [nextCursor, setNextCursor] = useState('');
   const [previousCursors, setPreviousCursors] = useState<string[]>([]);
   const [pageSize, setPageSize] = useState(20);
+  const agentMetadata = useRef<Promise<Agent[]>>(Promise.resolve([]));
+  const table = useResourceTable({items, loadPage: async (cursor, signal) => {
+    const metadata = !cursor && canPreview ? loadAgents(signal) : agentMetadata.current;
+    agentMetadata.current = metadata;
+    const agentItems = await metadata;
+    if (signal.aborted) throw signal.reason;
+    if (agentMetadata.current !== metadata) throw new Error('Agent metadata changed during sorting. Try again.');
+    setAgents(agentItems); setError('');
+    return client.list(200, cursor, signal);
+  }, pageSize, scope: context.session?.user_id ?? '', enabled: !selectedID && !isNew && !!context.session && !context.session.restricted});
   const [updatedAt, setUpdatedAt] = useState('');
   const [sliUsage, setSliUsage] = useState<SliUsage | null>(null);
   const [sliUsageTruncated, setSliUsageTruncated] = useState(false);
@@ -328,20 +352,27 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
 
   // The previous-cursor trail changes only once the page it describes has loaded; usage counts are re-read for the list scope.
   const loadList = useCallback((next = '', size = 20, trailAfter?: string[]) => {
-    const request = new AbortController(); const routeAtRequest = locationKeyRef.current; setLoading(true); setError('');
+    const request = new AbortController(); const routeAtRequest = locationKeyRef.current; const acceptsRead = table.readGuard(); setLoading(true); setError('');
     setSliUsage(null); setSliUsageTruncated(false);
+    const metadata = canPreview ? loadAgents(request.signal) : Promise.resolve([]);
+    agentMetadata.current = metadata;
+    void metadata.then(agentItems => {
+      if (!request.signal.aborted && locationKeyRef.current === routeAtRequest && agentMetadata.current === metadata && acceptsRead()) setAgents(agentItems);
+    }).catch(reason => {
+      if (!request.signal.aborted && locationKeyRef.current === routeAtRequest && agentMetadata.current === metadata && acceptsRead()) {
+        table.readFailed(reason);
+        setError(`Agent metadata could not be loaded. ${safeError(reason)}`);
+      }
+    });
     void (async () => {
       try {
-        const [page, agentItems] = await Promise.all([
-          client.list(size, next, request.signal),
-          canPreview ? loadAgents(request.signal) : Promise.resolve([]),
-        ]);
-        if (request.signal.aborted || locationKeyRef.current !== routeAtRequest) return;
+        const page = await client.list(size, next, request.signal);
+        if (request.signal.aborted || locationKeyRef.current !== routeAtRequest || !acceptsRead()) return;
         listResultKey.current = routeAtRequest;
-        setItems(page.items); setCursor(next); setNextCursor(page.next_cursor); setAgents(agentItems); setUpdatedAt(clockFormat.format(new Date()));
+        setItems(page.items); setCursor(next); setNextCursor(page.next_cursor); setUpdatedAt(clockFormat.format(new Date()));
         if (trailAfter) setPreviousCursors(trailAfter);
         void loadSliUsage(request.signal).then((result) => { if (!request.signal.aborted && locationKeyRef.current === routeAtRequest) { setSliUsage(result.usage); setSliUsageTruncated(result.truncated); } }).catch(() => undefined);
-      } catch (reason) { if (!request.signal.aborted && locationKeyRef.current === routeAtRequest) setError(`${safeError(reason)}${listResultKey.current === routeAtRequest ? ' Showing previous results.' : ''}`); }
+      } catch (reason) { if (!request.signal.aborted && locationKeyRef.current === routeAtRequest && acceptsRead()) {const denied = table.readFailed(reason); setError(`${safeError(reason)}${!denied && listResultKey.current === routeAtRequest ? ' Showing previous results.' : ''}`);} }
       finally { if (!request.signal.aborted && locationKeyRef.current === routeAtRequest) setLoading(false); }
     })();
     return request;
@@ -646,7 +677,7 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
   const agentName = (id: string) => agents.find((agent) => agent.id === id)?.display_name ?? null;
 
   if (!selectedID && !isNew) {
-    const currentItems = listResultKey.current === locationKey ? items : [];
+    const currentItems = listResultKey.current === locationKey ? table.sourceItems : [];
     const term = listSearch.trim().toLowerCase();
     const rows = currentItems.map((item) => {
       const usage = usageOf(item.id);
@@ -654,33 +685,47 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
     });
     const attention = rows.filter((row) => row.vocabulary?.attention).length;
     const unused = rows.filter((row) => row.usage?.count === 0).length;
-    const visible = rows.filter((row) => (!term || `${row.item.display_name} ${row.item.name} ${row.item.endpoint} ${agentName(row.item.agent_id) ?? ''}`.toLowerCase().includes(term))
-      && (healthFilter === 'all' || (healthFilter === 'attention' ? row.vocabulary?.attention : row.usage?.count === 0)));
+    const columns: ResourceColumn<Datasource>[] = [
+      {id: 'name', label: 'Datasource', value: item => item.display_name},
+      ...(canPreview ? [{id: 'health', label: 'Health', value: (item: Datasource) => datasourceVocabulary(item, agents, usageOf(item.id) === null ? null : usageOf(item.id)!.count > 0).label}, {id: 'agent', label: 'Agent', value: (item: Datasource) => item.reassignment ? `${agentName(item.reassignment.source_agent_id) ?? '…'} → ${agentName(item.reassignment.target_agent_id) ?? '…'}` : agentName(item.agent_id)}] : []),
+      {id: 'cadence', label: 'Cadence', value: item => item.polling_interval_seconds},
+      {id: 'slis', label: 'SLIs', value: item => usageOf(item.id)?.count ?? null},
+    ];
+    const rowsByID = new Map(rows.map(row => [row.item.id, row]));
+    const sortedPage = table.rows(columns, item => { const row = rowsByID.get(item.id); return !!row && (!term || `${row.item.display_name} ${row.item.name} ${row.item.endpoint} ${agentName(row.item.agent_id) ?? ''}`.toLowerCase().includes(term))
+      && (healthFilter === 'all' || (healthFilter === 'attention' ? !!row.vocabulary?.attention : row.usage?.count === 0)); });
+    const visible = sortedPage.items.map(item => rowsByID.get(item.id)!);
     // Refresh stays available when the list is empty or its first read failed, so new records can be found without a reload.
     const refresh = <RefreshButton label="Refresh datasources" busy={loading} lastRefreshed={updatedAt} onClick={() => loadList(cursor, pageSize)} />;
     return <>
       <PageHeader title="Datasources" headingRef={heading} actions={admin ? <Button onClick={() => navigate('/datasources/new')}>New datasource</Button> : undefined} />
       {error && <p ref={errorSummary} role="alert" tabIndex={-1} className="datasource-alert">{error}</p>}{notice && <p role="status" className="datasource-notice">{notice}</p>}
+      {table.error && <p role="alert">{table.error}<Button variant="outline" disabled={loading || table.busy} onClick={() => table.active ? table.refresh() : loadList(cursor, pageSize)}>Try again</Button></p>}
       {loading && <span className="sr-only" role="status">Refreshing datasources</span>}
-      {currentItems.length === 0 && error && listResultKey.current !== locationKey ? <Toolbar><ToolbarSpacer />{refresh}</Toolbar> : currentItems.length === 0 ? <><Toolbar><ToolbarSpacer />{refresh}</Toolbar><Panel heading="No datasources yet"><p>{admin ? 'Add a Prometheus datasource to connect an agent.' : 'No datasources are available to your account.'}</p></Panel></> : <>
+      {currentItems.length === 0 && !table.active && error && listResultKey.current !== locationKey ? <Toolbar><ToolbarSpacer />{refresh}</Toolbar> : currentItems.length === 0 && !table.active && !table.error ? <><Toolbar><ToolbarSpacer />{refresh}</Toolbar><Panel heading="No datasources yet"><p>{admin ? 'Add a Prometheus datasource to connect an agent.' : 'No datasources are available to your account.'}</p></Panel></> : <>
         <Toolbar>
-          <SearchField id="datasource-search" label="Filter datasources" placeholder="Filter by name, endpoint or agent" value={listSearch} onChange={(event) => setListSearch(event.target.value)} />
-          <SegmentedControl label="Filter by health" value={healthFilter} onChange={setHealthFilter} options={[{ value: 'all', label: 'All', count: rows.length }, ...(admin ? [{ value: 'attention' as const, label: 'Needs attention', count: attention }] : []), ...(sliUsage ? [{ value: 'unused' as const, label: 'Unused', count: unused }] : [])]} />
+          <SearchField id="datasource-search" label="Filter datasources" placeholder="Filter by name, endpoint or agent" value={listSearch} onChange={(event) => {setListSearch(event.target.value); table.resetPage();}} />
+          <SegmentedControl label="Filter by health" value={healthFilter} onChange={value => {setHealthFilter(value); table.resetPage();}} options={[{ value: 'all', label: 'All', count: rows.length }, ...(admin ? [{ value: 'attention' as const, label: 'Needs attention', count: attention }] : []), ...(sliUsage ? [{ value: 'unused' as const, label: 'Unused', count: unused }] : [])]} />
           <ToolbarSpacer />{refresh}
         </Toolbar>
-        {visible.length === 0 ? <p className="datasource-empty-filter">No datasources match these filters on this page.</p> : <table className="ds-table ui-list-table" aria-label="Datasources">
-          <thead><tr><th scope="col">Datasource</th>{canPreview && <th scope="col">Health</th>}{canPreview && <th scope="col">Agent</th>}<th scope="col">Cadence</th><th scope="col" className="num">SLIs</th></tr></thead>
-          <tbody>{visible.map(({ item, vocabulary, usage }) => <tr key={item.id} className="ds-row">
-            <td data-label="Datasource" className="ds-row__name"><a href={`/datasources/${item.id}`} data-app-route onClick={(event) => { event.preventDefault(); navigate(`/datasources/${item.id}`); }}>{item.display_name}</a><span className="ds-row__sub ui-list-table__sub">Prometheus · {item.endpoint}{item.tls.insecure_skip_verify && <span className="ui-pill ds-pill--warning">TLS unverified</span>}</span></td>
+        <ResourceTableMobileSort id="datasources-sort" columns={columns} sorting={table}/>
+
+        <div className="ui-resource-panel" role="region" aria-label="Datasource table" tabIndex={0} aria-busy={loading || table.busy || undefined}>
+        {table.busy && <span className="sr-only" role="status">Sorting datasources</span>}
+        {visible.length === 0 ? table.error ? null : <p className="datasource-empty-filter">No datasources match these filters{table.active ? '.' : ' on this page.'}</p> : <table className="ds-table ui-list-table ui-resource-table" aria-label="Datasources">
+          <ResourceTableHead columns={columns} sorting={table}/>
+          <tbody>{visible.map(({ item, vocabulary, usage }) => <tr key={item.id} className="ds-row" onClick={event => resourceRowClick(event, () => navigate(`/datasources/${item.id}`))}>
+            <td data-label="Datasource" className="ds-row__name"><a href={`/datasources/${item.id}`} data-app-route onClick={(event) => { if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); navigate(`/datasources/${item.id}`); }}>{item.display_name}</a><span className="ds-row__sub ui-list-table__sub">Prometheus · {item.endpoint}{item.tls.insecure_skip_verify && <span className="ui-pill ds-pill--warning">TLS unverified</span>}</span></td>
             {canPreview && vocabulary && <td data-label="Health"><StatusChip tone={vocabulary.tone} label={vocabulary.label} reason={vocabulary.reason} /></td>}
-            {canPreview && <td data-label="Agent" className="mono">{item.reassignment ? `${agentName(item.reassignment.source_agent_id) ?? '…'} → ${agentName(item.reassignment.target_agent_id) ?? '…'}` : agentName(item.agent_id) ?? 'Unknown'}</td>}
+            {canPreview && <td data-label="Agent" className="mono"><span className="ui-resource-wrap">{item.reassignment ? `${agentName(item.reassignment.source_agent_id) ?? '…'} → ${agentName(item.reassignment.target_agent_id) ?? '…'}` : agentName(item.agent_id) ?? 'Unknown'}</span></td>}
             <td data-label="Cadence" className="mono">{item.polling_interval_seconds} s</td>
             <td data-label="SLIs" className="num mono">{usage ? usageCount(usage) : '—'}</td>
           </tr>)}</tbody>
         </table>}
-        <Pager id="datasource-page-size" label="Datasource result pages" position={`Showing ${visible.length} of ${currentItems.length}${nextCursor || cursor ? ' on this page' : ''}`} pageSize={pageSize} onPageSizeChange={(size) => { setPageSize(size); loadList('', size, []); }} hasPrevious={previousCursors.length > 0} hasNext={Boolean(nextCursor)} busy={loading}
-          onPrevious={() => { const previous = previousCursors[previousCursors.length - 1] ?? ''; loadList(previous, pageSize, previousCursors.slice(0, -1)); }}
-          onNext={() => loadList(nextCursor, pageSize, [...previousCursors, cursor])} />
+        <Pager id="datasource-page-size" label="Datasource result pages" position={table.active ? `Showing ${sortedPage.total ? sortedPage.start + 1 : 0}–${sortedPage.start + visible.length} of ${sortedPage.total}` : `Showing ${visible.length} of ${currentItems.length}${nextCursor || cursor ? ' on this page' : ''}`} pageSize={pageSize} onPageSizeChange={(size) => { setPageSize(size); table.resetPage(); if (!table.active) loadList('', size, []); }} hasPrevious={table.active ? sortedPage.hasPrevious : previousCursors.length > 0} hasNext={table.active ? sortedPage.hasNext : Boolean(nextCursor)} busy={loading || table.busy}
+          onPrevious={() => { if (table.active) {table.previous(); return;} const previous = previousCursors[previousCursors.length - 1] ?? ''; loadList(previous, pageSize, previousCursors.slice(0, -1)); }}
+          onNext={() => table.active ? table.next() : loadList(nextCursor, pageSize, [...previousCursors, cursor])} />
+        </div>
       </>}
     </>;
   }

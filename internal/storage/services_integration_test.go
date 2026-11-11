@@ -271,3 +271,44 @@ func TestIntegrationServiceCatalogSummaryTruthAndSloBlocker(t *testing.T) {
 		t.Fatalf("stale projection became success: %+v", v.SloSummary)
 	}
 }
+
+func TestIntegrationServiceCatalogRetriesConcurrentSessionTouch(t *testing.T) {
+	t.Parallel()
+	f := newAgentFixture(t)
+	clock := func() time.Time { return f.base.Add(5 * time.Second) }
+	proof := DatasourceProof{SessionVerifier: f.verifier}
+	service, _, err := CreateObjective(t.Context(), f.databaseURL, CreateObjectiveInput{Proof: proof, Name: "catalog-touch", DisplayName: "Catalog touch", IdempotencyKey: "catalog-touch", RequestID: "catalog-touch", Now: clock}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	locker := integrationConnect(t, f.databaseURL)
+	observer := integrationConnect(t, f.databaseURL)
+	tx, err := locker.Begin(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback(t.Context())
+	if _, err := tx.Exec(t.Context(), `SELECT id FROM public.almanac_users WHERE id=(SELECT user_id FROM public.almanac_sessions WHERE verifier=$1) FOR UPDATE`, f.verifier[:]); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(t.Context(), `UPDATE public.almanac_sessions SET last_seen_at=last_seen_at + interval '1 microsecond' WHERE verifier=$1`, f.verifier[:]); err != nil {
+		t.Fatal(err)
+	}
+	type result struct {
+		page ServiceCatalogPage
+		err  error
+	}
+	done := make(chan result, 1)
+	go func() {
+		page, err := ListServiceCatalog(t.Context(), f.databaseURL, ServiceCatalogInput{Proof: proof, Sort: "name", Order: "asc", Limit: 1, Now: clock})
+		done <- result{page, err}
+	}()
+	waitForAgentQueryWait(t, observer, "%FROM public.almanac_users%")
+	if err := tx.Commit(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	got := <-done
+	if got.err != nil || len(got.page.Services) != 1 || got.page.Services[0].ID != service.ID {
+		t.Fatalf("catalog after concurrent session touch: %+v, %v", got.page, got.err)
+	}
+}
