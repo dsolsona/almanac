@@ -34,3 +34,14 @@ it('distinguishes repeated local times by their UTC offsets',()=>{
  expect(first).toContain('01:30');expect(second).toContain('01:30');expect(first).toContain('GMT-4');expect(second).toContain('GMT-5');expect(first).not.toBe(second);
  expect(pointTime('2026-11-01T05:30:00Z','UTC')).toContain('05:30 UTC');
 });
+
+it('keeps dense qualified history as small marks and preserves missing gaps',()=>{
+ const start='2026-10-13T10:00:00Z',end='2026-11-12T10:00:00Z';
+ const samples=Array.from({length:720},(_,i)=>sample(new Date(Date.parse(start)+i*3600000).toISOString(),i===360?null:'0.8',i===360?'missing':'partial'));
+ render(<SloHistoryChart kind="budget" samples={samples} start={start} end={end} target="0.999"/>);
+ expect(document.querySelectorAll('circle.qualified-point')).toHaveLength(0);
+ expect(document.querySelectorAll('path.qualified-point')).toHaveLength(719);
+ const chart=screen.getByRole('group',{name:/Inspect/});fireEvent.keyDown(chart,{key:'Home'});
+ expect(screen.getByRole('tooltip')).toHaveTextContent('80%');expect(screen.getByRole('tooltip')).toHaveTextContent('Partial data');
+ expect(document.querySelectorAll('.inspection-dot')).toHaveLength(1);
+});

@@ -11,7 +11,7 @@ export function pointTime(value:string,zone:'UTC'|'local'='UTC'):string {
  return new Date(value).toLocaleString('en-GB',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:false,...(zone==='UTC'?{timeZone:'UTC'}:{timeZoneName:'shortOffset'})})+(zone==='UTC'?' UTC':' local');
 }
 export function SloHistoryChart({kind,samples,start,end,target,compact=false,zone='UTC',generation,burnLabel='1 h'}:Props) {
- const host=useRef<HTMLDivElement>(null),tooltip=useRef<HTMLDivElement>(null);
+ const host=useRef<HTMLDivElement>(null);
  const [width,setWidth]=useState(980),[index,setIndex]=useState<number|null>(null);
  useLayoutEffect(()=>{const el=host.current;if(!el)return;const resize=()=>setWidth(Math.max(280,el.clientWidth-(innerWidth>700?38:14)));resize();const observer=new ResizeObserver(resize);observer.observe(el);return()=>observer.disconnect();},[start,end]);
  useEffect(()=>setIndex(null),[samples,start,end,kind]);
@@ -31,11 +31,10 @@ export function SloHistoryChart({kind,samples,start,end,target,compact=false,zon
  traceChartRender(()=>{
  const segments:Sample[][]=[];let segment:Sample[]=[];
  for(const p of samples){const qualified=p.state!=='observed'||p.quality?.state!=='complete'||p.quality?.freshness!=='fresh'||!!p.display_coverage?.states.some(state=>state!=='observed')||!!p.display_coverage?.quality_states.some(state=>state!=='complete')||!!p.display_coverage?.freshness.some(state=>state!=='fresh');if(!allowed(p)||qualified){if(segment.length)segments.push(segment);segment=[];if(allowed(p))segments.push([p]);}else segment.push(p);}if(segment.length)segments.push(segment);
- nodes=segments.map((points,i)=><g key={i}>{kind==='budget'&&points.length>1&&<path className="fill" d={`M${x(points[0]!)},${y(0)} ${points.map(p=>`L${x(p)},${y(numeric(p)!)}`).join(' ')} L${x(points.at(-1)!)},${y(0)} Z`}/>}<path className="curve" d={points.map((p,j)=>`${j?'L':'M'}${x(p)},${y(numeric(p)!)}`).join(' ')}/>{points.length===1&&<circle className={`qualified-point ${points[0]!.state}`} cx={x(points[0]!)} cy={y(numeric(points[0]!)!)} r="3"/>}</g>);
+ nodes=segments.map((points,i)=><g key={i}>{kind==='budget'&&points.length>1&&<path className="fill" d={`M${x(points[0]!)},${y(0)} ${points.map(p=>`L${x(p)},${y(numeric(p)!)}`).join(' ')} L${x(points.at(-1)!)},${y(0)} Z`}/>}<path className="curve" d={points.map((p,j)=>`${j?'L':'M'}${x(p)},${y(numeric(p)!)}`).join(' ')}/>{points.length===1&&<path className={`qualified-point ${points[0]!.state}`} d={`M${x(points[0]!)-Math.min(1.5,(right-left)/Math.max(1,samples.length)*.3)},${y(numeric(points[0]!)!)} h${Math.min(3,(right-left)/Math.max(1,samples.length)*.6)}`}/>}</g>);
  });return nodes;
  },[samples,kind,width,start,end,target,compact,zone,generation]);
  const selected=index===null?undefined:samples[index];
- useLayoutEffect(()=>{if(!selected||!tooltip.current||!host.current)return;const frame=host.current.getBoundingClientRect(),svg=host.current.querySelector('svg')!.getBoundingClientRect(),px=svg.left-frame.left+x(selected)/width*svg.width;tooltip.current.style.left=`${Math.max(8,Math.min(frame.width-tooltip.current.offsetWidth-8,px+14))}px`;});
  function inspect(e:PointerEvent<HTMLDivElement>){const svg=e.currentTarget.querySelector('svg');if(!svg||!samples.length)return;const r=svg.getBoundingClientRect(),value=min+((e.clientX-r.left)/r.width*width-left)/(right-left)*(max-min);let nearest=0;for(let i=1;i<samples.length;i++)if(Math.abs(Date.parse(samples[i]!.evaluation_at)-value)<Math.abs(Date.parse(samples[nearest]!.evaluation_at)-value))nearest=i;setIndex(nearest);}
  const tickFractions=width<480?[0,6/11,1]:[0,4/11,8/11,1];
  const selectedValue=selected&&allowed(selected)?(kind==='burn'?`${selected.burn}×`:percentExact(selected[field])):null;
@@ -50,7 +49,7 @@ export function SloHistoryChart({kind,samples,start,end,target,compact=false,zon
  {tickFractions.map((fraction,i)=>{const t=min+fraction*(max-min);return <text className="axis" key={i} x={left+fraction*(right-left)} y={height-7} textAnchor={i===0?'start':i===tickFractions.length-1?'end':'middle'}>{new Date(t).toLocaleDateString('en-GB',{day:'2-digit',month:'short',...(zone==='UTC'?{timeZone:'UTC'}:{})})}{i===tickFractions.length-1?` ${zone==='UTC'?'UTC':'local'}`:''}</text>;})}
  {selected&&<g><line className="cursor" x1={x(selected)} x2={x(selected)} y1={top} y2={bottom}/>{allowed(selected)&&<circle className="inspection-dot" cx={x(selected)} cy={y(numeric(selected)!)} r="4.5"/>}</g>}
  </svg>}
- {selected&&<div ref={tooltip} className="slo-point-tooltip" role="tooltip"><span>{pointTime(selected.evaluation_at,zone)}</span><strong>{selectedValue??labels[selected.state]}</strong><span>{label}</span><small>{selected.state==='observed'&&(selected.quality?.state!=='complete'||selected.quality?.freshness!=='fresh')?`Observed · ${selected.quality?.state.replaceAll('_',' ')} · ${selected.quality?.freshness}`:labels[selected.state]}</small>{selected.display_coverage&&<small>Displayed period includes {[...new Set([...selected.display_coverage.states,...selected.display_coverage.quality_states,...selected.display_coverage.freshness])].join(', ').replaceAll('_',' ')}</small>}</div>}
+ {selected&&<div className="slo-point-tooltip" role="tooltip"><span>{pointTime(selected.evaluation_at,zone)}</span><strong>{selectedValue??labels[selected.state]}</strong><span>{label}</span><small>{selected.state==='observed'&&(selected.quality?.state!=='complete'||selected.quality?.freshness!=='fresh')?`Observed · ${selected.quality?.state.replaceAll('_',' ')} · ${selected.quality?.freshness}`:labels[selected.state]}</small>{selected.display_coverage&&<small>Displayed period includes {[...new Set([...selected.display_coverage.states,...selected.display_coverage.quality_states,...selected.display_coverage.freshness])].join(', ').replaceAll('_',' ')}</small>}</div>}
  <span className="sr-only" aria-live="polite">{selected?`${pointTime(selected.evaluation_at,zone)} · ${selectedValue??labels[selected.state]}`:''}</span>
  </div>;
 }

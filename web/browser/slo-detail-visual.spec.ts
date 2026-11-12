@@ -43,3 +43,20 @@ test('365 completed days remain visible, scrollable and keyboard inspectable',{t
  const base=detail.compliance_series.days[0]!;detail.compliance_series.days=Array.from({length:365},(_,i)=>{const first=Date.UTC(2025,10,12)+i*86400000,end=new Date(first+86400000).toISOString();return{...base,utc_date:new Date(first).toISOString().slice(0,10),day_start:new Date(first).toISOString(),day_end:end,requested_at:end,effective_at:end,quality:{...base.quality,first_observation_at:new Date(first-29*86400000).toISOString(),last_observation_at:end,latest_receipt_at:end}};});detail.compliance_summary={...detail.compliance_summary,met_days:365,evaluable_days:365};await installSloFixture(page,detail);
  try{await page.goto(`/slos/${sloID}?range=1y`);const strip=page.getByRole('group',{name:'Inspect completed UTC days'});await expect(strip.locator('i')).toHaveCount(365);expect((await strip.locator('i').first().boundingBox())!.width).toBeGreaterThanOrEqual(8);expect(await strip.evaluate(el=>el.scrollWidth>el.clientWidth)).toBe(true);await strip.focus();await page.keyboard.press('End');await expect(page.locator('.slo-day-inspection')).toContainText('2026-11-11');await expect.poll(()=>strip.evaluate(el=>el.scrollLeft)).toBeGreaterThan(0);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);}finally{await context.close();}
 });
+
+test('dense 30-day budget stays visible during inspection',{tag:'@matrix'},async({page},info)=>{
+ const detail=sloFixture(),start='2026-10-13T10:00:00Z',end=detail.range.effective_end,base=detail.budget_series.samples[0]!;
+ detail.range={...detail.range,requested_start:start,effective_start:start};
+ detail.objective.activated_at='2026-10-01T00:00:00Z';detail.objective.evaluation_valid_from=detail.objective.activated_at;detail.current.window.activated_at=detail.objective.activated_at;detail.current.window.evaluation_valid_from=detail.objective.activated_at;
+ const day=detail.compliance_series.days[0]!;detail.compliance_series.days=Array.from({length:30},(_,i)=>{const first=Date.UTC(2026,9,13)+i*86400000,last=new Date(first+86400000).toISOString();return {...day,utc_date:new Date(first).toISOString().slice(0,10),day_start:new Date(first).toISOString(),day_end:last,requested_at:last,effective_at:last};});detail.compliance_summary={...detail.compliance_summary,met_days:30,evaluable_days:30};
+ detail.budget_series.samples=Array.from({length:720},(_,i)=>{const time=new Date(Date.parse(start)+i*3600000).toISOString(),missing=i>=350&&i<370;return {...base,evaluation_at:time,bucket_start:time,bucket_end:new Date(Date.parse(time)+3600000).toISOString(),state:missing?'missing':'partial',remaining_fraction:missing?null:String(.9-i/1000),quality:{...base.quality,state:'partial',freshness:'fresh'}};});
+ await page.addInitScript(theme=>localStorage.setItem('almanac-theme',theme),info.project.name.endsWith('dark')?'dark':'light');
+ await installSloFixture(page,detail);await page.goto(`/slos/${sloID}?range=30d`);
+ const chart=page.locator('.slo-history-chart.budget'),svg=chart.locator('svg');await expect(chart.locator('path.qualified-point')).toHaveCount(700);
+ expect(await chart.locator('.qualified-point').first().evaluate(el=>el.getBoundingClientRect().width)).toBeLessThan(3);
+ await chart.focus();await page.keyboard.press('End');await expect(chart.getByRole('tooltip')).toContainText('Partial data');
+ expect((await chart.getByRole('tooltip').boundingBox())!.y).toBeGreaterThanOrEqual((await svg.boundingBox())!.y+(await svg.boundingBox())!.height);
+ await page.keyboard.press('Home');for(let i=0;i<350;i++)await page.keyboard.press('ArrowRight');await expect(chart.getByRole('tooltip')).toContainText('Missing');await expect(chart.locator('.inspection-dot')).toHaveCount(0);
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await page.screenshot({path:`../.local/slo-density-${info.project.name}.png`,fullPage:true});
+});
