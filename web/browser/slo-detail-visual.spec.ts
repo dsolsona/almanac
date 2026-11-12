@@ -34,7 +34,7 @@ test('SLO disclosures preserve long exact decimal counts on touch screens',async
  detail.current.performance={...detail.current.performance,good:'9007199254740993.000000000001',total:'9007199254740994.000000000002',bad:'1.000000000001',allowed_budget:'9007199254740.994000000000',remaining_budget:'9007199254739.993999999999',remaining_fraction:'1.000000000000',attainment:'1.000000000000',consumed_fraction:'0.000000000000'};
  await installSloFixture(page,detail);await page.goto(`/slos/${sloID}`);await page.locator('#calculation summary').click();await expect(page.locator('#calculation')).toContainText('9,007,199,254,740,993.000000000001');
  for(const selector of ['.calculation-inputs','.calculation-equation','.calculation-equation > strong'])for(const row of await page.locator(selector).all())expect(await row.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
- const graph=page.locator('.slo-history-chart.budget');await graph.tap();await expect(page.locator('.slo-point-tooltip')).toBeVisible();expect(await page.locator('.slo-point-tooltip').evaluate(el=>getComputedStyle(el).position)).toBe('static');await page.getByRole('heading',{name:'Your error budget'}).tap();await expect(page.locator('.slo-point-tooltip')).toHaveCount(0);await context.close();
+ const graph=page.locator('.slo-history-chart.budget');await graph.tap();await expect(page.locator('.slo-point-tooltip')).toBeVisible();expect(await page.locator('.slo-point-tooltip').evaluate(el=>getComputedStyle(el).position)).toBe('absolute');await page.getByRole('heading',{name:'Your error budget'}).tap();await expect(page.locator('.slo-point-tooltip')).toHaveCount(0);await context.close();
  }
 });
 
@@ -54,9 +54,27 @@ test('dense 30-day budget stays visible during inspection',{tag:'@matrix'},async
  await installSloFixture(page,detail);await page.goto(`/slos/${sloID}?range=30d`);
  const chart=page.locator('.slo-history-chart.budget'),svg=chart.locator('svg');await expect(chart.locator('path.qualified-point')).toHaveCount(700);
  expect(await chart.locator('.qualified-point').first().evaluate(el=>el.getBoundingClientRect().width)).toBeLessThan(3);
- await chart.focus();await page.keyboard.press('End');await expect(chart.getByRole('tooltip')).toContainText('Partial data');
- expect((await chart.getByRole('tooltip').boundingBox())!.y).toBeGreaterThanOrEqual((await svg.boundingBox())!.y+(await svg.boundingBox())!.height);
+ const before=await chart.boundingBox();await chart.focus();await page.keyboard.press('End');await expect(chart.getByRole('tooltip')).toContainText('Partial data');
+ expect((await chart.boundingBox())!.height).toBe(before!.height);expect((await chart.getByRole('tooltip').boundingBox())!.width).toBeLessThanOrEqual(260);
  await page.keyboard.press('Home');for(let i=0;i<350;i++)await page.keyboard.press('ArrowRight');await expect(chart.getByRole('tooltip')).toContainText('Missing');await expect(chart.locator('.inspection-dot')).toHaveCount(0);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  await page.screenshot({path:`../.local/slo-density-${info.project.name}.png`,fullPage:true});
+});
+
+
+test('point tooltip stays compact without shifting the graph or covering selection',{tag:'@matrix'},async({page},info)=>{
+ await page.addInitScript(theme=>localStorage.setItem('almanac-theme',theme),info.project.name.endsWith('dark')?'dark':'light');await installSloFixture(page);await page.goto(`/slos/${sloID}`);
+ const chart=page.locator('.slo-history-chart.budget'),next=page.locator('#burn'),svg=chart.locator('svg');const before=await chart.boundingBox(),nextBefore=await next.evaluate(el=>el.getBoundingClientRect().top+scrollY);
+ await chart.focus();
+ for(const key of ['Home','End']){
+ await page.keyboard.press(key);const tip=chart.getByRole('tooltip');await expect(tip).toBeVisible();const box=(await tip.boundingBox())!,point=(await chart.locator('.inspection-dot').boundingBox())!;
+ expect(box.width).toBeLessThanOrEqual(260);expect(box.x).toBeGreaterThanOrEqual(before!.x);expect(box.x+box.width).toBeLessThanOrEqual(before!.x+before!.width);
+ expect(box.x+box.width<point.x||box.x>point.x+point.width||box.y+box.height<point.y||box.y>point.y+point.height).toBe(true);
+ expect((await chart.boundingBox())!.height).toBe(before!.height);expect(await next.evaluate(el=>el.getBoundingClientRect().top+scrollY)).toBe(nextBefore);
+ await chart.screenshot({path:`../.local/slo-tooltip-${info.project.name}-${key}.png`});
+ }
+ await page.keyboard.press('Escape');await expect(chart.getByRole('tooltip')).toHaveCount(0);
+ const bounds=(await svg.boundingBox())!;await page.mouse.move(bounds.x+bounds.width*.45,bounds.y+bounds.height*.5);await expect(chart.getByRole('tooltip')).toBeVisible();expect((await chart.boundingBox())!.height).toBe(before!.height);
+ await page.screenshot({path:`../.local/slo-hover-${info.project.name}.png`,fullPage:true});
+ await page.mouse.move(0,0);await expect(chart.getByRole('tooltip')).toHaveCount(0);
 });

@@ -11,7 +11,7 @@ export function pointTime(value:string,zone:'UTC'|'local'='UTC'):string {
  return new Date(value).toLocaleString('en-GB',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:false,...(zone==='UTC'?{timeZone:'UTC'}:{timeZoneName:'shortOffset'})})+(zone==='UTC'?' UTC':' local');
 }
 export function SloHistoryChart({kind,samples,start,end,target,compact=false,zone='UTC',generation,burnLabel='1 h'}:Props) {
- const host=useRef<HTMLDivElement>(null);
+ const host=useRef<HTMLDivElement>(null),tooltip=useRef<HTMLDivElement>(null),pointerY=useRef<number|undefined>(undefined);
  const [width,setWidth]=useState(980),[index,setIndex]=useState<number|null>(null);
  useLayoutEffect(()=>{const el=host.current;if(!el)return;const resize=()=>setWidth(Math.max(280,el.clientWidth-(innerWidth>700?38:14)));resize();const observer=new ResizeObserver(resize);observer.observe(el);return()=>observer.disconnect();},[start,end]);
  useEffect(()=>setIndex(null),[samples,start,end,kind]);
@@ -35,13 +35,28 @@ export function SloHistoryChart({kind,samples,start,end,target,compact=false,zon
  });return nodes;
  },[samples,kind,width,start,end,target,compact,zone,generation]);
  const selected=index===null?undefined:samples[index];
- function inspect(e:PointerEvent<HTMLDivElement>){const svg=e.currentTarget.querySelector('svg');if(!svg||!samples.length)return;const r=svg.getBoundingClientRect(),value=min+((e.clientX-r.left)/r.width*width-left)/(right-left)*(max-min);let nearest=0;for(let i=1;i<samples.length;i++)if(Math.abs(Date.parse(samples[i]!.evaluation_at)-value)<Math.abs(Date.parse(samples[nearest]!.evaluation_at)-value))nearest=i;setIndex(nearest);}
+ useLayoutEffect(()=>{
+  const frame=host.current,panel=tooltip.current,svg=frame?.querySelector('svg');
+  if(!frame||!panel||!svg||!selected)return;
+  const bounds=frame.getBoundingClientRect(),plot=svg.getBoundingClientRect(),scale=plot.width/width;
+  const pointX=plot.left-bounds.left+x(selected)*scale;
+  const pointY=plot.top-bounds.top+(allowed(selected)?y(numeric(selected)!):(top+bottom)/2)*scale;
+  const gap=16,panelWidth=panel.offsetWidth,panelHeight=panel.offsetHeight;
+  const fitsRight=pointX+gap+panelWidth<=bounds.width-8,fitsLeft=pointX-gap-panelWidth>=8;
+  const leftPosition=fitsRight?pointX+gap:fitsLeft?pointX-gap-panelWidth:Math.max(8,Math.min(pointX-panelWidth/2,bounds.width-panelWidth-8));
+  // Match SLI inspection: offset from the pointer (or selected point for keyboard), then flip at viewport edges.
+  const anchorY=pointerY.current===undefined?pointY:pointerY.current-bounds.top;
+  const preferredTop=bounds.top+anchorY+gap+panelHeight<=innerHeight-8?anchorY+gap:anchorY-panelHeight-gap;
+  const topPosition=Math.max(8-bounds.top,Math.min(preferredTop,innerHeight-bounds.top-panelHeight-8));
+  panel.style.left=`${leftPosition}px`;panel.style.top=`${topPosition}px`;
+ });
+ function inspect(e:PointerEvent<HTMLDivElement>){pointerY.current=e.clientY;const svg=e.currentTarget.querySelector('svg');if(!svg||!samples.length)return;const r=svg.getBoundingClientRect(),value=min+((e.clientX-r.left)/r.width*width-left)/(right-left)*(max-min);let nearest=0;for(let i=1;i<samples.length;i++)if(Math.abs(Date.parse(samples[i]!.evaluation_at)-value)<Math.abs(Date.parse(samples[nearest]!.evaluation_at)-value))nearest=i;setIndex(nearest);}
  const tickFractions=width<480?[0,6/11,1]:[0,4/11,8/11,1];
  const selectedValue=selected&&allowed(selected)?(kind==='burn'?`${selected.burn}×`:percentExact(selected[field])):null;
  if(!Number.isFinite(min)||!Number.isFinite(max)||max<=min)return <p role="alert">Chart unavailable: Timeline range must have end after start</p>;
  return <div ref={host} className={`slo-history-chart ${kind}`} data-chart-ready="true" data-rendered-generation={generation} data-rendered-zone={zone} role="group" aria-label={`Inspect ${label}. Use arrow keys, Home, End, Escape.`} tabIndex={samples.length?0:undefined}
  onPointerMove={e=>{if(e.pointerType!=='touch')inspect(e);}} onPointerDown={e=>{if(e.pointerType==='touch')inspect(e);}} onPointerLeave={e=>{if(e.pointerType!=='touch')setIndex(null);}} onBlur={()=>setIndex(null)}
- onKeyDown={e=>{if(e.key==='Escape'){setIndex(null);return;}if(!samples.length||!['Home','End','ArrowLeft','ArrowRight'].includes(e.key))return;e.preventDefault();setIndex(i=>e.key==='Home'?0:e.key==='End'?samples.length-1:Math.max(0,Math.min(samples.length-1,(i??samples.length-1)+(e.key==='ArrowRight'?1:-1))));}}>
+ onKeyDown={e=>{pointerY.current=undefined;if(e.key==='Escape'){setIndex(null);return;}if(!samples.length||!['Home','End','ArrowLeft','ArrowRight'].includes(e.key))return;e.preventDefault();setIndex(i=>e.key==='Home'?0:e.key==='End'?samples.length-1:Math.max(0,Math.min(samples.length-1,(i??samples.length-1)+(e.key==='ArrowRight'?1:-1))));}}>
  {samples.length===0?<p className="slo-history-empty">No history available for this period.</p>:<svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${label}; unavailable measurements are gaps.`}>
  {ticks.map((t,i)=><g key={i}><line className="gridline" x1={left} x2={right} y1={y(t)} y2={y(t)}/><text className="axis" x="55" y={y(t)+4} textAnchor="end">{Number(t.toFixed(kind==='attainment'?3:2))}{unit}</text></g>)}
  <line className="ref" x1={left} x2={right} y1={y(kind==='budget'?0:kind==='burn'?1:Number(target)*100)} y2={y(kind==='budget'?0:kind==='burn'?1:Number(target)*100)}/>
@@ -49,7 +64,7 @@ export function SloHistoryChart({kind,samples,start,end,target,compact=false,zon
  {tickFractions.map((fraction,i)=>{const t=min+fraction*(max-min);return <text className="axis" key={i} x={left+fraction*(right-left)} y={height-7} textAnchor={i===0?'start':i===tickFractions.length-1?'end':'middle'}>{new Date(t).toLocaleDateString('en-GB',{day:'2-digit',month:'short',...(zone==='UTC'?{timeZone:'UTC'}:{})})}{i===tickFractions.length-1?` ${zone==='UTC'?'UTC':'local'}`:''}</text>;})}
  {selected&&<g><line className="cursor" x1={x(selected)} x2={x(selected)} y1={top} y2={bottom}/>{allowed(selected)&&<circle className="inspection-dot" cx={x(selected)} cy={y(numeric(selected)!)} r="4.5"/>}</g>}
  </svg>}
- {selected&&<div className="slo-point-tooltip" role="tooltip"><span>{pointTime(selected.evaluation_at,zone)}</span><strong>{selectedValue??labels[selected.state]}</strong><span>{label}</span><small>{selected.state==='observed'&&(selected.quality?.state!=='complete'||selected.quality?.freshness!=='fresh')?`Observed · ${selected.quality?.state.replaceAll('_',' ')} · ${selected.quality?.freshness}`:labels[selected.state]}</small>{selected.display_coverage&&<small>Displayed period includes {[...new Set([...selected.display_coverage.states,...selected.display_coverage.quality_states,...selected.display_coverage.freshness])].join(', ').replaceAll('_',' ')}</small>}</div>}
+ {selected&&<div ref={tooltip} className="slo-point-tooltip" role="tooltip"><span>{pointTime(selected.evaluation_at,zone)}</span><strong>{selectedValue??labels[selected.state]}</strong><span>{label}</span><small>{selected.state==='observed'&&(selected.quality?.state!=='complete'||selected.quality?.freshness!=='fresh')?`Observed · ${selected.quality?.state.replaceAll('_',' ')} · ${selected.quality?.freshness}`:labels[selected.state]}</small>{selected.display_coverage&&<small>Displayed period includes {[...new Set([...selected.display_coverage.states,...selected.display_coverage.quality_states,...selected.display_coverage.freshness])].join(', ').replaceAll('_',' ')}</small>}</div>}
  <span className="sr-only" aria-live="polite">{selected?`${pointTime(selected.evaluation_at,zone)} · ${selectedValue??labels[selected.state]}`:''}</span>
  </div>;
 }
