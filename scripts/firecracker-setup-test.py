@@ -1016,6 +1016,10 @@ main codex
     python_shim = tools / 'python3'
     python_shim.write_text('''#!/bin/sh
 if test "$1" = /usr/local/lib/almanac-tern/session.py; then
+    if test "$FAKE_NATIVE_STATUS" = other; then
+        test "${3:-}" = codex && exit 1
+        exit 0
+    fi
     exit "$FAKE_NATIVE_STATUS"
 fi
 exec ''' + shlex.quote(shutil.which('python3')) + ''' "$@"
@@ -1023,13 +1027,13 @@ exec ''' + shlex.quote(shutil.which('python3')) + ''' "$@"
     python_shim.chmod(0o700)
     native_marker = guest_home / '.codex/almanac-terminal-tern'
     native_marker.touch()
-    for native_status in ('0', '2'):
+    for native_status in ('0', '2', 'other'):
         result = subprocess.run(
             ['bash', '-c', 'source "$1"; state=$2; collect', 'test', str(script), str(state)],
             env=dict(transport_env, FAKE_SESSION='', FAKE_NATIVE_STATUS=native_status),
             text=True, capture_output=True, timeout=10,
         )
-        assert result.returncode != 0 and 'Quit Codex in Tern' in result.stderr, result.stderr
+        assert result.returncode != 0 and 'Tern' in result.stderr, result.stderr
         assert not list(state.glob('results.*')), 'live or unknown Tern state exported files'
     native_marker.unlink()
     python_shim.unlink()

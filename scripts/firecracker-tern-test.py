@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Focused native Tern worker checks; external programs use private fixtures."""
+import contextlib
+import copy
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -179,16 +182,34 @@ else:
         (folder / 'process.json').write_text(json.dumps({'child': shell, 'foreground': shell}))
         background = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(10)'])
         try:
-            try:
-                guest.main()
-            except RuntimeError as error:
-                assert 'background work' in str(error)
-            else:
-                raise AssertionError('background work was replaced')
+            warning = io.StringIO()
+            with contextlib.redirect_stderr(warning):
+                assert guest.main() == 0, 'protected work blocked reconnection'
+            assert 'background work' in warning.getvalue()
             assert (folder / 'native-calls').read_text() == before
+            assert not guest.PROMPT_USED.exists(), 'protected restore consumed the task'
         finally:
             background.terminate()
             background.wait(timeout=5)
+        multiple = copy.deepcopy(restored)
+        multiple['sessions'][0]['tabs'][0]['blocks'].append({'live': True, 'exited': None})
+        (folder / 'sessions.json').write_text(json.dumps(multiple))
+        warning = io.StringIO()
+        with contextlib.redirect_stderr(warning):
+            assert guest.main() == 0, 'extra panes blocked reconnection'
+        assert 'other panes' in warning.getvalue()
+        assert (folder / 'native-calls').read_text() == before
+        assert not guest.PROMPT_USED.exists()
+        (folder / 'sessions.json').write_text(json.dumps(restored))
+        (folder / 'process.json').write_text('{}')
+        try:
+            guest.main()
+        except KeyError:
+            pass
+        else:
+            raise AssertionError('unknown restored process allowed replacement')
+        assert (folder / 'native-calls').read_text() == before
+        (folder / 'process.json').write_text(json.dumps({'child': shell, 'foreground': shell}))
         assert guest.main() == 0
         calls = [json.loads(line) for line in (folder / 'native-calls').read_text().splitlines()]
         assert calls[-2] == ['kill', 'session', 'codex'], 'restored login shell was mistaken for Codex'

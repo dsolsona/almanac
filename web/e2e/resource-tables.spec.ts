@@ -2,8 +2,16 @@ import {expect,test} from '@playwright/test';
 import {api,expectOk,unique} from './support/api.ts';
 import {startAgent} from './support/stack.ts';
 
+type Journey = {journey:string;result:string;duration:number};
+
 test('resource lists share the services table, sort all results, and open selectable rows',async({page},testInfo)=>{
  test.setTimeout(120_000);
+ await page.addInitScript(()=>{
+  Object.assign(window,{listJourneys:[]});
+  window.addEventListener('almanac:journey',event=>{
+   (window as unknown as {listJourneys:Journey[]}).listJourneys.push((event as CustomEvent<Journey>).detail);
+  });
+ });
  const prefix=unique('tables');
  const registered=await expectOk(api(page,'POST','/api/v1/agents',{name:`collector-${prefix}`,display_name:'Table collector'}));
  startAgent(registered.body.token);
@@ -22,12 +30,15 @@ test('resource lists share the services table, sort all results, and open select
  }
  await expectOk(api(page,'POST','/api/v1/services',{name:prefix,display_name:prefix}));
  for(const resource of ['agents','datasources','slis']){
-  const started=performance.now();
   await page.goto(`/${resource}`,{waitUntil:'commit'});
   await expect(page.locator('.ui-resource-table tbody tr').first()).toBeVisible();
-  const firstVisitMs=performance.now()-started;
-  expect(firstVisitMs).toBeLessThan(1000);
+  // Browser timings include navigation, fonts and paint, without assertion polling delay.
+  const completed=await page.waitForFunction(route=>(window as unknown as {listJourneys:Journey[]}).listJourneys.find(item=>item.journey===route),resource==='slis'?'sli.list':'management');
+  const journey=await completed.jsonValue();
+  const firstVisitMs=journey.duration;
   await testInfo.attach(`${resource}-first-visit`,{body:JSON.stringify({milliseconds:firstVisitMs}),contentType:'application/json'});
+  expect(journey.result).toBe('ready');
+  expect(firstVisitMs).toBeLessThan(1000);
   const search=page.getByRole('searchbox');
   await search.fill(prefix+'-');
   const sortLabel=resource==='agents'?'Agent':resource==='datasources'?'Datasource':'SLI';

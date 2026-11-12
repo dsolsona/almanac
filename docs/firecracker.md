@@ -208,7 +208,7 @@ Codex starts. Existing lifecycle commands without `VM` still select the original
 same behavior when `NAME` is omitted.
 
 You can also choose a short name per task. `run` clones a guest on first use and then starts
-interactive Codex inside a detached tmux session:
+interactive Codex in the guest's Tern session and connects your laptop's Tern window:
 
 ```sh
 bash scripts/firecracker-setup.sh run api --prompt 'Investigate the API issue described in docs/task.md'

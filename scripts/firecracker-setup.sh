@@ -1024,8 +1024,8 @@ if tmux has-session -t codex 2>/dev/null; then
 fi
 if test -f /home/dev/.codex/almanac-terminal-tern; then
     session_status=0
-    python3 /usr/local/lib/almanac-tern/session.py status codex || session_status=$?
-    test "$session_status" = 1 || { echo 'Quit Codex in Tern before collecting; guest preserved' >&2; exit 1; }
+    python3 /usr/local/lib/almanac-tern/session.py status || session_status=$?
+    test "$session_status" = 1 || { echo 'Quit Codex and other Tern tasks before collecting; guest preserved' >&2; exit 1; }
 fi
 mkdir -p /home/dev/.codex/almanac-export
 cd /home/dev/almanac/.worktrees/codex

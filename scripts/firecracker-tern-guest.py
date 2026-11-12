@@ -58,14 +58,16 @@ def restore(data, env):
         if not restored:
             return
         if len(blocks) != 1:
-            raise RuntimeError('restored Codex session has other panes; left it untouched')
+            print('restored Codex session has other panes; reconnecting without replacing it', file=sys.stderr)
+            return
         process = json.loads(subprocess.check_output(
             [RUNTIME + '/tern', 'process', str(restored[0]['id']), '--json'], env=env, timeout=10))
         child, foreground = process['child'], process['foreground']
         if child['name'] != 'bash' or foreground['pid'] != child['pid']:
             return  # A user has already started a program in the restored pane.
         if Path(f"/proc/{int(child['pid'])}/task/{int(child['pid'])}/children").read_text().strip():
-            raise RuntimeError('restored shell has background work; left it untouched')
+            print('restored shell has background work; reconnecting without replacing it', file=sys.stderr)
+            return
         # Tern restores login shells. Recreate only the owned idle pane, retaining prompt consumption.
         PROMPT_USED.touch(mode=0o600)
         launch(data, env)
