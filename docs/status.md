@@ -1,3 +1,12 @@
+Alerting design review, 2026-11-12: [F4-T01](tasks/F4-T01.md) prepares proposed
+[ADR-0051](adr/0051-durable-alert-policy-state-machine.md), draft
+[SPEC-0021](specs/0021-alert-policy-engine.md) and
+[SPEC-0022](specs/0022-alert-management-ui.md), with the selected
+[A/current creation mocks](design/mocks/alert-options/README.md). Initial engine
+verification scope is 100/200 policies; SLO/condition/occurrence counts are explicit.
+Catch-up, lifecycle and latency defaults remain proposed. A draft PR including
+mocks is authorized; no engine implementation, benchmark or merge is claimed.
+
 SLO detail redesign, 2026-11-12: [F6-T11](tasks/F6-T11.md) is published in
 [PR #91](https://github.com/dsolsona/almanac/pull/91) under
 [ADR-0049](adr/0049-slo-budget-in-context-detail.md). Refined B integrates the

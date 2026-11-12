@@ -53,6 +53,9 @@ plan and [ADR-0023](../adr/0023-slo-operational-urgency.md) in the working conve
 
 ## Purpose
 
+Proposed alert-management addition: [SPEC-0022](0022-alert-management-ui.md)
+records the selected alert mocks and production state coverage still under review.
+
 Give operators a clear path from installation and observation setup to trustworthy
 SLO results and alert investigation, preserving the Almanac visual design.
 

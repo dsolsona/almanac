@@ -1,5 +1,8 @@
 # Implementation tasks
 
+[F4-T01](F4-T01.md) tracks the draft alert engine/UI contracts and selected mocks.
+It is design review, not authorization for engine implementation.
+
 Use `FN-TNN.md` for a bounded task within a delivery slice, for example `F1-T01.md`.
 Copy [TEMPLATE.md](TEMPLATE.md). These identifiers are independent of spec/ADR numbers.
 The primary agent owns readiness, implementation, dependencies, review and completion.

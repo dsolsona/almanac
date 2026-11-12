@@ -9,6 +9,9 @@
 
 ## Context
 
+Proposed successor: [ADR-0051](0051-durable-alert-policy-state-machine.md).
+This record remains accepted until that proposal is reviewed and accepted.
+
 Alerts need consistent calculations, durable incident transitions and recoverable
 notification attempts. Agent collection must continue independently of alerting.
 Separately runnable alert processing should not require another component to own

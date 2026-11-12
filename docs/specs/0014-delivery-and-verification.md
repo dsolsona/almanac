@@ -14,6 +14,10 @@
 
 ## Accepted amendment
 
+Pending design review: [SPEC-0021](0021-alert-policy-engine.md) proposes a UI-first
+alert outcome and initial 100/200-policy fixtures. Its scope mapping identifies
+the F4 changes; the accepted release scope below is unchanged until acceptance.
+
 Crit review `0de0c0e42db6` adds [SPEC-0017](0017-slo-timeline-annotations.md)
 to F3 and [SPEC-0016](0016-maintenance-exclusions.md) to F4. Maintenance exclusions
 are part of initial delivery; the sequence and checks below reflect that approval.
