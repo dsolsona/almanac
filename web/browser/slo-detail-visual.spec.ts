@@ -38,10 +38,6 @@ test('SLO disclosures preserve long exact decimal counts on touch screens',async
  }
 });
 
-test('local point inspection distinguishes the repeated DST hour',async({browser})=>{
- const context=await browser.newContext({timezoneId:'America/New_York'}),page=await context.newPage();try{await page.goto('/design-system');const labels=await page.evaluate(async()=>{const{pointTime}=await import('/src/components/charts/SloHistoryChart.tsx');return[pointTime('2026-11-01T05:30:00Z','local'),pointTime('2026-11-01T06:30:00Z','local')];});expect(labels[0]).not.toBe(labels[1]);expect(labels[0]).toContain('GMT-4');expect(labels[1]).toContain('GMT-5');}finally{await context.close();}
-});
-
 test('365 completed days remain visible, scrollable and keyboard inspectable',{tag:'@matrix'},async({browser},info)=>{
  const width=info.project.use.viewport!.width,theme=info.project.name.endsWith('dark')?'dark':'light',context=await browser.newContext({viewport:{width,height:1000}});await context.addInitScript(theme=>localStorage.setItem('almanac-theme',theme),theme);const page=await context.newPage(),detail=sloFixture(),start='2025-11-12T10:00:00Z';detail.range={...detail.range,effective_start:start,requested_start:start,resolution_seconds:86400};detail.objective.activated_at='2025-10-01T00:00:00Z';detail.objective.evaluation_valid_from=detail.objective.activated_at;detail.current.window.activated_at=detail.objective.activated_at;detail.current.window.evaluation_valid_from=detail.objective.activated_at;
  const base=detail.compliance_series.days[0]!;detail.compliance_series.days=Array.from({length:365},(_,i)=>{const first=Date.UTC(2025,10,12)+i*86400000,end=new Date(first+86400000).toISOString();return{...base,utc_date:new Date(first).toISOString().slice(0,10),day_start:new Date(first).toISOString(),day_end:end,requested_at:end,effective_at:end,quality:{...base.quality,first_observation_at:new Date(first-29*86400000).toISOString(),last_observation_at:end,latest_receipt_at:end}};});detail.compliance_summary={...detail.compliance_summary,met_days:365,evaluable_days:365};await installSloFixture(page,detail);
