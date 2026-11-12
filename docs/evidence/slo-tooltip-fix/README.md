@@ -47,3 +47,23 @@ This is focused rendering/interaction evidence with validated API fixtures.
 Native-container and performance suites were not repeated; broad PR gates run
 in CI. Screenshots were visually inspected, including desktop and mobile right-edge
 inspection; they do not establish physical-device or screen-reader acceptance.
+
+
+## PR #93 review follow-up
+
+Three findings were validated. Shared compactness, point-clearance and chart-height
+checks now run against the actual design-system Charts catalogue; the SLO route
+retains its next-panel document-position and navigation checks. Pointer height is
+reactive, so vertical movement within the selected sample repositions the tooltip.
+When neither horizontal side fits, vertical placement excludes the selected point.
+Both new bugs reproduced before correction (desktop same-sample movement and a
+mobile middle point with the pointer above it).
+
+Six unit cases and TypeScript pass. The combined focused browser run passes 36
+cases but reports two route baselines measured against the loading placeholder
+at document position zero. The route check now waits for the visible graph and
+fonts before measuring; all six route cases pass (15.7 s). Catalogue coverage
+includes all 13 cases across both themes and three widths. Production build
+(0.597 s) and exclusion pass. Screenshots are refreshed for the final interaction.
+Prior required CI suites passed on `71f76a7`; updated-head CI remains a separate
+gate. Native-container/performance checks were not repeated for this correction.
