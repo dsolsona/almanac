@@ -92,13 +92,16 @@ authorization and cannot introduce arbitrary passthrough execution.
 
 ## Verify and review
 
-Follow [testing](testing.md) and run checks that can detect a defect in the change.
-Docs, skills and CI-only changes need relevant link, syntax or behavior checks,
-not application suites. For app changes, run the affected suite early and the
-applicable final gates. A handoff, small edit or status request does not trigger them.
+Follow [testing](testing.md) and run the smallest checks that can detect a defect
+in the change. Docs, skills, CI configuration and development tooling need focused
+link, syntax or behavior checks. Exercise an application journey only when affected.
+Broader local suites need a concrete shared-impact risk or explicit requirement,
+explained before execution. CI owns the broad PR gates. A handoff, small edit or
+status request does not trigger them.
 
-After a failure, preserve diagnostics, investigate with focused checks and rerun the
-affected gate when the corrected candidate is ready. Keep unaffected evidence. Never
+After a failure, preserve diagnostics, investigate with focused checks and run the
+implicated test selection locally when the corrected candidate is ready. Keep
+unaffected evidence; CI revalidates the complete gate. Never
 waive a required gate because a narrow check passed. Retain unexplained failures as
 open investigations; a later passing run alone does not establish a fix.
 

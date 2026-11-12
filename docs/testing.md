@@ -14,9 +14,20 @@ are in [commands](commands.md).
 | `make test-e2e` | The critical user journeys on a fresh Compose stack of the real images | a few minutes | affected user journeys or deployment changes |
 | `make test-perf` | Page speed and exact values of the SLO list, SLO detail, SLI list and SLI detail on a seeded fleet | about ten minutes | nightly, performance work |
 
-`make check` runs the first three. Choose local checks by the behavior changed; a skill or
-documentation edit is not a reason to build images or run application tests. Check relevant
-links, syntax and examples instead. CI uses built-in path filters to skip application jobs
+`make check` runs the first three. Local verification starts with the smallest selection
+that covers the changed behavior. Documentation, skills, CI configuration and development
+tooling use their focused link, syntax and behavior checks; they do not require application
+suites, images or benchmarks. A tooling change that affects application deployment or runtime
+also exercises that specific affected journey.
+
+A failed CI job is a reason to inspect its log and artifacts, not to run the entire suite
+locally. After diagnosing and correcting the failure, select the implicated test, for example
+`make test-e2e ARGS='e2e/resource-tables.spec.ts'`. Keep unaffected passing evidence. Broaden
+local checks only when a concrete shared-impact risk or explicit acceptance requirement
+needs them, and explain that reason before execution. CI runs the broad PR gates; a
+focused local pass does not waive a required CI gate.
+
+CI uses built-in path filters to skip application jobs
 when all changes are Markdown, `docs/`, `.agents/`, `.codex/` or the CI workflow itself.
 Mixed changes run the existing four application suites; nightly/manual performance runs remain.
 In one checkout, run `make check` and `make test-e2e` sequentially: the catalogue
