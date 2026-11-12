@@ -5,7 +5,7 @@
 - Accepted: 2026-11-11
 - Approval: maintainer requested that make vm-run boot its worker, start Codex directly inside Stencil Tern and add the remote host to the laptop's Tern.
 - Related specs: optional development workflow in the [Firecracker guide](../firecracker.md)
-- Supersedes / superseded by: none; extends [ADR-0045](0045-prepared-firecracker-development-workers.md)
+- Supersedes / superseded by: extends [ADR-0045](0045-prepared-firecracker-development-workers.md); [ADR-0050](0050-dedicated-firecracker-tern-client-key.md) supersedes the externally provisioned laptop client-credential requirement.
 
 ## Context
 

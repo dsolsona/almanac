@@ -68,8 +68,9 @@ warmed dependencies, using the laptop's installed Stencil Tern executable.
 snapshot for base preparation or first setup/run. Host `gh` and file-based Codex
 logins are copied privately to workers. Base definitions, rebuild semantics and
 credential limits are in [the guide](firecracker.md).
-`vm-run` also requires the laptop's Stencil Tern executable on PATH and usable
-SSH authentication for its native remote connection. It installs the guest
+`vm-run` also requires the laptop's Stencil Tern executable on PATH. It creates
+a dedicated unencrypted laptop key and a scoped SSH include automatically;
+personal keys and `ssh-agent` are not required. It installs the guest
 runtime without repeating application dependency setup, starts Codex directly
 in Tern and connects the local window. Failed local attachment preserves the
 running worker and task; `vm-codex` retries attachment without resubmitting it.

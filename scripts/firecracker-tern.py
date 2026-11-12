@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """Connect the laptop's Stencil Tern window to one authenticated worker."""
-import base64
 import fcntl
 import ipaddress
 import json
@@ -25,32 +24,57 @@ def validate_address(address):
         raise ValueError('expected a private Firecracker worker address for dev on UDP 8376')
 
 
-def public_keys():
-    keys = []
-    if shutil.which('ssh-add'):
-        result = subprocess.run(['ssh-add', '-L'], capture_output=True, text=True, timeout=5)
-        if result.returncode == 0:
-            keys.extend(result.stdout.splitlines())
-    for name in ('id_ed25519', 'id_ecdsa', 'id_rsa'):
-        path = Path.home() / '.ssh' / name
-        if path.is_file():
-            # Tern cannot unlock encrypted files; those identities must come from the agent.
-            result = subprocess.run(['ssh-keygen', '-y', '-P', '', '-f', str(path)],
-                                    capture_output=True, text=True, timeout=5)
-            if result.returncode == 0:
-                keys.extend(result.stdout.splitlines())
-    accepted = set()
-    for line in keys:
-        fields = line.split()
-        if len(fields) < 2 or fields[0] not in ('ssh-ed25519', 'ssh-rsa',
-                'ecdsa-sha2-nistp256', 'ecdsa-sha2-nistp384', 'ecdsa-sha2-nistp521'):
-            continue
-        base64.b64decode(fields[1], validate=True)
-        accepted.add(' '.join(fields[:2]))
-    if not accepted:
-        raise RuntimeError('no usable laptop SSH key; unlock your private key with ssh-add '
-                           '(for example: ssh-add ~/.ssh/id_ed25519), then retry vm-run or vm-codex')
-    return '\n'.join(sorted(accepted)) + '\n'
+def prepare_identity():
+    directory = Path.home() / '.ssh/almanac-firecracker'
+    key = directory / 'id_ed25519'
+    config = directory.parent / 'config'
+    include = directory / 'config'
+    backup = directory / 'ssh-config.before'
+    for path in (directory, key, key.with_suffix('.pub'), config, include, backup, directory / 'lock'):
+        if path.is_symlink():
+            raise RuntimeError(f'refusing to replace symlinked SSH state: {path}')
+    directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+    directory.chmod(0o700)
+    with open(directory / 'lock', 'a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if not key.exists():
+            if key.with_suffix('.pub').exists():
+                raise RuntimeError('dedicated SSH private key is missing; existing public key preserved')
+            subprocess.run(['ssh-keygen', '-q', '-t', 'ed25519', '-N', '', '-C',
+                            'almanac-firecracker', '-f', str(key)],
+                           capture_output=True, check=True, timeout=10)
+        key.chmod(0o600)
+        public = subprocess.check_output(['ssh-keygen', '-y', '-P', '', '-f', str(key)],
+                                         text=True, stderr=subprocess.PIPE, timeout=5)
+        original = config.read_text() if config.exists() else ''
+        directive = 'Include ' + json.dumps(str(include), ensure_ascii=False)
+        configured = original
+        if not original.startswith(directive + '\n'):
+            configured = directive + '\n' + ''.join(
+                line for line in original.splitlines(keepends=True) if line.rstrip('\r\n') != directive)
+        contents = {
+            key.with_suffix('.pub'): public,
+            include: '# Managed by Almanac for its reserved Firecracker VM addresses.\n'
+                     'Host ' + ' '.join(f'192.168.{octet}.*' for octet in range(240, 256)) + '\n'
+                     f'    IdentityFile {json.dumps(str(key), ensure_ascii=False)}\n'
+                     '    IdentityAgent none\n    IdentitiesOnly yes\nHost *\n',
+        }
+        if configured != original:
+            if config.exists() and not backup.exists():
+                contents[backup] = original
+            contents[config] = configured
+        for path, content in contents.items():
+            if path.exists() and path.read_text() == content:
+                continue
+            with tempfile.NamedTemporaryFile(mode='w', dir=path.parent, delete=False) as output:
+                temporary = Path(output.name)
+                try:
+                    output.write(content)
+                    output.flush()
+                    os.replace(temporary, path)
+                finally:
+                    temporary.unlink(missing_ok=True)
+        return public
 
 
 def check_runtime():
@@ -60,7 +84,7 @@ def check_runtime():
 
 def check():
     check_runtime()
-    public_keys()
+    prepare_identity()
 
 
 def inspect():
@@ -195,7 +219,7 @@ def main():
     elif action == 'check-runtime':
         check_runtime()
     elif action == 'keys':
-        print(public_keys(), end='')
+        print(prepare_identity(), end='')
     elif action == 'connect':
         connect(*sys.argv[2:])
     elif action == '_window':

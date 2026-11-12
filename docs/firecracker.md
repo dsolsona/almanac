@@ -267,11 +267,12 @@ Several copied ChatGPT auth caches may require fresh logins after token rotation
 independent guest logins avoid sharing a refresh cache.
 
 `make vm-run` requires [Stencil Tern](https://stencil.so/tern) on the laptop's
-PATH and a usable SSH identity: an unlocked key in the SSH agent used by Tern,
-or an unencrypted standard private-key file in `~/.ssh/`. A `.pub` file alone
-cannot authenticate. Encrypted keys must first be unlocked locally, for example
-with `ssh-add ~/.ssh/id_ed25519`; never send the passphrase to the guest.
-Authentication preflight runs before allocating a worker. The launcher then boots
+PATH. On first use it creates an unencrypted Ed25519 key at
+`~/.ssh/almanac-firecracker/id_ed25519`, with a private directory and file mode
+0600. This key is shared by the laptop's Firecracker workers; personal SSH keys
+and `ssh-agent` are not required. Authentication setup runs before allocating a
+worker, reuses the key and serializes concurrent launches without rotating it.
+The launcher then boots
 the worker, installs the matching Tern runtime when missing, starts its guest
 services and launches Codex directly in a `codex` Tern session.
 It retrieves the host fingerprint over authenticated SSH, configures local Tern
@@ -282,7 +283,14 @@ use the first local Tern window through an automatically closing control session
 Local Lua performs this connection without a model request or a custom plugin.
 
 The guest listener binds its private IPv4 address on UDP 8376 with relays disabled.
-Only public laptop SSH keys are authorized; private keys stay on the laptop.
+Only the dedicated key's public half is authorized; its private half stays on the
+laptop and is never copied into a VM or base image. A managed SSH include at
+`~/.ssh/almanac-firecracker/config` selects this key and disables agent use only
+for the reserved VM address range. The launcher adds that include to the start
+of `~/.ssh/config`, retaining existing content and saving the original in
+`~/.ssh/almanac-firecracker/ssh-config.before`. Other SSH destinations keep their
+settings. Symlinked configuration or an unreadable dedicated key is preserved
+and reported for manual inspection.
 Newly rebuilt bases already contain the runtime. Older prepared bases can still
 receive it without another application `make setup`. Guest services start with the VM, and each clone has its own Tern
 identity and session state. A saved identity mismatch stops connection setup.
@@ -290,10 +298,12 @@ If local connection fails after launch, the VM and agent remain running; use
 `make vm-codex VM=NAME` to reconnect without submitting the task again.
 An already running Codex session rejects a replacement prompt.
 
-If Tern reports `Nothing to log in with`, unlock the key in your laptop terminal
-with `ssh-add ~/.ssh/id_ed25519`, then run `make vm-codex VM=NAME` for the existing
-worker. Both Tern and that terminal must use the same SSH agent. Codex and its
-initial task are preserved; creating another worker is unnecessary.
+Existing native workers created with personal-key authorization can use
+`make vm-codex VM=NAME`: it configures the dedicated laptop key and replaces that
+worker's Tern public-key authorization before connecting. Codex and its initial
+task are preserved; creating another worker or unlocking a personal key is
+unnecessary. Deleting one worker retains the shared laptop identity and include
+because other workers still use them.
 
 Closing the local window leaves Codex running inside the VM. A stopped VM preserves files, containers,
 images, volumes, login credentials and Codex conversation history, but stops
