@@ -49,11 +49,11 @@ Container images
 
 Optional Firecracker microVMs (Linux host; Docker runs inside each VM)
   vm-base               Build/rebuild the shared OS, tools and dependency disk
-  vm-run                Prepare a worker from the base and start background Codex
+  vm-run                Boot a worker, start Codex in Tern and connect local Tern
   vm-setup              Prepare a worker for manual use; Codex is not started
   vm-list               List running, stopped and partially prepared VMs
   vm-start              Boot an existing VM and wait for SSH
-  vm-codex              Attach to the worker's Codex terminal
+  vm-codex              Reconnect Tern to Codex (legacy tmux remains attachable)
   vm-ssh                Open a guest shell in the task worktree
   vm-collect            Retrieve commits/edits/new files without applying them
   vm-stop               Orderly shutdown; keep disk and credentials
@@ -79,7 +79,7 @@ Useful options
   VM_CPUS=2             New named VM vCPUs
   VM_MEMORY_MIB=4096    New named VM memory
   VM_DISK_GIB=80        Base disk size; clones inherit it
-  FIRECRACKER_STATE_DIR Shared private directory for bases and VM state
+  FIRECRACKER_STATE_DIR Optional override; VM state is shared across worktrees
 
 Examples
   make bootstrap
@@ -124,26 +124,26 @@ export VM_PROMPT ?= -
 override export VM_PROMPT := $(value VM_PROMPT)
 .PHONY: vm-base vm-setup vm-run vm-list vm-start vm-ssh vm-codex vm-stop vm-delete vm-collect
 vm-base:
-	@bash firecracker-setup.sh base $${VM:+"$$VM"} --repo "$$VM_REPO"
+	@bash scripts/firecracker-setup.sh base $${VM:+"$$VM"} --repo "$$VM_REPO"
 vm-setup:
-	@bash firecracker-setup.sh setup $${VM:+"$$VM"} --repo "$$VM_REPO"
+	@bash scripts/firecracker-setup.sh setup $${VM:+"$$VM"} --repo "$$VM_REPO"
 vm-run:
-	@bash firecracker-setup.sh run $${VM:+"$$VM"} --repo "$$VM_REPO" --prompt "$$VM_PROMPT"
+	@bash scripts/firecracker-setup.sh run $${VM:+"$$VM"} --repo "$$VM_REPO" --prompt "$$VM_PROMPT"
 vm-list:
-	@bash firecracker-setup.sh list
+	@bash scripts/firecracker-setup.sh list
 vm-start:
-	@bash firecracker-setup.sh start "$${VM:-almanac}"
+	@bash scripts/firecracker-setup.sh start "$${VM:-almanac}"
 vm-ssh:
-	@bash firecracker-setup.sh ssh "$${VM:-almanac}"
+	@bash scripts/firecracker-setup.sh ssh "$${VM:-almanac}"
 vm-codex:
-	@bash firecracker-setup.sh codex "$${VM:-almanac}"
+	@bash scripts/firecracker-setup.sh codex "$${VM:-almanac}"
 vm-stop:
-	@bash firecracker-setup.sh stop "$${VM:-almanac}"
+	@bash scripts/firecracker-setup.sh stop "$${VM:-almanac}"
 vm-delete:
 	@test -n "$$VM" || { echo 'Use make vm-delete VM=NAME; deletion is permanent' >&2; exit 2; }
-	@bash firecracker-setup.sh delete "$$VM"
+	@bash scripts/firecracker-setup.sh delete "$$VM"
 vm-collect:
-	@bash firecracker-setup.sh collect "$${VM:-almanac}"
+	@bash scripts/firecracker-setup.sh collect "$${VM:-almanac}"
 
 # Build the dev image for this user, pull the fixture images, check all against the daemon's
 # platform and warm the Go module and npm caches inside the container. Network-capable.
@@ -278,6 +278,7 @@ _test:
 	python3 scripts/check-image-pins.py
 	python3 scripts/local-agent-tty-test.py
 	python3 scripts/firecracker-setup-test.py
+	python3 scripts/firecracker-tern-test.py
 	python3 scripts/make-help-test.py
 	cd web && node scripts/check-local-agent.mjs
 	cd web && npm run typecheck

@@ -123,10 +123,14 @@ These documents govern applicable work; read them before that work begins.
   tool. Do not request new approvals during unattended work; leave unavailable
   operations pending. Pass these restrictions to subagents.
 - Match verification to the change under [testing](docs/testing.md). Documentation,
-  skills and CI configuration alone do not require application tests, E2E, images
-  or benchmarks; check their links, syntax and behavior where relevant. For app
-  changes, run the affected suite early and `make check` / `make test-e2e` as applicable.
-  Diagnose a failure before rerunning; never retry into green.
+  skills, CI configuration and development tooling use focused link, syntax and
+  behavior checks; they do not trigger application suites, images or benchmarks.
+  For app changes, select the smallest checks covering the changed behavior and
+  required acceptance. For a failed CI check, inspect its evidence and run the
+  implicated test selection locally, not its entire suite. Broaden local verification
+  only for a concrete shared-impact risk or an explicit requirement; state that reason
+  before running it. CI owns the broad PR gates. Diagnose failures before rerunning;
+  never retry into green.
 - Reproduce reported steps/values before fixes. Exercise the integrated user journey
   and normal isolated container deployment; mocks, screenshots and suite counts
   cannot replace real API/database/agent or usability evidence. UI acceptance includes

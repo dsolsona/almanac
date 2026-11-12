@@ -9,6 +9,7 @@ from pathlib import Path
 import pty
 import re
 import select
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -19,7 +20,8 @@ import tomllib
 
 
 root = Path(__file__).resolve().parent.parent
-script = root / "firecracker-setup.sh"
+relative_script = Path('scripts/firecracker-setup.sh')
+script = root / relative_script
 
 
 def run(*args, env=None):
@@ -29,7 +31,52 @@ def run(*args, env=None):
     )
 
 
-assert script.is_file(), "firecracker-setup.sh is missing"
+assert script.is_file(), "scripts/firecracker-setup.sh is missing"
+with tempfile.TemporaryDirectory(prefix='almanac-shared-vms-') as directory:
+    primary = Path(directory) / 'primary checkout'
+    primary.mkdir()
+    (primary / 'scripts').mkdir()
+    shutil.copy(script, primary / relative_script)
+    def fixture_git(*args):
+        return subprocess.run(['git', '-C', str(primary), *args], check=True,
+                              text=True, capture_output=True).stdout
+    fixture_git('init', '-q')
+    fixture_git('config', 'user.name', 'Launcher fixture')
+    fixture_git('config', 'user.email', 'fixture@example.invalid')
+    fixture_git('add', str(relative_script))
+    fixture_git('commit', '-qm', 'launcher fixture')
+    worktrees = [primary]
+    for index in range(2):
+        linked = primary / '.worktrees' / f'worker {index}'
+        fixture_git('worktree', 'add', '-qb', f'worker-{index}', str(linked))
+        worktrees.append(linked)
+    default_env = os.environ.copy()
+    default_env.pop('FIRECRACKER_STATE_DIR', None)
+    for checkout in worktrees:
+        result = subprocess.run(['bash', '-c', 'source "$1"; printf "%s\\n" "$base" "$repo" "$launcher_repo"',
+                                 'test', str(checkout / relative_script)], env=default_env,
+                                text=True, capture_output=True, timeout=10)
+        assert result.returncode == 0, result.stderr
+        assert result.stdout.splitlines() == [str(primary / '.local/firecracker'), str(checkout), str(checkout)], \
+            'launcher relocation changed shared state, source root or helper lookup'
+        assert not (checkout / '.local').exists(), 'resolving state created files'
+    shared = primary / '.local/firecracker/instances/shared-worker'
+    shared.mkdir(parents=True)
+    (shared / 'ready').touch()
+    (shared / 'network-slot').write_text('1\n')
+    for checkout in worktrees:
+        result = subprocess.run(['bash', str(checkout / relative_script), 'list'],
+                                env=default_env, text=True, capture_output=True, timeout=10)
+        assert result.returncode == 0 and 'shared-worker' in result.stdout, result
+        assert '192.168.240.6' in result.stdout
+    override = Path(directory) / 'custom state'
+    result = subprocess.run(['bash', '-c', 'source "$1"; printf "%s" "$base"',
+                             'test', str(worktrees[-1] / relative_script)],
+                            env=dict(default_env, FIRECRACKER_STATE_DIR=str(override)),
+                            text=True, capture_output=True, timeout=10)
+    assert result.returncode == 0 and result.stdout == str(override), result
+    assert not override.exists()
+
 for guest_program in re.findall(r"<<'GUEST'\n(.*?)\nGUEST", script.read_text(), re.S):
     result = subprocess.run(["bash", "-n"], input=guest_program, text=True, capture_output=True)
     assert result.returncode == 0, result.stderr
@@ -60,6 +107,11 @@ with tempfile.TemporaryDirectory(prefix="almanac-firecracker-") as directory:
     preflight = '''source "$1"
 shift
 check() { :; }
+check_local_tern() { :; }
+check_tern_runtime() { :; }
+check_legacy_agent() { :; }
+prepare_tern() { :; }
+connect_tern() { :; }
 start() { :; }
 launch_agent() { :; }
 prepare_base() { printf 'seed preparation\\n'; }
@@ -139,7 +191,7 @@ main run --prompt -
 
     # Sealing a dependency image must remove seed identity/work without deleting caches.
     seed = Path(directory) / "seed-filesystem"
-    for folder in ("etc/ssh", "var/lib/dbus", "var/lib/docker", "var/lib/containerd",
+    for folder in ("etc/ssh", "var/lib/dbus", "var/lib/docker", "var/lib/containerd", "usr/local/lib/almanac-tern",
                    "home/dev/.codex", "root/.ssh", "tmp", "var/tmp", "var/log"):
         (seed / folder).mkdir(parents=True, exist_ok=True)
     for relative in ("etc/ssh/ssh_host_ed25519_key", "etc/ssh/ssh_host_ed25519_key.pub",
@@ -149,6 +201,13 @@ main run --prompt -
     (seed / "etc/machine-id").write_text("old machine identity")
     (seed / "var/lib/docker/cache-fixture").write_text("warmed dependencies")
     (seed / "var/lib/containerd/image-fixture").write_text("cached images")
+    (seed / 'usr/local/lib/almanac-tern/tern').write_text('Tern runtime')
+    (seed / 'usr/local/lib/almanac-tern/session.py').write_text('Tern session helper')
+    for service in ('almanac-tern-session.service', 'almanac-tern-remote.service'):
+        units = seed / 'etc/systemd/system'
+        (units / 'multi-user.target.wants').mkdir(parents=True, exist_ok=True)
+        (units / service).write_text('seed terminal service')
+        (units / 'multi-user.target.wants' / service).symlink_to('../' + service)
     result = subprocess.run(
         ["bash", "-c", 'source "$1"; sudo() { "$@"; }; sanitize_image "$2"',
          "test", str(script), str(seed)], text=True, capture_output=True, timeout=10,
@@ -161,6 +220,11 @@ main run --prompt -
     assert (seed / "etc/machine-id").read_text() == ""
     assert (seed / "var/lib/docker/cache-fixture").read_text() == "warmed dependencies"
     assert (seed / "var/lib/containerd/image-fixture").read_text() == "cached images"
+    assert (seed / 'usr/local/lib/almanac-tern/tern').read_text() == 'Tern runtime'
+    assert (seed / 'usr/local/lib/almanac-tern/session.py').read_text() == 'Tern session helper'
+    for service in ('almanac-tern-session.service', 'almanac-tern-remote.service'):
+        assert not (seed / 'etc/systemd/system' / service).exists()
+        assert not (seed / 'etc/systemd/system/multi-user.target.wants' / service).is_symlink()
 
     # A guest filesystem must never redirect privileged edits outside the mounted image.
     outside = Path(directory) / "outside-image"
@@ -258,9 +322,10 @@ clone_image
             publish = '''source "$1"
 select_instance seed
 start() { :; }
-stop() { :; }
+stop() { test -f "$state/tern-runtime-installed" || { echo 'base did not install Tern before sealing' >&2; exit 1; }; }
 ssh_guest() { cat >/dev/null; }
 ensure_github_cli() { :; }
+install_tern_runtime() { touch "$state/tern-runtime-installed"; }
 dependency_fingerprint() { printf 'fixture-fingerprint\\n'; }
 edit_image() { [[ -z ${FAIL_BASE_EDIT:-} ]]; }
 prepare_base
@@ -376,6 +441,11 @@ newlines, --options and Unicode: café.\n\n'''
     parse_only = '''source "$1"
 shift
 check() { :; }
+check_local_tern() { :; }
+check_tern_runtime() { :; }
+check_legacy_agent() { :; }
+prepare_tern() { :; }
+connect_tern() { :; }
 setup() { :; }
 start() { :; }
 launch_agent() {
@@ -433,7 +503,8 @@ reserve_random_instance
     # Make must pass prompt text literally, including Make function syntax.
     make_fixture = Path(directory) / "make-entrypoint"
     make_fixture.mkdir()
-    (make_fixture / "firecracker-setup.sh").write_text('''#!/usr/bin/env bash
+    (make_fixture / 'scripts').mkdir()
+    (make_fixture / relative_script).write_text('''#!/usr/bin/env bash
 python3 - "$@" <<'PY'
 import json, os, sys
 from pathlib import Path
@@ -813,9 +884,13 @@ elif args != ['auth', 'setup-git', '--hostname', 'github.com']:
 
     (guest_home / ".codex").mkdir()
     (tools / "tmux").write_text('''#!/usr/bin/env python3
-import os, subprocess, sys
+import json, os, subprocess, sys
 if sys.argv[1] == 'has-session':
     sys.exit(0 if os.environ.get('FAKE_SESSION') else 1)
+if 'attach-session' in sys.argv:
+    with open(os.environ['FAKE_TMUX_ATTACH'], 'w') as output:
+        json.dump(sys.argv[1:], output)
+    sys.exit(0)
 assert sys.argv[1:6] == ['new-session', '-d', '-s', 'codex', '-c'], sys.argv
 sys.exit(subprocess.run([sys.argv[-1]], cwd=sys.argv[-2]).returncode)
 ''')
@@ -836,6 +911,11 @@ with open(os.environ['FAKE_ARGV'], 'w') as f:
     guest_config = guest_home / ".codex/config.toml"
     shell_program = '''source "$1"
 check() { :; }
+check_local_tern() { :; }
+check_tern_runtime() { :; }
+check_legacy_agent() { :; }
+prepare_tern() { :; }
+connect_tern() { :; }
 start() { :; }
 main ssh
 '''
@@ -868,6 +948,18 @@ main ssh
         f'projects."{guest_home / "almanac"}".trust_level="trusted"', "--", payload,
     ]
     assert not (Path(directory) / "injected").exists()
+    # A restored Tern pane may execute the runner again; never replay its task.
+    result = subprocess.run([str(guest_home / '.codex/almanac-run')],
+                            env=transport_env, text=True, capture_output=True, timeout=10)
+    assert result.returncode == 0, result.stderr
+    assert '--' not in json.loads((state / 'argv.json').read_text()), 'initial task was replayed'
+    result = subprocess.run(
+        ['bash', '-c', 'source "$1"; state=$2; prompt=; launch_agent',
+         'test', str(script), str(state)], env=transport_env,
+        text=True, capture_output=True, timeout=10)
+    assert result.returncode == 0, result.stderr
+    assert (guest_home / '.codex/almanac-prompt.txt').read_text() == payload, 'reconnect discarded the original task'
+    assert '--' not in json.loads((state / 'argv.json').read_text()), 'reconnect submitted the original task again'
     result = subprocess.run(
         ["bash", "-c", 'source "$1"; state=$2; prompt=new; launch_agent',
          "test", str(script), str(state)],
@@ -883,6 +975,32 @@ main ssh
     assert result.returncode != 0 and "inspect Codex" in result.stderr, result.stderr
     assert (guest_home / ".codex/almanac-prompt.txt").read_text() == payload
 
+    # New and existing Codex sessions must attach with distinct Shift+Enter input.
+    attachment = state / "tmux-attach.json"
+    for existing in (False, True):
+        result = subprocess.run(
+            ["bash", "-c", '''source "$1"
+check() { :; }
+check_local_tern() { :; }
+check_tern_runtime() { :; }
+check_legacy_agent() { :; }
+prepare_tern() { :; }
+connect_tern() { :; }
+start() { :; }
+main codex
+''', "test", str(script)],
+            env=dict(transport_env, FAKE_SESSION="1" if existing else "",
+                     FAKE_TMUX_ATTACH=str(attachment)),
+            text=True, capture_output=True, timeout=10,
+        )
+        assert result.returncode == 0, result.stderr
+        assert json.loads(attachment.read_text()) == [
+            "-T", "extkeys", "set-option", "-s", "extended-keys", "on", ";",
+            "bind-key", "-n", "S-Enter", "if-shell", "-F",
+            "#{==:#{session_name},codex}", "send-keys C-j", "send-keys S-Enter", ";",
+            "attach-session", "-t", "codex",
+        ], "Codex attachment omitted extended keys or its scoped newline binding"
+
     # Committed and uncommitted work must both be recoverable, without committing host files.
     def guest_git(*args):
         return subprocess.run(["git", "-C", str(guest_checkout), *args],
@@ -893,6 +1011,32 @@ main ssh
     (guest_checkout / "committed").write_text("committed guest work")
     guest_git("add", "committed")
     guest_git("commit", "-m", "guest fixture")
+
+    # Native live/unknown session states must refuse collection before exporting.
+    python_shim = tools / 'python3'
+    python_shim.write_text('''#!/bin/sh
+if test "$1" = /usr/local/lib/almanac-tern/session.py; then
+    if test "$FAKE_NATIVE_STATUS" = other; then
+        test "${3:-}" = codex && exit 1
+        exit 0
+    fi
+    exit "$FAKE_NATIVE_STATUS"
+fi
+exec ''' + shlex.quote(shutil.which('python3')) + ''' "$@"
+''')
+    python_shim.chmod(0o700)
+    native_marker = guest_home / '.codex/almanac-terminal-tern'
+    native_marker.touch()
+    for native_status in ('0', '2', 'other'):
+        result = subprocess.run(
+            ['bash', '-c', 'source "$1"; state=$2; collect', 'test', str(script), str(state)],
+            env=dict(transport_env, FAKE_SESSION='', FAKE_NATIVE_STATUS=native_status),
+            text=True, capture_output=True, timeout=10,
+        )
+        assert result.returncode != 0 and 'Tern' in result.stderr, result.stderr
+        assert not list(state.glob('results.*')), 'live or unknown Tern state exported files'
+    native_marker.unlink()
+    python_shim.unlink()
 
     for active in (True, False):
         result = subprocess.run(

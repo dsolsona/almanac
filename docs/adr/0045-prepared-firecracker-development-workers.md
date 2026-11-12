@@ -15,7 +15,7 @@ daemons and writable disks, with terminal access and GitHub publication availabl
 
 ## Decision
 
-Keep the reproducible definition in `firecracker-setup.sh`, the development
+Keep the reproducible definition in `scripts/firecracker-setup.sh`, the development
 Dockerfile, Compose file and dependency manifests. Build or refresh a private base
 from a seed guest with `base NAME`; run `make setup` there, shut it down cleanly,
 then copy its disk. Remove the seed checkout, home credentials, SSH host keys,
