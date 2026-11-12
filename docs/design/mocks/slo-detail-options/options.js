@@ -27,7 +27,7 @@ const metrics = () => `<div class="metrics">${metric(`${observed()}budget remain
 // Explicit independent historical snapshots for visual composition, not derived from a current interval ratio.
 function samples(kind) {
   const budget = state==='healthy'?[91,89,88,85,84,81,79,77,75,74,73,72]:state==='breached'?[70,67,65,62,60,57,48,15,-15,-21,-20,-20]:[85,82,78,76,71,66,60,53,35,24,21,18];
-  const values = kind==='budget'?budget:kind==='burn'?(burnWindow==='1 h'?[.4,.3,.5,.4,.7,.6,.8,1,5.4,3.8,2.8,Number(s().burn)||0]:[.4,.4,.4,.5,.5,.6,.7,.8,1,1.3,1.4,Number(s().six)||0]):[99.98,99.97,99.98,99.96,99.95,99.94,99.96,99.92,99.52,99.81,99.91,99.94];
+  const values = kind==='budget'?budget:kind==='burn'?(burnWindow==='1 h'?[.4,.3,.5,.4,.7,.6,.8,1,5.4,3.8,2.8,(Number.isFinite(Number(s().burn))?Number(s().burn):null)]:[.4,.4,.4,.5,.5,.6,.7,.8,1,1.3,1.4,(Number.isFinite(Number(s().six))?Number(s().six):null)]):[99.98,99.97,99.98,99.96,99.95,99.94,99.96,99.92,99.52,99.81,99.91,99.94];
   return values.map((value,i)=>({i,timestamp:new Date(Date.UTC(2026,10,6,10)+i*6*86400000/11).toISOString(),value:state==='partial'&&(i===7||i===8)?null:value}));
 }
 function chart(kind,compact=false) {

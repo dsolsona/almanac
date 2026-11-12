@@ -1,0 +1,179 @@
+{
+  "budget_ms": 1000,
+  "fleet": {
+    "size": 20,
+    "days": 35
+  },
+  "summary": [
+    {
+      "page": "slo.list",
+      "load": "cold",
+      "runs": 10,
+      "median_ms": 629,
+      "p95_ms": 861,
+      "max_ms": 861
+    },
+    {
+      "page": "slo.list",
+      "load": "warm",
+      "runs": 10,
+      "median_ms": 297,
+      "p95_ms": 446,
+      "max_ms": 446
+    },
+    {
+      "page": "slo.detail",
+      "load": "cold",
+      "runs": 10,
+      "median_ms": 283,
+      "p95_ms": 506,
+      "max_ms": 506
+    },
+    {
+      "page": "slo.detail",
+      "load": "warm",
+      "runs": 10,
+      "median_ms": 86,
+      "p95_ms": 119,
+      "max_ms": 119
+    },
+    {
+      "page": "sli.list",
+      "load": "cold",
+      "runs": 10,
+      "median_ms": 355,
+      "p95_ms": 438,
+      "max_ms": 438
+    },
+    {
+      "page": "sli.list",
+      "load": "warm",
+      "runs": 10,
+      "median_ms": 69,
+      "p95_ms": 152,
+      "max_ms": 152
+    },
+    {
+      "page": "sli.detail",
+      "load": "cold",
+      "runs": 10,
+      "median_ms": 351,
+      "p95_ms": 510,
+      "max_ms": 510
+    },
+    {
+      "page": "sli.detail",
+      "load": "warm",
+      "runs": 10,
+      "median_ms": 118,
+      "p95_ms": 166,
+      "max_ms": 166
+    }
+  ],
+  "samples": {
+    "slo.list": {
+      "cold": [
+        765,
+        837,
+        500,
+        741,
+        431,
+        520,
+        861,
+        729,
+        629,
+        524
+      ],
+      "warm": [
+        346,
+        355,
+        446,
+        361,
+        226,
+        311,
+        167,
+        297,
+        260,
+        225
+      ]
+    },
+    "slo.detail": {
+      "cold": [
+        474,
+        259,
+        273,
+        270,
+        506,
+        283,
+        317,
+        398,
+        395,
+        249
+      ],
+      "warm": [
+        119,
+        92,
+        100,
+        43,
+        73,
+        88,
+        75,
+        86,
+        97,
+        47
+      ]
+    },
+    "sli.list": {
+      "cold": [
+        355,
+        399,
+        373,
+        362,
+        239,
+        295,
+        238,
+        326,
+        377,
+        438
+      ],
+      "warm": [
+        152,
+        72,
+        72,
+        45,
+        60,
+        63,
+        55,
+        69,
+        79,
+        81
+      ]
+    },
+    "sli.detail": {
+      "cold": [
+        444,
+        510,
+        405,
+        303,
+        351,
+        321,
+        406,
+        296,
+        299,
+        408
+      ],
+      "warm": [
+        121,
+        112,
+        107,
+        87,
+        166,
+        126,
+        109,
+        118,
+        118,
+        129
+      ]
+    }
+  }
+}

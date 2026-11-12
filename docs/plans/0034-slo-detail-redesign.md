@@ -24,7 +24,7 @@ The primary agent implements directly in `.worktrees/slo-detail-concepts` on
   history controls, telemetry, rename and errors.
 - [x] Compare reference/actual panels at 360/1024/1440 px in light/dark and exercise
   disclosures, gaps, keyboard, touch and real link navigation.
-- [ ] Run focused frontend checks, browser verification, affected real container
+- [x] Run focused frontend checks, browser verification, affected real container
   SLO journeys and `make test-perf`. Diagnose failures before rerunning; broaden
   only for concrete shared impact. Review and record evidence.
 - [ ] Commit, push, open the PR against main and monitor required CI and CodeRabbit.

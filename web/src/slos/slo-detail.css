@@ -10,3 +10,5 @@
 /* Exact decimal counts may exceed the width of a column; retain every digit. */
 .slo-detail-b .calculation-inputs>div,.slo-detail-b .calculation-steps li>div{min-width:0}.slo-detail-b .calculation-inputs strong,.slo-detail-b .calculation-equation>span,.slo-detail-b .calculation-equation>strong{overflow-wrap:anywhere;white-space:normal;min-width:0}.slo-detail-b .calculation-steps li{grid-template-columns:28px minmax(0,1fr) minmax(0,1fr)}.slo-detail-b .calculation-equation{grid-template-columns:minmax(0,1fr) minmax(0,auto)}@media(max-width:700px){.slo-detail-b .calculation-inputs>div{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.slo-detail-b .calculation-steps li{grid-template-columns:28px minmax(0,1fr)}.slo-detail-b .calculation-equation{grid-template-columns:minmax(0,1fr)}}
 .app-slo-detail.slo-detail-b{gap:0}.slo-detail-b .app-breadcrumbs{margin-bottom:6px;font-size:13px}.slo-detail-b .app-detail-heading{margin-bottom:20px;align-items:center;justify-content:space-between}
+
+.slo-detail-b .day-strip{overflow-x:auto}

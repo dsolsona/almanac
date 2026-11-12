@@ -1,7 +1,15 @@
-SLO detail redesign, 2026-11-12: [F6-T11](tasks/F6-T11.md) implements the approved
-refined B under [ADR-0049](adr/0049-slo-budget-in-context-detail.md) on
-`feat/slo-detail-redesign`. Implementation and verification are in progress;
-publication and CodeRabbit monitoring are authorized, merging is not.
+SLO detail redesign, 2026-11-12: [F6-T11](tasks/F6-T11.md) is published in
+[PR #91](https://github.com/dsolsona/almanac/pull/91) under
+[ADR-0049](adr/0049-slo-budget-in-context-detail.md). Refined B integrates the
+budget summary with its graph, adds exact hover/keyboard/touch inspection,
+completed-day blocks and structured disclosures. All three graphs have zero
+pixel differences from the reference in both themes at 360/1024/1440 px.
+Application `d119c04` passes all four required CI suites, ten local real-container
+journeys and the six-case 35-day performance gate; SLO detail cold/in-app p95
+is 506/119 ms. Four valid CodeRabbit issues are reproduced and corrected with
+focused frontend/browser checks; review-delta CI/performance results are tracked
+in the PR. [Evidence](evidence/slo-detail-redesign/README.md) includes screenshots
+and the exact measured checkpoint. No merge is authorized.
 
 Trace/log datasources, 2026-11-11: [F2-T34](tasks/F2-T34.md) is in review in
 [PR #88](https://github.com/dsolsona/almanac/pull/88), rebased onto main `fba7dfe`

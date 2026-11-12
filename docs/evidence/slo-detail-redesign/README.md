@@ -57,3 +57,19 @@ that readability correction.
 These are component/reference artifacts, not substitutes for the real container
 journey or page-speed checks. Physical devices, non-Chromium browsers, a screen
 reader, a year-long workload and larger fleets are not claimed.
+
+## Verified delivery checkpoints
+
+Application `d119c04` passes the complete required PR CI run
+[43211656997](https://github.com/dsolsona/almanac/actions/runs/43211656997), including
+499 frontend tests, browser, PostgreSQL integration and full E2E. Local real
+collection verification passes ten cases in 6.1 min. The standard 20-object,
+35-day performance gate passes six cases in 8.4 min; SLO detail cold/in-app p95 is
+506/119 ms. [Raw results](performance-d119c04.json) identify that checkpoint.
+
+CodeRabbit's four findings are corrected and regression-tested: unavailable
+prototype burn, repeated local times at DST fall-back, long day-strip visibility
+and the failed-history burn destination. The review-delta browser selection passes
+14 cases in 32.9 s, retaining zero-pixel graph comparisons. Current follow-up CI,
+performance and review-thread evidence is maintained in
+[PR #91](https://github.com/dsolsona/almanac/pull/91).
