@@ -330,6 +330,12 @@ operations without exposing cached unauthorized details. Empty state, transport
 failure, stale data and permission denial must never share a misleading “healthy”
 view. Error pages preserve navigation and a safe retry path.
 
+SLO detail refinement, 2026-11-12: [ADR-0049](../adr/0049-slo-budget-in-context-detail.md)
+adopts B: integrated budget summary, burn/attainment plots, completed-day blocks
+and structured disclosures. Its hover/keyboard/touch exact point inspection replaces
+the SLO table actions and empty exact-values section at the maintainer’s request.
+This supersedes AC-06/AC-13 table pairing for SLO detail only; other charts retain it.
+
 ## Acceptance criteria
 
 - AC-01: Catalogue precedes screens, uses actual exports and is absent from production.

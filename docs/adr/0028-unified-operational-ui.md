@@ -7,6 +7,8 @@
 - Related specs: [SPEC-0012](../specs/0012-user-interface.md), [SPEC-0018](../specs/0018-agent-management-usability.md)
 - Supersedes / superseded by: supersedes the right-rail SLO detail composition and the slo-tracker screenshots as acceptance reference in [the visual reference](../design/slo-visual-reference.md); amends the native-select rule in [the design guide](../../web/DESIGN_SYSTEM.md); SLI vocabulary in decision 3 and right-aligned numerics in decision 1 amended by [ADR-0032](0032-centred-list-tables-and-data-state-vocabulary.md)
 
+SLO detail composition is superseded by [ADR-0049](0049-slo-budget-in-context-detail.md).
+
 ## Context
 
 On 2026-11-04 the maintainer reviewed the SLI, SLO, datasource and agent screens

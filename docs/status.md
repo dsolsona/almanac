@@ -1,3 +1,8 @@
+SLO detail redesign, 2026-11-12: [F6-T11](tasks/F6-T11.md) implements the approved
+refined B under [ADR-0049](adr/0049-slo-budget-in-context-detail.md) on
+`feat/slo-detail-redesign`. Implementation and verification are in progress;
+publication and CodeRabbit monitoring are authorized, merging is not.
+
 Trace/log datasources, 2026-11-11: [F2-T34](tasks/F2-T34.md) is in review in
 [PR #88](https://github.com/dsolsona/almanac/pull/88), rebased onto main `fba7dfe`
 under [ADR-0047](adr/0047-trace-and-log-event-count-datasources.md). VictoriaTraces
