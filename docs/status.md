@@ -4,8 +4,11 @@ Alerting design review, 2026-11-12: [F4-T01](tasks/F4-T01.md) prepares proposed
 [SPEC-0022](specs/0022-alert-management-ui.md), with the selected
 [A/current creation mocks](design/mocks/alert-options/README.md). Initial engine
 verification scope is 100/200 policies; SLO/condition/occurrence counts are explicit.
-Catch-up, lifecycle and latency defaults remain proposed. A draft PR including
-mocks is authorized; no engine implementation, benchmark or merge is claimed.
+Catch-up, lifecycle and latency defaults remain proposed.
+[Draft PR #94](https://github.com/dsolsona/almanac/pull/94) includes the contracts,
+interactive mocks and selected renders. Local mock checks passed 288 assertions;
+staged-only documentation validation passed. No engine implementation, benchmark
+or merge is claimed.
 
 SLO detail redesign, 2026-11-12: [F6-T11](tasks/F6-T11.md) is published in
 [PR #91](https://github.com/dsolsona/almanac/pull/91) under
