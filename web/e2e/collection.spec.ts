@@ -215,7 +215,7 @@ test('set an SLO on the SLI and read its evaluation', async ({ page }) => {
   await row.locator('.app-slo-objective').click();
   await expect(page.getByRole('heading', { name: sloName, exact: true })).toBeVisible();
   await expect(page.locator('.app-status-facts')).toContainText('99%');
-  await expect(page.getByRole('heading', { name: 'Timeline', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Your error budget', exact: true })).toBeVisible();
 });
 
 test('a new 98% SLO becomes Healthy from collected eligible data without a full rolling window', async ({ page }, testInfo) => {
@@ -239,10 +239,10 @@ test('a new 98% SLO becomes Healthy from collected eligible data without a full 
   await expect(page.getByRole('region', { name: 'Current SLO status', exact: true })).toContainText('No intervals are due yet.');
   await reloadUntil(page, async () => {
     const status = page.getByRole('region', { name: 'Current SLO status', exact: true });
-    await expect(status).toContainText('Why it is healthy', { timeout: 2_000 });
-    await expect(status.locator('.app-budget-hero')).toHaveText('50%');
-    await expect(status.locator('.app-status-facts')).toContainText('0.5×');
-    await expect(status).toContainText('Measurements through');
+    await expect(status).toContainText('Healthy', { timeout: 2_000 });
+    await expect(page.locator('.app-budget-hero')).toHaveText('50%');
+    await expect(page.locator('.app-status-facts')).toContainText('0.50×');
+    await page.getByRole('button',{name:'View definition ↓'}).click();await expect(page.locator('#definition')).toContainText('Measurements through');
   });
   const objectivePath = new URL(page.url()).pathname;
   for (const theme of ['light', 'dark']) {
@@ -253,7 +253,7 @@ test('a new 98% SLO becomes Healthy from collected eligible data without a full 
     await page.goto(objectivePath);
     for (const width of [1440, 360]) {
       await page.setViewportSize({ width, height: 1000 });
-      await expect(page.getByRole('region', { name: 'Current SLO status', exact: true })).toContainText('Why it is healthy');
+      await expect(page.getByRole('region', { name: 'Current SLO status', exact: true })).toContainText('Healthy');
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
       await testInfo.attach(`new-slo-${theme}-${width}`, { body: await page.screenshot({ fullPage: true }), contentType: 'image/png' });
     }

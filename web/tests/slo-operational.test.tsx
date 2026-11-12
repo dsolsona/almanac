@@ -39,8 +39,8 @@ it('keeps graphs and current status usable while history is incomplete and refre
  vi.spyOn(sloClient,'current').mockResolvedValue({slo:definition,current:detail.current,burn_1h:detail.burn_1h,burn_6h:detail.burn_6h,urgency:detail.urgency,leading_reason:detail.leading_reason,reasons:detail.reasons,exhaustion:detail.exhaustion,generation:stamp});
  render(<OperationalDetailView id={sloID} definition={definition} locationKey={`/slos/${sloID}`} onLocationChange={()=>undefined}/>);
  expect(await screen.findByText(/50% of this period’s history is ready/)).toBeVisible();
- expect(screen.getByText('error budget remaining')).toBeVisible();
- expect(screen.getByRole('button',{name:'View SLI as table'})).toBeVisible();
+ expect(screen.getByText('budget remaining',{selector:'.slo-detail-metric > span'})).toBeVisible();
+ expect(screen.getByRole('heading',{name:'Attainment'})).toBeVisible();
  fireEvent.click(screen.getByRole('button',{name:'Refresh objective history'}));
  await waitFor(()=>expect(screen.queryByText(/of this period’s history is ready/)).not.toBeInTheDocument());
  expect(read).toHaveBeenCalledTimes(2);
@@ -80,8 +80,10 @@ it('explains complete recent eligibility separately from status and shows the me
  vi.spyOn(sloClient,'operational').mockResolvedValue(detail);
  vi.spyOn(sloClient,'current').mockResolvedValue({slo:definition,current:detail.current,burn_1h:detail.burn_1h,burn_6h:detail.burn_6h,urgency:detail.urgency,leading_reason:detail.leading_reason,reasons:detail.reasons,exhaustion:detail.exhaustion,generation:{generation_id:'66666666-6666-6666-6666-666666666666',source_generation:'1',definition_revision:'1',measurement_revision:'1',exclusion_revision:'0',calculation_version:'slo-v1',evaluated_through:detail.current.evaluation_at,published_at:detail.current.evaluation_at,calculation_lag_seconds:0}});
  render(<OperationalDetailView id={sloID} definition={definition} locationKey={`/slos/${sloID}`} onLocationChange={()=>undefined}/>);
- const status=await screen.findByRole('region',{name:'Current SLO status'});
- expect(status).toHaveTextContent('Why it is healthy');
+ await screen.findByRole('region',{name:'Current SLO status'});
+ fireEvent.click(screen.getByText('Objective & data quality',{selector:'summary'}));
+ const status=document.getElementById('definition')!;
+ expect(screen.getByRole('region',{name:'Current SLO status'})).toHaveTextContent('Healthy');
  expect(status).toHaveTextContent('9 of 9 due intervals collected');
  expect(status).toHaveTextContent('Measurements through');
  expect(status.querySelector('time[datetime="2026-10-07T23:49:00Z"]')).toBeVisible();
@@ -108,7 +110,8 @@ it('does not claim no intervals are due when collection coverage is unavailable'
  vi.spyOn(sloClient,'current').mockRejectedValue(new Error('Current status is unavailable'));
  render(<OperationalDetailView id={sloID} definition={definition} locationKey={`/slos/${sloID}`} onLocationChange={()=>undefined}/>);
  const status=await screen.findByRole('region',{name:'Current SLO status'});
- expect(status).toHaveTextContent('Collection coverage is unavailable.');
+ fireEvent.click(screen.getByText('Objective & data quality',{selector:'summary'}));
+ expect(document.getElementById('definition')).toHaveTextContent('Collection coverage is unavailable.');
  expect(status).not.toHaveTextContent('No intervals are due yet.');
 });
 
@@ -158,17 +161,15 @@ it('never polls preparing first pages and leaves cursor pages pinned until expli
  expect(read.mock.calls[2]?.[0]).toMatchObject({cursor:'page-two'});
 });
 
-it('opens exact values from the generation displayed by the timeline',async()=>{
+it('removes exact table actions while preserving rendered chart inspection',async()=>{
  const detail=operationalDetail();
- const stamp={generation_id:'66666666-6666-6666-6666-666666666666',source_generation:'1',definition_revision:'1',measurement_revision:'1',exclusion_revision:'0',calculation_version:'slo-v1',evaluated_through:detail.effective_at,published_at:detail.effective_at,calculation_lag_seconds:0};
- detail.generation=stamp;
  vi.spyOn(sloClient,'operational').mockResolvedValue(detail);
- vi.spyOn(sloClient,'current').mockResolvedValue({slo:definition,current:detail.current,burn_1h:detail.burn_1h,burn_6h:detail.burn_6h,urgency:detail.urgency,leading_reason:detail.leading_reason,reasons:detail.reasons,exhaustion:detail.exhaustion,generation:stamp});
- const values=vi.spyOn(sloClient,'values').mockResolvedValue({generation:stamp,lane:'attainment',offset:0,next_offset:null,total_values:0,samples:[],days:[]});
+ const values=vi.spyOn(sloClient,'values');
  render(<OperationalDetailView id={sloID} definition={definition} locationKey={`/slos/${sloID}`} onLocationChange={()=>undefined}/>);
- fireEvent.click(await screen.findByRole('button',{name:'View SLI as table'}));
- expect(await screen.findByText('No samples are available for this range.')).toBeVisible();
- expect(values).toHaveBeenCalledWith(sloID,stamp.generation_id,'attainment',0,expect.any(AbortSignal));
+ await screen.findByRole('heading',{name:'Attainment'});
+ expect(screen.queryByRole('button',{name:/as table/})).not.toBeInTheDocument();
+ expect(document.querySelectorAll('.slo-history-chart')).toHaveLength(3);
+ expect(values).not.toHaveBeenCalled();
 });
 
 it('clears confirmed data on revocation and rejects late independent history completion',async()=>{
@@ -179,12 +180,12 @@ it('clears confirmed data on revocation and rejects late independent history com
  const history=vi.spyOn(sloClient,'operational').mockResolvedValueOnce(detail).mockImplementation(()=>new Promise(resolve=>{complete=resolve;}));
  const revoked=vi.fn(),props={id:sloID,definition,locationKey:`/slos/${sloID}`,onLocationChange:()=>undefined,onSessionFailure:revoked};
  const view=render(<OperationalDetailView {...props}/>);
- expect(await screen.findByText('error budget remaining')).toBeVisible();
+ expect(await screen.findByText('budget remaining',{selector:'.slo-detail-metric > span'})).toBeVisible();
  view.rerender(<OperationalDetailView {...props} refreshVersion={1}/>);
  await waitFor(()=>expect(revoked).toHaveBeenCalled());
  await waitFor(()=>expect(history).toHaveBeenCalledTimes(2));
  await act(async()=>{complete(detail);});
- expect(screen.queryByText('error budget remaining')).not.toBeInTheDocument();
+ expect(screen.queryByText('budget remaining',{selector:'.slo-detail-metric > span'})).not.toBeInTheDocument();
 });
 
 it('renders the SLO list while service filters are still loading',async()=>{
@@ -226,7 +227,7 @@ it('keeps retry and range controls available after the first detail read fails, 
  const read=vi.spyOn(sloClient,'operational').mockRejectedValueOnce(new Error('temporary read failure')).mockRejectedValueOnce(new Error('temporary retry failure')).mockImplementation((_id,options)=>Promise.resolve(operationalDetail(options?.start,options?.end)));
  const locationKey=`/slos/${sloID}`;history.replaceState({},'',locationKey);let view!:ReturnType<typeof render>;const onLocationChange=(path:string)=>{history.replaceState({},'',path);view.rerender(<OperationalDetailView id={sloID} definition={definition} locationKey={path} onLocationChange={onLocationChange}/>);};
  view=render(<OperationalDetailView id={sloID} definition={definition} locationKey={locationKey} onLocationChange={onLocationChange}/>);expect(await screen.findByRole('alert')).toHaveTextContent('temporary read failure');expect(screen.getByRole('button',{name:'Refresh objective history'})).toBeEnabled();expect(screen.getByRole('button',{name:'90 d'})).toBeEnabled();expect(screen.getByRole('button',{name:'90 d'})).toBeEnabled();
- fireEvent.click(screen.getByRole('button',{name:'Refresh objective history'}));await waitFor(()=>expect(read).toHaveBeenCalledTimes(2));expect(await screen.findByRole('alert')).toHaveTextContent('temporary retry failure');fireEvent.click(screen.getByRole('button',{name:'90 d'}));await waitFor(()=>expect(read).toHaveBeenCalledTimes(3));expect(read.mock.calls[2]?.[1]).toMatchObject({period:'90d',burn_window_seconds:3600});expect(await screen.findByText('Bad events left')).toBeVisible();expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+ fireEvent.click(screen.getByRole('button',{name:'Refresh objective history'}));await waitFor(()=>expect(read).toHaveBeenCalledTimes(2));expect(await screen.findByRole('alert')).toHaveTextContent('temporary retry failure');fireEvent.click(screen.getByRole('button',{name:'90 d'}));await waitFor(()=>expect(read).toHaveBeenCalledTimes(3));expect(read.mock.calls[2]?.[1]).toMatchObject({period:'90d',burn_window_seconds:3600});expect(await screen.findByText('budget remaining',{selector:'.slo-detail-metric > span'})).toBeVisible();expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 });
 
 it('marks retained overview values with their last confirmed evaluation after a same-view refresh fails',async()=>{
@@ -296,4 +297,13 @@ it('opens an SLO from anywhere on its row unless text is selected or an inner li
  expect(open).not.toHaveBeenCalled();
  fireEvent.click(objective,{metaKey:true});
  expect(open).not.toHaveBeenCalled();
+});
+
+it('keeps no-due eligibility distinct from unknown collection coverage in the compact verdict',async()=>{
+ const detail=operationalDetail();detail.current.quality={...detail.current.quality,state:'not_applicable',expected_intervals:0,observed_intervals:0,coverage:null};detail.current.window.end=detail.current.window.evaluation_valid_from;detail.current.performance={...detail.current.performance,state:'unknown',attainment:null,remaining_fraction:null};detail.urgency='watch';detail.leading_reason={code:'not_yet_eligible',provisional:false};detail.reasons=[detail.leading_reason];vi.spyOn(sloClient,'operational').mockResolvedValue(detail);vi.spyOn(sloClient,'current').mockRejectedValue(new Error('No current read'));render(<OperationalDetailView id={sloID} definition={definition} locationKey={`/slos/${sloID}`} onLocationChange={()=>undefined}/>);const status=await screen.findByRole('region',{name:'Current SLO status'});expect(status).toHaveTextContent('No intervals are due yet.');expect(status).not.toHaveTextContent('Partial data');expect(screen.getByRole('link',{name:'Inspect data ↓'})).toBeVisible();
+});
+
+it('keeps the burn action reachable when the first history read fails',async()=>{
+ const detail=operationalDetail(),generation={generation_id:'66666666-6666-6666-6666-666666666666',source_generation:'1',measurement_revision:'1',definition_revision:'1',exclusion_revision:'0',calculation_version:'slo-v1',evaluated_through:detail.effective_at,published_at:detail.effective_at,calculation_lag_seconds:0};
+ vi.spyOn(sloClient,'operational').mockRejectedValue(new Error('History offline'));vi.spyOn(sloClient,'current').mockResolvedValue({...detail,slo:definition,generation});render(<OperationalDetailView id={sloID} definition={definition} locationKey={`/slos/${sloID}`} onLocationChange={()=>undefined}/>);const link=await screen.findByRole('link',{name:'Inspect burn ↓'});const target=document.getElementById((link as HTMLAnchorElement).hash.slice(1));expect(target).not.toBeNull();const scroll=vi.fn();target!.scrollIntoView=scroll;fireEvent.click(link);expect(scroll).toHaveBeenCalled();expect(target).toHaveFocus();
 });

@@ -36,7 +36,7 @@ func routeDocuments(assets fs.FS) (map[string][]byte, error) {
 		"slis":       {"src/slis/SlisPage.tsx"},
 		"slos":       {"src/slos/SlosPage.tsx"},
 		"slo-list":   {"src/slos/SlosPage.tsx", "src/components/charts/BudgetSparklinePlot.tsx"},
-		"slo-detail": {"src/slos/SlosPage.tsx", "src/components/charts/TimelineChartView.tsx"},
+		"slo-detail": {"src/slos/SlosPage.tsx"},
 	} {
 		var links strings.Builder
 		seen := make(map[string]bool)
