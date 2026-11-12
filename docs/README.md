@@ -46,3 +46,6 @@ The skill reviews without applying fixes or publishing comments. It selects rele
 lenses, follows Almanac's accepted contracts, and reports findings and verification
 gaps. Codex discovers skills under `.agents/skills/`; restart Codex if it does not
 appear. No global installation or plugin is required.
+
+[Trace and log datasources](trace-log-datasources.md) covers optional local sources,
+provider queries, event populations and SLO semantics.

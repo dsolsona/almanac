@@ -154,6 +154,7 @@ type sliCreateReceipt struct {
 	ConfigurationRevision int64  `json:"configuration_revision"`
 }
 
+// CreateSli admits an event-count definition against an enabled agent with the datasource provider capability.
 func CreateSli(ctx context.Context, databaseURL string, input CreateSliInput) (SliRecord, error) {
 	definition := sli.Definition{
 		Name: input.Name, DisplayName: input.DisplayName, DatasourceID: input.DatasourceID,
@@ -251,7 +252,7 @@ func CreateSli(ctx context.Context, databaseURL string, input CreateSliInput) (S
 	if err != nil {
 		return SliRecord{}, operationError(ctx, "storage: SLI agent capability lookup failed", err)
 	}
-	if !capability.Enabled || !datasource.SupportsOperation(decodeCapabilities(capability.Capabilities), "collect") {
+	if !capability.Enabled || !datasource.SupportsProviderOperation(decodeCapabilities(capability.Capabilities), lockedDatasource.Provider, lockedDatasource.ConfigurationFormat, "collect") {
 		return SliRecord{}, ErrSliAgentUnavailable
 	}
 	if err := prepareSliPartitions(ctx, tx, now); err != nil {

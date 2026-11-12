@@ -4,7 +4,7 @@
 - Created: 2026-10-24
 - Accepted: 2026-10-24
 - Approval: Crit review `7fd22977b6c0`; approved 2026-10-24 after all comments resolved
-- Implementation: not started
+- Implementation: in progress
 - Related ADR: [ADR-0013](../adr/0013-provider-capabilities-and-execution.md)
 
 ## Purpose and common contract
@@ -134,5 +134,50 @@ when live demand cannot be protected.
   delivery order. Confirm desired integrations before provider implementation.
 - **REVIEW-D02:** Single-series components, 60s settling delay and declared rate-to-count
   conversion are deliberate correctness restrictions requiring realistic fixtures.
-- No providers implemented. Require HTTP fixture tests and acceptance against actual
-  supported source versions, including query accuracy and history limits.
+- Prometheus collection is available under F2-T20/F2-T22. Trace/log provider
+  execution and current evidence are tracked in [F2-T34](../tasks/F2-T34.md).
+  Source query accuracy and history limits require real supported-version fixtures.
+
+## Trace and log profiles (2026-11-11)
+
+Maintainer-authorized implementation decisions are recorded in
+[ADR-0047](../adr/0047-trace-and-log-event-count-datasources.md).
+
+- `victoriatraces` / `victoriatraces-http-v1`: native LogsQL statistics at
+  `/select/logsql/stats_query`. Each query returns one count, for example
+  `resource_attr:service.name:="checkout" | stats count() as events`. The agent supplies
+  explicit exclusive-end start/end bounds for the canonical interval and disables
+  partial responses. Source event timestamps define interval membership.
+- `tempo` / `tempo-http-v1`: TraceQL instant metrics at `/api/metrics/query`,
+  with explicit interval bounds and a single ungrouped `count_over_time()` result.
+  Trace search endpoints are never used for measurement.
+- `loki` / `loki-http-v1`: LogQL instant metrics at `/loki/api/v1/query`.
+  Use `sum(count_over_time({service_name="checkout"}[$interval]))`;
+  `$interval` expands to the datasource cadence in seconds. Queries evaluate at
+  the canonical endpoint; Loki's left-open/right-closed range convention is
+  shifted one nanosecond to represent Almanac's half-open interval.
+
+Previews use a settled interval at the datasource cadence. Both preview and live
+collection apply the same provider translation. A connection test uses a bounded
+provider-native read and does not claim that an SLI query or retained history is
+valid. No tenant header editor is added; deployments requiring tenant routing use
+a dedicated authenticated gateway endpoint. Authentication remains none/basic/bearer.
+
+Counts represent ingested spans or log events. Select one span/event per logical
+request and use a consistent good/total population. Sampled/dropped/duplicated source
+events are not automatically corrected. Percentiles and rates are not interval
+counts. Source emptiness never fabricates a missing count; explicit zero counts
+follow the existing zero-traffic policy. Existing SLO arithmetic is unchanged.
+
+Additional acceptance: provider/format pairs and selected-agent capabilities must
+match through API, storage, protocol, UI and CLI; live source fixtures must establish
+independent exact counts, interval boundaries and downstream SLO arithmetic.
+
+The initial VictoriaTraces count profile rejects LogsQL `options(...)` clauses at
+any nesting depth before source I/O. This reserves interval and completeness
+policy for the agent; query-level time shifts, ignored global time filters and
+partial-response overrides cannot be accepted as canonical counts. Quoted search
+text remains supported. Provider changes while drafting an SLI clear both queries;
+switches between datasources of the same provider preserve them. While the picker
+is changing an existing selection, retain that source’s query language, cadence
+and guidance until the next source is chosen; initialize fresh forms independently.

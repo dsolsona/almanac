@@ -474,6 +474,7 @@ func waitForAgentReconnect(t *testing.T, databaseURL string, client *http.Client
 	t.Fatal("same agent process did not resume ownership and renew after backend restart")
 }
 
+// assertDatasourceDiagnosticJourney exercises the CLI through a real running agent and preserves bounded state evidence on diagnostic failures.
 func assertDatasourceDiagnosticJourney(t *testing.T, databaseURL, binary, dir, baseURL, certFile, endpoint string, caPEM []byte, password string, journey connectedAgentJourney, backendLogs *runtimeLog) {
 	t.Helper()
 	inputPath := filepath.Join(dir, "datasource-input.json")
@@ -503,6 +504,7 @@ func assertDatasourceDiagnosticJourney(t *testing.T, databaseURL, binary, dir, b
 			}
 			evidence := datasourceFailureEvidence(strings.Join(args[:2], " "), output, err)
 			evidence += " " + agentEvidence + " " + datasourceRegistryEvidence(backendLogs, output)
+			evidence += " " + shutdownFailureSnapshot(t, databaseURL, journey.id)
 			if stage == "agents get" {
 				evidence += " " + datasourceAgentStateEvidence(t, databaseURL, journey.id)
 			}
@@ -881,7 +883,7 @@ func startVictoriaMetrics(t *testing.T, dir, certificatePath, keyPath string, ce
 		if err == nil {
 			_ = response.Body.Close()
 			if response.StatusCode == http.StatusOK {
-				seedVictoriaMetricsTransferSeries(t, endpoint, certificatePEM)
+				seedVictoriaMetricsTransferSeries(t, endpoint, certificatePEM, time.Now().UTC())
 				return endpoint
 			}
 		}
@@ -1025,7 +1027,7 @@ func (writer *boundedStderrWriter) Close() error {
 	return writer.file.Close()
 }
 
-func seedVictoriaMetricsTransferSeries(t *testing.T, endpoint string, certificatePEM []byte) {
+func seedVictoriaMetricsTransferSeries(t *testing.T, endpoint string, certificatePEM []byte, now time.Time) {
 	t.Helper()
 	block, _ := pem.Decode(certificatePEM)
 	if block == nil {
@@ -1040,12 +1042,19 @@ func seedVictoriaMetricsTransferSeries(t *testing.T, endpoint string, certificat
 	client := &http.Client{Timeout: 2 * time.Second, Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: roots, MinVersion: tls.VersionTLS12}}}
 	t.Cleanup(client.CloseIdleConnections)
 	var payload strings.Builder
+	// Cover settled diagnostic endpoints as well as the current minute. Samples
+	// retain the same 20 large label sets and HTTPS transfer-size assertions.
+	at := now.UTC().Truncate(time.Minute)
 	for series := range 20 {
-		fmt.Fprintf(&payload, "almanac_transfer_metric{transfer_series=\"%d\"", series)
+		var selector strings.Builder
+		fmt.Fprintf(&selector, "almanac_transfer_metric{transfer_series=\"%d\"", series)
 		for label := range 24 {
-			fmt.Fprintf(&payload, ",label_%02d=\"%s\"", label, strings.Repeat("x", 256))
+			fmt.Fprintf(&selector, ",label_%02d=\"%s\"", label, strings.Repeat("x", 256))
 		}
-		fmt.Fprintf(&payload, "} 1 %d\n", time.Now().UnixMilli())
+		selector.WriteByte('}')
+		for sample := range 3 {
+			fmt.Fprintf(&payload, "%s 1 %d\n", selector.String(), at.Add(time.Duration(sample-2)*time.Minute).UnixMilli())
+		}
 	}
 	request, err := http.NewRequestWithContext(t.Context(), http.MethodPost, endpoint+"/api/v1/import/prometheus", strings.NewReader(payload.String()))
 	if err != nil {

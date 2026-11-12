@@ -44,13 +44,22 @@ func (e AgentDatasourceAssignmentAuthenticationMode) Valid() bool {
 
 // Defines values for AgentDatasourceAssignmentConfigurationFormat.
 const (
-	AgentDatasourceAssignmentConfigurationFormatPrometheusHttpV1 AgentDatasourceAssignmentConfigurationFormat = "prometheus-http-v1"
+	AgentDatasourceAssignmentConfigurationFormatLokiHttpV1           AgentDatasourceAssignmentConfigurationFormat = "loki-http-v1"
+	AgentDatasourceAssignmentConfigurationFormatPrometheusHttpV1     AgentDatasourceAssignmentConfigurationFormat = "prometheus-http-v1"
+	AgentDatasourceAssignmentConfigurationFormatTempoHttpV1          AgentDatasourceAssignmentConfigurationFormat = "tempo-http-v1"
+	AgentDatasourceAssignmentConfigurationFormatVictoriatracesHttpV1 AgentDatasourceAssignmentConfigurationFormat = "victoriatraces-http-v1"
 )
 
 // Valid indicates whether the value is a known member of the AgentDatasourceAssignmentConfigurationFormat enum.
 func (e AgentDatasourceAssignmentConfigurationFormat) Valid() bool {
 	switch e {
+	case AgentDatasourceAssignmentConfigurationFormatLokiHttpV1:
+		return true
 	case AgentDatasourceAssignmentConfigurationFormatPrometheusHttpV1:
+		return true
+	case AgentDatasourceAssignmentConfigurationFormatTempoHttpV1:
+		return true
+	case AgentDatasourceAssignmentConfigurationFormatVictoriatracesHttpV1:
 		return true
 	default:
 		return false
@@ -59,13 +68,22 @@ func (e AgentDatasourceAssignmentConfigurationFormat) Valid() bool {
 
 // Defines values for AgentDatasourceAssignmentProvider.
 const (
-	AgentDatasourceAssignmentProviderPrometheus AgentDatasourceAssignmentProvider = "prometheus"
+	AgentDatasourceAssignmentProviderLoki           AgentDatasourceAssignmentProvider = "loki"
+	AgentDatasourceAssignmentProviderPrometheus     AgentDatasourceAssignmentProvider = "prometheus"
+	AgentDatasourceAssignmentProviderTempo          AgentDatasourceAssignmentProvider = "tempo"
+	AgentDatasourceAssignmentProviderVictoriatraces AgentDatasourceAssignmentProvider = "victoriatraces"
 )
 
 // Valid indicates whether the value is a known member of the AgentDatasourceAssignmentProvider enum.
 func (e AgentDatasourceAssignmentProvider) Valid() bool {
 	switch e {
+	case AgentDatasourceAssignmentProviderLoki:
+		return true
 	case AgentDatasourceAssignmentProviderPrometheus:
+		return true
+	case AgentDatasourceAssignmentProviderTempo:
+		return true
+	case AgentDatasourceAssignmentProviderVictoriatraces:
 		return true
 	default:
 		return false
@@ -326,13 +344,22 @@ func (e ConnectionTestRequestAuthenticationMode) Valid() bool {
 
 // Defines values for ConnectionTestRequestConfigurationFormat.
 const (
-	ConnectionTestRequestConfigurationFormatPrometheusHttpV1 ConnectionTestRequestConfigurationFormat = "prometheus-http-v1"
+	ConnectionTestRequestConfigurationFormatLokiHttpV1           ConnectionTestRequestConfigurationFormat = "loki-http-v1"
+	ConnectionTestRequestConfigurationFormatPrometheusHttpV1     ConnectionTestRequestConfigurationFormat = "prometheus-http-v1"
+	ConnectionTestRequestConfigurationFormatTempoHttpV1          ConnectionTestRequestConfigurationFormat = "tempo-http-v1"
+	ConnectionTestRequestConfigurationFormatVictoriatracesHttpV1 ConnectionTestRequestConfigurationFormat = "victoriatraces-http-v1"
 )
 
 // Valid indicates whether the value is a known member of the ConnectionTestRequestConfigurationFormat enum.
 func (e ConnectionTestRequestConfigurationFormat) Valid() bool {
 	switch e {
+	case ConnectionTestRequestConfigurationFormatLokiHttpV1:
+		return true
 	case ConnectionTestRequestConfigurationFormatPrometheusHttpV1:
+		return true
+	case ConnectionTestRequestConfigurationFormatTempoHttpV1:
+		return true
+	case ConnectionTestRequestConfigurationFormatVictoriatracesHttpV1:
 		return true
 	default:
 		return false
@@ -341,13 +368,22 @@ func (e ConnectionTestRequestConfigurationFormat) Valid() bool {
 
 // Defines values for ConnectionTestRequestProvider.
 const (
-	ConnectionTestRequestProviderPrometheus ConnectionTestRequestProvider = "prometheus"
+	ConnectionTestRequestProviderLoki           ConnectionTestRequestProvider = "loki"
+	ConnectionTestRequestProviderPrometheus     ConnectionTestRequestProvider = "prometheus"
+	ConnectionTestRequestProviderTempo          ConnectionTestRequestProvider = "tempo"
+	ConnectionTestRequestProviderVictoriatraces ConnectionTestRequestProvider = "victoriatraces"
 )
 
 // Valid indicates whether the value is a known member of the ConnectionTestRequestProvider enum.
 func (e ConnectionTestRequestProvider) Valid() bool {
 	switch e {
+	case ConnectionTestRequestProviderLoki:
+		return true
 	case ConnectionTestRequestProviderPrometheus:
+		return true
+	case ConnectionTestRequestProviderTempo:
+		return true
+	case ConnectionTestRequestProviderVictoriatraces:
 		return true
 	default:
 		return false
@@ -356,13 +392,22 @@ func (e ConnectionTestRequestProvider) Valid() bool {
 
 // Defines values for DatasourceConfigurationFormat.
 const (
-	DatasourceConfigurationFormatPrometheusHttpV1 DatasourceConfigurationFormat = "prometheus-http-v1"
+	DatasourceConfigurationFormatLokiHttpV1           DatasourceConfigurationFormat = "loki-http-v1"
+	DatasourceConfigurationFormatPrometheusHttpV1     DatasourceConfigurationFormat = "prometheus-http-v1"
+	DatasourceConfigurationFormatTempoHttpV1          DatasourceConfigurationFormat = "tempo-http-v1"
+	DatasourceConfigurationFormatVictoriatracesHttpV1 DatasourceConfigurationFormat = "victoriatraces-http-v1"
 )
 
 // Valid indicates whether the value is a known member of the DatasourceConfigurationFormat enum.
 func (e DatasourceConfigurationFormat) Valid() bool {
 	switch e {
+	case DatasourceConfigurationFormatLokiHttpV1:
+		return true
 	case DatasourceConfigurationFormatPrometheusHttpV1:
+		return true
+	case DatasourceConfigurationFormatTempoHttpV1:
+		return true
+	case DatasourceConfigurationFormatVictoriatracesHttpV1:
 		return true
 	default:
 		return false
@@ -371,13 +416,22 @@ func (e DatasourceConfigurationFormat) Valid() bool {
 
 // Defines values for DatasourceProvider.
 const (
-	DatasourceProviderPrometheus DatasourceProvider = "prometheus"
+	DatasourceProviderLoki           DatasourceProvider = "loki"
+	DatasourceProviderPrometheus     DatasourceProvider = "prometheus"
+	DatasourceProviderTempo          DatasourceProvider = "tempo"
+	DatasourceProviderVictoriatraces DatasourceProvider = "victoriatraces"
 )
 
 // Valid indicates whether the value is a known member of the DatasourceProvider enum.
 func (e DatasourceProvider) Valid() bool {
 	switch e {
+	case DatasourceProviderLoki:
+		return true
 	case DatasourceProviderPrometheus:
+		return true
+	case DatasourceProviderTempo:
+		return true
+	case DatasourceProviderVictoriatraces:
 		return true
 	default:
 		return false
@@ -467,13 +521,22 @@ func (e DatasourceWriteAuthenticationMode) Valid() bool {
 
 // Defines values for DatasourceWriteConfigurationFormat.
 const (
-	DatasourceWriteConfigurationFormatPrometheusHttpV1 DatasourceWriteConfigurationFormat = "prometheus-http-v1"
+	DatasourceWriteConfigurationFormatLokiHttpV1           DatasourceWriteConfigurationFormat = "loki-http-v1"
+	DatasourceWriteConfigurationFormatPrometheusHttpV1     DatasourceWriteConfigurationFormat = "prometheus-http-v1"
+	DatasourceWriteConfigurationFormatTempoHttpV1          DatasourceWriteConfigurationFormat = "tempo-http-v1"
+	DatasourceWriteConfigurationFormatVictoriatracesHttpV1 DatasourceWriteConfigurationFormat = "victoriatraces-http-v1"
 )
 
 // Valid indicates whether the value is a known member of the DatasourceWriteConfigurationFormat enum.
 func (e DatasourceWriteConfigurationFormat) Valid() bool {
 	switch e {
+	case DatasourceWriteConfigurationFormatLokiHttpV1:
+		return true
 	case DatasourceWriteConfigurationFormatPrometheusHttpV1:
+		return true
+	case DatasourceWriteConfigurationFormatTempoHttpV1:
+		return true
+	case DatasourceWriteConfigurationFormatVictoriatracesHttpV1:
 		return true
 	default:
 		return false
@@ -482,13 +545,22 @@ func (e DatasourceWriteConfigurationFormat) Valid() bool {
 
 // Defines values for DatasourceWriteProvider.
 const (
-	DatasourceWriteProviderPrometheus DatasourceWriteProvider = "prometheus"
+	DatasourceWriteProviderLoki           DatasourceWriteProvider = "loki"
+	DatasourceWriteProviderPrometheus     DatasourceWriteProvider = "prometheus"
+	DatasourceWriteProviderTempo          DatasourceWriteProvider = "tempo"
+	DatasourceWriteProviderVictoriatraces DatasourceWriteProvider = "victoriatraces"
 )
 
 // Valid indicates whether the value is a known member of the DatasourceWriteProvider enum.
 func (e DatasourceWriteProvider) Valid() bool {
 	switch e {
+	case DatasourceWriteProviderLoki:
+		return true
 	case DatasourceWriteProviderPrometheus:
+		return true
+	case DatasourceWriteProviderTempo:
+		return true
+	case DatasourceWriteProviderVictoriatraces:
 		return true
 	default:
 		return false
@@ -968,13 +1040,22 @@ func (e ProviderDescriptorConfigurationFailureCode) Valid() bool {
 
 // Defines values for ProviderDescriptorConfigurationFormat.
 const (
-	ProviderDescriptorConfigurationFormatPrometheusHttpV1 ProviderDescriptorConfigurationFormat = "prometheus-http-v1"
+	ProviderDescriptorConfigurationFormatLokiHttpV1           ProviderDescriptorConfigurationFormat = "loki-http-v1"
+	ProviderDescriptorConfigurationFormatPrometheusHttpV1     ProviderDescriptorConfigurationFormat = "prometheus-http-v1"
+	ProviderDescriptorConfigurationFormatTempoHttpV1          ProviderDescriptorConfigurationFormat = "tempo-http-v1"
+	ProviderDescriptorConfigurationFormatVictoriatracesHttpV1 ProviderDescriptorConfigurationFormat = "victoriatraces-http-v1"
 )
 
 // Valid indicates whether the value is a known member of the ProviderDescriptorConfigurationFormat enum.
 func (e ProviderDescriptorConfigurationFormat) Valid() bool {
 	switch e {
+	case ProviderDescriptorConfigurationFormatLokiHttpV1:
+		return true
 	case ProviderDescriptorConfigurationFormatPrometheusHttpV1:
+		return true
+	case ProviderDescriptorConfigurationFormatTempoHttpV1:
+		return true
+	case ProviderDescriptorConfigurationFormatVictoriatracesHttpV1:
 		return true
 	default:
 		return false
@@ -983,13 +1064,22 @@ func (e ProviderDescriptorConfigurationFormat) Valid() bool {
 
 // Defines values for ProviderDescriptorProvider.
 const (
-	ProviderDescriptorProviderPrometheus ProviderDescriptorProvider = "prometheus"
+	ProviderDescriptorProviderLoki           ProviderDescriptorProvider = "loki"
+	ProviderDescriptorProviderPrometheus     ProviderDescriptorProvider = "prometheus"
+	ProviderDescriptorProviderTempo          ProviderDescriptorProvider = "tempo"
+	ProviderDescriptorProviderVictoriatraces ProviderDescriptorProvider = "victoriatraces"
 )
 
 // Valid indicates whether the value is a known member of the ProviderDescriptorProvider enum.
 func (e ProviderDescriptorProvider) Valid() bool {
 	switch e {
+	case ProviderDescriptorProviderLoki:
+		return true
 	case ProviderDescriptorProviderPrometheus:
+		return true
+	case ProviderDescriptorProviderTempo:
+		return true
+	case ProviderDescriptorProviderVictoriatraces:
 		return true
 	default:
 		return false
@@ -4946,7 +5036,7 @@ type ClientInterface interface {
 	// Corresponds with POST /api/v1/datasources (the `PostDatasources` operationId).
 	PostDatasources(ctx context.Context, params *PostDatasourcesParams, body PostDatasourcesJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// PostDatasourceConnectionTestWithBody Test unsaved Prometheus connection settings on an assigned agent
+	// PostDatasourceConnectionTestWithBody Test unsaved datasource connection settings on an assigned agent
 	//
 	// If the agent is connected but has not applied its desired configuration, the request returns 503 configuration_pending and creates no diagnostic receipt. Once a diagnostic receipt is created, the endpoint returns 202 with its Location even if dispatch fails; read that receipt for its resulting state.
 	//
@@ -4955,7 +5045,7 @@ type ClientInterface interface {
 	// Corresponds with POST /api/v1/datasources/connection-tests (the `PostDatasourceConnectionTest` operationId).
 	PostDatasourceConnectionTestWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// PostDatasourceConnectionTest Test unsaved Prometheus connection settings on an assigned agent
+	// PostDatasourceConnectionTest Test unsaved datasource connection settings on an assigned agent
 	//
 	// If the agent is connected but has not applied its desired configuration, the request returns 503 configuration_pending and creates no diagnostic receipt. Once a diagnostic receipt is created, the endpoint returns 202 with its Location even if dispatch fails; read that receipt for its resulting state.
 	//
@@ -5120,7 +5210,7 @@ type ClientInterface interface {
 
 	// CreateSliWithBody Create an event-count SLI
 	//
-	// Editors and administrators can create one Prometheus event-count SLI using the existing datasource cadence. This increment accepts event_counts with interval_count only. Activation is scheduled at a future canonical boundary after the assigned agent acknowledges the prepublished configuration.
+	// Editors and administrators can create one native event-count SLI using the existing datasource cadence. This increment accepts event_counts with interval_count only. Activation is scheduled at a future canonical boundary after the assigned agent acknowledges the prepublished configuration.
 	//
 	// Takes any type of body and a specified content type.
 	//
@@ -5129,7 +5219,7 @@ type ClientInterface interface {
 
 	// CreateSli Create an event-count SLI
 	//
-	// Editors and administrators can create one Prometheus event-count SLI using the existing datasource cadence. This increment accepts event_counts with interval_count only. Activation is scheduled at a future canonical boundary after the assigned agent acknowledges the prepublished configuration.
+	// Editors and administrators can create one native event-count SLI using the existing datasource cadence. This increment accepts event_counts with interval_count only. Activation is scheduled at a future canonical boundary after the assigned agent acknowledges the prepublished configuration.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -6021,7 +6111,7 @@ func (c *Client) PostDatasources(ctx context.Context, params *PostDatasourcesPar
 	return c.Client.Do(req)
 }
 
-// PostDatasourceConnectionTestWithBody Test unsaved Prometheus connection settings on an assigned agent
+// PostDatasourceConnectionTestWithBody Test unsaved datasource connection settings on an assigned agent
 //
 // If the agent is connected but has not applied its desired configuration, the request returns 503 configuration_pending and creates no diagnostic receipt. Once a diagnostic receipt is created, the endpoint returns 202 with its Location even if dispatch fails; read that receipt for its resulting state.
 //
@@ -6040,7 +6130,7 @@ func (c *Client) PostDatasourceConnectionTestWithBody(ctx context.Context, conte
 	return c.Client.Do(req)
 }
 
-// PostDatasourceConnectionTest Test unsaved Prometheus connection settings on an assigned agent
+// PostDatasourceConnectionTest Test unsaved datasource connection settings on an assigned agent
 //
 // If the agent is connected but has not applied its desired configuration, the request returns 503 configuration_pending and creates no diagnostic receipt. Once a diagnostic receipt is created, the endpoint returns 202 with its Location even if dispatch fails; read that receipt for its resulting state.
 //
@@ -6435,7 +6525,7 @@ func (c *Client) ListSlis(ctx context.Context, params *ListSlisParams, reqEditor
 
 // CreateSliWithBody Create an event-count SLI
 //
-// Editors and administrators can create one Prometheus event-count SLI using the existing datasource cadence. This increment accepts event_counts with interval_count only. Activation is scheduled at a future canonical boundary after the assigned agent acknowledges the prepublished configuration.
+// Editors and administrators can create one native event-count SLI using the existing datasource cadence. This increment accepts event_counts with interval_count only. Activation is scheduled at a future canonical boundary after the assigned agent acknowledges the prepublished configuration.
 //
 // Takes any type of body and a specified content type.
 //
@@ -6454,7 +6544,7 @@ func (c *Client) CreateSliWithBody(ctx context.Context, params *CreateSliParams,
 
 // CreateSli Create an event-count SLI
 //
-// Editors and administrators can create one Prometheus event-count SLI using the existing datasource cadence. This increment accepts event_counts with interval_count only. Activation is scheduled at a future canonical boundary after the assigned agent acknowledges the prepublished configuration.
+// Editors and administrators can create one native event-count SLI using the existing datasource cadence. This increment accepts event_counts with interval_count only. Activation is scheduled at a future canonical boundary after the assigned agent acknowledges the prepublished configuration.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -10746,7 +10836,7 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /api/v1/datasources (the `PostDatasources` operationId).
 	PostDatasourcesWithResponse(ctx context.Context, params *PostDatasourcesParams, body PostDatasourcesJSONRequestBody, reqEditors ...RequestEditorFn) (*PostDatasourcesResponse, error)
 
-	// PostDatasourceConnectionTestWithBodyWithResponse Test unsaved Prometheus connection settings on an assigned agent
+	// PostDatasourceConnectionTestWithBodyWithResponse Test unsaved datasource connection settings on an assigned agent
 	//
 	// If the agent is connected but has not applied its desired configuration, the request returns 503 configuration_pending and creates no diagnostic receipt. Once a diagnostic receipt is created, the endpoint returns 202 with its Location even if dispatch fails; read that receipt for its resulting state.
 	//
@@ -10755,7 +10845,7 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /api/v1/datasources/connection-tests (the `PostDatasourceConnectionTest` operationId).
 	PostDatasourceConnectionTestWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostDatasourceConnectionTestResponse, error)
 
-	// PostDatasourceConnectionTestWithResponse Test unsaved Prometheus connection settings on an assigned agent
+	// PostDatasourceConnectionTestWithResponse Test unsaved datasource connection settings on an assigned agent
 	//
 	// If the agent is connected but has not applied its desired configuration, the request returns 503 configuration_pending and creates no diagnostic receipt. Once a diagnostic receipt is created, the endpoint returns 202 with its Location even if dispatch fails; read that receipt for its resulting state.
 	//
@@ -10936,7 +11026,7 @@ type ClientWithResponsesInterface interface {
 
 	// CreateSliWithBodyWithResponse Create an event-count SLI
 	//
-	// Editors and administrators can create one Prometheus event-count SLI using the existing datasource cadence. This increment accepts event_counts with interval_count only. Activation is scheduled at a future canonical boundary after the assigned agent acknowledges the prepublished configuration.
+	// Editors and administrators can create one native event-count SLI using the existing datasource cadence. This increment accepts event_counts with interval_count only. Activation is scheduled at a future canonical boundary after the assigned agent acknowledges the prepublished configuration.
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -10945,7 +11035,7 @@ type ClientWithResponsesInterface interface {
 
 	// CreateSliWithResponse Create an event-count SLI
 	//
-	// Editors and administrators can create one Prometheus event-count SLI using the existing datasource cadence. This increment accepts event_counts with interval_count only. Activation is scheduled at a future canonical boundary after the assigned agent acknowledges the prepublished configuration.
+	// Editors and administrators can create one native event-count SLI using the existing datasource cadence. This increment accepts event_counts with interval_count only. Activation is scheduled at a future canonical boundary after the assigned agent acknowledges the prepublished configuration.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -15368,7 +15458,7 @@ func (c *ClientWithResponses) PostDatasourcesWithResponse(ctx context.Context, p
 	return ParsePostDatasourcesResponse(rsp)
 }
 
-// PostDatasourceConnectionTestWithBodyWithResponse Test unsaved Prometheus connection settings on an assigned agent
+// PostDatasourceConnectionTestWithBodyWithResponse Test unsaved datasource connection settings on an assigned agent
 //
 // If the agent is connected but has not applied its desired configuration, the request returns 503 configuration_pending and creates no diagnostic receipt. Once a diagnostic receipt is created, the endpoint returns 202 with its Location even if dispatch fails; read that receipt for its resulting state.
 //
@@ -15383,7 +15473,7 @@ func (c *ClientWithResponses) PostDatasourceConnectionTestWithBodyWithResponse(c
 	return ParsePostDatasourceConnectionTestResponse(rsp)
 }
 
-// PostDatasourceConnectionTestWithResponse Test unsaved Prometheus connection settings on an assigned agent
+// PostDatasourceConnectionTestWithResponse Test unsaved datasource connection settings on an assigned agent
 //
 // If the agent is connected but has not applied its desired configuration, the request returns 503 configuration_pending and creates no diagnostic receipt. Once a diagnostic receipt is created, the endpoint returns 202 with its Location even if dispatch fails; read that receipt for its resulting state.
 //
@@ -15702,7 +15792,7 @@ func (c *ClientWithResponses) ListSlisWithResponse(ctx context.Context, params *
 
 // CreateSliWithBodyWithResponse Create an event-count SLI
 //
-// Editors and administrators can create one Prometheus event-count SLI using the existing datasource cadence. This increment accepts event_counts with interval_count only. Activation is scheduled at a future canonical boundary after the assigned agent acknowledges the prepublished configuration.
+// Editors and administrators can create one native event-count SLI using the existing datasource cadence. This increment accepts event_counts with interval_count only. Activation is scheduled at a future canonical boundary after the assigned agent acknowledges the prepublished configuration.
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
@@ -15717,7 +15807,7 @@ func (c *ClientWithResponses) CreateSliWithBodyWithResponse(ctx context.Context,
 
 // CreateSliWithResponse Create an event-count SLI
 //
-// Editors and administrators can create one Prometheus event-count SLI using the existing datasource cadence. This increment accepts event_counts with interval_count only. Activation is scheduled at a future canonical boundary after the assigned agent acknowledges the prepublished configuration.
+// Editors and administrators can create one native event-count SLI using the existing datasource cadence. This increment accepts event_counts with interval_count only. Activation is scheduled at a future canonical boundary after the assigned agent acknowledges the prepublished configuration.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -19129,7 +19219,7 @@ type ServerInterface interface {
 	// PostDatasources Create and assign a datasource
 	// (POST /api/v1/datasources)
 	PostDatasources(w http.ResponseWriter, r *http.Request, params PostDatasourcesParams)
-	// PostDatasourceConnectionTest Test unsaved Prometheus connection settings on an assigned agent
+	// PostDatasourceConnectionTest Test unsaved datasource connection settings on an assigned agent
 	// (POST /api/v1/datasources/connection-tests)
 	PostDatasourceConnectionTest(w http.ResponseWriter, r *http.Request)
 	// GetDatasource Read redacted datasource detail

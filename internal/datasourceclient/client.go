@@ -179,6 +179,7 @@ func (c *Client) SLIObservations(ctx context.Context, rawID string, limit int, c
 	return c.read(r, err, http.StatusOK, validSliObservationPage)
 }
 
+// Providers lists agent-specific readiness for all supported datasource profiles.
 func (c *Client) Providers(ctx context.Context, agentID string) ([]byte, error) {
 	var params *api.GetProvidersParams
 	if agentID != "" {
@@ -204,7 +205,7 @@ func (c *Client) Providers(ctx context.Context, agentID string) ([]byte, error) 
 			if json.Unmarshal(raw.Items[index], &descriptorFields) != nil || !exactFields(descriptorFields, "applied_configuration_revision", "availability", "configuration_failure_code", "configuration_failure_revision", "configuration_format", "desired_configuration_revision", "operations", "provider") {
 				return false
 			}
-			if descriptor.Provider != api.ProviderDescriptorProviderPrometheus || descriptor.ConfigurationFormat != api.ProviderDescriptorConfigurationFormatPrometheusHttpV1 || !descriptor.Availability.Valid() || len(descriptor.Operations) > 16 {
+			if !agentprotocol.ValidProvider(string(descriptor.Provider), string(descriptor.ConfigurationFormat)) || !descriptor.Availability.Valid() || len(descriptor.Operations) > 16 {
 				return false
 			}
 			for _, operation := range descriptor.Operations {
@@ -421,6 +422,7 @@ func (c *Client) readLimit(response *http.Response, err error, expected int, val
 	return data, nil
 }
 
+// validDatasource rejects incomplete or unsupported datasource responses before exposing them to CLI callers.
 func validDatasource(data []byte) bool {
 	var value api.Datasource
 	var fields map[string]jsontext.Value
@@ -441,7 +443,7 @@ func validDatasource(data []byte) bool {
 	if json.Unmarshal(fields["tls"], &tlsFields) != nil || !exactFields(tlsFields, "insecure_skip_verify", "ca_pem") || json.Unmarshal(fields["authentication"], &authFields) != nil || !exactFields(authFields, "mode", "username", "password_configured", "token_configured") {
 		return false
 	}
-	if !uuidPattern.MatchString(uuidText(value.Id)) || !uuidPattern.MatchString(uuidText(value.AgentId)) || !positiveDecimal(value.Version) || value.Name == "" || value.DisplayName == "" || value.PollingIntervalSeconds < 15 || value.SettlingDelaySeconds != 60 || value.Provider != api.DatasourceProviderPrometheus || value.ConfigurationFormat != api.DatasourceConfigurationFormatPrometheusHttpV1 || !value.Authentication.Mode.Valid() || value.CreatedAt.IsZero() || value.UpdatedAt.IsZero() || value.Tls.CaPem != nil && len(*value.Tls.CaPem) > 64<<10 {
+	if !uuidPattern.MatchString(uuidText(value.Id)) || !uuidPattern.MatchString(uuidText(value.AgentId)) || !positiveDecimal(value.Version) || value.Name == "" || value.DisplayName == "" || value.PollingIntervalSeconds < 15 || value.SettlingDelaySeconds != 60 || !agentprotocol.ValidProvider(string(value.Provider), string(value.ConfigurationFormat)) || !value.Authentication.Mode.Valid() || value.CreatedAt.IsZero() || value.UpdatedAt.IsZero() || value.Tls.CaPem != nil && len(*value.Tls.CaPem) > 64<<10 {
 		return false
 	}
 	if _, err := strconv.ParseInt(value.Version, 10, 64); err != nil {

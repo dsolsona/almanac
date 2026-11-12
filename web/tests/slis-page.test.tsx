@@ -64,16 +64,16 @@ describe('SLI page', () => {
     render(<SlisPage context={context} />);
     if (context === admin && path === '/slis') {
       // The list has one action, the header's New SLI; the prerequisite is explained, not duplicated as buttons.
-      expect(await screen.findByText(/Add a Prometheus datasource to create/)).toBeVisible();
+      expect(await screen.findByText(/Add a datasource to create/)).toBeVisible();
       expect(screen.getAllByRole('button').filter((button) => /SLI|datasource/i.test(button.textContent ?? '')).map((button) => button.textContent)).toEqual(['New SLI']);
     } else if (context === admin) {
-      expect(await screen.findByText(/Add a Prometheus datasource to create/)).toBeVisible();
+      expect(await screen.findByText(/Add a datasource to create/)).toBeVisible();
       const action = screen.getByRole('button', { name: 'Add datasource' });
       expect(screen.queryByRole('button', { name: 'Create SLI' })).not.toBeInTheDocument();
       await userEvent.click(action);
       expect(location.pathname + location.search).toBe('/datasources/new?return=slis');
     } else {
-      expect(await screen.findByText(/Ask an administrator to add a Prometheus datasource/)).toBeVisible();
+      expect(await screen.findByText(/Ask an administrator to add a datasource/)).toBeVisible();
       expect(screen.queryByRole('button', { name: 'Add datasource' })).not.toBeInTheDocument();
     }
   });
@@ -85,7 +85,7 @@ describe('SLI page', () => {
       ? (++reads === 1 ? deferred.promise : response({ items: [source()], next_cursor: '' }))
       : response({ items: [], next_cursor: '' })));
     render(<SlisPage context={admin} />);
-    expect(screen.queryByText(/Add a Prometheus datasource to create/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Add a datasource to create/)).not.toBeInTheDocument();
     await act(async () => deferred.resolve(response({}, 503)));
     expect(await screen.findByRole('alert')).toHaveTextContent('Datasources could not be loaded');
     expect(screen.queryByRole('button', { name: 'Add datasource' })).not.toBeInTheDocument();
@@ -551,7 +551,7 @@ describe('SLI page', () => {
     await user.click(await screen.findByRole('button', { name: 'Create SLI' }));
     expect(screen.getByRole('alert')).toHaveTextContent('Enter a display name.');
     expect(screen.getByLabelText('Display name')).toHaveAccessibleDescription(/Enter a display name/);
-    expect(screen.getByLabelText('Datasource')).toHaveAccessibleDescription(/Choose an existing Prometheus datasource/);
+    expect(screen.getByLabelText('Datasource')).toHaveAccessibleDescription(/Choose an existing datasource/);
     expect(screen.getByText('Enter a good events query.')).toBeVisible();
     expect(screen.getByLabelText('Good events')).toHaveAccessibleDescription(/Enter a good events query/);
     await user.type(screen.getByLabelText('Display name'), 'Request success');
@@ -786,4 +786,40 @@ it('keeps the URL and Created page in sync with a sorted page-size change',async
  await user.selectOptions(screen.getByRole('combobox',{name:'Sort by'}),'');
  await waitFor(()=>expect(screen.queryByRole('link',{name:'Indicator 19'})).not.toBeInTheDocument());
  expect(screen.getAllByRole('link',{name:/Indicator /})).toHaveLength(10);
+});
+
+it('preserves queries for the same provider and clears them when the language changes', async () => {
+  history.replaceState({}, '', `/slis/new?datasource=${sourceID}`);
+  const second = { ...source(), id: '8ed93d7e-51e3-4a3e-9222-3e8a612de20b', display_name: 'Other metrics', name: 'other-metrics' };
+  const logs = { ...source(), id: '8ed93d7e-51e3-4a3e-9222-3e8a612de20c', display_name: 'Request logs', name: 'logs', provider: 'loki', configuration_format: 'loki-http-v1' };
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => response({ items: String(input).startsWith('/api/v1/datasources') ? [source(), second, logs] : [], next_cursor: '' })));
+  const user = userEvent.setup(); render(<SlisPage context={admin} />);
+  await screen.findByRole('button', { name: 'Change' });
+  fireEvent.change(screen.getByLabelText('Good events'), { target: { value: 'sum(good)' } });
+  fireEvent.change(screen.getByLabelText('Total events'), { target: { value: 'sum(total)' } });
+  await user.click(screen.getByRole('button', { name: 'Change' }));
+  await user.click(screen.getByRole('option', { name: /Other metrics/ }));
+  expect(screen.getByLabelText('Good events')).toHaveValue('sum(good)');
+  expect(screen.getByLabelText('Total events')).toHaveValue('sum(total)');
+  await user.click(screen.getByRole('button', { name: 'Change' }));
+  await user.click(screen.getByRole('option', { name: /Request logs/ }));
+  expect(screen.getByLabelText('Good events')).toHaveValue('');
+  expect(screen.getByLabelText('Total events')).toHaveValue('');
+  expect(screen.getByText(/Use count_over_time with/)).toBeVisible();
+  expect(screen.queryByText(/increase\(\)/)).not.toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'Change' }));
+  expect(screen.getAllByText('LogQL').length).toBeGreaterThan(0);
+  expect(screen.getByText(/Use count_over_time with/)).toBeVisible();
+  fireEvent.change(screen.getByLabelText('Good events'), { target: { value: 'sum(count_over_time({job="app"} |= "good" [$interval]))' } });
+  await user.click(screen.getByLabelText('Datasource'));
+  await user.click(screen.getByRole('option', { name: /Request logs/ }));
+  expect(screen.getByLabelText('Good events')).toHaveValue('sum(count_over_time({job="app"} |= "good" [$interval]))');
+  act(() => { history.replaceState({}, '', '/slis/new?fresh=1'); window.dispatchEvent(new PopStateEvent('popstate')); });
+  await screen.findByLabelText('Datasource');
+  fireEvent.change(screen.getByLabelText('Good events'), { target: { value: 'sum(good)' } });
+  fireEvent.change(screen.getByLabelText('Total events'), { target: { value: 'sum(total)' } });
+  await user.click(screen.getByLabelText('Datasource'));
+  await user.click(screen.getByRole('option', { name: /Production metrics/ }));
+  expect(screen.getByLabelText('Good events')).toHaveValue('sum(good)');
+  expect(screen.getByLabelText('Total events')).toHaveValue('sum(total)');
 });

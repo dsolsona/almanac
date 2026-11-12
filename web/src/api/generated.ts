@@ -518,7 +518,7 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Test unsaved Prometheus connection settings on an assigned agent
+         * Test unsaved datasource connection settings on an assigned agent
          * @description If the agent is connected but has not applied its desired configuration, the request returns 503 configuration_pending and creates no diagnostic receipt. Once a diagnostic receipt is created, the endpoint returns 202 with its Location even if dispatch fails; read that receipt for its resulting state.
          */
         post: operations["postDatasourceConnectionTest"];
@@ -614,7 +614,7 @@ export interface paths {
         put?: never;
         /**
          * Create an event-count SLI
-         * @description Editors and administrators can create one Prometheus event-count SLI using the existing datasource cadence. This increment accepts event_counts with interval_count only. Activation is scheduled at a future canonical boundary after the assigned agent acknowledges the prepublished configuration.
+         * @description Editors and administrators can create one native event-count SLI using the existing datasource cadence. This increment accepts event_counts with interval_count only. Activation is scheduled at a future canonical boundary after the assigned agent acknowledges the prepublished configuration.
          */
         post: operations["createSli"];
         delete?: never;
@@ -1772,9 +1772,9 @@ export interface components {
         };
         ProviderDescriptor: {
             /** @enum {string} */
-            provider: "prometheus";
+            provider: "prometheus" | "victoriatraces" | "tempo" | "loki";
             /** @enum {string} */
-            configuration_format: "prometheus-http-v1";
+            configuration_format: "prometheus-http-v1" | "victoriatraces-http-v1" | "tempo-http-v1" | "loki-http-v1";
             operations: string[];
             /** @enum {string} */
             availability: "available" | "applying" | "offline" | "disabled" | "unreported" | "configuration_failed" | "incompatible" | "planned" | "unsupported";
@@ -1795,9 +1795,9 @@ export interface components {
             display_name: string;
             version: string;
             /** @enum {string} */
-            provider: "prometheus";
+            provider: "prometheus" | "victoriatraces" | "tempo" | "loki";
             /** @enum {string} */
-            configuration_format: "prometheus-http-v1";
+            configuration_format: "prometheus-http-v1" | "victoriatraces-http-v1" | "tempo-http-v1" | "loki-http-v1";
             /** Format: uri */
             endpoint: string;
             tls: components["schemas"]["DatasourceTLS"];
@@ -1840,9 +1840,9 @@ export interface components {
             name: string;
             display_name: string;
             /** @enum {string} */
-            provider: "prometheus";
+            provider: "prometheus" | "victoriatraces" | "tempo" | "loki";
             /** @enum {string} */
-            configuration_format: "prometheus-http-v1";
+            configuration_format: "prometheus-http-v1" | "victoriatraces-http-v1" | "tempo-http-v1" | "loki-http-v1";
             /** Format: uri */
             endpoint: string;
             tls: components["schemas"]["DatasourceTLS"];
@@ -1867,9 +1867,9 @@ export interface components {
         };
         ConnectionTestRequest: {
             /** @enum {string} */
-            provider: "prometheus";
+            provider: "prometheus" | "victoriatraces" | "tempo" | "loki";
             /** @enum {string} */
-            configuration_format: "prometheus-http-v1";
+            configuration_format: "prometheus-http-v1" | "victoriatraces-http-v1" | "tempo-http-v1" | "loki-http-v1";
             /** Format: uri */
             endpoint: string;
             tls: components["schemas"]["DatasourceTLS"];
@@ -1982,9 +1982,9 @@ export interface components {
             datasource_version: string;
             name: string;
             /** @enum {string} */
-            provider: "prometheus";
+            provider: "prometheus" | "victoriatraces" | "tempo" | "loki";
             /** @enum {string} */
-            configuration_format: "prometheus-http-v1";
+            configuration_format: "prometheus-http-v1" | "victoriatraces-http-v1" | "tempo-http-v1" | "loki-http-v1";
             /** Format: uri */
             endpoint: string;
             tls: {

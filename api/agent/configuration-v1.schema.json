@@ -28,8 +28,8 @@
         "datasource_id": { "type": "string", "format": "uuid" },
         "datasource_version": { "type": "string", "pattern": "^[1-9][0-9]*$", "maxLength": 19 },
         "name": { "type": "string", "minLength": 1, "maxLength": 63 },
-        "provider": { "const": "prometheus" },
-        "configuration_format": { "const": "prometheus-http-v1" },
+        "provider": { "enum": ["prometheus", "victoriatraces", "tempo", "loki"] },
+        "configuration_format": { "enum": ["prometheus-http-v1", "victoriatraces-http-v1", "tempo-http-v1", "loki-http-v1"] },
         "endpoint": { "type": "string", "format": "uri" },
         "tls": {
           "type": "object",
