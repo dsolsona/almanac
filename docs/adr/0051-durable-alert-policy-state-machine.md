@@ -5,7 +5,7 @@
 - Accepted: pending
 - Approval: pending; maintainer authorized drafts and a draft PR, not engine implementation
 - Related specs: [SPEC-0021](../specs/0021-alert-policy-engine.md), [SPEC-0022](../specs/0022-alert-management-ui.md)
-- Supersedes / superseded by: proposes superseding [ADR-0010](0010-alert-evaluation-and-delivery.md); not effective until acceptance
+- Supersedes / superseded by: proposes superseding only the evaluation scheduling and occurrence-ordering decisions in [ADR-0010](0010-alert-evaluation-and-delivery.md); delivery, worker authorization, egress and shared persistence boundaries remain accepted; not effective until acceptance
 
 ## Context
 
@@ -31,6 +31,13 @@ same SLO. No 1,000-policy capability is claimed or required by this proposal.
 This is a proposal for review. Product behavior and review defaults are specified
 in SPEC-0021; UI behavior and the selected mock references are in SPEC-0022.
 
+Acceptance would partially supersede ADR-0010, not retire it. Its transactional
+outbox, delivery claims/leases, attempt acknowledgements, bounded at-least-once
+semantics, event identity/sequence, suppression and retry visibility, scoped Worker
+credentials, secret access and egress decisions remain authoritative for delivery.
+Backend-only database ownership and equivalent embedded/remote authorization
+also remain. Deferring delivery implementation does not defer these safeguards.
+
 ### Backend-owned durable work
 
 Use PostgreSQL as the first durable work store. Ingestion commits canonical
@@ -52,6 +59,26 @@ sharing the same SLO, bounds and revision snapshot. Keep evaluation windows
 independent from graph resolution and extrema caches. Missing or pending derived
 data is never zero burn. Calculations must use the canonical exact count/coverage
 path; ingestion does not synchronously execute the alert state machine.
+
+The canonical path in [SPEC-0020](../specs/0020-cumulative-slo-calculation.md)
+returns pending when a dirty hourly aggregate intersects a window interior.
+Treat this as blocked evaluation work, not a completed unavailable condition.
+Keep the original boundary due and its cursor unchanged; record the affected
+aggregate dependencies and release the worker claim while waiting. Aggregate
+publication durably wakes blocked work, with a bounded timer recheck to recover
+lost wakeups. Re-evaluate all conditions at that same boundary against one fresh,
+fenced snapshot before committing. Later boundaries remain ordered behind it.
+No raw scan of the whole alert window is introduced as an implicit fallback.
+
+Pending aggregation is not a failed retry attempt. Passing the preparation target
+raises processing-lag diagnostics; it does not turn pending into non-matching or
+advance the cursor. Explicit aggregate exhaustion produces a failed/unavailable
+input under SPEC-0021; administrative cancellation and expiry of its catch-up
+horizon have their own recorded outcomes. Source gaps and zero traffic are
+definitive quality results, distinct from still-running aggregate preparation.
+Waiting adds real detection delay, including for otherwise-ready conditions in
+that policy. The draft's ready-to-commit target excludes this wait; SPEC-0021
+requires measuring total delay and explicitly sets no numeric end-to-end target yet.
 
 ### Evaluation and transition ownership
 
@@ -96,6 +123,9 @@ Definition changes terminate the old revision with an explicit reason and fence
 its workers; they do not pretend the old alert recovered.
 The same transaction records the administratively cancelled pending range under
 SPEC-0021, rather than silently advancing past it.
+Confirmed SLO archival similarly makes its policy bindings inactive, fences their
+claims and closes open occurrences as Disabled with cause `slo_archived`; the
+dependency guard and confirmation contract are specified in SPEC-0021.
 
 SPEC-0021 proposes a bounded automatic reconstruction horizon. Already committed
 evidence is immutable and replayable. Uncaptured boundaries are evaluated using
@@ -119,6 +149,8 @@ When delivery is added, create eligible destination work atomically with the
 transition, and perform external I/O outside that transaction. Use independent
 delivery admission, retries and transport adapters. Email, Slack and PagerDuty
 are the intended sequence; provider-specific contracts remain later work.
+ADR-0010's retained delivery decisions apply to each future adapter; this section
+does not replace their outbox, claim, credential or network-security contracts.
 
 The durability promise is no silent loss of committed transitions within database
 durability guarantees, and an explicit outcome for each due evaluation boundary

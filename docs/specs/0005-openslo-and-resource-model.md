@@ -64,6 +64,11 @@ query, unit, collection mode, interval, or normalization creates an SLI revision
 Changing objective target, budgeting, window, or indicator creates an SLO revision.
 Metadata edits do not. Use expected revision preconditions to reject lost updates.
 
+Proposed alerting amendment: [SPEC-0021](0021-alert-policy-engine.md) defines an
+explicitly confirmed SLO archive that deactivates dependent alert policies and
+retains historical references. The ordinary dependency rejection above remains
+accepted; the scoped exception is draft pending review.
+
 The first SLI revision records separate `measurement-valid-from` and live
 collection activation timestamps. Under [ADR-0021](../adr/0021-immediate-initial-collection.md),
 creating an agent-collected SLI authorizes an immediate saved measurement of the

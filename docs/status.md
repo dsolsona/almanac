@@ -4,7 +4,11 @@ Alerting design review, 2026-11-12: [F4-T01](tasks/F4-T01.md) prepares proposed
 [SPEC-0022](specs/0022-alert-management-ui.md), with the selected
 [A/current creation mocks](design/mocks/alert-options/README.md). Initial engine
 verification scope is 100/200 policies; SLO/condition/occurrence counts are explicit.
-Catch-up, lifecycle and latency defaults remain proposed.
+Review supports full-window readiness, a 24-hour catch-up horizon and explicit
+cancelled ranges; complete contracts remain draft. Review corrections retain
+aggregate-pending boundaries for retry, narrow ADR supersession to evaluation,
+define administrative closure/archive outcomes and distinguish ready-to-commit
+latency from total detection delay (which has no numeric target yet).
 [Draft PR #94](https://github.com/dsolsona/almanac/pull/94) includes the contracts,
 interactive mocks and selected renders. Local mock checks passed 288 assertions;
 staged-only documentation validation passed. No engine implementation, benchmark

@@ -52,6 +52,13 @@ A firing alert with stale evidence remains open with that reason visible.
 Never call unavailable evidence healthy. Behind-cursor results are explicitly
 last evaluated state, not current measurements.
 
+When an hourly aggregate is pending, show evaluation waiting with its original
+due time and processing lag. Preserve the last committed alert state; do not
+present the delayed boundary as completed no-data, a new indeterminate decision
+or current Healthy evidence. Distinguish aggregate preparation failure from
+observation absence. Surface aggregate-wait and total delay separately from the
+ready-to-commit latency reported by the processor.
+
 History marks Detected after recovery and shows effective occurrence times and
 actual detection time. Distinguish replayed original evidence, reconstructed
 evidence and unreconstructed gaps. A gap must not look like a quiet period.
@@ -113,6 +120,15 @@ state and per-condition readiness from the backend. Cancel returns without savin
 Editing evaluation settings explains that an open occurrence will be superseded;
 disabling has a distinct administrative outcome.
 
+There is no standalone Close alert action. Policy disablement, definition
+supersession and confirmed SLO archive are the administrative terminal routes.
+The SLO archive confirmation identifies affected policies, open alerts and queued
+ranges and requires the backend's expected-version/impact checks. Afterwards show
+the policy as inactive because its SLO is archived, and its open occurrence as
+Disabled with cause SLO archived. Preserve historical SLO links and original
+configuration; never describe archival as recovery. An ordinary blocked archive
+lists dependent policy IDs with a route to the confirmed operation.
+
 ### Acknowledgement, concurrency and permissions
 
 Editors/Administrators acknowledge an identified occurrence globally. Show its
@@ -151,6 +167,8 @@ only warm API responses. Existing SLO performance contracts are unchanged.
 - AC-08: Exact counts, thresholds, chart inspection and SLO navigation agree with real API data; missing data stays explicit.
 - AC-09: Authenticated alert navigation meets the reviewed performance contract on both fixtures during engine work, with browser/tracing evidence.
 - AC-10: Domain operations have matching API/CLI semantics; destinations and deferred response features cannot appear functional prematurely.
+- AC-11: Aggregate-pending views preserve last committed lifecycle and distinguish waiting/lag from completed unavailable evidence; original due time and total delay remain visible.
+- AC-12: Archive impact/version conflicts, inactive Archived SLO policies and Disabled occurrence history follow the backend contract; no standalone manual-close control appears.
 
 ## Dependencies and open questions
 
@@ -160,6 +178,9 @@ extend review coverage for multiple matching conditions on one occurrence,
 non-30-day preset confirmation, per-condition cold-start readiness, administrative
 closure, evaluation gaps and real concurrent acknowledgement/errors. Preserve
 the chosen composition while adding these states.
+Include aggregate preparation waiting/failure and the confirmed SLO archive flow
+in that remaining review coverage. These corrections change the draft contract;
+the currently published static mocks do not yet demonstrate those states.
 
 ## Verification evidence
 
@@ -169,3 +190,4 @@ No production alert UI, API integration or performance result is claimed.
 ## Change notes
 
 - 2026-11-12: Selected A/current creation reference recorded; proposed production state coverage remains under review.
+- 2026-11-12: Review adds pending-aggregate lag, named administrative closure routes and confirmed SLO archive states; static mock coverage remains unchanged.

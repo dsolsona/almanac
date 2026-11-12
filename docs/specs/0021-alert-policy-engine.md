@@ -27,6 +27,10 @@ External delivery, silences, standalone data-quality alert conditions, reminders
 acknowledgement expiry, assignment, notes, escalation and expression languages
 are deferred. Email, Slack and PagerDuty follow in that order. This does not
 remove maintenance exclusions from calculation semantics or relax their fencing.
+Deferring standalone data-quality conditions deliberately removes SPEC-0011's
+initial automatic no-data/stale warning alert. The first release shows data
+quality and processor health but does not open an alert solely because observations
+stop. This scope tradeoff is explicit in the review direction below.
 
 ### Relationship to accepted contracts
 
@@ -41,6 +45,8 @@ stable during review. On acceptance, update the linked records together:
 | [SPEC-0006](0006-slo-calculation-and-reporting.md), ADR-0043 | Reuse exact calculations and due-measurement timing; full alert windows differ intentionally from shortened current SLO status. |
 | [SPEC-0007](0007-storage-and-retention.md) | Preserve 365-day alert history and active-record protection; add bounded evaluation recovery records. |
 | [SPEC-0016](0016-maintenance-exclusions.md) | Preserve adjusted populations, full-exclusion behavior and explicit maintenance-change resolution reasons. |
+| [SPEC-0005](0005-openslo-and-resource-model.md), SPEC-0007 | Retain dependency rejection for ordinary delete/archive requests; propose an explicitly confirmed SLO archive that atomically deactivates affected alert policies while retaining historical references. Other dependent-resource restrictions remain. |
+| [SPEC-0020](0020-cumulative-slo-calculation.md) | Keep exact aggregates plus raw edges. Pending aggregate work defers an alert boundary until publication rather than completing it as unavailable. No raw whole-window fallback. |
 
 ## Behavior and contracts
 
@@ -84,6 +90,40 @@ good/total decimals, target and comparison by cross multiplication:
 `bad >= threshold * total * (1-target)`. Display rounding never decides state.
 The same canonical counts must explain the decision in API/CLI/UI evidence.
 
+#### Pending aggregate preparation
+
+A dirty hour intersecting a window interior returns **pending** from the canonical
+aggregate/raw-edge path. Pending is an evaluation-work state, not a fourth
+condition truth value and not a committed unavailable result. If any required
+window is pending, keep the whole policy boundary due at its original effective
+cutoff. Persist dependencies and wait for publication, releasing the worker claim
+and resources. Do not advance its cursor, open/resolve from a partial policy
+snapshot or process a later boundary first. Other policies remain independently
+eligible for fair worker scheduling.
+
+Aggregate publication durably re-enqueues the blocked boundary; bounded timer
+rechecks cover missed wakeups. Re-read every condition against one consistent
+snapshot, including new source/exclusion generations, and use the usual commit
+fencing. Freshness/coverage are judged at the original evaluation instant, not
+the later retry wall clock; present-day source freshness remains separately visible.
+No implicit raw scan of the full six-hour or other configured window bypasses
+the canonical pending state.
+
+This applies at hourly rollover and when a late observation dirties an interior
+hour. A breach at T followed by recovery at T+1 minute must still be evaluated in
+that order if aggregate publication happens five minutes later. Those reconstructed
+decisions use the retained-facts provenance rules below. A ready fast condition
+also waits if sustained burn needs a pending aggregate; this is processing lag,
+not the full-window warmup/unknown recovery rule.
+
+Pending alone does not exhaust evaluation retries, become a no-data condition or
+silently expire at a preparation target. Explicit canonical aggregate failure
+after its retry budget is exhausted yields unavailable with `calculation_failed`;
+record the failure separately from missing observations. Until then, retain due
+work unless a documented administrative cancellation or the 24-hour catch-up
+horizon ends it with an explicit range outcome. Surface waiting age/dependencies,
+oldest due boundary and preparation failure to UI/API/CLI diagnostics.
+
 Require full configured windows within the SLO's measurement validity and retained
 data; do not shorten them to create an alert. Existing eligible measurements can
 make a newly created policy immediately evaluable. Never open occurrences before
@@ -95,8 +135,9 @@ Every condition result is **matching**, **not matching** or **unavailable**.
 Both windows need definitive, complete, fresh eligible coverage and positive
 traffic before the condition can be matching or not matching. With usable inputs,
 matching requires both burns `>= threshold`; either below yields not matching.
-No-data, partial, stale, zero traffic, pre-validity, fully excluded and calculation
-unavailability retain distinct reasons. Historical reconstruction judges coverage
+No-data, partial, stale, zero traffic, pre-validity, fully excluded and terminal
+calculation unavailability retain distinct reasons. Pending preparation defers
+evaluation as defined above. Historical reconstruction judges coverage
 and freshness relative to its effective evaluation time, not the recovery wall clock.
 
 | Policy's condition results | Evaluation outcome |
@@ -110,10 +151,10 @@ minimum failure count or recovery hysteresis is introduced. Exact examples: at
 99.9% target and 10,000 total events, 144 bad events in each window meet 14.4×;
 143 in either window does not. Fast-to-sustained handoff preserves one occurrence.
 
-Review consequence: if fast burn fires during a new SLO's first six hours, then
+Full-window consequence, supported in review: if fast burn fires during a new SLO's first six hours, then
 clears while sustained burn is still warming up, the policy is indeterminate and
 the occurrence stays open. Treating never-ready conditions differently for recovery
-is an alternative requiring an explicit decision, not an implementation shortcut.
+would change the reviewed default; do not introduce it as an implementation shortcut.
 
 ### Lifecycle, acknowledgement and changes
 
@@ -130,6 +171,7 @@ Resolved, Superseded and Disabled are terminal occurrence states retained in his
 | Firing or Acknowledged | Clear evaluation | Resolved, with exact recovery evidence. |
 | Firing or Acknowledged | Policy disabled | Disabled, with actor/reason; not service recovery. |
 | Firing or Acknowledged | Evaluation definition changes | Superseded; new revision evaluates independently. |
+| Firing or Acknowledged | Confirmed selected-SLO archive takes effect | Disabled with cause `slo_archived`; binding becomes inactive. |
 | Terminal occurrence | New breach under an enabled policy | Create a new occurrence, never reopen the old one. |
 
 Acknowledgement has no timeout in the initial release. Retrying acknowledgement
@@ -144,14 +186,51 @@ supersede open occurrences and fence old evaluations. Re-enabling uses a new
 evaluation revision and starts from its activation boundary. Name/description and
 severity-only edits preserve occurrence identity, with audited metadata changes
 and original transition snapshots retained. Configurations require expected versions.
-Referenced resources cannot be deleted through ordinary management operations.
+Ordinary deletion of referenced resources fails with dependent IDs, as in SPEC-0005.
 
 Disabling or superseding a revision also records its pending evaluation range as
 cancelled by that administrative change, atomically with the lifecycle action.
 Those boundaries are not silently dropped or labelled clear. An old worker cannot
 resume them as current alerts after the new revision activates. This deliberate
 cancellation exception to catch-up must be shown in edit/disable confirmation and
-retained in history; it is another review choice before implementation.
+retained in history. The maintainer supported this explicit cancellation record
+in review; it must not be replaced by an unrecorded cursor jump.
+
+There is no standalone manual-close operation in this release. To stop an open
+alert administratively, an authorized user disables the policy; definition changes
+supersede it. Confirmed SLO archive is the other named scheduling-stop cause below.
+Each records the actor, time, resource revision and cause. Acknowledge does not
+close an occurrence, and administrative actions never label it Recovered.
+
+#### SLO archive and policy binding
+
+Do not bypass SPEC-0005's dependent-resource guard. An ordinary SLO delete/archive
+request with referencing alert policies fails and returns those policy IDs. The
+proposed confirmed-archive operation must explicitly authorize deactivating the
+affected policies, identify the expected SLO and policy versions, and show any
+open occurrences and pending ranges it will close/cancel. Reject a stale impact
+confirmation if a policy is added/rebound or a referenced version changes.
+Require both SLO-archive and policy-management authorization. Revalidate the
+dependent set and expected versions at effective activation; a changed impact
+requires fresh confirmation before archival can take effect. Do not admit new
+bindings to an SLO with a confirmed archive pending activation.
+Other resource dependencies continue to block archival under their own contracts;
+this exception covers alert-policy references only and requires spec acceptance.
+
+At the archive's effective boundary, atomically stop new evaluation scheduling,
+mark every affected binding inactive with reason `slo_archived`, fence existing
+claims, close open occurrences as Disabled with that cause, and record cancelled
+pending ranges. Audit the initiating actor and preserve policy configuration,
+original enabled preference, SLO identity, alert evidence and historical links.
+The archive is logical; it deletes neither the SLO's history nor alert references.
+An already-terminal occurrence retains its state. Reject new policy bindings to
+an archived SLO. The effective archive boundary cannot pass while its alert
+scheduling/closure changes remain unapplied.
+
+Show Archived SLO as the policy's inactive reason, distinct from a user-disabled
+policy. Rebinding explicitly to a supported live SLO creates a fresh evaluation
+revision; it does not reopen the Disabled occurrence. No unarchive/automatic
+reactivation operation is introduced by this spec.
 
 Maintenance does not equal silence. Fully excluded windows are unavailable,
 preserving open alerts. Historical exclusion edits fence older work and affect
@@ -183,7 +262,9 @@ page or backlog of old transitions.
 If downtime exceeds 24 hours, record the unreconstructed interval as a visible
 evaluation gap before resuming within the horizon. Unavailable history is not
 proof that no breach occurred. Preserve any open occurrence until a later clear
-evaluation or explicit administrative closure. No retrospective page is generated.
+evaluation, policy disablement, definition supersession or confirmed SLO archival
+as defined in the lifecycle table. There is no unspecified manual-close path.
+No retrospective page is generated.
 The same applies to absent definitions, expired observations or unrecoverable inputs.
 
 Late/backfilled observations can affect pending and subsequent evaluations. They
@@ -209,7 +290,8 @@ alert payloads. Future destination administration remains administrator-only.
 Worker claims have bounded leases, concurrency and retry/backoff. Lease expiry
 permits retry, not a second transition. Configuration/measurement generation
 fencing and occurrence state versions prevent stale commits. A transient engine
-failure is processor health, not evidence about the SLO. Exhausted work remains
+failure is processor health, not evidence about the SLO. Pending aggregate
+preparation remains due and follows the deferral contract above. Exhausted work remains
 visible with an explicit unavailable outcome and audited retry; it is never
 silently discarded or interpreted as non-matching. A late retry cannot rewrite
 already committed lifecycle history.
@@ -236,10 +318,24 @@ condition handoff, acknowledgements and an isolated missing-data cohort.
 Use a separate small correctness fixture with several policies sharing one SLO;
 it proves fan-out and independent lifecycles, not independent-SLO capacity.
 
-Proposed latency targets for review: p99 at most 60 seconds, maximum 120 seconds
+Proposed ready-to-commit latency targets for review: p99 at most 60 seconds, maximum 120 seconds
 from a due evaluation's required evidence being ready to committed result during
 healthy operation. Record collection/settling delay and total detection delay
 separately; the ready-to-commit measure cannot hide source or calculation backlog.
+**No numeric end-to-end detection-delay target is set in this draft.** The 60/120
+second targets are not such a guarantee. Record total boundary-to-commit delay
+from the original scheduled due time, aggregate-wait duration, source settling/
+arrival delay and ready-to-commit time separately. Never reset the original due
+time on publication, generation changes or retry. Report distributions plus the
+oldest still-pending boundary and its age; pending evaluations cannot disappear
+from the report because they have not committed.
+
+SPEC-0020's five-minute closed-hour build target is an existing preparation target,
+not an alert detection SLO or a reason to declare a pending aggregate complete.
+Set an end-to-end alert target after measuring rollover and late-data rebuilding
+at both fixtures. Until then, no bound on total detection delay is claimed.
+Verification must cross an hourly rollover and dirty an interior hour through late
+data, proving wakeup, same-boundary retry and ordered breach/recovery after publication.
 After a 30-minute evaluator outage with ingestion continuing, recover the 200-policy
 backlog within five minutes while incoming work continues. Verify chronological
 outcomes and zero unexplained missing boundaries, not only processing throughput.
@@ -266,17 +362,24 @@ does not claim a 1,000-policy alert benchmark.
 - AC-10: UI/API/CLI expose equivalent policy, condition evidence, acknowledgement, history and processor/quality outcomes with authorization and conflict handling.
 - AC-11: Both declared policy/SLO fixtures meet reviewed lag/recovery targets with exact expected transitions; shared-SLO policies remain independent.
 - AC-12: Collection and authenticated alert/SLO navigation retain their budgets during live evaluation and catch-up, with traces identifying costs.
+- AC-13: Hour rollover/late-data aggregate pending retains the original due boundary without a lifecycle or cursor commit; publication retries all conditions coherently, preserves ordered breach/recovery and reports aggregate wait plus total delay. Missed wakeups, terminal aggregate failure and horizon expiry have explicit outcomes.
+- AC-14: Ordinary referenced-SLO archival rejects with dependent IDs; confirmed archival atomically inactivates bindings, fences claims, records cancelled ranges and disables open occurrences with `slo_archived`. Version/creation races, already-terminal occurrences and archived-SLO rebinding rejection preserve history and authorization.
 
 ## Dependencies and open questions
 
-The following recommendations are draft decisions, not approvals inferred from the
-request to prepare documents: full-window cold start; one occurrence per policy;
-all-condition recovery; administrative terminal states; one-minute cadence;
-24-hour automatic reconstruction; and deferring separate data-quality conditions.
-The selected mock direction, global acknowledgement and 100/200 starting scale
-are confirmed direction. Review the latency/recovery numbers and retained-evidence
-cost before acceptance. Provider delivery contracts and retries can be decided
-with their later specs; no transport is silently approved here.
+The maintainer's review supports full-window readiness with indeterminate retaining
+open occurrences, the 24-hour catch-up horizon and explicit cancelled-range history.
+It also supports deferring standalone data-quality alerts, with the loss of the
+automatic no-data/stale detector made explicit in Scope. These record review
+direction, not acceptance of the complete draft or authorization to implement.
+The selected mocks, global acknowledgement and 100/200 starting scale are confirmed.
+
+Review the remaining lifecycle details, confirmed-archive dependency exception,
+pending-aggregate deferral, one-minute cadence and numerical ready-to-commit/recovery
+targets before accepting the complete contract. End-to-end detection latency has
+no target yet and must not be conflated with ready-to-commit latency. Review the
+retained-evidence cost. ADR-0010's delivery/security decisions remain accepted;
+later adapter contracts may refine them explicitly, not silently replace them.
 
 Resolve API schemas, exact worker admission/lease defaults and the pinned runner
 profile in an implementation plan after behavior/architecture acceptance. The
@@ -291,3 +394,4 @@ evidence are recorded in F4-T01; they do not satisfy the engine acceptance crite
 ## Change notes
 
 - 2026-11-12: Initial draft, with 100/200-policy verification scope selected by the maintainer. Proposed replacement contracts remain pending review.
+- 2026-11-12: Review corrections distinguish pending aggregates from completed unavailable results, retain delivery ADR scope, define the absence of manual close and specify confirmed SLO archival. Supported review defaults are recorded without marking the full draft accepted.

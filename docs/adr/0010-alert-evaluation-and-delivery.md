@@ -9,8 +9,10 @@
 
 ## Context
 
-Proposed successor: [ADR-0051](0051-durable-alert-policy-state-machine.md).
-This record remains accepted until that proposal is reviewed and accepted.
+Proposed partial successor: [ADR-0051](0051-durable-alert-policy-state-machine.md)
+changes evaluation scheduling and occurrence ordering only. Delivery, Worker
+authorization, egress and shared persistence decisions remain here. This record
+remains accepted while the proposal is under review.
 
 Alerts need consistent calculations, durable incident transitions and recoverable
 notification attempts. Agent collection must continue independently of alerting.
