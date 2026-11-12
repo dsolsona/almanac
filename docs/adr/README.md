@@ -75,3 +75,4 @@ well as benefits. Do not invent alternatives or measurements to justify a choice
 | [ADR-0047](0047-trace-and-log-event-count-datasources.md) | Trace and log event-count datasources | accepted |
 | [ADR-0048](0048-tern-firecracker-agent-terminals.md) | Tern terminals for Firecracker agents | accepted |
 | [ADR-0049](0049-slo-budget-in-context-detail.md) | SLO budget in context detail | accepted |
+| [ADR-0050](0050-dedicated-firecracker-tern-client-key.md) | A dedicated Firecracker Tern client key | accepted |

@@ -10,6 +10,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import sys
+from unittest.mock import patch
 
 root = Path(__file__).resolve().parent.parent
 launcher = root / 'scripts/firecracker-setup.sh'
@@ -95,6 +96,88 @@ def load(name, filename):
 
 host = load('firecracker_tern', 'firecracker-tern.py')
 guest = load('firecracker_tern_guest', 'firecracker-tern-guest.py')
+
+# First use owns one key, without accessing personal keys or an SSH agent.
+with tempfile.TemporaryDirectory(prefix='almanac tern clés ') as directory:
+    home = Path(directory)
+    ssh = home / '.ssh'
+    ssh.mkdir(mode=0o700)
+    tools = home / 'tools'
+    tools.mkdir()
+    tern = tools / 'tern'
+    tern.write_text('#!/bin/sh\nprintf "Tern — a multiplexing terminal\\n"\n')
+    tern.chmod(0o700)
+    agent = tools / 'ssh-add'
+    agent.write_text('#!/bin/sh\ntouch "$HOME/agent-accessed"\nexit 91\n')
+    agent.chmod(0o700)
+    private = ssh / 'id_ed25519'
+    subprocess.run(['ssh-keygen', '-q', '-t', 'ed25519', '-N', 'fixture-passphrase',
+                    '-f', str(private)], check=True, timeout=10)
+    personal = private.read_bytes()
+    config = ssh / 'config'
+    previous_config = f'# Personal settings\nHost *\n  IdentityFile "{private}"\n  ServerAliveInterval 25\n'
+    config.write_text(previous_config)
+    with patch.dict(os.environ, HOME=str(home), PATH=str(tools) + os.pathsep + os.environ['PATH']):
+        launches = [subprocess.Popen([sys.executable, str(root / 'scripts/firecracker-tern.py'), 'check'],
+                    text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE) for _ in range(4)]
+        for launch in launches:
+            stdout, stderr = launch.communicate(timeout=15)
+            assert launch.returncode == 0, stderr
+        dedicated = ssh / 'almanac-firecracker/id_ed25519'
+        key_bytes = dedicated.read_bytes()
+        assert dedicated.stat().st_mode & 0o777 == 0o600
+        assert dedicated.parent.stat().st_mode & 0o777 == 0o700
+        public = subprocess.check_output(['ssh-keygen', '-y', '-P', '', '-f', str(dedicated)], text=True)
+        assert host.prepare_identity() == public
+        assert private.read_bytes() == personal, 'personal key was changed'
+        assert not (home / 'agent-accessed').exists(), 'personal agent was accessed'
+        configured = config.read_text()
+        assert configured.endswith(previous_config), 'personal SSH configuration was changed'
+        assert (dedicated.parent / 'ssh-config.before').read_text() == previous_config
+        host.check()
+        assert dedicated.read_bytes() == key_bytes and config.read_text() == configured, 'setup was not idempotent'
+
+        def ssh_options(address):
+            result = subprocess.run(['ssh', '-G', '-F', str(config), address],
+                                    text=True, capture_output=True, check=True, timeout=5)
+            return [line.split(' ', 1) for line in result.stdout.splitlines()]
+
+        for address in ('192.168.240.2', '192.168.255.254'):
+            options = ssh_options(address)
+            assert ['identityfile', str(dedicated)] in options, [row for row in options if row[0] in ('identityfile', 'identityagent')]
+            assert ['identityagent', 'none'] in options
+            assert ['serveraliveinterval', '25'] in options
+        assert ['identityfile', str(dedicated)] not in ssh_options('203.0.113.1')
+
+        dedicated.unlink()
+        try:
+            host.check()
+        except RuntimeError as error:
+            assert 'missing' in str(error)
+        else:
+            raise AssertionError('a missing private key silently rotated the identity')
+        assert not dedicated.exists()
+        dedicated.write_bytes(key_bytes)
+        dedicated.write_text('broken managed key\n')
+        try:
+            host.check()
+        except subprocess.CalledProcessError:
+            pass
+        else:
+            raise AssertionError('an unreadable managed key was silently replaced')
+        assert dedicated.read_text() == 'broken managed key\n'
+        dedicated.write_bytes(key_bytes)
+        config.unlink()
+        target = home / 'personal-config'
+        target.write_text(previous_config)
+        config.symlink_to(target)
+        try:
+            host.check()
+        except RuntimeError as error:
+            assert 'symlink' in str(error)
+        else:
+            raise AssertionError('a symlinked personal config was replaced')
+        assert target.read_text() == previous_config
 
 for address in ('dev@192.168.240.14', 'dev@192.168.241.2:8376'):
     host.validate_address(address)

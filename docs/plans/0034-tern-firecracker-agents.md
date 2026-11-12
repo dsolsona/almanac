@@ -52,6 +52,15 @@ Host checks: `bash -n scripts/firecracker-setup.sh` and `git diff --check`.
 No application suite is required for this development-tooling-only change.
 
 Live evidence and failure history are recorded in [F1-T21](../tasks/F1-T21.md).
+
+Authentication follow-up under [ADR-0050](../adr/0050-dedicated-firecracker-tern-client-key.md):
+replace personal-key discovery with a serialized dedicated-key setup and scoped
+SSH include; verify first-use creation, reuse, concurrent launches, preservation
+of other SSH settings and refusal to replace an unsafe existing key. Run focused
+launcher/Tern/docs checks, then reconnect the existing reported worker without
+changing its Codex process or task. Keep this follow-up in
+`.worktrees/firecracker-tern-auth` on `fix/firecracker-tern-auth`.
+
 Stencil Tern 0.9.16 was verified with one laptop window and two native workers.
 Multiple laptop windows, runtime upgrades to another Tern version and the local
 GUI-start path when no window exists remain unverified. Legacy tmux input repair
