@@ -36,7 +36,7 @@ func TestClientReusesConnectionsAndRetainsDestinationPolicy(t *testing.T) {
 	}
 	defer client.CloseIdleConnections()
 	for range 2 {
-		if _, err := client.Query(t.Context(), "up"); err != nil {
+		if _, err := client.QueryAt(t.Context(), "up", time.Unix(1793102400, 0).UTC()); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -49,7 +49,7 @@ func TestClientReusesConnectionsAndRetainsDestinationPolicy(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("idle connection was not closed")
 	}
-	if _, err := client.Query(t.Context(), "up"); err != nil {
+	if _, err := client.QueryAt(t.Context(), "up", time.Unix(1793102400, 0).UTC()); err != nil {
 		t.Fatal(err)
 	}
 	denied, err := NewClient(Config{Endpoint: server.URL})
@@ -57,7 +57,7 @@ func TestClientReusesConnectionsAndRetainsDestinationPolicy(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer denied.CloseIdleConnections()
-	_, err = denied.Query(t.Context(), "up")
+	_, err = denied.QueryAt(t.Context(), "up", time.Unix(1793102400, 0).UTC())
 	if sourceErr, ok := errors.AsType[*SourceError](err); !ok || sourceErr.Code != "network" {
 		t.Fatalf("unlisted client's query error = %v, want network denial", err)
 	}
@@ -96,7 +96,7 @@ func TestQueryPreviewUsesConfiguredBearerAndReturnsBoundedVector(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := client.Query(context.Background(), "up")
+	result, err := client.QueryAt(t.Context(), "up", time.Unix(1793102400, 0).UTC())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -140,7 +140,7 @@ func TestQueryPreviewDoesNotFollowRedirect(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := client.Query(context.Background(), "up"); err == nil {
+	if _, err := client.QueryAt(t.Context(), "up", time.Unix(1793102400, 0).UTC()); err == nil {
 		t.Fatal("redirect response was accepted")
 	}
 	if redirected {
@@ -159,7 +159,7 @@ func TestQueryPreviewRequiresOperatorDestinationAllowlist(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = client.Query(context.Background(), "up")
+	_, err = client.QueryAt(t.Context(), "up", time.Unix(1793102400, 0).UTC())
 	var sourceError *SourceError
 	if !errors.As(err, &sourceError) || sourceError.Code != "network" {
 		t.Fatalf("Query error = %v, want safe network failure", err)
@@ -187,7 +187,7 @@ func TestQueryPreviewClassifiesInvalidPromQLWithoutReturningSourceBody(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = client.Query(context.Background(), "bad(")
+	_, err = client.QueryAt(t.Context(), "bad(", time.Unix(1793102400, 0).UTC())
 	var sourceError *SourceError
 	if !errors.As(err, &sourceError) || sourceError.Code != "query" || strings.Contains(err.Error(), sensitiveError) {
 		t.Fatalf("Query error = %v, want redacted query classification", err)

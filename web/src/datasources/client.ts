@@ -1,3 +1,4 @@
+import { validProviderPair } from './providers.ts';
 import type { components } from '../api/generated.ts';
 import type { AuthContext } from '../auth/client.ts';
 import { traceJSON } from '../telemetry/client.ts';
@@ -47,6 +48,7 @@ function exactKeys(value: Record<string, unknown>, keys: readonly string[]): boo
   return Object.keys(value).length === keys.length && keys.every((key) => Object.hasOwn(value, key));
 }
 
+/** Validate the response shape and canonical provider-format pair before caching source settings. */
 function validDatasource(value: unknown): value is Datasource {
   if (!object(value) || !exactKeys(value, ['id', 'name', 'display_name', 'version', 'provider', 'configuration_format', 'endpoint', 'tls', 'authentication', 'polling_interval_seconds', 'settling_delay_seconds', 'agent_id', 'created_at', 'updated_at', ...(Object.hasOwn(value, 'reassignment') ? ['reassignment'] : [])])) return false;
   if (Object.hasOwn(value, 'reassignment')) {
@@ -64,7 +66,7 @@ function validDatasource(value: unknown): value is Datasource {
   const version = typeof value.version === 'string' && /^[1-9][0-9]*$/.test(value.version)
     && (value.version.length < MAX_INT64.length || value.version.length === MAX_INT64.length && value.version <= MAX_INT64);
   return typeof value.id === 'string' && UUID.test(value.id) && version && typeof value.name === 'string' && typeof value.display_name === 'string'
-    && value.provider === 'prometheus' && value.configuration_format === 'prometheus-http-v1'
+    && validProviderPair(value.provider, value.configuration_format)
     && typeof value.endpoint === 'string' && ['http:', 'https:'].includes(endpoint.protocol) && !endpoint.username && !endpoint.password && !endpoint.hash
     && object(value.tls) && exactKeys(value.tls, ['insecure_skip_verify', 'ca_pem']) && typeof value.tls.insecure_skip_verify === 'boolean'
     && (value.tls.ca_pem === null || typeof value.tls.ca_pem === 'string' && value.tls.ca_pem.length <= 64 * 1024) && object(value.authentication)
@@ -80,11 +82,12 @@ function validRevision(value: unknown, allowZero: boolean): value is string {
   return typeof value === 'string' && (allowZero ? /^(0|[1-9][0-9]*)$/ : /^[1-9][0-9]*$/).test(value);
 }
 
+/** Validate provider descriptors before using their readiness to enable form operations. */
 function validProvider(value: unknown): value is Provider {
   const availabilities = ['available', 'applying', 'offline', 'disabled', 'unreported', 'configuration_failed', 'incompatible', 'planned', 'unsupported'];
   const failureCodes = ['invalid_snapshot', 'incompatible', 'apply_failed'];
   return object(value) && exactKeys(value, ['applied_configuration_revision', 'availability', 'configuration_failure_code', 'configuration_failure_revision', 'configuration_format', 'desired_configuration_revision', 'operations', 'provider'])
-    && value.provider === 'prometheus' && value.configuration_format === 'prometheus-http-v1'
+    && validProviderPair(value.provider, value.configuration_format)
     && availabilities.includes(String(value.availability)) && Array.isArray(value.operations) && value.operations.length <= 16
     && value.operations.every((operation) => operation === 'connection_test' || operation === 'query_preview')
     && (value.desired_configuration_revision === null || validRevision(value.desired_configuration_revision, false))

@@ -1,4 +1,4 @@
-// Package datasourcehttp exposes redacted Prometheus datasource management.
+// Package datasourcehttp exposes redacted datasource management.
 package datasourcehttp
 
 import (
@@ -269,6 +269,7 @@ func (h *Handler) notifyConfiguration(ctx context.Context, agentID string, revis
 	}
 }
 
+// providers reports each supported profile and distinguishes missing agents from incompatible or unavailable capabilities.
 func (h *Handler) providers(w http.ResponseWriter, r *http.Request, requestID string, proof storage.DatasourceProof) {
 	if r.Method != http.MethodGet {
 		w.Header().Set("Allow", http.MethodGet)
@@ -280,11 +281,7 @@ func (h *Handler) providers(w http.ResponseWriter, r *http.Request, requestID st
 		h.writeProblem(w, http.StatusBadRequest, "invalid_request", requestID)
 		return
 	}
-	availability := api.ProviderDescriptorAvailability("available")
-	operations := []string{"connection_test", "query_preview"}
-	var desiredRevision, appliedRevision *string
-	var failureCode *api.ProviderDescriptorConfigurationFailureCode
-	var failureRevision *string
+	var selected *storage.DatasourceAgentCapability
 	if len(query["agent_id"]) == 1 {
 		agentID := query["agent_id"][0]
 		parsed, parseErr := uuid.Parse(agentID)
@@ -297,32 +294,45 @@ func (h *Handler) providers(w http.ResponseWriter, r *http.Request, requestID st
 			h.writeStorageError(w, capabilityErr, requestID)
 			return
 		}
-		operations = []string{}
-		for _, operation := range []string{"connection_test", "query_preview"} {
-			if datasource.SupportsOperation(capability.Capabilities, operation) {
-				operations = append(operations, operation)
-			}
-		}
-		if capability.DesiredConfigurationRevision != nil {
-			value := strconv.FormatInt(*capability.DesiredConfigurationRevision, 10)
-			desiredRevision = &value
-		}
-		if capability.AppliedConfigurationRevision != nil {
-			value := strconv.FormatInt(*capability.AppliedConfigurationRevision, 10)
-			appliedRevision = &value
-		}
-		if capability.ConfigurationFailureCode != nil {
-			value := api.ProviderDescriptorConfigurationFailureCode(*capability.ConfigurationFailureCode)
-			failureCode = &value
-		}
-		if capability.ConfigurationFailureRevision != nil {
-			value := strconv.FormatInt(*capability.ConfigurationFailureRevision, 10)
-			failureRevision = &value
-		}
-		availability = providerAvailability(capability, len(operations))
+		selected = &capability
 	}
-	h.writeJSON(w, http.StatusOK, api.ProviderPage{Items: []api.ProviderDescriptor{{Provider: "prometheus", ConfigurationFormat: "prometheus-http-v1", Operations: operations, Availability: availability,
-		DesiredConfigurationRevision: desiredRevision, AppliedConfigurationRevision: appliedRevision, ConfigurationFailureCode: failureCode, ConfigurationFailureRevision: failureRevision}}})
+	items := make([]api.ProviderDescriptor, 0, 4)
+	for _, provider := range []string{"prometheus", "victoriatraces", "tempo", "loki"} {
+		availability := api.ProviderDescriptorAvailability("available")
+		operations := []string{"connection_test", "query_preview"}
+		var desiredRevision, appliedRevision *string
+		var failureCode *api.ProviderDescriptorConfigurationFailureCode
+		var failureRevision *string
+		if selected != nil {
+			capability := *selected
+			operations = []string{}
+			for _, operation := range []string{"connection_test", "query_preview"} {
+				if datasource.SupportsProviderOperation(capability.Capabilities, provider, provider+"-http-v1", operation) {
+					operations = append(operations, operation)
+				}
+			}
+			if capability.DesiredConfigurationRevision != nil {
+				value := strconv.FormatInt(*capability.DesiredConfigurationRevision, 10)
+				desiredRevision = &value
+			}
+			if capability.AppliedConfigurationRevision != nil {
+				value := strconv.FormatInt(*capability.AppliedConfigurationRevision, 10)
+				appliedRevision = &value
+			}
+			if capability.ConfigurationFailureCode != nil {
+				value := api.ProviderDescriptorConfigurationFailureCode(*capability.ConfigurationFailureCode)
+				failureCode = &value
+			}
+			if capability.ConfigurationFailureRevision != nil {
+				value := strconv.FormatInt(*capability.ConfigurationFailureRevision, 10)
+				failureRevision = &value
+			}
+			availability = providerAvailability(capability, len(operations))
+		}
+		items = append(items, api.ProviderDescriptor{Provider: api.ProviderDescriptorProvider(provider), ConfigurationFormat: api.ProviderDescriptorConfigurationFormat(provider + "-http-v1"), Operations: operations, Availability: availability,
+			DesiredConfigurationRevision: desiredRevision, AppliedConfigurationRevision: appliedRevision, ConfigurationFailureCode: failureCode, ConfigurationFailureRevision: failureRevision})
+	}
+	h.writeJSON(w, http.StatusOK, api.ProviderPage{Items: items})
 }
 
 func providerAvailability(capability storage.DatasourceAgentCapability, operationCount int) api.ProviderDescriptorAvailability {

@@ -1,0 +1,66 @@
+{
+  "fixture": "isolated real HTTP/PostgreSQL, initial user directory",
+  "accountUsableMs": 941.7450910000002,
+  "usersUsableMs": 504.01166299999977,
+  "accountTrace": {
+    "formUsableMs": 751.6000000000931,
+    "longTasks": [
+      {
+        "start": 289.29999999981374,
+        "duration": 111
+      }
+    ],
+    "resources": [
+      {
+        "path": "/assets/SettingsPage-DvNx_2mx.js",
+        "start": 86,
+        "end": 118.89999999990687
+      },
+      {
+        "path": "/assets/settings-CLjyGU8l.css",
+        "start": 87,
+        "end": 118.29999999981374
+      },
+      {
+        "path": "/assets/index-CfT0O5C3.css",
+        "start": 87.6999999997206,
+        "end": 126.10000000009313
+      },
+      {
+        "path": "/assets/index-Dkn-1R8c.js",
+        "start": 87.6999999997206,
+        "end": 131
+      },
+      {
+        "path": "/assets/rolldown-runtime-4tVxZq34.js",
+        "start": 87.79999999981374,
+        "end": 129.6999999997206
+      },
+      {
+        "path": "/assets/client-7EKAo5-y.js",
+        "start": 87.79999999981374,
+        "end": 130.39999999990687
+      },
+      {
+        "path": "/assets/index-CfT0O5C3.css",
+        "start": 107.10000000009313,
+        "end": 130.1999999997206
+      },
+      {
+        "path": "/fonts/Bevan-Regular.ttf",
+        "start": 471.6999999997206,
+        "end": 490.79999999981374
+      },
+      {
+        "path": "/api/v1/auth/context",
+        "start": 495.60000000009313,
+        "end": 505.60000000009313
+      },
+      {
+        "path": "/api/v1/account",
+        "start": 626.3999999999069,
+        "end": 632.6000000000931
+      }
+    ]
+  }
+}

@@ -1,4 +1,4 @@
-# ADR-0047: Tern terminals for Firecracker agents
+# ADR-0048: Tern terminals for Firecracker agents
 
 - Status: accepted
 - Created: 2026-11-11

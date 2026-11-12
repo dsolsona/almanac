@@ -72,4 +72,5 @@ well as benefits. Do not invent alternatives or measurements to justify a choice
 | [ADR-0044](0044-configurable-session-inactivity.md) | Configurable session inactivity | accepted |
 | [ADR-0045](0045-prepared-firecracker-development-workers.md) | Prepared Firecracker development workers | accepted |
 | [ADR-0046](0046-sli-measurements-and-collection-detail.md) | SLI measurements and collection detail | accepted |
-| [ADR-0047](0047-tern-firecracker-agent-terminals.md) | Tern terminals for Firecracker agents | accepted |
+| [ADR-0047](0047-trace-and-log-event-count-datasources.md) | Trace and log event-count datasources | accepted |
+| [ADR-0048](0048-tern-firecracker-agent-terminals.md) | Tern terminals for Firecracker agents | accepted |

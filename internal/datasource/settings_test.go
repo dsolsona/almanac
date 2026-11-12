@@ -79,3 +79,24 @@ func TestCollectionRequiresExplicitProviderFormatAndOperation(t *testing.T) {
 		t.Fatal("diagnostic capability implicitly enabled collection")
 	}
 }
+
+// TestSelectedProviderCapabilityIsolation rejects capabilities belonging to another provider or configuration format.
+func TestSelectedProviderCapabilityIsolation(t *testing.T) {
+	for _, provider := range []string{"victoriatraces", "tempo", "loki"} {
+		settings := DefaultSettings("source", "Source", "http://source:3100", "b13e0739-3c86-4a7f-b7e5-c15e9626e71c")
+		settings.Provider, settings.ConfigurationFormat = provider, provider+"-http-v1"
+		if settings.Validate() != nil {
+			t.Fatalf("valid %s settings rejected", provider)
+		}
+		if SupportsProviderOperation([]agentprotocol.Capability{{Provider: "prometheus", ConfigurationFormats: []string{"prometheus-http-v1"}, Operations: []string{"collect"}}}, provider, settings.ConfigurationFormat, "collect") {
+			t.Fatal("old agent accepted another provider")
+		}
+		if !SupportsProviderOperation(Capabilities(), provider, settings.ConfigurationFormat, "collect") {
+			t.Fatal("shipped capability missing")
+		}
+		settings.ConfigurationFormat = "prometheus-http-v1"
+		if settings.Validate() == nil {
+			t.Fatal("mismatched provider/format accepted")
+		}
+	}
+}

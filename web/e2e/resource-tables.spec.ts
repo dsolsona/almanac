@@ -36,6 +36,7 @@ test('resource lists share the services table, sort all results, and open select
   const completed=await page.waitForFunction(route=>(window as unknown as {listJourneys:Journey[]}).listJourneys.find(item=>item.journey===route),resource==='slis'?'sli.list':'management');
   const journey=await completed.jsonValue();
   const firstVisitMs=journey.duration;
+  console.info('Resource first-visit timing:',JSON.stringify({resource,milliseconds:firstVisitMs}));
   await testInfo.attach(`${resource}-first-visit`,{body:JSON.stringify({milliseconds:firstVisitMs}),contentType:'application/json'});
   expect(journey.result).toBe('ready');
   expect(firstVisitMs).toBeLessThan(1000);

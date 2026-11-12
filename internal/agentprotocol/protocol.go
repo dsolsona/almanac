@@ -878,10 +878,11 @@ func (s SLICollection) Validate() error {
 	return nil
 }
 
+// Validate rejects invalid identities, cadence, credentials and provider-format pairs before assignment use.
 func (a DatasourceAssignment) Validate() error {
 	endpoint, _ := url.Parse(a.Endpoint)
 	if !canonicalUUID(a.DatasourceID) || !positiveDecimalCheck(a.DatasourceVersion, false) ||
-		!validDatasourceName(a.Name) || a.Provider != "prometheus" || a.ConfigurationFormat != "prometheus-http-v1" ||
+		!validDatasourceName(a.Name) || !ValidProvider(a.Provider, a.ConfigurationFormat) ||
 		!validDatasourceEndpoint(a.Endpoint) || a.PollingIntervalSeconds < 15 || a.PollingIntervalSeconds > 86400 || a.SettlingDelaySeconds != 60 || len(a.TLS.CAPEM) > 64<<10 {
 		return invalidField("datasource_assignment")
 	}
@@ -1042,4 +1043,13 @@ func validConfigurationETag(value string) bool {
 func positiveDecimalCheck(value string, allowZero bool) bool {
 	_, err := positiveDecimal(value, allowZero)
 	return err == nil
+}
+
+// ValidProvider validates a versioned provider configuration pair.
+func ValidProvider(provider, format string) bool {
+	switch provider {
+	case "prometheus", "victoriatraces", "tempo", "loki":
+		return format == provider+"-http-v1"
+	}
+	return false
 }

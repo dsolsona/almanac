@@ -315,3 +315,63 @@ func testDiagnosticClient(agentID string, assignments []agentprotocol.Datasource
 	agent.setServerTime(now)
 	return agent
 }
+
+// TestDiagnosticsUseExplicitSettledBackendInterval checks preview and connection queries despite a skewed local clock and a nonstandard cadence.
+func TestDiagnosticsUseExplicitSettledBackendInterval(t *testing.T) {
+	for _, provider := range []string{"prometheus", "victoriatraces", "tempo", "loki"} {
+		for _, operation := range []string{"query_preview", "connection_test"} {
+			t.Run(provider+"/"+operation, func(t *testing.T) {
+				// floor((2_000_000_123 - 60) / 37) * 37 = 2_000_000_035.
+				end := time.Unix(2_000_000_035, 0).UTC()
+				server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					evaluation := end
+					if provider == "loki" {
+						evaluation = end.Add(-time.Nanosecond)
+					}
+					if got := r.URL.Query().Get("time"); got != evaluation.Format(time.RFC3339Nano) {
+						t.Errorf("evaluation=%q, want %s", got, evaluation.Format(time.RFC3339Nano))
+					}
+					if provider == "victoriatraces" || provider == "tempo" {
+						if got := r.URL.Query().Get("start"); got != "2033-05-18T03:33:18Z" {
+							t.Errorf("start=%q", got)
+						}
+						if got := r.URL.Query().Get("end"); got != end.Format(time.RFC3339Nano) {
+							t.Errorf("end=%q", got)
+						}
+					}
+					w.Header().Set("Content-Type", "application/json")
+					if provider == "tempo" {
+						fmt.Fprint(w, `{"series":[{"value":1}],"metrics":{"totalJobs":1,"completedJobs":1}}`)
+					} else if provider == "loki" {
+						fmt.Fprintf(w, `{"status":"success","data":{"resultType":"vector","result":[{"metric":{},"value":[%d.999,"1"]}]}}`, end.Unix()-1)
+					} else {
+						fmt.Fprintf(w, `{"status":"success","data":{"resultType":"vector","result":[{"metric":{},"value":[%d,"1"]}]}}`, end.Unix())
+					}
+				}))
+				defer server.Close()
+				assignment := testDiagnosticAssignment(server.URL)
+				assignment.Provider, assignment.ConfigurationFormat = provider, provider+"-http-v1"
+				assignment.PollingIntervalSeconds = 37
+				agent := testDiagnosticClient(testAgentID, []agentprotocol.DatasourceAssignment{assignment})
+				agent.setServerTime(time.Unix(2_000_000_123, 0).UTC())
+				runner := newDiagnosticRunner(agent)
+				defer runner.close()
+				request := agentprotocol.DiagnosticRequest{DiagnosticID: "00000000-0000-4000-8000-000000000003", AgentID: testAgentID, Operation: operation, DeadlineAt: time.Unix(2_000_000_143, 0).UTC(), Datasource: assignment, Query: "up"}
+				if operation == "connection_test" {
+					request.Query = ""
+				}
+				if err := runner.start(t.Context(), request); err != nil {
+					t.Fatal(err)
+				}
+				select {
+				case result := <-runner.results:
+					if result.result.State != "succeeded" {
+						t.Fatalf("result=%+v", result.result)
+					}
+				case <-time.After(3 * time.Second):
+					t.Fatal("diagnostic did not complete")
+				}
+			})
+		}
+	}
+}

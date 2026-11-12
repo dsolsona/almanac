@@ -535,7 +535,7 @@ func (r *collectionRunner) collectionClientLocked(definition collectionDefinitio
 	}
 	endpoint, _ := url.Parse(definition.assignment.Endpoint)
 	// Each collection's context carries its current lease deadline, not the pool.
-	source, err := prometheus.NewClient(prometheus.Config{Endpoint: definition.assignment.Endpoint,
+	source, err := prometheus.NewClient(prometheus.Config{Endpoint: definition.assignment.Endpoint, Provider: definition.assignment.Provider, CadenceSeconds: definition.assignment.PollingIntervalSeconds,
 		AuthMode: definition.assignment.AuthenticationMode, Username: definition.assignment.Username,
 		Password: definition.assignment.Password, BearerToken: definition.assignment.BearerToken,
 		TLSConfig: tlsConfig, Timeout: maxCollectionQueryTime, AllowedDestinations: []string{endpoint.Hostname()}})

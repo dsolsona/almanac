@@ -11,6 +11,7 @@ import (
 	"github.com/dsolsona/almanac/internal/agentprotocol"
 	"github.com/dsolsona/almanac/internal/datasource"
 	"github.com/dsolsona/almanac/internal/prometheus"
+	"github.com/dsolsona/almanac/internal/sli"
 )
 
 const (
@@ -58,6 +59,7 @@ func newDiagnosticRunner(agent *client) *diagnosticRunner {
 		commandIDs: make(map[string]time.Time), completed: make(map[string]diagnosticReceipt)}
 }
 
+// start admits a diagnostic only when this agent advertises the exact provider operation.
 func (r *diagnosticRunner) start(parent context.Context, request agentprotocol.DiagnosticRequest) error {
 	if r == nil || r.client == nil || request.Validate() != nil || request.AgentID != r.client.agentID {
 		return errors.New("agent diagnostic request rejected")
@@ -69,9 +71,8 @@ func (r *diagnosticRunner) start(parent context.Context, request agentprotocol.D
 	if request.Operation == "query_preview" && !slices.Contains(r.client.assignments, request.Datasource) {
 		return errors.New("agent diagnostic assignment rejected")
 	}
-	capabilities := []agentprotocol.Capability{{Provider: datasource.PrometheusProvider,
-		ConfigurationFormats: []string{datasource.PrometheusConfiguration}, Operations: []string{"connection_test", "query_preview"}}}
-	if !datasource.SupportsOperation(capabilities, request.Operation) {
+	capabilities := datasource.Capabilities()
+	if !datasource.SupportsProviderOperation(capabilities, request.Datasource.Provider, request.Datasource.ConfigurationFormat, request.Operation) {
 		return errors.New("agent diagnostic capability rejected")
 	}
 	r.mu.Lock()
@@ -121,7 +122,9 @@ func (r *diagnosticRunner) start(parent context.Context, request agentprotocol.D
 	r.active[request.DiagnosticID] = active
 	generation := r.client.generation
 	r.mu.Unlock()
-	go r.execute(ctx, request, generation)
+	// Freeze the interval at admission using the shared backend-time alignment.
+	intervalEnd := sli.LatestSettledEnd(now, request.Datasource.PollingIntervalSeconds, request.Datasource.SettlingDelaySeconds)
+	go r.execute(ctx, request, generation, intervalEnd)
 	return nil
 }
 
@@ -186,7 +189,8 @@ func (r *diagnosticRunner) close() {
 	}
 }
 
-func (r *diagnosticRunner) execute(ctx context.Context, request agentprotocol.DiagnosticRequest, generation string) {
+// execute runs a bounded native connection or preview query without writing SLI observations.
+func (r *diagnosticRunner) execute(ctx context.Context, request agentprotocol.DiagnosticRequest, generation string, intervalEnd time.Time) {
 	result := agentprotocol.DiagnosticResult{DiagnosticID: request.DiagnosticID}
 	settings := datasource.Settings{Name: request.Datasource.Name, DisplayName: request.Datasource.Name,
 		Provider: request.Datasource.Provider, ConfigurationFormat: request.Datasource.ConfigurationFormat,
@@ -199,7 +203,7 @@ func (r *diagnosticRunner) execute(ctx context.Context, request agentprotocol.Di
 		result = diagnosticFailure(request.DiagnosticID, "unsupported")
 	} else {
 		endpoint, _ := url.Parse(request.Datasource.Endpoint)
-		source, clientErr := prometheus.NewClient(prometheus.Config{Endpoint: request.Datasource.Endpoint,
+		source, clientErr := prometheus.NewClient(prometheus.Config{Endpoint: request.Datasource.Endpoint, Provider: request.Datasource.Provider, CadenceSeconds: request.Datasource.PollingIntervalSeconds,
 			AuthMode: request.Datasource.AuthenticationMode, Username: request.Datasource.Username,
 			Password: request.Datasource.Password, BearerToken: request.Datasource.BearerToken,
 			TLSConfig: tlsConfig, Timeout: 20 * time.Second, AllowedDestinations: []string{endpoint.Hostname()}})
@@ -209,9 +213,9 @@ func (r *diagnosticRunner) execute(ctx context.Context, request agentprotocol.Di
 			defer source.CloseIdleConnections()
 			query := request.Query
 			if request.Operation == "connection_test" {
-				query = "vector(1)"
+				query = prometheus.ConnectionQuery(request.Datasource.Provider)
 			}
-			observed, queryErr := source.Query(ctx, query)
+			observed, queryErr := source.QueryAt(ctx, query, intervalEnd)
 			if queryErr != nil {
 				var sourceErr *prometheus.SourceError
 				if errors.As(queryErr, &sourceErr) {

@@ -1,0 +1,39 @@
+stream_over_http_enabled: true
+server:
+  http_listen_port: 3200
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        http:
+          endpoint: 0.0.0.0:4318
+ingester:
+  max_block_duration: 1m
+# Local test data can contain spans from already settled intervals.
+metrics_generator:
+  metrics_ingestion_time_range_slack: 10m
+  processor:
+    local_blocks:
+      filter_server_spans: false
+      flush_to_storage: true
+  storage:
+    path: /var/tempo/generator/wal
+  traces_storage:
+    path: /var/tempo/generator/traces
+    ingestion_time_range_slack: 10m
+storage:
+  trace:
+    backend: local
+    wal:
+      path: /var/tempo/wal
+    local:
+      path: /var/tempo/blocks
+compactor:
+  compaction:
+    block_retention: 168h
+overrides:
+  defaults:
+    metrics_generator:
+      processors: [local-blocks]
+usage_report:
+  reporting_enabled: false

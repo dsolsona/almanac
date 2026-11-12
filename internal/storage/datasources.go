@@ -157,6 +157,7 @@ func GetDatasourceAgentCapability(ctx context.Context, databaseURL string, proof
 	return capability, nil
 }
 
+// CreateDatasource validates provider capabilities and atomically persists the encrypted configuration and agent delivery.
 func CreateDatasource(ctx context.Context, databaseURL string, secrets *sourcesecret.Adapter, input CreateDatasourceInput) (DatasourceRecord, error) {
 	if input.Now == nil || input.Settings.Validate() != nil || input.RequestID == "" || !validPrintableASCII(input.IdempotencyKey, 1, 128) {
 		return DatasourceRecord{}, datasource.ErrInvalidSettings
@@ -231,7 +232,7 @@ func CreateDatasource(ctx context.Context, databaseURL string, secrets *sourcese
 	if err != nil {
 		return DatasourceRecord{}, operationError(ctx, "storage: datasource agent lookup failed", err)
 	}
-	if !agent.Enabled || !datasource.SupportsOperation(decodeCapabilities(agent.Capabilities), "connection_test") || !datasource.SupportsOperation(decodeCapabilities(agent.Capabilities), "query_preview") {
+	if !agent.Enabled || !datasource.SupportsProviderOperation(decodeCapabilities(agent.Capabilities), input.Settings.Provider, input.Settings.ConfigurationFormat, "connection_test") || !datasource.SupportsProviderOperation(decodeCapabilities(agent.Capabilities), input.Settings.Provider, input.Settings.ConfigurationFormat, "query_preview") {
 		return DatasourceRecord{}, ErrAgentConflict
 	}
 	id, err := uuid.NewRandom()
@@ -458,6 +459,7 @@ func ListAgentDatasourceDependencies(ctx context.Context, databaseURL string, pr
 	return page, nil
 }
 
+// UpdateDatasource applies a versioned configuration update while keeping the provider identity immutable.
 func UpdateDatasource(ctx context.Context, databaseURL string, secrets *sourcesecret.Adapter, input UpdateDatasourceInput) (DatasourceRecord, error) {
 	id, valid := canonicalUUID(input.DatasourceID)
 	if !valid || input.ExpectedVersion <= 0 || input.Now == nil || input.Settings.Validate() != nil || input.RequestID == "" || input.Proof.SessionVerifier == ([32]byte{}) {
@@ -499,6 +501,9 @@ func UpdateDatasource(ctx context.Context, databaseURL string, secrets *sourcese
 	}
 	if err != nil {
 		return DatasourceRecord{}, operationError(ctx, "storage: datasource update lock failed", err)
+	}
+	if current.Provider != input.Settings.Provider || current.ConfigurationFormat != input.Settings.ConfigurationFormat {
+		return DatasourceRecord{}, ErrInvalidAgentInput
 	}
 	if current.Version != input.ExpectedVersion || current.AgentID != observed.AgentID {
 		return DatasourceRecord{}, ErrDatasourceConflict
@@ -561,7 +566,7 @@ func UpdateDatasource(ctx context.Context, databaseURL string, secrets *sourcese
 		return DatasourceRecord{}, operationError(ctx, "storage: datasource agent lookup failed", err)
 	}
 	capabilities := decodeCapabilities(agent.Capabilities)
-	if !agent.Enabled || !datasource.SupportsOperation(capabilities, "connection_test") || !datasource.SupportsOperation(capabilities, "query_preview") {
+	if !agent.Enabled || !datasource.SupportsProviderOperation(capabilities, input.Settings.Provider, input.Settings.ConfigurationFormat, "connection_test") || !datasource.SupportsProviderOperation(capabilities, input.Settings.Provider, input.Settings.ConfigurationFormat, "query_preview") {
 		return DatasourceRecord{}, ErrAgentConflict
 	}
 	tls, err := json.Marshal(input.Settings.TLS)

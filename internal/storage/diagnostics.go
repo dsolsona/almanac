@@ -89,6 +89,7 @@ func ReplayDatasourceConnectionTest(ctx context.Context, databaseURL string, pro
 	return record, found, nil
 }
 
+// BeginDatasourceDiagnostic admits a provider-specific operation after validating source ownership and agent readiness.
 func BeginDatasourceDiagnostic(ctx context.Context, databaseURL string, input BeginDiagnosticInput) (DiagnosticRecord, agentprotocol.DiagnosticRequest, error) {
 	diagnosticID, diagnosticOK := canonicalUUID(input.DiagnosticID)
 	agentID, agentOK := canonicalUUID(input.AgentID)
@@ -161,7 +162,19 @@ func BeginDatasourceDiagnostic(ctx context.Context, databaseURL string, input Be
 	if status.AppliedConfigurationRevision < status.DesiredConfigurationRevision {
 		return DiagnosticRecord{}, agentprotocol.DiagnosticRequest{}, ErrDiagnosticConfigurationPending
 	}
-	if !datasource.SupportsOperation(status.Capabilities, input.Operation) {
+	provider, format := input.ConnectionSettings.Provider, input.ConnectionSettings.ConfigurationFormat
+	if input.DatasourceID != "" {
+		sourceID, _ := canonicalUUID(input.DatasourceID)
+		source, sourceErr := queries.GetDatasource(ctx, sourceID)
+		if errors.Is(sourceErr, pgx.ErrNoRows) {
+			return DiagnosticRecord{}, agentprotocol.DiagnosticRequest{}, ErrDatasourceNotFound
+		}
+		if sourceErr != nil {
+			return DiagnosticRecord{}, agentprotocol.DiagnosticRequest{}, operationError(ctx, "storage: diagnostic datasource lookup failed", sourceErr)
+		}
+		provider, format = source.Provider, source.ConfigurationFormat
+	}
+	if !datasource.SupportsProviderOperation(status.Capabilities, provider, format, input.Operation) {
 		return DiagnosticRecord{}, agentprotocol.DiagnosticRequest{}, ErrDiagnosticUnsupported
 	}
 	createdAt := input.RequestedAt.UTC().Truncate(time.Microsecond)

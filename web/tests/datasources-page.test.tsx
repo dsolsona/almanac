@@ -740,7 +740,7 @@ describe('datasource page', () => {
     await user.click(screen.getByRole('radio', { name: 'Skip verification' }));
     expect(screen.getByText(/Insecure: the certificate is not checked/)).toBeVisible();
     await user.click(screen.getByRole('radio', { name: 'Verify certificate' }));
-    expect(screen.getByRole('radio', { name: '60 s' })).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByRole('radio', { name: '60 s' })).toBeChecked();
     await user.click(screen.getByRole('radio', { name: '5 min' }));
     await user.click(screen.getByRole('button', { name: 'Create and add an SLI' }));
     await waitFor(() => expect(location.pathname + location.search).toBe(`/slis/new?datasource=${sourceID}`));
@@ -903,4 +903,45 @@ it.each(['success','failure'])('ignores an older metadata %s after a newer refre
   expect(screen.getByText('Newest collector')).toBeVisible();
   expect(screen.queryByText('Old collector')).not.toBeInTheDocument();
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+});
+
+it('selects a log provider, preserves connection fields and submits its versioned settings', async () => {
+  const user = userEvent.setup(); history.replaceState({}, '', '/datasources/new');
+  const capabilities = ['prometheus', 'victoriatraces', 'tempo', 'loki'].map((provider) => ({ provider, configuration_formats: [`${provider}-http-v1`], operations: ['collect', 'connection_test', 'query_preview'] }));
+  const calls = installFetch([{ id: agentID, name: 'all', display_name: 'Source collector', enabled: true, runtime: { reachability: 'connected', capabilities } }]);
+  render(<DatasourcesPage context={admin} />);
+  await screen.findByLabelText('Prometheus endpoint');
+  await user.type(screen.getByLabelText('Display name', { exact: true }), 'Request logs');
+  await user.click(screen.getByRole('radio', { name: /^Loki$/ }));
+  expect(screen.getByRole('radio', { name: /^Loki$/ })).toBeChecked();
+  expect(screen.getByLabelText('Display name', { exact: true })).toHaveValue('Request logs');
+  await user.type(screen.getByLabelText('Loki endpoint'), 'http://loki:3100');
+  expect(screen.getByRole('button', { name: 'Test connection' })).toBeEnabled();
+  await user.click(screen.getByRole('button', { name: /^Create datasource$/ }));
+  await waitFor(() => expect(calls.some((call) => call.url === '/api/v1/datasources' && call.init?.method === 'POST')).toBe(true));
+  const sent = calls.find((call) => call.url === '/api/v1/datasources' && call.init?.method === 'POST')!;
+  expect(JSON.parse(String(sent.init?.body))).toMatchObject({ provider: 'loki', configuration_format: 'loki-http-v1', endpoint: 'http://loki:3100', agent_id: agentID });
+});
+
+it('does not assign a Prometheus-only agent to a trace provider', async () => {
+  const user = userEvent.setup(); history.replaceState({}, '', '/datasources/new'); installFetch();
+  render(<DatasourcesPage context={admin} />);
+  await screen.findByLabelText('Prometheus endpoint');
+  await user.click(screen.getByRole('radio', { name: /^VictoriaTraces$/ }));
+  expect(screen.getByRole('button', { name: 'Test connection' })).toBeDisabled();
+  expect(screen.getByLabelText('Assigned agent', { exact: true })).toHaveValue('');
+  expect(screen.getAllByText(/No enabled agent reports the required provider/)[0]).toBeVisible();
+});
+
+it('warns when authentication sends credentials over HTTP and explains HTTPS verification', async () => {
+  history.replaceState({}, '', '/datasources/new'); installFetch();
+  const user = userEvent.setup(); render(<DatasourcesPage context={admin} />);
+  await screen.findByLabelText('Prometheus endpoint');
+  await user.type(screen.getByLabelText('Prometheus endpoint'), 'http://metrics:9090');
+  await user.click(screen.getByRole('radio', { name: 'Basic' }));
+  expect(screen.getByRole('alert')).toHaveTextContent('sends credentials without encryption');
+  expect(screen.getByText('HTTP does not use TLS or verify a certificate.')).toBeVisible();
+  await user.clear(screen.getByLabelText('Prometheus endpoint'));
+  await user.type(screen.getByLabelText('Prometheus endpoint'), 'https://metrics:9090');
+  expect(screen.queryByText(/sends credentials without encryption/)).not.toBeInTheDocument();
 });

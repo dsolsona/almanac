@@ -787,6 +787,13 @@ WHERE r.agent_id=c.agent_id AND r.delivery_id=c.delivery_id`); err != nil {
 	if _, err := conn.Exec(t.Context(), `ALTER TABLE public.almanac_datasource_reassignments DROP COLUMN target_configuration_revision; ALTER TABLE public.almanac_datasources DROP COLUMN assignment_configuration_revision`); err != nil {
 		t.Fatal(err)
 	}
+	// Restore the provider constraints that existed before migration 0052.
+	if _, err := conn.Exec(t.Context(), `ALTER TABLE public.almanac_datasources
+ DROP CONSTRAINT almanac_datasources_provider_format_check,
+ ADD CONSTRAINT almanac_datasources_provider_check CHECK (provider='prometheus'),
+ ADD CONSTRAINT almanac_datasources_configuration_format_check CHECK (configuration_format='prometheus-http-v1')`); err != nil {
+		t.Fatal(err)
+	}
 	if result, err := Upgrade(t.Context(), f.databaseURL); err != nil || result.Applied != latestTestSchemaVersion(t)-15 || result.DatabaseSchemaVersion != latestTestSchemaVersion(t) {
 		t.Fatalf("cursor migration: %+v, %v", result, err)
 	}

@@ -4,7 +4,7 @@
 then connects the laptop's existing Tern window without manual host setup.
 
 **Architecture:** Extend the existing launcher under
-[ADR-0047](../adr/0047-tern-firecracker-agent-terminals.md). Reuse prepared disks,
+[ADR-0048](../adr/0048-tern-firecracker-agent-terminals.md). Reuse prepared disks,
 SSH identity verification, prompt transport and local Tern control APIs. The
 primary agent implements and verifies inline in `.worktrees/firecracker-terminal`;
 the maintainer authorized committing and opening a PR after the bare-command

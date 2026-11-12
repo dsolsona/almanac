@@ -1,3 +1,22 @@
+Trace/log datasources, 2026-11-11: [F2-T34](tasks/F2-T34.md) is in review in
+[PR #88](https://github.com/dsolsona/almanac/pull/88), rebased onto main `fba7dfe`
+under [ADR-0047](adr/0047-trace-and-log-event-count-datasources.md). VictoriaTraces
+native LogsQL, Tempo TraceQL metrics and Loki LogQL use the existing event-count SLO
+model. Optional persistent sources, provider-aware admission and language-aware
+forms are implemented. The previous application CI checkpoint passes on `94fabcb` (run
+`43048521975`): 470 frontend cases, 89 browser cases, PostgreSQL integration and all
+21 real-container journeys. Native source journeys prove exact 9/10, −100% budget
+and 2x burn against the accepted SLI detail layout. A stable local browser run also
+passes 89 cases in 216.203 s. One earlier local browser case was invalidated by a
+concurrent documentation edit triggering Vite reload; the trace identifies the cause.
+The local E2E Settings cold-load variation (1,049.913 ms against 1,000 ms) remains
+open; final CI timing is 509.303 ms, which does not establish a fix. Previous CLI
+and PTY failures remain recorded. [Evidence](evidence/traces-logs/README.md) includes
+nine final datasource renders and four sanitized timing artifacts. CodeRabbit
+functional fixes are verified and replied to; the HTTP credential policy is confirmed by the maintainer: warn-but-allow for
+private deployments, with HTTPS recommended for credentials. Native
+backfill, tenant headers and larger/year-long performance are not claimed. Rebased verification and the datasource-loading correction are recorded in F2-T34 and current PR checks; no merge.
+
 Consistent resource tables, 2026-11-11: [F1-T23](tasks/F1-T23.md) ports the
 services table to agents, datasources and SLIs, with selectable clickable rows,
 all-column sorting across complete filtered results and 10/20-row pagination.
