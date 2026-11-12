@@ -2,7 +2,7 @@
 # Optional Linux development host. All application containers run inside the guest.
 set -euo pipefail
 
-repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
+repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 launcher_repo=$repo
 primary_repo=$repo
 if IFS= read -r -d '' primary_worktree < <(git -C "$repo" worktree list --porcelain -z 2>/dev/null); then
@@ -24,7 +24,7 @@ fail() { printf 'firecracker: %s\n' "$*" >&2; exit 1; }
 
 usage() {
     cat <<'EOF'
-Usage: ./firecracker-setup.sh ACTION [NAME] [--prompt TEXT|-] [--repo PATH]
+Usage: ./scripts/firecracker-setup.sh ACTION [NAME] [--prompt TEXT|-] [--repo PATH]
 
   setup   Clone the prepared base (or install the first seed), then copy code/login.
   base    Warm a seed with make setup, stop it and publish a reusable CoW base.
@@ -932,7 +932,7 @@ setup() {
         return
     fi
     [[ -e $base/base-image || ${1:-} == seed ]] \
-        || fail 'prepare shared dependencies first: ./firecracker-setup.sh base --repo PATH'
+        || fail 'prepare shared dependencies first: ./scripts/firecracker-setup.sh base --repo PATH'
     if [[ ! -f $state/image-prepared ]]; then
         if [[ -e $base/base-image && ${1:-} != seed ]]; then
             clone_image
@@ -967,9 +967,9 @@ setup() {
     fi
     ssh_guest dev 'docker info --format "Guest Docker: {{.ServerVersion}}" && docker compose version && codex --version'
     touch "$state/ready"
-    printf 'Setup prepared. Run ./firecracker-setup.sh codex %s (or ssh).\n' "$name"
+    printf 'Setup prepared. Run ./scripts/firecracker-setup.sh codex %s (or ssh).\n' "$name"
     if [[ ! -e $base/base-image ]]; then
-        printf 'Prepare shared dependencies once: ./firecracker-setup.sh base %s\n' "$name"
+        printf 'Prepare shared dependencies once: ./scripts/firecracker-setup.sh base %s\n' "$name"
     fi
 }
 
@@ -1112,7 +1112,7 @@ main() {
     if [[ $action != stop && $action != delete ]]; then check; fi
     if [[ ( $action == setup || $action == run ) && ! -e $base/base-image ]] \
         && { (( auto_name )) || [[ ! -f $state/ready ]]; }; then
-        fail 'prepare shared dependencies first: ./firecracker-setup.sh base --repo PATH'
+        fail 'prepare shared dependencies first: ./scripts/firecracker-setup.sh base --repo PATH'
     fi
     if [[ $action == run || ( $action == codex && -f $state/tern-address ) ]]; then check_local_tern; fi
     if [[ $action == base ]]; then check_tern_runtime; fi

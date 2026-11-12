@@ -28,7 +28,7 @@ On x86_64 Linux, [the Firecracker guide](firecracker.md) describes a private
 development VM whose Docker daemon and containers run inside the guest:
 
 ```sh
-bash firecracker-setup.sh check   # read-only host prerequisite check
+bash scripts/firecracker-setup.sh check   # read-only host prerequisite check
 make vm-base                     # build/rebuild dependencies from a fresh seed; uses sudo
 make vm-base VM=seed              # adopt/warm this seed and stop it before sealing the base
 make vm-setup VM=api              # CoW clone, independent checkout and host logins
@@ -43,16 +43,16 @@ make vm-codex VM=api              # reconnect local Tern (legacy tmux supported)
 make vm-stop VM=api               # preserve disk
 make vm-delete VM=api             # permanently delete one guest; explicit VM required
 make vm-collect VM=api            # retrieve changes without applying them
-bash firecracker-setup.sh setup api # direct script equivalent; requires a base
-bash firecracker-setup.sh start   # boot the prepared disk; uses sudo
-bash firecracker-setup.sh ssh     # guest terminal
-bash firecracker-setup.sh codex   # reconnect Codex; legacy guests retain tmux
-bash firecracker-setup.sh run api --prompt 'Describe your task' # named Codex in Tern; first use clones the base
-bash firecracker-setup.sh run ui --prompt - # read the task from stdin
-bash firecracker-setup.sh codex api # attach to that worker's terminal
-bash firecracker-setup.sh collect api # retrieve commits, tracked changes and new files; apply nothing
-bash firecracker-setup.sh status  # read-only running/stopped status
-bash firecracker-setup.sh stop    # orderly shutdown and owned network cleanup; preserves disk
+bash scripts/firecracker-setup.sh setup api # direct script equivalent; requires a base
+bash scripts/firecracker-setup.sh start   # boot the prepared disk; uses sudo
+bash scripts/firecracker-setup.sh ssh     # guest terminal
+bash scripts/firecracker-setup.sh codex   # reconnect Codex; legacy guests retain tmux
+bash scripts/firecracker-setup.sh run api --prompt 'Describe your task' # named Codex in Tern; first use clones the base
+bash scripts/firecracker-setup.sh run ui --prompt - # read the task from stdin
+bash scripts/firecracker-setup.sh codex api # attach to that worker's terminal
+bash scripts/firecracker-setup.sh collect api # retrieve commits, tracked changes and new files; apply nothing
+bash scripts/firecracker-setup.sh status  # read-only running/stopped status
+bash scripts/firecracker-setup.sh stop    # orderly shutdown and owned network cleanup; preserves disk
 ```
 
 These optional host commands do not replace the Docker application commands

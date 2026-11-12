@@ -9,7 +9,7 @@ import tempfile
 import sys
 
 root = Path(__file__).resolve().parent.parent
-launcher = root / 'firecracker-setup.sh'
+launcher = root / 'scripts/firecracker-setup.sh'
 
 # Exercise the normal run dispatcher: provisioning must precede launch/connection.
 with tempfile.TemporaryDirectory() as directory:

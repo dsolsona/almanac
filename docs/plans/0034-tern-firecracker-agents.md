@@ -12,7 +12,7 @@ workflow is complete. Merge is not authorized.
 
 ## Scope and interfaces
 
-- `firecracker-setup.sh`: preflight, guest services/runtime, direct session
+- `scripts/firecracker-setup.sh`: preflight, guest services/runtime, direct session
   launch, reconnect, safe task inspection and worker-owned local identity cleanup.
 - `scripts/firecracker-tern.py`: local window connection using existing Tern
   APIs, bounded waits and private per-request result files.
@@ -48,7 +48,7 @@ unrelated local Tern registrations. A client-connect error must retain the agent
 and give a working reconnect command.
 
 Focused command: `make shell CMD='python3 scripts/firecracker-setup-test.py && python3 scripts/firecracker-tern-test.py && python3 scripts/make-help-test.py && python3 scripts/check-docs.py'`.
-Host checks: `bash -n firecracker-setup.sh` and `git diff --check`.
+Host checks: `bash -n scripts/firecracker-setup.sh` and `git diff --check`.
 No application suite is required for this development-tooling-only change.
 
 Live evidence and failure history are recorded in [F1-T21](../tasks/F1-T21.md).

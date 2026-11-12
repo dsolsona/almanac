@@ -1,6 +1,6 @@
 # Develop inside a Firecracker microVM
 
-`firecracker-setup.sh` prepares an optional persistent Linux development machine
+`scripts/firecracker-setup.sh` prepares an optional persistent Linux development machine
 for Codex. Docker Engine, application containers, volumes and builds live inside
 the guest. The host's Docker socket and filesystem are not mounted into it.
 Almanac still builds and tests through its existing Docker workflow
@@ -73,7 +73,7 @@ Guests cannot initiate connections to each other through their private networks.
 From the repository root:
 
 ```sh
-bash firecracker-setup.sh check
+bash scripts/firecracker-setup.sh check
 gh auth login --hostname github.com # if the host is not already logged in
 make vm-base
 make vm-run VM=api VM_PROMPT='Investigate the API issue'
@@ -211,12 +211,12 @@ You can also choose a short name per task. `run` clones a guest on first use and
 interactive Codex inside a detached tmux session:
 
 ```sh
-bash firecracker-setup.sh run api --prompt 'Investigate the API issue described in docs/task.md'
-cat task.txt | bash firecracker-setup.sh run ui --prompt -
-bash firecracker-setup.sh codex api
-bash firecracker-setup.sh ssh ui
-bash firecracker-setup.sh status api
-bash firecracker-setup.sh stop ui
+bash scripts/firecracker-setup.sh run api --prompt 'Investigate the API issue described in docs/task.md'
+cat task.txt | bash scripts/firecracker-setup.sh run ui --prompt -
+bash scripts/firecracker-setup.sh codex api
+bash scripts/firecracker-setup.sh ssh ui
+bash scripts/firecracker-setup.sh status api
+bash scripts/firecracker-setup.sh stop ui
 ```
 
 `--prompt -` reads all of stdin before setup begins, preserving quotes and
@@ -362,7 +362,7 @@ copy files while that agent may still be changing them. A stopped guest is boote
 for collection, without starting another Codex session:
 
 ```sh
-bash firecracker-setup.sh collect api
+bash scripts/firecracker-setup.sh collect api
 ```
 
 The command prints a new private `results.XXXXXX/` directory under the instance:

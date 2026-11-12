@@ -117,26 +117,26 @@ export VM_PROMPT ?= -
 override export VM_PROMPT := $(value VM_PROMPT)
 .PHONY: vm-base vm-setup vm-run vm-list vm-start vm-ssh vm-codex vm-stop vm-delete vm-collect
 vm-base:
-	@bash firecracker-setup.sh base $${VM:+"$$VM"} --repo "$$VM_REPO"
+	@bash scripts/firecracker-setup.sh base $${VM:+"$$VM"} --repo "$$VM_REPO"
 vm-setup:
-	@bash firecracker-setup.sh setup $${VM:+"$$VM"} --repo "$$VM_REPO"
+	@bash scripts/firecracker-setup.sh setup $${VM:+"$$VM"} --repo "$$VM_REPO"
 vm-run:
-	@bash firecracker-setup.sh run $${VM:+"$$VM"} --repo "$$VM_REPO" --prompt "$$VM_PROMPT"
+	@bash scripts/firecracker-setup.sh run $${VM:+"$$VM"} --repo "$$VM_REPO" --prompt "$$VM_PROMPT"
 vm-list:
-	@bash firecracker-setup.sh list
+	@bash scripts/firecracker-setup.sh list
 vm-start:
-	@bash firecracker-setup.sh start "$${VM:-almanac}"
+	@bash scripts/firecracker-setup.sh start "$${VM:-almanac}"
 vm-ssh:
-	@bash firecracker-setup.sh ssh "$${VM:-almanac}"
+	@bash scripts/firecracker-setup.sh ssh "$${VM:-almanac}"
 vm-codex:
-	@bash firecracker-setup.sh codex "$${VM:-almanac}"
+	@bash scripts/firecracker-setup.sh codex "$${VM:-almanac}"
 vm-stop:
-	@bash firecracker-setup.sh stop "$${VM:-almanac}"
+	@bash scripts/firecracker-setup.sh stop "$${VM:-almanac}"
 vm-delete:
 	@test -n "$$VM" || { echo 'Use make vm-delete VM=NAME; deletion is permanent' >&2; exit 2; }
-	@bash firecracker-setup.sh delete "$$VM"
+	@bash scripts/firecracker-setup.sh delete "$$VM"
 vm-collect:
-	@bash firecracker-setup.sh collect "$${VM:-almanac}"
+	@bash scripts/firecracker-setup.sh collect "$${VM:-almanac}"
 
 # Build the dev image for this user, pull the fixture images, check all against the daemon's
 # platform and warm the Go module and npm caches inside the container. Network-capable.

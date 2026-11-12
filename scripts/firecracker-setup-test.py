@@ -20,7 +20,8 @@ import tomllib
 
 
 root = Path(__file__).resolve().parent.parent
-script = root / "firecracker-setup.sh"
+relative_script = Path('scripts/firecracker-setup.sh')
+script = root / relative_script
 
 
 def run(*args, env=None):
@@ -30,18 +31,19 @@ def run(*args, env=None):
     )
 
 
-assert script.is_file(), "firecracker-setup.sh is missing"
+assert script.is_file(), "scripts/firecracker-setup.sh is missing"
 with tempfile.TemporaryDirectory(prefix='almanac-shared-vms-') as directory:
     primary = Path(directory) / 'primary checkout'
     primary.mkdir()
-    shutil.copy(script, primary / script.name)
+    (primary / 'scripts').mkdir()
+    shutil.copy(script, primary / relative_script)
     def fixture_git(*args):
         return subprocess.run(['git', '-C', str(primary), *args], check=True,
                               text=True, capture_output=True).stdout
     fixture_git('init', '-q')
     fixture_git('config', 'user.name', 'Launcher fixture')
     fixture_git('config', 'user.email', 'fixture@example.invalid')
-    fixture_git('add', script.name)
+    fixture_git('add', str(relative_script))
     fixture_git('commit', '-qm', 'launcher fixture')
     worktrees = [primary]
     for index in range(2):
@@ -51,24 +53,25 @@ with tempfile.TemporaryDirectory(prefix='almanac-shared-vms-') as directory:
     default_env = os.environ.copy()
     default_env.pop('FIRECRACKER_STATE_DIR', None)
     for checkout in worktrees:
-        result = subprocess.run(['bash', '-c', 'source "$1"; printf "%s" "$base"',
-                                 'test', str(checkout / script.name)], env=default_env,
+        result = subprocess.run(['bash', '-c', 'source "$1"; printf "%s\\n" "$base" "$repo" "$launcher_repo"',
+                                 'test', str(checkout / relative_script)], env=default_env,
                                 text=True, capture_output=True, timeout=10)
         assert result.returncode == 0, result.stderr
-        assert result.stdout == str(primary / '.local/firecracker'), 'worktree did not use the shared VM state'
+        assert result.stdout.splitlines() == [str(primary / '.local/firecracker'), str(checkout), str(checkout)], \
+            'launcher relocation changed shared state, source root or helper lookup'
         assert not (checkout / '.local').exists(), 'resolving state created files'
     shared = primary / '.local/firecracker/instances/shared-worker'
     shared.mkdir(parents=True)
     (shared / 'ready').touch()
     (shared / 'network-slot').write_text('1\n')
     for checkout in worktrees:
-        result = subprocess.run(['bash', str(checkout / script.name), 'list'],
+        result = subprocess.run(['bash', str(checkout / relative_script), 'list'],
                                 env=default_env, text=True, capture_output=True, timeout=10)
         assert result.returncode == 0 and 'shared-worker' in result.stdout, result
         assert '192.168.240.6' in result.stdout
     override = Path(directory) / 'custom state'
     result = subprocess.run(['bash', '-c', 'source "$1"; printf "%s" "$base"',
-                             'test', str(worktrees[-1] / script.name)],
+                             'test', str(worktrees[-1] / relative_script)],
                             env=dict(default_env, FIRECRACKER_STATE_DIR=str(override)),
                             text=True, capture_output=True, timeout=10)
     assert result.returncode == 0 and result.stdout == str(override), result
@@ -500,7 +503,8 @@ reserve_random_instance
     # Make must pass prompt text literally, including Make function syntax.
     make_fixture = Path(directory) / "make-entrypoint"
     make_fixture.mkdir()
-    (make_fixture / "firecracker-setup.sh").write_text('''#!/usr/bin/env bash
+    (make_fixture / 'scripts').mkdir()
+    (make_fixture / relative_script).write_text('''#!/usr/bin/env bash
 python3 - "$@" <<'PY'
 import json, os, sys
 from pathlib import Path
