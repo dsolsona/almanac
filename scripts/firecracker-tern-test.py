@@ -10,6 +10,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import sys
+from unittest.mock import patch
 
 root = Path(__file__).resolve().parent.parent
 launcher = root / 'scripts/firecracker-setup.sh'
@@ -95,6 +96,50 @@ def load(name, filename):
 
 host = load('firecracker_tern', 'firecracker-tern.py')
 guest = load('firecracker_tern_guest', 'firecracker-tern-guest.py')
+
+# A public file alone cannot authenticate Tern; encrypted keys need the agent.
+with tempfile.TemporaryDirectory(prefix='almanac-tern-keys-') as directory:
+    home = Path(directory)
+    ssh = home / '.ssh'
+    ssh.mkdir(mode=0o700)
+    tools = home / 'tools'
+    tools.mkdir()
+    tern = tools / 'tern'
+    tern.write_text('#!/bin/sh\nprintf "Tern — a multiplexing terminal\\n"\n')
+    tern.chmod(0o700)
+    agent = tools / 'ssh-add'
+    agent.write_text('''#!/bin/sh
+if test -n "${TERN_TEST_AGENT_KEY:-}"; then
+    printf '%s\\n' "$TERN_TEST_AGENT_KEY"
+else
+    exit 1
+fi
+''')
+    agent.chmod(0o700)
+    private = ssh / 'id_ed25519'
+    subprocess.run(['ssh-keygen', '-q', '-t', 'ed25519', '-N', 'fixture-passphrase',
+                    '-f', str(private)], check=True, timeout=10)
+    public = private.with_suffix('.pub').read_text()
+    private.rename(ssh / 'locked-key')
+    with patch.dict(os.environ, HOME=str(home), PATH=str(tools) + os.pathsep + os.environ['PATH'],
+                    TERN_TEST_AGENT_KEY=''):
+        for encrypted in (False, True):
+            if encrypted:
+                (ssh / 'locked-key').rename(private)
+            try:
+                host.check()
+            except RuntimeError as error:
+                assert 'ssh-add' in str(error), error
+            else:
+                raise AssertionError('public-only or locked key passed authentication preflight')
+        os.environ['TERN_TEST_AGENT_KEY'] = public
+        assert host.public_keys().split() == public.split()[:2]
+        os.environ['TERN_TEST_AGENT_KEY'] = ''
+        subprocess.run(['ssh-keygen', '-q', '-p', '-P', 'fixture-passphrase', '-N', '',
+                        '-f', str(private)], check=True, capture_output=True, timeout=10)
+        # The private key supplies the identity even if its public sidecar is stale.
+        private.with_suffix('.pub').write_text('stale sidecar\n')
+        assert host.public_keys().split() == public.split()[:2]
 
 for address in ('dev@192.168.240.14', 'dev@192.168.241.2:8376'):
     host.validate_address(address)

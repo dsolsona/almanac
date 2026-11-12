@@ -32,9 +32,13 @@ def public_keys():
         if result.returncode == 0:
             keys.extend(result.stdout.splitlines())
     for name in ('id_ed25519', 'id_ecdsa', 'id_rsa'):
-        path = Path.home() / '.ssh' / (name + '.pub')
+        path = Path.home() / '.ssh' / name
         if path.is_file():
-            keys.extend(path.read_text().splitlines())
+            # Tern cannot unlock encrypted files; those identities must come from the agent.
+            result = subprocess.run(['ssh-keygen', '-y', '-P', '', '-f', str(path)],
+                                    capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                keys.extend(result.stdout.splitlines())
     accepted = set()
     for line in keys:
         fields = line.split()
@@ -44,7 +48,8 @@ def public_keys():
         base64.b64decode(fields[1], validate=True)
         accepted.add(' '.join(fields[:2]))
     if not accepted:
-        raise RuntimeError('no laptop SSH public key found; load your key with ssh-add before vm-run')
+        raise RuntimeError('no usable laptop SSH key; unlock your private key with ssh-add '
+                           '(for example: ssh-add ~/.ssh/id_ed25519), then retry vm-run or vm-codex')
     return '\n'.join(sorted(accepted)) + '\n'
 
 

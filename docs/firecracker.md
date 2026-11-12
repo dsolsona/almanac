@@ -267,9 +267,13 @@ Several copied ChatGPT auth caches may require fresh logins after token rotation
 independent guest logins avoid sharing a refresh cache.
 
 `make vm-run` requires [Stencil Tern](https://stencil.so/tern) on the laptop's
-PATH and a public SSH key available through ssh-agent or a standard key file in
-`~/.ssh/`. It boots the worker, installs the matching Tern runtime when missing,
-starts its guest services and launches Codex directly in a `codex` Tern session.
+PATH and a usable SSH identity: an unlocked key in the SSH agent used by Tern,
+or an unencrypted standard private-key file in `~/.ssh/`. A `.pub` file alone
+cannot authenticate. Encrypted keys must first be unlocked locally, for example
+with `ssh-add ~/.ssh/id_ed25519`; never send the passphrase to the guest.
+Authentication preflight runs before allocating a worker. The launcher then boots
+the worker, installs the matching Tern runtime when missing, starts its guest
+services and launches Codex directly in a `codex` Tern session.
 It retrieves the host fingerprint over authenticated SSH, configures local Tern
 trust, then adds/selects that remote host in the local window. No manual host
 entry or fingerprint copying is required. The local app opens if necessary.
@@ -285,6 +289,11 @@ identity and session state. A saved identity mismatch stops connection setup.
 If local connection fails after launch, the VM and agent remain running; use
 `make vm-codex VM=NAME` to reconnect without submitting the task again.
 An already running Codex session rejects a replacement prompt.
+
+If Tern reports `Nothing to log in with`, unlock the key in your laptop terminal
+with `ssh-add ~/.ssh/id_ed25519`, then run `make vm-codex VM=NAME` for the existing
+worker. Both Tern and that terminal must use the same SSH agent. Codex and its
+initial task are preserved; creating another worker is unnecessary.
 
 Closing the local window leaves Codex running inside the VM. A stopped VM preserves files, containers,
 images, volumes, login credentials and Codex conversation history, but stops
