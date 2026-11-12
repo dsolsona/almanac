@@ -257,3 +257,5 @@ both sorted and fallback rows, aborts the active scan and prevents earlier reads
 from restoring cached data. A newly confirmed read can restore the view. Retry
 controls stay visible when sorting is cleared. Long secondary names wrap within
 200 px, with keyboard-accessible horizontal overflow as a fallback.
+
+SLO detail uses the approved B composition under [ADR-0049](../docs/adr/0049-slo-budget-in-context-detail.md). Exact point inspection replaces its table actions; other chart/table pairing rules remain.

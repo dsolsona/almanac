@@ -7,6 +7,8 @@ import { Panel } from '../components/ui/Panel.tsx';
 import { StatusBadge } from '../components/ui/StatusBadge.tsx';
 import { illustrativeChart, illustrativeRows } from './chartFixture.ts';
 import type { TimelineChart } from '../components/charts/timelineModel.ts';
+import { SloHistoryChart } from '../components/charts/SloHistoryChart.tsx';
+import type { components } from '../api/generated.ts';
 import { SliMeasurementsChart } from '../components/charts/SliMeasurementsChart.tsx';
 import { measurementRatio, type MeasurementInterval } from '../slis/measurements.ts';
 
@@ -50,6 +52,11 @@ export function ChartsSection() {
     <Panel heading="Coarse coverage"><p>Illustrative values only. Shaded periods contain missing measurements. Markers retain exact selected values; choose a shorter range for finer gaps.</p><TimelineChartView chart={coarseChart}/></Panel>
     <Panel heading="SLI measurements and collection"><p>Illustrative received counts, query errors and a missing interval. Green means counts received. Hover, tap or focus the chart and use arrow keys for exact values.</p><SliMeasurementsChart intervals={sliSamples}/></Panel>
     <Panel heading="SLI intervals without a ratio"><p>Zero traffic, known empty, partial and missing remain distinct. None has an invented ratio.</p><SliMeasurementsChart intervals={sliOtherStates}/></Panel>
+    <Panel heading="SLO budget point inspection"><p>Illustrative data only: observed, partial and missing evaluations. Use pointer, touch or arrow keys.</p><SloHistoryChart kind="budget" target="0.999" start="2026-11-06T10:00:00Z" end="2026-11-12T10:00:00Z" samples={Array.from({length:4},(_,i)=>{
+      const at=new Date(Date.UTC(2026,10,6+i*2,10)).toISOString(),missing=i===2,partial=i===1;
+      return {evaluation_at:at,bucket_start:at,bucket_end:at,state:missing?'missing':partial?'partial':'observed',remaining_fraction:missing?null:['0.85','0.65',null,'-0.2'][i]!,remaining_budget:missing?null:['85','65',null,'-20'][i]!,allowed_budget:missing?null:'100',good:missing?null:['99985','99965',null,'99880'][i]!,total:missing?null:'100000',attainment:missing?null:['0.99985','0.99965',null,'0.99880'][i]!,burn:null,revision:'1',received_at:at,retained_extrema:[],quality:{state:missing||partial?'partial':'complete',freshness:'fresh',expected_intervals:partial?2:1,observed_intervals:missing?0:1,missing_intervals:missing||partial?1:0,known_empty_intervals:0,zero_traffic_intervals:0,expired_intervals:0,coverage:missing?'0':partial?'0.5':'1',first_observation_at:missing?null:at,last_observation_at:missing?null:at,latest_receipt_at:missing?null:at}} satisfies components['schemas']['SloOperationalSample'];
+    })}/></Panel>
+    <Panel heading="SLO history unavailable"><p>Illustrative empty range.</p><SloHistoryChart kind="burn" target="0.999" start="2026-11-06T10:00:00Z" end="2026-11-12T10:00:00Z" samples={[]}/></Panel>
     <div className="charts-section__states">
       <Panel heading="Empty state"><p>No samples are available in this illustrative range.</p></Panel>
       <Panel heading="Refresh error"><p className="ui-error" role="alert">The example refresh failed. Previously loaded values would be marked stale.</p><StatusBadge status="stale" /></Panel>

@@ -1,5 +1,10 @@
 # UI mocks: unified SLI, SLO, datasource and agent screens
 
+SLO detail exploration, 2026-11-12: [six interactive proposals](slo-detail-options/README.md)
+compare three evolutions and three radical compositions. Refined B is accepted
+for SLO detail under [ADR-0049](../../adr/0049-slo-budget-in-context-detail.md);
+the other directions remain proposals.
+
 Approved SLI detail update, 2026-11-11: [mockup E](sli-detail-options/refined.html)
 governs the SLI detail under [ADR-0046](../../adr/0046-sli-measurements-and-collection-detail.md).
 It replaces the four tiles with an integrated graph summary, exact interval

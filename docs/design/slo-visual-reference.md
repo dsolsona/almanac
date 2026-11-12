@@ -1,3 +1,5 @@
+> SLO detail update, 2026-11-12: [ADR-0049](../adr/0049-slo-budget-in-context-detail.md) adopts the refined [B reference](mocks/slo-detail-options/index.html#b).
+
 # SLI and SLO visual reference
 
 > SLI detail update, 2026-11-11: [ADR-0046](../adr/0046-sli-measurements-and-collection-detail.md)

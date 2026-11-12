@@ -56,12 +56,16 @@ func TestColdNavigationPreloadsOnlyItsPublicRouteDependencies(t *testing.T) {
 				"src/settings/SettingsPage.tsx":                 settingsPath.MatchString(route),
 				"src/slos/SlosPage.tsx":                         strings.HasPrefix(route, "/slos"),
 				"src/slis/SlisPage.tsx":                         route == "/slis",
-				"src/components/charts/TimelineChartView.tsx":   sloDetailPath.MatchString(route),
 				"src/components/charts/BudgetSparklinePlot.tsx": route == "/slos",
 			} {
 				link := `<link rel="modulepreload" crossorigin href="/` + manifest[module].File + `">`
 				if strings.Contains(string(body), link) != want {
 					t.Fatalf("%s preload on %s: want %v", module, route, want)
+				}
+			}
+			if obsolete, exists := manifest["src/components/charts/TimelineChartView.tsx"]; exists && sloDetailPath.MatchString(route) {
+				if strings.Contains(string(body), `<link rel="modulepreload" crossorigin href="/`+obsolete.File+`">`) {
+					t.Fatal("SLO detail must not preload the replaced timeline module")
 				}
 			}
 			if strings.Contains(string(body), "/api/") {
