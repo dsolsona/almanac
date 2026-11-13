@@ -1,5 +1,8 @@
 # Implementation tasks
 
+[F4-T11](F4-T11.md) prepares one bounded source batch before due current work,
+preserving current fairness and repair wakeups; combined performance remains pending.
+
 [F4-T01](F4-T01.md) tracks the draft alert engine/UI contracts and selected mocks.
 It is design review, not authorization for engine implementation.
 [F4-T02](F4-T02.md) runs the authorized bounded-calculation experiment before

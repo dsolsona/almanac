@@ -1,3 +1,12 @@
+Derived scheduling follow-up, 2026-11-13: [F4-T11](tasks/F4-T11.md) rebuilds one
+bounded source batch before due current projections, avoiding a reproduced
+one-turn waiting deferral. Integrated scheduler checks pass in 5.554 s; the
+[200-SLI diagnostic run](evidence/slo-overview-performance/2026-11-13-source-first-contention.json)
+matches all 3,200 windows and retains all due ingestion, but fails latency and
+browser completion. Its historical SQL fixture also predates declared validity;
+correct that fixture and add a matching control before further capacity claims.
+Calculation adoption and engine implementation remain pending.
+
 Selected alert list presentation, 2026-11-13: [F4-T10](tasks/F4-T10.md) adds
 paired-window evidence, global acknowledgement callbacks, compact filters, supplied
 SLO group totals and distinct history/gap states. Fourteen component cases and ten
