@@ -1,0 +1,54 @@
+{
+  "task": "F4-T07",
+  "baseRevision": "e9c8fa0",
+  "scope": "Prepared-query diagnosis; not authenticated API/browser acceptance",
+  "fixture": {
+    "slos": 200,
+    "projections": 200,
+    "database": "PostgreSQL 18.6",
+    "baselineAt": "2026-11-13T18:14:28.879451+00:00",
+    "candidateAt": "2026-11-13T18:31:39.584474+00:00",
+    "candidateSchemaVersion": 53,
+    "candidateImage": "sha256:9f2452ec3b21244f8a89c911a950f6eb41e49ec7932b4b98890e03378cbc7c11"
+  },
+  "method": {
+    "readers": 10,
+    "warmupsPerConnection": 6,
+    "measuredSamplesPerQueryAndMode": 30,
+    "isolation": "repeatable read",
+    "timezone": "UTC",
+    "jit": false,
+    "statementTimeoutMs": 2000,
+    "lockTimeoutMs": 250,
+    "explain": "ANALYZE, BUFFERS, SETTINGS, VERBOSE, SERIALIZE TEXT, FORMAT JSON",
+    "duration": "Planning Time + Execution Time in milliseconds",
+    "p50": "median",
+    "p95": "sorted zero-based index floor(n * 0.95), capped at n - 1",
+    "pageLimitIncludingSentinel": 11,
+    "filters": "No search, service, urgency or cursor filters",
+    "automaticPreparedChoiceAfterWarmup": "generic",
+    "rawEvidence": ".local/overview-performance/"
+  },
+  "measurements": [
+    {"candidate": "original", "mode": "auto", "countP50Ms": 48.960, "countP95Ms": 73.450, "pageP50Ms": 52.084, "pageP95Ms": 85.191},
+    {"candidate": "original", "mode": "force_custom_plan", "countP50Ms": 58.552, "countP95Ms": 96.990, "pageP50Ms": 216.796, "pageP95Ms": 262.464},
+    {"candidate": "original", "mode": "force_generic_plan", "countP50Ms": 51.466, "countP95Ms": 83.953, "pageP50Ms": 60.870, "pageP95Ms": 89.801},
+    {"candidate": "materialized classification", "mode": "auto", "countP50Ms": 16.049, "countP95Ms": 24.022, "pageP50Ms": 56.534, "pageP95Ms": 90.697},
+    {"candidate": "also strip internal cache, not adopted", "mode": "auto", "countP50Ms": 12.720, "countP95Ms": 35.921, "pageP50Ms": 51.880, "pageP95Ms": 86.719},
+    {"candidate": "temporary scalar experiment", "mode": "auto", "countP50Ms": 1.147, "countP95Ms": 9.397, "pageP50Ms": 27.564, "pageP95Ms": 51.412},
+    {"candidate": "migration53 and safe parser", "mode": "auto", "countP50Ms": 1.806, "countP95Ms": 13.587, "pageP50Ms": 37.498, "pageP95Ms": 66.747},
+    {"candidate": "migration53 and safe parser", "mode": "force_custom_plan", "countP50Ms": 6.665, "countP95Ms": 19.886, "pageP50Ms": 204.774, "pageP95Ms": 228.845},
+    {"candidate": "migration53 and safe parser", "mode": "force_generic_plan", "countP50Ms": 5.063, "countP95Ms": 19.658, "pageP50Ms": 39.875, "pageP95Ms": 72.573}
+  ],
+  "candidateSourceHashes": {
+    "internal/storage/query/derived_overview.sql": "e0fcb6d8ce72bc0ed0c75d4f67cde6d3e0371e62a0b35e651ac64cdca30e0c73",
+    "internal/storage/query/slo_list_references.sql": "f8f88f270f0666992c1f3e5c5512328594c334d319fd8ba831be29f81f3b84ff",
+    "internal/storage/migrations/0053_projection_validity_scalar.sql": "1d6a9cc03c682fdde665d94859e0d93693ba8a046bac154787ccbb8a687a76e6"
+  },
+  "limitations": [
+    "Live collection continued between sequential diagnostic phases; these are not identical frozen snapshots.",
+    "Direct SQL timings exclude authentication, Go decoding, network transit and browser rendering.",
+    "The competing ingestion/backfill/API/browser workload is a separate acceptance gate.",
+    "No production plan mode, connection limit, timeout or public contract was changed."
+  ]
+}

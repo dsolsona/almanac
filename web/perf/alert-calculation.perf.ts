@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { cpus, totalmem } from 'node:os';
 import { expect, test, request as apiRequest, type Page } from '@playwright/test';
-import { compose, psql } from '../e2e/support/stack.ts';
+import { compose, composeArgs, postgresStorage, psql } from '../e2e/support/stack.ts';
 import { resourceSnapshot, ingestionBetween } from './resources.ts';
 import { ingestionMetrics, ingestionDelta } from './alert-calculation.metrics.ts';
 
@@ -16,8 +16,7 @@ function asynchronousSQL(sql: string, label: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const startedAt = new Date().toISOString();
     let inputError: string | undefined;
-    const child = execFile('docker', ['compose', '-p', 'almanac-e2e', '-f', '../compose.yaml', '-f', '../compose.e2e.yaml',
-      'exec', '-T', 'postgres', 'psql', '--no-psqlrc', '--quiet', '--tuples-only', '--no-align', '-v', 'ON_ERROR_STOP=1', '-U', 'almanac', '-d', 'almanac', '-f', '-'],
+    const child = execFile('docker', composeArgs('exec', '-T', 'postgres', 'psql', '--no-psqlrc', '--quiet', '--tuples-only', '--no-align', '-v', 'ON_ERROR_STOP=1', '-U', 'almanac', '-d', 'almanac', '-f', '-'),
     { encoding: 'utf8', timeout: 180_000, maxBuffer: 32 * 1024 * 1024 }, (error, stdout, stderr) => {
       writeFileSync(`${root}/${label}.jsonl`, stdout);
       writeFileSync(`${root}/${label}.stderr`, stderr);
@@ -119,10 +118,15 @@ ${marker.replaceAll('$1', `'${sli}'::uuid`)} COMMIT;`;
   const ingestionOnly = ingestionDelta(baselineStart, baselineEnd);
   writeFileSync(`${root}/ingestion-baseline.json`, JSON.stringify({ baselineStart, baselineEnd, ingestionOnly }, null, 2));
   const before = resourceSnapshot();
-  const profile = { baseRevision: '0d028cd',
+  const profile = { baseRevision: 'e9c8fa0', postgresStorage,
     applicationImage: compose('images', '--quiet', 'app').trim(),
     sourceHashes: Object.fromEntries(['../internal/storage/testdata/alert_window_fallback.sql',
-      'perf/alert-calculation.perf.ts', 'perf/alert-calculation.metrics.ts', 'perf/alert-calculation.seed.ts', 'playwright.alert-calculation.config.ts', '../compose.e2e.yaml', '../internal/storage/query/agent_access.sql', '../internal/storage/query/slis.sql', '../internal/storage/derived_current.go', '../internal/storage/query/derived_projections.sql', '../api/openapi.yaml', '../web/src/slos/SloDetailPanels.tsx']
+      'perf/alert-calculation.perf.ts', 'perf/alert-calculation.metrics.ts', 'perf/alert-calculation.seed.ts', 'playwright.alert-calculation.config.ts', '../compose.e2e.yaml', '../internal/storage/query/agent_access.sql', '../internal/storage/query/slis.sql', '../internal/storage/derived_current.go', '../internal/storage/query/derived_projections.sql', '../api/openapi.yaml', '../web/src/slos/SloDetailPanels.tsx',
+      '../internal/storage/query/derived_overview.sql', '../internal/storage/query/slo_list_references.sql',
+      '../internal/storage/query/derived_due.sql', '../internal/storage/query/derived_consistency.sql',
+      '../internal/storage/query/derived_metrics.sql', '../internal/storage/query/services.sql',
+      '../internal/storage/query/derived_history.sql', '../internal/storage/migrations/0053_projection_validity_scalar.sql',
+      '../compose.e2e.disk.yaml', '../scripts/e2e.sh', 'e2e/support/stack.ts']
       .map(path => [path, createHash('sha256').update(readFileSync(path)).digest('hex')])),
     cpu: cpus()[0]?.model, logicalCPUs: cpus().length, memoryBytes: totalmem(),
     database: psql("SELECT version()"), slis: 200, initialDays: 1, backfillDays: 3,

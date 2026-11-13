@@ -1,0 +1,222 @@
+{
+  "result": "failed; retained tmpfs workload under host memory pressure",
+  "profile": {
+    "baseRevision": "e9c8fa0",
+    "applicationImage": "9f2452ec3b21244f8a89c911a950f6eb41e49ec7932b4b98890e03378cbc7c11",
+    "sourceHashes": {
+      "../internal/storage/testdata/alert_window_fallback.sql": "2d7261617bf37a2c497103fe3f84a79a72365707bb2229f1b40537b909b6fa2e",
+      "perf/alert-calculation.perf.ts": "4fab16665bbc4bc5e5468fa7ca504c29e5f078c74dc77d3aa33f38b33e18f049",
+      "perf/alert-calculation.metrics.ts": "baa17bcd0604ced066e82941c96432d213f8402eaa7b1b15888a76f0f7ef8b41",
+      "perf/alert-calculation.seed.ts": "3f5544a5816cd550ff152f31a4b2bb154422b52bb224b3fcf062895d67f92228",
+      "playwright.alert-calculation.config.ts": "1b1584176d7b468750b1f6cc1a84f4df47486777a03c425097fd834eba42a1a9",
+      "../compose.e2e.yaml": "4796baeef6c7f8195624098f6c58487818db39b68fac6e4811d8267739b9b4a1",
+      "../internal/storage/query/agent_access.sql": "a50453eaf48acc4655b5a683eeb739c3e6fc6a22468bd3fd981622b3030c6332",
+      "../internal/storage/query/slis.sql": "dd520547b3b05f0a41308c3e6405436d1c71586bd2760c52b94c025607d02499",
+      "../internal/storage/derived_current.go": "4a0992a791240024c320027984a78ac7b6e344ff4f9d0dc4274b12238427f92a",
+      "../internal/storage/query/derived_projections.sql": "3bec990efffc6a2d72ca3a6e64796473e7a2b11e13abcfdb8ba06186fd0f6ea7",
+      "../api/openapi.yaml": "8cee7e36a221268d0bb5e05c81f11a28d6e81107b3425b7dabe4f8bbe675b4d8",
+      "../web/src/slos/SloDetailPanels.tsx": "0fa0ff1e854445c99150ec9c7e53bad936826d29f110e37280935a48a58b824b",
+      "../internal/storage/query/derived_overview.sql": "e0fcb6d8ce72bc0ed0c75d4f67cde6d3e0371e62a0b35e651ac64cdca30e0c73",
+      "../internal/storage/query/slo_list_references.sql": "f8f88f270f0666992c1f3e5c5512328594c334d319fd8ba831be29f81f3b84ff",
+      "../internal/storage/query/derived_due.sql": "cfe2a7e1b25c02be497ba3eec2d03e3230a6efb1fd488ae666787bd943dd7aac",
+      "../internal/storage/query/derived_consistency.sql": "7f3a3750d5a6c836ff1c0835def45bce160c3f370357d987b14dd533f7a54da1",
+      "../internal/storage/query/derived_metrics.sql": "0294bc1319786323c8a42e1be514c5d7f8c8919bfd5b667458b5c311fb9d5495",
+      "../internal/storage/query/services.sql": "7b131e6b40c0dff327a18f034f7874cf03cce65074738fd05fb88e46093cc950",
+      "../internal/storage/query/derived_history.sql": "b362ef9a5a1a76a66a0665fdd9eafe9681effebe4e1d078eefe8fd9d8bd5a221",
+      "../internal/storage/migrations/0053_projection_validity_scalar.sql": "1d6a9cc03c682fdde665d94859e0d93693ba8a046bac154787ccbb8a687a76e6"
+    },
+    "cpu": "AMD EPYC",
+    "logicalCPUs": 2,
+    "memoryBytes": 4130635776,
+    "database": "PostgreSQL 18.6 (Debian 18.6-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+    "slis": 200,
+    "initialDays": 1,
+    "backfillDays": 3,
+    "maxDirtyHours": 8,
+    "maxRawVisits": 7200,
+    "statementTimeoutMs": 1000,
+    "workers": 2,
+    "offeredBatchesPerSecond": 8,
+    "rounds": 4,
+    "cutoff": "2026-11-13T16:00:00Z",
+    "apiUsers": 10,
+    "apiMinimumCyclesPerUser": 10,
+    "apiCycleIntervalMs": 10000,
+    "browserUsers": 1,
+    "browserCycles": 20,
+    "backfillBatchMaxRows": 720,
+    "backfillBatchSLIs": 1,
+    "backfillBatches": 1400,
+    "note": "Controlled historical measurement cutoffs cross a UTC hour; wall-clock engine scheduling is outside this query experiment. Each paired query also runs an independent raw-population reference in the same snapshot; its extra work is part of the contention load.",
+    "postgresStorage": "memory"
+  },
+  "phase": {
+    "before": "2026-11-13T18:40:48.416872+00:00",
+    "after": "2026-11-13T18:44:02.277321+00:00"
+  },
+  "pairedBatches": 800,
+  "independentlyComparedWindows": 3200,
+  "mismatches": [],
+  "pendingBaseline": 142,
+  "pendingCandidate": 0,
+  "fallbackBatches": 142,
+  "maximumEmittedRawRows": 455,
+  "baselineMilliseconds": {
+    "samples": 800,
+    "p50": 10.595500000000001,
+    "p95": 37.514,
+    "maximum": 175.252
+  },
+  "candidateMilliseconds": {
+    "samples": 800,
+    "p50": 11.470500000000001,
+    "p95": 36.394,
+    "maximum": 169.241
+  },
+  "browserMilliseconds": {
+    "list-cold": {
+      "samples": 20,
+      "p50": 1414.0500000044703,
+      "p95": 2041.4000000059605,
+      "maximum": 2087.7999999970198
+    },
+    "list-warm": {
+      "samples": 20,
+      "p50": 583.5499999970198,
+      "p95": 1204.0999999940395,
+      "maximum": 1278
+    },
+    "detail-cold": {
+      "samples": 19,
+      "p50": 776.4000000059605,
+      "p95": 1325.9000000059605,
+      "maximum": 1325.9000000059605
+    },
+    "detail-warm": {
+      "samples": 20,
+      "p50": 289.8999999985099,
+      "p95": 590.6000000089407,
+      "maximum": 595.7000000029802
+    }
+  },
+  "apiMilliseconds": {
+    "overview": {
+      "samples": 140,
+      "p50": 756.4188510000022,
+      "p95": 10250.145332000015,
+      "maximum": 35076.786352000025
+    },
+    "status": {
+      "samples": 133,
+      "p50": 156.90693599998485,
+      "p95": 3151.4233810000005,
+      "maximum": 21264.765255000035
+    },
+    "history": {
+      "samples": 130,
+      "p50": 327.5855994999947,
+      "p95": 2375.129071000003,
+      "maximum": 3762.5844900000084
+    }
+  },
+  "ingestionOnly": {
+    "accepted": 205,
+    "duplicate": 0,
+    "unsuccessful": 0,
+    "p95LowerSeconds": 0.018314866,
+    "p95UpperSeconds": 0.019230609,
+    "elapsedSeconds": 62.549
+  },
+  "ingestionUnderLoad": {
+    "accepted": 540,
+    "duplicate": 0,
+    "unsuccessful": 14,
+    "p95LowerSeconds": 0.325815833,
+    "p95UpperSeconds": 0.342106624,
+    "elapsedSeconds": 200.367
+  },
+  "due": {
+    "intervals": 800,
+    "missing": 0,
+    "slisWithMissing": 0,
+    "nonObserved": 0
+  },
+  "live": {
+    "slis": 200,
+    "intervals": 404,
+    "maxReceiptDelaySeconds": 122.470918
+  },
+  "completedBackfillBatches": 1334,
+  "outcomes": [
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "rejected",
+      "error": "Error: experiment SQL failed (backfill): Command failed: docker compose -p almanac-e2e -f ../compose.yaml -f ../compose.e2e.yaml exec -T postgres psql --no-psqlrc --quiet --tuples-only --no-align -v ON_ERROR_STOP=1 -U almanac -d almanac -f -\n; "
+    },
+    {
+      "status": "rejected",
+      "error": "Error: expect(received).toBe(expected) // Object.is equality\n\nExpected: \"ready\"\nReceived: \"error\""
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "rejected",
+      "error": "Error: overview HTTP status\n\nexpect(received).toBe(expected) // Object.is equality\n\nExpected: 200\nReceived: 503"
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "rejected",
+      "error": "Error: overview HTTP status\n\nexpect(received).toBe(expected) // Object.is equality\n\nExpected: 200\nReceived: 503"
+    },
+    {
+      "status": "rejected",
+      "error": "Error: overview HTTP status\n\nexpect(received).toBe(expected) // Object.is equality\n\nExpected: 200\nReceived: 503"
+    }
+  ],
+  "artifactHashes": {
+    "backfill.jsonl": "5fcf0865ec7b8d61c92e45e826c55dc6a7bc5746548feaa193c420096de239b3",
+    "backfill.process.json": "64d50deb66504d0667b83cb8abd0acb48c408c50cb51f46247f922b2f2434530",
+    "backfill.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "ingestion-baseline.json": "304fc67fed04da00e9251cf5c1dfa1c8b579b16b40116cb220efa81cd5a237d2",
+    "profile.json": "5035e3eaf2f5613788cc46ecb838e10d7d90e4e0b5c0c5f0780f52a1bb09b7fa",
+    "queries-0.jsonl": "b572399df0955045d7bfe6d1723a062ec51b5e3049d82903ca5a8cbc1c8db1a7",
+    "queries-0.process.json": "6e624243b5520385a50ff6db36bb421151e56b9b06242a1a78ca93ede377b531",
+    "queries-0.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "queries-1.jsonl": "3b63dce75ad800edfbe62c7746b6275299024fc69d0c7133d2235274fdf37948",
+    "queries-1.process.json": "28089a39483afcb23c726e8b3bc7d8e89ade6d5cecf07a438ae73621871658f3",
+    "queries-1.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "results.json": "0a7ba2a536d546a9deaaa9f40455a139635d4cf7c538cd7914e5547033121959",
+    "summary.json": "ff3b1cbe1b3dedd9f2e3c237bcaa35c7f057ea49a16583e0ae914c70c3322833"
+  },
+  "caveats": [
+    "Source data remained live between SQL diagnostics and this full workload.",
+    "One browser renderer runs on the same two-vCPU host; remote capable-client acceptance remains outstanding.",
+    "Baseline, candidate and independent raw-reference queries all contribute to contention.",
+    "External query workers do not share the backend DerivedTraffic pool.",
+    "Controlled historical cutoffs cross an hour; this is not wall-clock alert-engine rollover acceptance.",
+    "Emitted raw contributions are not universal physical-read bounds."
+  ]
+}

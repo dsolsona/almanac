@@ -6,6 +6,8 @@ It is design review, not authorization for engine implementation.
 architecture adoption; production alert engine implementation remains separate.
 [F4-T03](F4-T03.md) fixes measured agent-access lock contention during historical
 writes; the remaining load failures stay in the calculation gate.
+[F4-T07](F4-T07.md) diagnoses prepared overview-query latency and implements a
+measured correction while preserving live pagination and currentness.
 [F4-T04](F4-T04.md) preserves explicitly labelled SLO status during preparation and
 separates API concurrency from rendered-browser measurements.
 [F4-T06](F4-T06.md) maps the proposed alert engine to concrete persistence and

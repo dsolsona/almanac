@@ -4,6 +4,7 @@
 #   sh scripts/e2e.sh [playwright args]   start a fresh stack, run the suite, remove the stack
 #   sh scripts/e2e.sh up | down           manage the stack by hand (E2E_KEEP=1 keeps it after a run)
 #   E2E_CONFIG=playwright.perf.config.ts  run the performance suite on the same kind of stack
+#   E2E_POSTGRES_STORAGE=disk           opt into a project-owned database volume
 # Runs inside the dev container with the Docker socket (make test-e2e).
 set -eu
 
@@ -18,8 +19,20 @@ export E2E_BASE_URL="https://localhost:${ALMANAC_PORT}"
 export E2E_METRICS_URL="http://localhost:${ALMANAC_METRICS_PORT}"
 export E2E_TRACES_URL="http://localhost:${ALMANAC_TRACES_PORT}"
 
-# compose.e2e.yaml keeps the stack's data in memory, so runs do not grow the Docker disk.
-compose() { docker compose -p "$COMPOSE_PROJECT_NAME" -f compose.yaml -f compose.e2e.yaml "$@"; }
+# Normal suites retain their tmpfs database. Long retained-history experiments can
+# opt into disk; export the same selection to every Playwright Compose invocation.
+export E2E_POSTGRES_STORAGE="${E2E_POSTGRES_STORAGE:-memory}"
+case "$E2E_POSTGRES_STORAGE" in
+  memory|disk) ;;
+  *) printf 'E2E_POSTGRES_STORAGE must be memory or disk\n' >&2; exit 2 ;;
+esac
+compose() {
+  if [ "$E2E_POSTGRES_STORAGE" = disk ]; then
+    docker compose -p "$COMPOSE_PROJECT_NAME" -f compose.yaml -f compose.e2e.yaml -f compose.e2e.disk.yaml "$@"
+  else
+    docker compose -p "$COMPOSE_PROJECT_NAME" -f compose.yaml -f compose.e2e.yaml "$@"
+  fi
+}
 
 down() {
   # Agents started by the suite carry this label; they are not Compose services.

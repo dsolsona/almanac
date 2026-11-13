@@ -15,7 +15,7 @@ WHERE (f.slo_id IS NULL OR ((f.attempts<5 OR f.failing_since IS NULL OR f.failin
    OR g.retention_start<>to_timestamp(ceil(extract(epoch FROM (sqlc.arg(now)::timestamptz-interval '365 days'))/d.cadence_seconds)*d.cadence_seconds)
    OR g.source_generation<>coalesce(source.generation,0)
    OR g.evaluated_through<to_timestamp(floor(extract(epoch FROM sqlc.arg(now)::timestamptz)/d.cadence_seconds)*d.cadence_seconds)
-          OR coalesce((p.payload->>'_current_valid_until')::timestamptz,'-infinity'::timestamptz)<=sqlc.arg(now)::timestamptz
+          OR coalesce(public.almanac_projection_deadline(p.current_valid_until),'-infinity'::timestamptz)<=sqlc.arg(now)::timestamptz
    OR EXISTS (SELECT 1 FROM public.almanac_slo_extrema e
       WHERE e.slo_id=s.id AND e.definition_revision=d.revision AND e.measurement_revision=d.measurement_revision
         AND e.calculation_version=sqlc.arg(calculation_version) AND e.exclusion_revision=0 AND e.resolution_seconds=3600
@@ -116,7 +116,7 @@ SELECT s.id AS slo_id, ((p.payload-'budget_sparkline'-'budget_history_generation
          AND g.retention_start=to_timestamp(ceil(extract(epoch FROM (sqlc.arg(now)::timestamptz-interval '365 days'))/d.cadence_seconds)*d.cadence_seconds)
          AND g.source_generation=coalesce(source.generation,0)
          AND g.evaluated_through>=to_timestamp(floor(extract(epoch FROM sqlc.arg(now)::timestamptz)/d.cadence_seconds)*d.cadence_seconds)
-             AND coalesce((p.payload->>'_current_valid_until')::timestamptz,'-infinity'::timestamptz)>sqlc.arg(now)::timestamptz),false)::boolean AS current
+             AND coalesce(public.almanac_projection_deadline(p.current_valid_until),'-infinity'::timestamptz)>sqlc.arg(now)::timestamptz),false)::boolean AS current
 FROM public.almanac_slos s
 JOIN public.almanac_slo_definitions d ON d.slo_id=s.id AND d.revision=s.definition_revision
 JOIN public.almanac_services service ON service.id=d.service_id

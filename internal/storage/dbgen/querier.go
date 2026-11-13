@@ -42,6 +42,7 @@ type Querier interface {
 	CountAccountLoginAttempts(ctx context.Context, arg CountAccountLoginAttemptsParams) (CountAccountLoginAttemptsRow, error)
 	CountActiveServiceIDs(ctx context.Context, dollar_1 []pgtype.UUID) (int64, error)
 	CountManagedUsers(ctx context.Context, arg CountManagedUsersParams) (int64, error)
+	// Evaluate classification once per SLO, rather than once per count bucket.
 	CountSloOverviewGroups(ctx context.Context, arg CountSloOverviewGroupsParams) (CountSloOverviewGroupsRow, error)
 	CountSourceLoginAttempts(ctx context.Context, arg CountSourceLoginAttemptsParams) (CountSourceLoginAttemptsRow, error)
 	CountUsableAdmins(ctx context.Context) (int64, error)

@@ -1,0 +1,49 @@
+{
+  "task": "F4-T07",
+  "purpose": "Preserve failed workload and remove a demonstrated test-fixture RAM pressure source",
+  "host": {"memoryMiB": 3939, "swapMiB": 0, "diskFreeBeforeGiB": 58},
+  "observedAfterFailedTmpfsLoad": {
+    "hostMemoryAvailableLowMiB": 90,
+    "hostSharedMemoryKiB": 2401660,
+    "e2ePostgresCgroupMemoryBytes": 2208854016,
+    "e2ePostgresSharedMemoryBytes": 2147020800,
+    "postgresBaseMiB": 895,
+    "postgresWalMiB": 1008,
+    "postgresTmpfsLimitGiB": 6,
+    "devPostgresCgroupMemoryBytes": 254152704,
+    "devPostgresSharedMemoryBytes": 229326848,
+    "e2eTraceCgroupMemoryBytes": 135344128,
+    "e2eTraceSharedMemoryBytes": 55382016,
+    "blockedBrowserWaitChannel": "folio_wait_bit_common",
+    "kernelOomEvidence": "No matching OOM-kill lines during kernel-log inspection; client143 and worker timeouts are recorded separately"
+  },
+  "preservation": {
+    "privateArchiveBytes": 74598495,
+    "privateArchiveSha256": "8d913ce4507e27ca700becd08a1741e8e59eb7bd04440e66322c68f706151bd4",
+    "backupSeconds": 7.226,
+    "fullDecodeSeconds": 1.267,
+    "restoreSeconds": 10.861,
+    "applicationAndAgentStoppedDuringBackupAndRestore": true,
+    "originalCredentialsAndImagesPreserved": true,
+    "countsAndSumsMatchBeforeAndAfter": {
+      "slos": 200,
+      "observations": 1146713,
+      "projections": 200,
+      "good": "11447661845.000000000000",
+      "total": "11467130000.000000000000"
+    }
+  },
+  "restoredStorage": {
+    "mode": "disk",
+    "volume": "almanac-e2e_postgres-data",
+    "filesystem": "/dev/root",
+    "applicationHealthSeconds": 5.338,
+    "hostMemoryAvailableMiB": 2668,
+    "hostSharedMemoryMiB": 167
+  },
+  "limitations": [
+    "Post-load memory observations establish fixture pressure; they do not precisely attribute every slow request.",
+    "A new disk-backed performance result requires its own fresh baseline and explicitly recorded storage mode.",
+    "Normal test-suite defaults, hardware, connection limits, timeouts and acceptance thresholds remain unchanged."
+  ]
+}

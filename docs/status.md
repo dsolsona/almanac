@@ -1,3 +1,11 @@
+Overview query and experiment isolation, 2026-11-13: [F4-T07](tasks/F4-T07.md)
+adds a generated projection deadline and single-pass count classification. Focused
+PostgreSQL checks pass (18.320 s). A separately identified disk-backed 200-SLO run
+matches all 3,200 windows and observes every due live interval, but still fails
+ingestion and browser/API latency budgets. [Evidence](evidence/slo-overview-performance/2026-11-13-disk-contention.json)
+retains those failures. The calculation adoption gate remains open; repeated
+background preparation is the next measured correction target.
+
 Alert policy form foundation, 2026-11-13: [F4-T09](tasks/F4-T09.md) implements
 the selected compact creation form as shared controls and a development catalogue
 example. Focused checks pass 45 component cases (5.82 s), typecheck and nine browser

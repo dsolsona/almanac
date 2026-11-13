@@ -1,0 +1,8 @@
+# Opt-in storage for long retained-history experiments on memory-constrained hosts.
+# The project-owned volume is removed by the existing E2E down --volumes cleanup.
+# All other isolated services, credentials and resource limits remain unchanged.
+services:
+  postgres:
+    volumes: !override
+      - postgres-data:/var/lib/postgresql
+      - postgres-secret:/run/postgres-secret:ro

@@ -72,6 +72,15 @@ data. `E2E_KEEP=1` keeps the stack for inspection; `sh scripts/e2e.sh down` (ins
 `.local/e2e/report/index.html`; raw results stay in the dev container's test-results volume, because
 trace recording on the macOS bind mount fails.
 
+Normal suites use an in-memory PostgreSQL fixture. For a long retained-history
+experiment whose database and WAL would crowd the host's RAM, explicitly set
+`E2E_POSTGRES_STORAGE=disk` on setup, subsequent direct Playwright commands and
+cleanup. This selects [the disk overlay](../compose.e2e.disk.yaml) and a
+project-owned volume removed by the existing `down --volumes` cleanup. Record the
+storage mode in performance evidence; a storage change requires a fresh baseline,
+not comparison as though the environment were unchanged. Preserve any retained
+fixture before replacing its mounts. No latency budget or workload limit changes.
+
 The performance suite uses the same stack with `playwright.perf.config.ts`. It seeds 20 SLIs and
 20 SLOs with `PERF_DAYS` of history (35 by default), checks the exact budgets, then times each page
 `PERF_RUNS` times cold and through in-app navigation. The budget is < 1,000 ms at the 95th

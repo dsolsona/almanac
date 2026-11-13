@@ -433,6 +433,7 @@ type AlmanacSloCurrentProjection struct {
 	Urgency            string      `json:"urgency"`
 	Payload            []byte      `json:"payload"`
 	BudgetHistoryState pgtype.Text `json:"budget_history_state"`
+	CurrentValidUntil  pgtype.Text `json:"current_valid_until"`
 }
 
 type AlmanacSloDefinition struct {

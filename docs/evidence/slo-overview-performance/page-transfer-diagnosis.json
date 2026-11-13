@@ -1,0 +1,334 @@
+{
+  "task": "F4-T07",
+  "result": "Internal-cache stripping was measured and not adopted; public wire contract remains unchanged",
+  "method": {
+    "rowsIncludingSentinel": 21,
+    "readers": [
+      1,
+      10
+    ],
+    "warmupPairsPerReader": 6,
+    "measuredPairsPerReader": 5,
+    "order": "Alternating original/stripped query order by worker and round",
+    "isolation": "One repeatable-read read-only transaction per worker",
+    "driver": "pgx default prepared statement caching",
+    "statementTimeoutMs": 2000,
+    "lockTimeoutMs": 250,
+    "jit": false,
+    "queryTiming": "Query, row transfer and Scan into generated SQLC row types",
+    "decodeTiming": "encoding/json/v2 unmarshal into the existing public overview item",
+    "encodeTiming": "encoding/json/v2 marshal of all public items",
+    "equality": "Public encoded payload hashes match for every pair in each snapshot",
+    "sourceHash": "f8f88f270f0666992c1f3e5c5512328594c334d319fd8ba831be29f81f3b84ff",
+    "limitations": "Direct Go/pgx diagnosis excludes HTTP/authentication and the separate competing backfill/query workload. Field breakdown is a later live snapshot."
+  },
+  "measurements": {
+    "single": {
+      "original": {
+        "query_ms": {
+          "samples": 5,
+          "p50": 20.804161,
+          "p95": 23.429315
+        },
+        "decode_ms": {
+          "samples": 5,
+          "p50": 4.811874,
+          "p95": 12.035103
+        },
+        "encode_ms": {
+          "samples": 5,
+          "p50": 4.590858,
+          "p95": 7.574634
+        },
+        "payload_bytes": {
+          "samples": 5,
+          "p50": 1184154,
+          "p95": 1184154
+        },
+        "public_bytes": {
+          "samples": 5,
+          "p50": 1023103,
+          "p95": 1023103
+        }
+      },
+      "strip-cache": {
+        "query_ms": {
+          "samples": 5,
+          "p50": 27.532711,
+          "p95": 35.977495
+        },
+        "decode_ms": {
+          "samples": 5,
+          "p50": 4.877978,
+          "p95": 5.485945
+        },
+        "encode_ms": {
+          "samples": 5,
+          "p50": 3.685927,
+          "p95": 6.04571
+        },
+        "payload_bytes": {
+          "samples": 5,
+          "p50": 1104759,
+          "p95": 1104759
+        },
+        "public_bytes": {
+          "samples": 5,
+          "p50": 1023103,
+          "p95": 1023103
+        }
+      }
+    },
+    "concurrent": {
+      "original": {
+        "query_ms": {
+          "samples": 50,
+          "p50": 108.1199,
+          "p95": 170.558818
+        },
+        "decode_ms": {
+          "samples": 50,
+          "p50": 8.112536,
+          "p95": 17.390612
+        },
+        "encode_ms": {
+          "samples": 50,
+          "p50": 5.185512,
+          "p95": 36.610095
+        },
+        "payload_bytes": {
+          "samples": 50,
+          "p50": 1184056.0,
+          "p95": 1184056
+        },
+        "public_bytes": {
+          "samples": 50,
+          "p50": 1023071.0,
+          "p95": 1023071
+        }
+      },
+      "strip-cache": {
+        "query_ms": {
+          "samples": 50,
+          "p50": 127.6916365,
+          "p95": 181.772694
+        },
+        "decode_ms": {
+          "samples": 50,
+          "p50": 8.0259085,
+          "p95": 27.54258
+        },
+        "encode_ms": {
+          "samples": 50,
+          "p50": 6.8252865,
+          "p95": 29.114851
+        },
+        "payload_bytes": {
+          "samples": 50,
+          "p50": 1104661.0,
+          "p95": 1104661
+        },
+        "public_bytes": {
+          "samples": 50,
+          "p50": 1023071.0,
+          "p95": 1023071
+        }
+      }
+    },
+    "publicFields": {
+      "budget_history_generation": 7810,
+      "budget_history_state": 147,
+      "budget_sparkline": 895408,
+      "burn_1h": 17904,
+      "burn_6h": 19210,
+      "current": 27288,
+      "current_state": 147,
+      "exhaustion": 23058,
+      "generation": 7810,
+      "leading_reason": 1094,
+      "reasons": 3781,
+      "slo": 14888,
+      "urgency": 357
+    },
+    "sparklineSamples": [
+      62,
+      62,
+      62,
+      62,
+      62,
+      62,
+      62,
+      62,
+      62,
+      62,
+      62,
+      62,
+      62,
+      62,
+      62,
+      62,
+      62,
+      62,
+      62,
+      62,
+      62
+    ],
+    "sparklineSampleFields": {
+      "allowed_budget": 9093,
+      "attainment": 8232,
+      "bucket_end": 28644,
+      "bucket_start": 28644,
+      "burn": 8232,
+      "evaluation_at": 28644,
+      "good": 9828,
+      "quality": 419833,
+      "received_at": 11341,
+      "remaining_budget": 8945,
+      "remaining_fraction": 8388,
+      "retained_extrema": 12600,
+      "revision": 3906,
+      "state": 19278,
+      "total": 9849
+    }
+  },
+  "fullDiskWorkloadServerSpans": {
+    "db.ListSloOverviewPage": {
+      "samples": 176,
+      "p50Ms": 175.0859405,
+      "p95Ms": 574.829648,
+      "maximumMs": 708.045916
+    },
+    "db.CountSloOverviewGroups": {
+      "samples": 176,
+      "p50Ms": 3.175764,
+      "p95Ms": 25.965562,
+      "maximumMs": 60.213588
+    },
+    "slo.overview.read": {
+      "samples": 178,
+      "p50Ms": 226.0564475,
+      "p95Ms": 644.936757,
+      "maximumMs": 761.230896
+    },
+    "GET /api/v1/slos/overview": {
+      "samples": 178,
+      "p50Ms": 253.97871500000002,
+      "p95Ms": 667.654403,
+      "maximumMs": 773.796255
+    }
+  },
+  "slowestOverviewTrace": [
+    "24882e3bea5ec05615c3400c4db0a8bc",
+    [
+      {
+        "name": "GET /api/v1/slos/overview",
+        "milliseconds": 773.796255,
+        "startedAt": "2026-11-13T19:17:45.737799454Z",
+        "status": null
+      },
+      {
+        "name": "slo.overview.read",
+        "milliseconds": 761.230896,
+        "startedAt": "2026-11-13T19:17:45.738573362Z",
+        "status": null
+      },
+      {
+        "name": "db.ListSloOverviewPage",
+        "milliseconds": 708.045916,
+        "startedAt": "2026-11-13T19:17:45.751350113Z",
+        "status": null
+      },
+      {
+        "name": "http.response.encode",
+        "milliseconds": 11.597638,
+        "startedAt": "2026-11-13T19:17:46.499809979Z",
+        "status": null
+      },
+      {
+        "name": "db.statement",
+        "milliseconds": 8.115182,
+        "startedAt": "2026-11-13T19:17:46.491674399Z",
+        "status": null
+      },
+      {
+        "name": "db.CountSloOverviewGroups",
+        "milliseconds": 3.520283,
+        "startedAt": "2026-11-13T19:17:45.747826163Z",
+        "status": null
+      },
+      {
+        "name": "db.LockSessionInstallation",
+        "milliseconds": 3.175784,
+        "startedAt": "2026-11-13T19:17:45.743907679Z",
+        "status": null
+      },
+      {
+        "name": "db.FindAgentSessionUserID",
+        "milliseconds": 2.058643,
+        "startedAt": "2026-11-13T19:17:45.73865765Z",
+        "status": null
+      },
+      {
+        "name": "db.statement",
+        "milliseconds": 1.593863,
+        "startedAt": "2026-11-13T19:17:45.742301904Z",
+        "status": null
+      },
+      {
+        "name": "db.statement",
+        "milliseconds": 0.841565,
+        "startedAt": "2026-11-13T19:17:45.740724449Z",
+        "status": null
+      },
+      {
+        "name": "db.LockSessionUserRead",
+        "milliseconds": 0.588141,
+        "startedAt": "2026-11-13T19:17:45.747086218Z",
+        "status": null
+      },
+      {
+        "name": "db.GetInitialOwnerState",
+        "milliseconds": 0.574786,
+        "startedAt": "2026-11-13T19:17:45.737871829Z",
+        "status": null
+      },
+      {
+        "name": "db.statement",
+        "milliseconds": 0.360146,
+        "startedAt": "2026-11-13T19:17:45.741930396Z",
+        "status": null
+      },
+      {
+        "name": "db.LockAgentSessionRead",
+        "milliseconds": 0.139101,
+        "startedAt": "2026-11-13T19:17:45.747679679Z",
+        "status": null
+      },
+      {
+        "name": "db.pool.acquire",
+        "milliseconds": 0.013666,
+        "startedAt": "2026-11-13T19:17:45.737851782Z",
+        "status": null
+      },
+      {
+        "name": "db.pool.acquire",
+        "milliseconds": 0.004959,
+        "startedAt": "2026-11-13T19:17:45.738644145Z",
+        "status": null
+      }
+    ]
+  ],
+  "contractFinding": {
+    "dominantField": "budget_sparkline",
+    "sparklineBytes": 895408,
+    "qualityValueBytesWithinSparklines": 419833,
+    "samplesPerRowInCapturedPage": 62,
+    "listRendererReads": [
+      "remaining_fraction",
+      "state",
+      "display_coverage.states"
+    ],
+    "existingWireRequirement": "budget_sparkline contains full SloOperationalSample values, including quality, counts, exact timestamps, revision and extrema metadata; the client validates that contract",
+    "decision": "No public fields removed or substituted; compact list samples require an explicit contract decision"
+  }
+}

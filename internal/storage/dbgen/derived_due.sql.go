@@ -25,7 +25,7 @@ WITH aggregate_due AS (
           OR g.source_generation<>coalesce(source.generation,0)
           OR g.retention_start<>to_timestamp(ceil(extract(epoch FROM ($1::timestamptz-interval '365 days'))/d.cadence_seconds)*d.cadence_seconds)
           OR g.evaluated_through<to_timestamp(floor(extract(epoch FROM $1::timestamptz)/d.cadence_seconds)*d.cadence_seconds)
-          OR coalesce((p.payload->>'_current_valid_until')::timestamptz,'-infinity'::timestamptz)<=$1::timestamptz
+          OR coalesce(public.almanac_projection_deadline(p.current_valid_until),'-infinity'::timestamptz)<=$1::timestamptz
           OR EXISTS (SELECT 1 FROM public.almanac_slo_extrema e
              WHERE e.slo_id=s.id AND e.definition_revision=d.revision AND e.measurement_revision=d.measurement_revision
                AND e.calculation_version=$2 AND e.exclusion_revision=0 AND e.resolution_seconds=3600
@@ -33,7 +33,7 @@ WITH aggregate_due AS (
                AND e.range_end<=date_trunc('hour',g.evaluated_through AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
                AND e.published_at>coalesce((p.payload#>>'{_budget_cache,published_at}')::timestamptz,'-infinity'::timestamptz))
         THEN GREATEST($1::timestamptz,f.next_attempt_at)
-        ELSE GREATEST(LEAST(to_timestamp((floor(extract(epoch FROM $1::timestamptz)/d.cadence_seconds)+1)*d.cadence_seconds),coalesce((p.payload->>'_current_valid_until')::timestamptz,'-infinity'::timestamptz)),f.next_attempt_at)
+        ELSE GREATEST(LEAST(to_timestamp((floor(extract(epoch FROM $1::timestamptz)/d.cadence_seconds)+1)*d.cadence_seconds),coalesce(public.almanac_projection_deadline(p.current_valid_until),'-infinity'::timestamptz)),f.next_attempt_at)
         END) AS at
     FROM public.almanac_slos s
     JOIN public.almanac_slo_definitions d ON d.slo_id=s.id AND d.revision=s.definition_revision
