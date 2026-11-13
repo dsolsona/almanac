@@ -781,6 +781,14 @@ WHERE r.agent_id=c.agent_id AND r.delivery_id=c.delivery_id`); err != nil {
 	if _, err := conn.Exec(t.Context(), `DROP TABLE public.almanac_slo_history_blocks, public.almanac_slo_current_projections, public.almanac_slo_derived_generations, public.almanac_sli_hourly_aggregates, public.almanac_derived_dirty_ranges, public.almanac_sli_source_generations; DROP INDEX public.almanac_slo_definitions_sli_idx; DROP TABLE public.almanac_service_dependencies, public.almanac_objective_create_receipts, public.almanac_slo_definitions, public.almanac_slos, public.almanac_services CASCADE; DROP INDEX public.almanac_agent_ownership_proof_idx, public.almanac_sli_execution_attempts_lease_idx, public.almanac_sli_delivery_receipts_lease_idx; DELETE FROM public.almanac_schema_migrations WHERE version >= 16`); err != nil {
 		t.Fatal(err)
 	}
+	// Remove migration 0054 authority objects before replaying the legacy upgrade.
+	if _, err := conn.Exec(t.Context(), `DROP TABLE public.almanac_slo_exclusion_work,
+public.almanac_slo_exclusion_changes, public.almanac_slo_exclusion_state,
+public.almanac_maintenance_exclusion_scopes, public.almanac_maintenance_exclusion_revisions,
+public.almanac_maintenance_exclusions;
+DROP FUNCTION public.almanac_initialize_slo_exclusion_state(), public.almanac_immutable_maintenance_revision()`); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := conn.Exec(t.Context(), `DROP FUNCTION public.almanac_projection_deadline(text)`); err != nil {
 		t.Fatal(err)
 	}
