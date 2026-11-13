@@ -216,3 +216,6 @@ under [ADR-0046](../adr/0046-sli-measurements-and-collection-detail.md) and
 [F6-T11](F6-T11.md) implements approved SLO detail B, with integrated budget context,
 point inspection, completed-day blocks and structured disclosures under
 [ADR-0049](../adr/0049-slo-budget-in-context-detail.md).
+
+[F4-T05](F4-T05.md) adds the pure maintenance-exclusion calculation foundation;
+production storage and maintenance management remain separate work.
