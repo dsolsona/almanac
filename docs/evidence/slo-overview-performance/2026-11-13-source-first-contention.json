@@ -221,7 +221,7 @@
     "External query workers do not share the backend DerivedTraffic pool.",
     "Controlled historical cutoffs cross an hour; this is not wall-clock alert-engine rollover acceptance.",
     "Emitted raw contributions are not universal physical-read bounds.",
-    "The 1,200 older SQL backfill batches precede the seeded SLI/SLO validity bounds. Real ingestion rejects those intervals; this run is diagnostic stress evidence, not representative historical-ingestion acceptance. A corrected fixture and matching workload control are required."
+    "The seed sets measurement effective_from and SLO evaluation_valid_from to the start of the single initially populated day. The subsequent 1,200 older SQL backfill batches inject observations before both validity bounds, which real ingestion rejects. This is a synthetic stress result, not acceptance evidence for valid historical ingestion. A corrected fixture requires declared earlier validity, fresh seeding and a distinct profile; its missing coverage differs."
   ],
   "failedChecks": [
     "worker outcomes",
@@ -234,5 +234,219 @@
     "detail-cold browser sample count",
     "detail-cold browser maximum",
     "detail-warm browser sample count"
-  ]
+  ],
+  "persistedValidityBounds": {
+    "slis": 200,
+    "earliest_observation": "2026-11-09T20:13:00+00:00",
+    "latest_observation": "2026-11-13T20:19:00+00:00",
+    "minimum_measurement_effective_from": "2026-11-12T20:13:00+00:00",
+    "maximum_measurement_effective_from": "2026-11-12T20:13:00+00:00",
+    "minimum_slo_evaluation_valid_from": "2026-11-12T20:13:00+00:00",
+    "maximum_slo_evaluation_valid_from": "2026-11-12T20:13:00+00:00",
+    "observations_before_measurement_effective_from": 864000,
+    "observations_before_slo_evaluation_valid_from": 864000,
+    "total_observations": 1153012,
+    "diagnosticSeconds": 1.2958130449987948
+  },
+  "controlDesign": {
+    "standaloneControl": "ingestion-only baseline",
+    "sameOtherLoadWithoutCandidateAndOracle": false,
+    "rawOracleElapsedTimeRecorded": false,
+    "perPair": "One baseline call, one candidate call and one raw-reference query covering four windows in the same snapshot; alternating baseline/candidate order."
+  },
+  "queryLanes": [
+    {
+      "worker": 0,
+      "pairedBatches": 400,
+      "baselineCalls": 400,
+      "candidateCalls": 400,
+      "rawOracleQueries": 400,
+      "windowsPerCall": 4,
+      "baselineTotalMilliseconds": 3987.4210000000057,
+      "candidateTotalMilliseconds": 4961.711000000006,
+      "wallSeconds": 119.124,
+      "process": {
+        "startedAt": "2026-11-13T20:16:48.898Z",
+        "finishedAt": "2026-11-13T20:18:48.022Z"
+      }
+    },
+    {
+      "worker": 1,
+      "pairedBatches": 400,
+      "baselineCalls": 400,
+      "candidateCalls": 400,
+      "rawOracleQueries": 400,
+      "windowsPerCall": 4,
+      "baselineTotalMilliseconds": 3619.9869999999983,
+      "candidateTotalMilliseconds": 5121.397999999999,
+      "wallSeconds": 118.699,
+      "process": {
+        "startedAt": "2026-11-13T20:16:48.902Z",
+        "finishedAt": "2026-11-13T20:18:47.601Z"
+      }
+    }
+  ],
+  "backfillProcess": {
+    "startedAt": "2026-11-13T20:16:48.920Z",
+    "finishedAt": "2026-11-13T20:18:57.082Z",
+    "wallSeconds": 128.162
+  },
+  "testReport": {
+    "seed": {
+      "stats": {
+        "total": 2,
+        "expected": 2,
+        "unexpected": 0,
+        "flaky": 0,
+        "skipped": 0,
+        "ok": true
+      },
+      "startTime": 1794600767177,
+      "duration": 154622.342
+    },
+    "contention": {
+      "stats": {
+        "total": 1,
+        "expected": 0,
+        "unexpected": 1,
+        "flaky": 0,
+        "skipped": 0,
+        "ok": false
+      },
+      "startTime": 1794600943374,
+      "duration": 206329.26299999998
+    }
+  },
+  "hostMemorySnapshots": {
+    "host-baseline-end.txt": {
+      "MemTotal": 4130635776,
+      "MemAvailable": 1809960960,
+      "SwapTotal": 0,
+      "Shmem": 307560448
+    },
+    "host-during-seed.txt": {
+      "MemTotal": 4130635776,
+      "MemAvailable": 2460958720,
+      "SwapTotal": 0,
+      "Shmem": 162783232
+    },
+    "host-before-workload.txt": {
+      "MemTotal": 4130635776,
+      "MemAvailable": 2547265536,
+      "SwapTotal": 0,
+      "Shmem": 293281792
+    },
+    "host-after-workload.txt": {
+      "MemTotal": 4130635776,
+      "MemAvailable": 2352398336,
+      "SwapTotal": 0,
+      "Shmem": 304742400
+    },
+    "host-during-workload.txt": {
+      "MemTotal": 4130635776,
+      "MemAvailable": 1942155264,
+      "SwapTotal": 0,
+      "Shmem": 300064768
+    },
+    "host-before-seed.txt": {
+      "MemTotal": 4130635776,
+      "MemAvailable": 2767392768,
+      "SwapTotal": 0,
+      "Shmem": 163274752
+    }
+  },
+  "browserNetworkErrors": [
+    {
+      "at": "2026-11-13T20:17:29.555Z",
+      "url": "https://localhost:18188/api/v1/auth/context",
+      "status": 503
+    },
+    {
+      "at": "2026-11-13T20:16:59.205Z",
+      "url": "https://localhost:18188/api/v1/slos/overview?limit=20",
+      "status": 503,
+      "body": "{\"code\":\"unavailable\",\"field_errors\":[],\"message\":\"Service or SLO request failed\",\"request_id\":\"50f00495-cef8-4581-8513-d3f39d0d4402\"}"
+    },
+    {
+      "at": "2026-11-13T20:16:59.193Z",
+      "url": "https://localhost:18188/api/v1/slos/overview?limit=20",
+      "status": 503,
+      "body": "{\"code\":\"unavailable\",\"field_errors\":[],\"message\":\"Service or SLO request failed\",\"request_id\":\"32e15544-01e8-4fd3-bcbb-789a512af982\"}"
+    }
+  ],
+  "overviewTraceSummary": {
+    "db.ListSloOverviewPage": {
+      "samples": 120,
+      "p50Ms": 254.487717,
+      "p95Ms": 679.379673,
+      "maximumMs": 765.498605
+    },
+    "db.CountSloOverviewGroups": {
+      "samples": 120,
+      "p50Ms": 2.372569,
+      "p95Ms": 36.143782,
+      "maximumMs": 91.664801
+    },
+    "slo.overview.read": {
+      "samples": 122,
+      "p50Ms": 306.4496955,
+      "p95Ms": 771.799338,
+      "maximumMs": 904.452117
+    },
+    "GET /api/v1/slos/overview": {
+      "samples": 122,
+      "p50Ms": 333.9246495,
+      "p95Ms": 780.688388,
+      "maximumMs": 950.089846
+    }
+  },
+  "derivedCurrentTraceResults": {
+    "waiting": {
+      "count": 3385,
+      "totalMilliseconds": 48137.38506200011
+    },
+    "published": {
+      "count": 959,
+      "totalMilliseconds": 58517.22843199997
+    }
+  },
+  "requestErrorTraceEvidence": [
+    {
+      "name": "db.pool.acquire",
+      "milliseconds": 250.101059,
+      "at": "2026-11-13T20:16:59.212300989Z",
+      "traceID": "79f98ca0039fa024f340c4bdb6e43e0d",
+      "status": "database admission failed",
+      "trafficClass": "interactive"
+    },
+    {
+      "name": "db.pool.acquire",
+      "milliseconds": 250.13853,
+      "at": "2026-11-13T20:16:59.212134607Z",
+      "traceID": "33574e610f7882f9fe80727b22ee8895",
+      "status": "database admission failed",
+      "trafficClass": "interactive"
+    },
+    {
+      "name": "GET /api/v1/slos/overview",
+      "milliseconds": 253.685751,
+      "at": "2026-11-13T20:16:59.209041046Z",
+      "traceID": "79f98ca0039fa024f340c4bdb6e43e0d",
+      "status": "server error",
+      "trafficClass": null
+    },
+    {
+      "name": "GET /api/v1/slos/overview",
+      "milliseconds": 260.134972,
+      "at": "2026-11-13T20:16:59.202774086Z",
+      "traceID": "33574e610f7882f9fe80727b22ee8895",
+      "status": "server error",
+      "trafficClass": null
+    }
+  ],
+  "traceExport": {
+    "rows": 262723,
+    "seconds": 13.701133253998705
+  },
+  "preservedTraceSHA256": "1c27159698a4b3ec282787e0e9670270192cea685536e78da4ed606010a17e0d"
 }
