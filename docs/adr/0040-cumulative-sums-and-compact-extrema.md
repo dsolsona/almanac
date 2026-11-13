@@ -1,5 +1,10 @@
 # ADR-0040: Serve SLO history from compact extrema over exact hourly aggregates
 
+> Proposed amendment, 2026-11-13: [ADR-0051](0051-durable-alert-policy-state-machine.md)
+> proposes a bounded raw calculation option for dirty interior portions in the
+> shared count path, narrowly amending decision 1's readiness rule. The experiment
+> and maintainer acceptance are still pending; this record remains authoritative.
+
 - Status: accepted
 - Created: 2026-11-09
 - Accepted: 2026-11-09

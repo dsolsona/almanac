@@ -52,12 +52,17 @@ A firing alert with stale evidence remains open with that reason visible.
 Never call unavailable evidence healthy. Behind-cursor results are explicitly
 last evaluated state, not current measurements.
 
-When an hourly aggregate is pending, show evaluation waiting with its original
-due time and processing lag. Preserve the last committed alert state; do not
-present the delayed boundary as completed no-data, a new indeterminate decision
+If aggregate preparation remains pending after bounded calculation cannot complete,
+show evaluation waiting with its original due time and processing lag. Preserve
+the last committed alert state; do not present the delayed boundary as completed
+no-data, a new indeterminate decision
 or current Healthy evidence. Distinguish aggregate preparation failure from
 observation absence. Surface aggregate-wait and total delay separately from the
-ready-to-commit latency reported by the processor.
+ready-to-commit latency reported by the processor. Distinguish calculation waiting
+(including budget/admission deferral) from unavailable source data. A completed exact
+fallback displays ordinary decision evidence; do not add a warning merely because
+raw contributions were used. Keep calculation-path and resource details in processor
+diagnostics, with source quality and processing delay understandable upfront.
 
 History marks Detected after recovery and shows effective occurrence times and
 actual detection time. Distinguish replayed original evidence, reconstructed
@@ -167,7 +172,7 @@ only warm API responses. Existing SLO performance contracts are unchanged.
 - AC-08: Exact counts, thresholds, chart inspection and SLO navigation agree with real API data; missing data stays explicit.
 - AC-09: Authenticated alert navigation meets the reviewed performance contract on both fixtures during engine work, with browser/tracing evidence.
 - AC-10: Domain operations have matching API/CLI semantics; destinations and deferred response features cannot appear functional prematurely.
-- AC-11: Aggregate-pending views preserve last committed lifecycle and distinguish waiting/lag from completed unavailable evidence; original due time and total delay remain visible.
+- AC-11: Calculation-waiting views preserve last committed lifecycle and distinguish preparation/budget lag from completed unavailable source evidence; original due time and total delay remain visible. Successful exact fallback uses ordinary evidence without a false data-quality warning.
 - AC-12: Archive impact/version conflicts, inactive Archived SLO policies and Disabled occurrence history follow the backend contract; no standalone manual-close control appears.
 
 ## Dependencies and open questions
@@ -191,3 +196,4 @@ No production alert UI, API integration or performance result is claimed.
 
 - 2026-11-12: Selected A/current creation reference recorded; proposed production state coverage remains under review.
 - 2026-11-12: Review adds pending-aggregate lag, named administrative closure routes and confirmed SLO archive states; static mock coverage remains unchanged.
+- 2026-11-13: Clarify waiting after bounded-calculation deferral versus source unavailability; successful fallback does not change the selected layouts or imply degraded data quality.

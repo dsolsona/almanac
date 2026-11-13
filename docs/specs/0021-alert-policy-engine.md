@@ -46,7 +46,7 @@ stable during review. On acceptance, update the linked records together:
 | [SPEC-0007](0007-storage-and-retention.md) | Preserve 365-day alert history and active-record protection; add bounded evaluation recovery records. |
 | [SPEC-0016](0016-maintenance-exclusions.md) | Preserve adjusted populations, full-exclusion behavior and explicit maintenance-change resolution reasons. |
 | [SPEC-0005](0005-openslo-and-resource-model.md), SPEC-0007 | Retain dependency rejection for ordinary delete/archive requests; propose an explicitly confirmed SLO archive that atomically deactivates affected alert policies while retaining historical references. Other dependent-resource restrictions remain. |
-| [SPEC-0020](0020-cumulative-slo-calculation.md) | Keep exact aggregates plus raw edges. Pending aggregate work defers an alert boundary until publication rather than completing it as unavailable. No raw whole-window fallback. |
+| [SPEC-0020](0020-cumulative-slo-calculation.md), [ADR-0040](../adr/0040-cumulative-sums-and-compact-extrema.md) decision 1 | Propose bounded raw replacement of dirty interior portions in the shared exact calculator, gated on experiment evidence and acceptance. If calculation remains pending, retain the original boundary for retry; no unbounded full-window fallback or partial policy commit. |
 
 ## Behavior and contracts
 
@@ -90,14 +90,22 @@ good/total decimals, target and comparison by cross multiplication:
 `bad >= threshold * total * (1-target)`. Display rounding never decides state.
 The same canonical counts must explain the decision in API/CLI/UI evidence.
 
-#### Pending aggregate preparation
+#### Pending aggregate preparation and proposed bounded fallback
 
 A dirty hour intersecting a window interior returns **pending** from the canonical
 aggregate/raw-edge path. Pending is an evaluation-work state, not a fourth
 condition truth value and not a committed unavailable result. If any required
-window is pending, keep the whole policy boundary due at its original effective
-cutoff. Persist dependencies and wait for publication, releasing the worker claim
-and resources. Do not advance its cursor, open/resolve from a partial policy
+window needs pending aggregates, first attempt the candidate bounded calculation
+defined in [SPEC-0020's proposed amendment](0020-cumulative-slo-calculation.md#proposed-amendment-bounded-raw-calculation-for-dirty-interiors):
+combine clean aggregates, exact raw replacements for dirty portions and raw edges
+within one snapshot and explicit resource limits. If every window can be completed,
+evaluate all conditions and commit the complete policy decision normally. This
+candidate is gated on the calculation experiment below; it is not current behavior.
+
+If preparation is still pending because fallback is ineligible, lacks admission
+or cannot complete within budget, keep the whole policy boundary due at its
+original effective cutoff. Persist dependencies and wait for publication, releasing
+the worker claim and resources. Do not advance its cursor, open/resolve from a partial policy
 snapshot or process a later boundary first. Other policies remain independently
 eligible for fair worker scheduling.
 
@@ -106,15 +114,16 @@ rechecks cover missed wakeups. Re-read every condition against one consistent
 snapshot, including new source/exclusion generations, and use the usual commit
 fencing. Freshness/coverage are judged at the original evaluation instant, not
 the later retry wall clock; present-day source freshness remains separately visible.
-No implicit raw scan of the full six-hour or other configured window bypasses
-the canonical pending state.
+Only the shared calculator's explicit bounded option may substitute raw portions.
+No unbounded full-window scan or alert-specific calculation bypasses its limits.
 
 This applies at hourly rollover and when a late observation dirties an interior
 hour. A breach at T followed by recovery at T+1 minute must still be evaluated in
 that order if aggregate publication happens five minutes later. Those reconstructed
 decisions use the retained-facts provenance rules below. A ready fast condition
-also waits if sustained burn needs a pending aggregate; this is processing lag,
-not the full-window warmup/unknown recovery rule.
+waits only if sustained burn cannot be calculated through either clean aggregates
+or the bounded fallback; this is processing lag, not the full-window warmup/unknown
+recovery rule. Do not introduce independent condition commits to hide the delay.
 
 Pending alone does not exhaust evaluation retries, become a no-data condition or
 silently expire at a preparation target. Explicit canonical aggregate failure
@@ -122,7 +131,10 @@ after its retry budget is exhausted yields unavailable with `calculation_failed`
 record the failure separately from missing observations. Until then, retain due
 work unless a documented administrative cancellation or the 24-hour catch-up
 horizon ends it with an explicit range outcome. Surface waiting age/dependencies,
-oldest due boundary and preparation failure to UI/API/CLI diagnostics.
+oldest due boundary and preparation failure to UI/API/CLI diagnostics. Record
+fallback usage, work, duration and budget/admission deferrals separately from source
+quality. A successful fallback does not repair or conceal the aggregate worker's
+backlog or failures.
 
 Require full configured windows within the SLO's measurement validity and retained
 data; do not shorten them to create an alert. Existing eligible measurements can
@@ -330,12 +342,15 @@ time on publication, generation changes or retry. Report distributions plus the
 oldest still-pending boundary and its age; pending evaluations cannot disappear
 from the report because they have not committed.
 
-SPEC-0020's five-minute closed-hour build target is an existing preparation target,
-not an alert detection SLO or a reason to declare a pending aggregate complete.
-Set an end-to-end alert target after measuring rollover and late-data rebuilding
-at both fixtures. Until then, no bound on total detection delay is claimed.
+SPEC-0020's five-minute closed-hour target applies to retained chart extrema,
+not source aggregate preparation or alert detection. Source aggregates rebuild as
+observations arrive, including before an hour closes; a five-minute pause on every
+rollover is not inherent. Set an end-to-end alert target after measuring rollover,
+late-data rebuilding and fallback at both fixtures, before accepting the complete
+contract or shipping the engine. Until then, no bound on total detection delay is claimed.
 Verification must cross an hourly rollover and dirty an interior hour through late
-data, proving wakeup, same-boundary retry and ordered breach/recovery after publication.
+data, proving both successful bounded fallback and waiting when its budget is
+exceeded, same-boundary retry and ordered breach/recovery after publication.
 After a 30-minute evaluator outage with ingestion continuing, recover the 200-policy
 backlog within five minutes while incoming work continues. Verify chronological
 outcomes and zero unexplained missing boundaries, not only processing throughput.
@@ -347,6 +362,41 @@ profile before measurements; no unreported hardware changes between fixtures.
 The UI contract retains the <1,000 ms journey requirement and preferred <=500 ms
 target. The broader existing SLO scale obligations are unchanged; this proposal
 does not claim a 1,000-policy alert benchmark.
+
+### Calculation experiment before engine implementation
+
+Compare the existing aggregate-wait path with the proposed shared-calculator
+fallback on both fixtures, using the same deterministic observations, effective
+boundaries and pinned runner. This experiment precedes ADR acceptance and engine
+implementation; a calculation/evaluation harness does not establish durable
+state-machine or production UI acceptance.
+
+- Cross hourly rollovers and inject late observations in an interior hour that
+  affects sustained burn but not fast burn. Include simultaneous dirty hours,
+  all-policy load and multiple policies sharing an SLO.
+- Delay and stop the aggregate worker while ingestion continues. Exercise both
+  admitted fallback and exhaustion of dirty-hour/raw-row/time/concurrency budgets;
+  resume publication and verify every retained boundary can be evaluated in order.
+- Compare exact counts, coverage/freshness and condition outcomes to an independent
+  direct-observation reference at the same snapshot. Include threshold equality,
+  non-hour-aligned/cadence-aligned edges, missing/stale/zero/expired data, publication
+  and ingestion races, and revision changes. Use deterministic transitions for
+  breach/recovery and condition handoff; real occurrence/acknowledgement crash-race
+  acceptance remains part of later engine integration tests.
+- Pin numerical resource budgets before each run. Report database work/rows,
+  concurrency, CPU/I/O, fallback frequency, deferrals and total boundary-to-result
+  latency, including unfinished-boundary ages. Break out source arrival/settling,
+  preparation wait and calculation time. Harness result latency is not a measured
+  durable alert-commit latency. Check interference with ingestion and authenticated
+  SLO navigation under their existing budgets.
+
+The adoption gate requires exact equivalence, enforced resource bounds and evidence
+that the candidate can meet an agreed total detection target without violating
+existing workloads' budgets. Record failing cases and choose explicit limits and
+the end-to-end target with the maintainer before accepting ADR-0051 and the
+SPEC-0020 amendment. If evidence is insufficient, retain the accepted calculation
+path and revisit waiting or independent condition processing; do not silently
+change ordering, relax bounds or mark the candidate implemented.
 
 ## Acceptance criteria
 
@@ -362,8 +412,9 @@ does not claim a 1,000-policy alert benchmark.
 - AC-10: UI/API/CLI expose equivalent policy, condition evidence, acknowledgement, history and processor/quality outcomes with authorization and conflict handling.
 - AC-11: Both declared policy/SLO fixtures meet reviewed lag/recovery targets with exact expected transitions; shared-SLO policies remain independent.
 - AC-12: Collection and authenticated alert/SLO navigation retain their budgets during live evaluation and catch-up, with traces identifying costs.
-- AC-13: Hour rollover/late-data aggregate pending retains the original due boundary without a lifecycle or cursor commit; publication retries all conditions coherently, preserves ordered breach/recovery and reports aggregate wait plus total delay. Missed wakeups, terminal aggregate failure and horizon expiry have explicit outcomes.
+- AC-13: Hour rollover/late-data dirty interiors either produce a complete, exact evaluation through bounded fallback or retain the original due boundary without a lifecycle/cursor commit. Budget/admission deferral releases resources; publication retries coherently and preserves ordered breach/recovery. Total delay includes preparation and fallback; missed wakeups, terminal failure and horizon expiry have explicit outcomes.
 - AC-14: Ordinary referenced-SLO archival rejects with dependent IDs; confirmed archival atomically inactivates bindings, fences claims, records cancelled ranges and disables open occurrences with `slo_archived`. Version/creation races, already-terminal occurrences and archived-SLO rebinding rejection preserve history and authorization.
+- AC-15: Before candidate adoption, the 100/200-policy calculation experiment proves exact equivalence against independent raw-observation results, bounded database work and no violation of existing workload budgets. Concurrent updates cannot double-count contributions or permit stale decisions; evidence records limits, unfinished work and total latency without claiming engine integration.
 
 ## Dependencies and open questions
 
@@ -375,8 +426,11 @@ direction, not acceptance of the complete draft or authorization to implement.
 The selected mocks, global acknowledgement and 100/200 starting scale are confirmed.
 
 Review the remaining lifecycle details, confirmed-archive dependency exception,
-pending-aggregate deferral, one-minute cadence and numerical ready-to-commit/recovery
-targets before accepting the complete contract. End-to-end detection latency has
+bounded fallback and remaining pending-aggregate deferral, one-minute cadence and
+numerical ready-to-commit/recovery targets before accepting the complete contract.
+The maintainer approved investigating bounded fallback as the preferred candidate;
+adoption requires the calculation experiment and acceptance of the SPEC-0020
+amendment. End-to-end detection latency has
 no target yet and must not be conflated with ready-to-commit latency. Review the
 retained-evidence cost. ADR-0010's delivery/security decisions remain accepted;
 later adapter contracts may refine them explicitly, not silently replace them.
@@ -395,3 +449,4 @@ evidence are recorded in F4-T01; they do not satisfy the engine acceptance crite
 
 - 2026-11-12: Initial draft, with 100/200-policy verification scope selected by the maintainer. Proposed replacement contracts remain pending review.
 - 2026-11-12: Review corrections distinguish pending aggregates from completed unavailable results, retain delivery ADR scope, define the absence of manual close and specify confirmed SLO archival. Supported review defaults are recorded without marking the full draft accepted.
+- 2026-11-13: Propose bounded shared-calculator fallback gated on a 100/200-policy experiment; preserve complete ordered evaluations and clarify the separate chart-history target. No candidate adoption or engine performance is claimed.

@@ -1,4 +1,4 @@
-Alerting design review, 2026-11-12: [F4-T01](tasks/F4-T01.md) prepares proposed
+Alerting design review, 2026-11-13: [F4-T01](tasks/F4-T01.md) prepares proposed
 [ADR-0051](adr/0051-durable-alert-policy-state-machine.md), draft
 [SPEC-0021](specs/0021-alert-policy-engine.md) and
 [SPEC-0022](specs/0022-alert-management-ui.md), with the selected
@@ -8,7 +8,15 @@ Review supports full-window readiness, a 24-hour catch-up horizon and explicit
 cancelled ranges; complete contracts remain draft. Review corrections retain
 aggregate-pending boundaries for retry, narrow ADR supersession to evaluation,
 define administrative closure/archive outcomes and distinguish ready-to-commit
-latency from total detection delay (which has no numeric target yet).
+latency from total detection delay (which has no numeric target yet). The latest
+proposal tests bounded raw calculation of dirty interior portions in the shared
+calculator before accepting the architecture. [SPEC-0020](specs/0020-cumulative-slo-calculation.md)
+records the proposed amendment; its accepted behavior remains in force. The next
+step is the 100/200-policy correctness/resource experiment across rollovers, late
+data, delayed/stopped aggregate workers and budget exhaustion. Complete policy
+evaluations remain ordered; unsuccessful fallback retains durable pending work.
+The five-minute closed-hour target belongs to chart history, not source aggregate
+readiness. No experiment result, fallback adoption or end-to-end target is claimed.
 [Draft PR #94](https://github.com/dsolsona/almanac/pull/94) includes the contracts,
 interactive mocks and selected renders. Local mock checks passed 288 assertions;
 staged-only documentation validation passed. No engine implementation, benchmark

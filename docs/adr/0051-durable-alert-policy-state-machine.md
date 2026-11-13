@@ -4,8 +4,10 @@
 - Created: 2026-11-12
 - Accepted: pending
 - Approval: pending; maintainer authorized drafts and a draft PR, not engine implementation
+- Investigation: maintainer approved testing bounded raw calculation as the preferred candidate; adoption requires experiment evidence and contract acceptance
 - Related specs: [SPEC-0021](../specs/0021-alert-policy-engine.md), [SPEC-0022](../specs/0022-alert-management-ui.md)
 - Supersedes / superseded by: proposes superseding only the evaluation scheduling and occurrence-ordering decisions in [ADR-0010](0010-alert-evaluation-and-delivery.md); delivery, worker authorization, egress and shared persistence boundaries remain accepted; not effective until acceptance
+- Proposed calculation amendment: [ADR-0040](0040-cumulative-sums-and-compact-extrema.md) decision 1's dirty-interior readiness rule only; gated on experiment and acceptance
 
 ## Context
 
@@ -62,13 +64,24 @@ path; ingestion does not synchronously execute the alert state machine.
 
 The canonical path in [SPEC-0020](../specs/0020-cumulative-slo-calculation.md)
 returns pending when a dirty hourly aggregate intersects a window interior.
-Treat this as blocked evaluation work, not a completed unavailable condition.
-Keep the original boundary due and its cursor unchanged; record the affected
-aggregate dependencies and release the worker claim while waiting. Aggregate
+Propose a bounded fallback inside that shared calculation layer: retain clean
+aggregate contributions and calculate only dirty interior portions directly from
+canonical observations, alongside the usual raw edges. All contributions use one
+consistent snapshot and the same exact count/coverage semantics. This proposes a
+narrow amendment to [ADR-0040](0040-cumulative-sums-and-compact-extrema.md)'s first
+decision on per-hour readiness; its history design and other decisions remain.
+The SPEC-0020 proposed amendment defines eligibility and resource limits. It is
+not an alert-specific formula, a synchronous aggregate repair or permission to
+scan an arbitrary whole window. Adoption is gated on the experiment below.
+
+If fallback cannot complete within its budget, treat pending as blocked evaluation
+work, not a completed unavailable condition. Keep the original boundary due and
+its cursor unchanged; record affected aggregate dependencies and release the worker
+claim while waiting. Aggregate
 publication durably wakes blocked work, with a bounded timer recheck to recover
 lost wakeups. Re-evaluate all conditions at that same boundary against one fresh,
 fenced snapshot before committing. Later boundaries remain ordered behind it.
-No raw scan of the whole alert window is introduced as an implicit fallback.
+Do not commit a partial condition set or skip a pending boundary.
 
 Pending aggregation is not a failed retry attempt. Passing the preparation target
 raises processing-lag diagnostics; it does not turn pending into non-matching or
@@ -79,6 +92,28 @@ definitive quality results, distinct from still-running aggregate preparation.
 Waiting adds real detection delay, including for otherwise-ready conditions in
 that policy. The draft's ready-to-commit target excludes this wait; SPEC-0021
 requires measuring total delay and explicitly sets no numeric end-to-end target yet.
+
+Hourly source aggregates are rebuilt as observations arrive, including in an open
+hour. SPEC-0020's five-minute closed-hour target is for retained chart extrema,
+not source aggregate readiness. An hourly rollover can expose outstanding source
+work; an unavoidable five-minute pause at every rollover is not the contract.
+
+### Calculation experiment and acceptance gate
+
+Before accepting this ADR or starting engine implementation, compare the existing
+wait-for-publication path with bounded fallback at the 100/200-policy fixtures.
+Prove numerical equivalence against an independent canonical-observation reference,
+including quality and revision behavior. Measure total delay, raw work and database
+contention across rollovers, late data and delayed/stopped aggregate workers.
+Keep dirty-hour, raw-row, deadline and concurrency budgets explicit and fixed for
+each run; SPEC-0021 defines the required cases and evidence. Existing collection
+and interactive-read budgets remain constraints.
+
+Adopt fallback only after correctness and resource evidence support it and the
+maintainer accepts its limits and an end-to-end latency target. If it fails, record
+the findings and revisit the alternatives; do not silently increase budgets or
+switch to independent condition processing. The experiment is not production
+implementation or acceptance of the whole alerting contract.
 
 ### Evaluation and transition ownership
 
@@ -159,6 +194,16 @@ beyond backup history, exactly-once notification receipt or a throughput result.
 
 ## Alternatives considered
 
+- Always wait for aggregate publication: keeps complete ordered evaluations but
+  makes detection depend on background preparation even when canonical observations
+  suffice. Retained as the current baseline and the fallback-budget exhaustion path.
+- Evaluate conditions independently: lets a matching fast condition fire while
+  sustained calculation waits, but adds partial-boundary persistence and occurrence
+  ordering/recovery rules during catch-up. Keep as an alternative if the calculation
+  experiment fails, not an implicit extension of this state machine.
+- Bounded raw calculation for dirty portions: preferred candidate because it keeps
+  complete ordered decisions. Adds query cost and shared-calculator complexity;
+  requires equivalence proof and bounded admission before adoption.
 - Periodically scan every policy: simpler scheduling, but ignores dependency
   indexing and needs separate durable ordering/catch-up machinery anyway.
 - Evaluate synchronously on every datapoint: couples ingestion to policy volume,
