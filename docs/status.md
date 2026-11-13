@@ -1,4 +1,6 @@
-Alerting calculation experiment, 2026-11-13: [F4-T02](tasks/F4-T02.md) has
+Alerting calculation experiment, 2026-11-13: [F4-T02](tasks/F4-T02.md), published in
+[draft PR #95](https://github.com/dsolsona/almanac/pull/95) above #94 in native
+stack 96, has
 [reviewable evidence](evidence/alert-calculation/README.md), with no production
 adoption. Focused exact-calculation checks pass (3.323 s); 800 paired contention
 batches independently match all 3,200 windows, candidate query p95 46.066 ms.
