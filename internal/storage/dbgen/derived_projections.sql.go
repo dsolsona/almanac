@@ -188,9 +188,14 @@ func (q *Queries) InsertDerivedGeneration(ctx context.Context, arg InsertDerived
 }
 
 const listDueDerivedObjectives = `-- name: ListDueDerivedObjectives :many
+WITH projection_metadata AS MATERIALIZED (
+    SELECT slo_id,generation_id,current_valid_until,
+           payload#>>'{_budget_cache,published_at}' AS budget_published_at
+    FROM public.almanac_slo_current_projections
+)
 SELECT s.id FROM public.almanac_slos s
 JOIN public.almanac_slo_definitions d ON d.slo_id=s.id AND d.revision=s.definition_revision
-LEFT JOIN public.almanac_slo_current_projections p ON p.slo_id=s.id
+LEFT JOIN projection_metadata p ON p.slo_id=s.id
 LEFT JOIN public.almanac_slo_derived_generations g ON g.id=p.generation_id
 LEFT JOIN public.almanac_sli_source_generations source
     ON source.sli_id=d.sli_id AND source.measurement_revision=d.measurement_revision
@@ -210,7 +215,7 @@ WHERE (f.slo_id IS NULL OR ((f.attempts<5 OR f.failing_since IS NULL OR f.failin
         AND e.calculation_version=$1 AND e.exclusion_revision=0 AND e.resolution_seconds=3600
         AND e.range_start>=date_trunc('hour',(g.evaluated_through-interval '7 days') AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
         AND e.range_end<=date_trunc('hour',g.evaluated_through AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
-        AND e.published_at>coalesce((p.payload#>>'{_budget_cache,published_at}')::timestamptz,'-infinity'::timestamptz)))
+        AND e.published_at>coalesce(p.budget_published_at::timestamptz,'-infinity'::timestamptz)))
 ORDER BY f.next_attempt_at NULLS FIRST, g.evaluated_through NULLS FIRST, s.id LIMIT $3
 `
 
@@ -220,6 +225,9 @@ type ListDueDerivedObjectivesParams struct {
 	BatchLimit         int32              `json:"batch_limit"`
 }
 
+// Read publication text once per projection, not once per retained hour.
+// Keep timestamp parsing in its conditional predicate so unrelated due/backoff
+// branches retain their existing behavior for malformed cache metadata.
 func (q *Queries) ListDueDerivedObjectives(ctx context.Context, arg ListDueDerivedObjectivesParams) ([]pgtype.UUID, error) {
 	rows, err := q.db.Query(ctx, listDueDerivedObjectives, arg.CalculationVersion, arg.Now, arg.BatchLimit)
 	if err != nil {

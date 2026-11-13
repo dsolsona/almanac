@@ -1,5 +1,8 @@
 # Implementation tasks
 
+[F4-T15](F4-T15.md) removes repeated projection-metadata extraction from current
+scheduler scans while preserving selection and retry semantics.
+
 [F4-T14](F4-T14.md) owns the ranked performance investigation and causal
 reproductions before further alert-calculation adoption or capacity claims.
 

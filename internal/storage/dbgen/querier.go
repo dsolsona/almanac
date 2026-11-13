@@ -188,6 +188,9 @@ type Querier interface {
 	ListCatalogServices(ctx context.Context, arg ListCatalogServicesParams) ([]AlmanacService, error)
 	ListDatasourceSliMeasurements(ctx context.Context, datasourceID pgtype.UUID) ([]ListDatasourceSliMeasurementsRow, error)
 	ListDatasources(ctx context.Context, arg ListDatasourcesParams) ([]AlmanacDatasource, error)
+	// Read publication text once per projection, not once per retained hour.
+	// Keep timestamp parsing in its conditional predicate so unrelated due/backoff
+	// branches retain their existing behavior for malformed cache metadata.
 	ListDueDerivedObjectives(ctx context.Context, arg ListDueDerivedObjectivesParams) ([]pgtype.UUID, error)
 	ListMaintenanceGrids(ctx context.Context, sloID pgtype.UUID) ([]ListMaintenanceGridsRow, error)
 	ListMaintenanceIdentities(ctx context.Context, arg ListMaintenanceIdentitiesParams) ([]ListMaintenanceIdentitiesRow, error)
@@ -249,6 +252,9 @@ type Querier interface {
 	PruneExpiredLoginAttempts(ctx context.Context, nowAt pgtype.Timestamptz) error
 	PublishDerivedCurrentProjection(ctx context.Context, arg PublishDerivedCurrentProjectionParams) (int64, error)
 	PublishSloExtrema(ctx context.Context, arg PublishSloExtremaParams) (int64, error)
+	// Read publication text once per projection, not once per retained hour.
+	// Keep timestamp parsing in its conditional predicate so unrelated due/backoff
+	// branches retain their existing behavior for malformed cache metadata.
 	ReadDerivedDue(ctx context.Context, arg ReadDerivedDueParams) (ReadDerivedDueRow, error)
 	ReadDerivedMaintenanceDue(ctx context.Context, arg ReadDerivedMaintenanceDueParams) (ReadDerivedMaintenanceDueRow, error)
 	ReadDerivedMetrics(ctx context.Context, arg ReadDerivedMetricsParams) (ReadDerivedMetricsRow, error)

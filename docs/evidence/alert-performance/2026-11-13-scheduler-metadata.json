@@ -1,0 +1,926 @@
+{
+  "task": "F4-T15",
+  "baseRevision": "925d156e45be12b51986f6b3c85c42f5eb072cc7",
+  "scope": "Same-snapshot scheduler query diagnosis and equivalent MATERIALIZED metadata implementation; no full workload acceptance.",
+  "causalProbe": {
+    "metadata": {
+      "now": "2026-11-13T22:34:25.842461+00:00",
+      "version": "PostgreSQL 18.6 (Debian 18.6-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+      "calculation_version": "occurrences-operational-v1",
+      "snapshot": "69558:69558:"
+    },
+    "sourceHashes": {
+      "internal/storage/query/derived_due.sql": "cfe2a7e1b25c02be497ba3eec2d03e3230a6efb1fd488ae666787bd943dd7aac",
+      "internal/storage/query/derived_projections.sql": "3bec990efffc6a2d72ca3a6e64796473e7a2b11e13abcfdb8ba06186fd0f6ea7"
+    },
+    "state": {
+      "objectives": 200,
+      "missing_projection": 0,
+      "source_mismatch": 2,
+      "min_evaluated": "2026-11-13T22:34:00+00:00",
+      "max_evaluated": "2026-11-13T22:34:00+00:00",
+      "minimum_deadline": "2026-11-13T22:34:25.426904+00:00",
+      "maximum_deadline": "2026-11-13T22:35:00+00:00",
+      "failure_rows": 0,
+      "payload_stored_bytes": 1130083,
+      "payload_json_bytes": 11591497
+    },
+    "parameters": {
+      "now": "2026-11-13T22:34:25.842461+00:00",
+      "calculation_version": "occurrences-operational-v1",
+      "metrics_at": "now + 1 minute",
+      "batch_limit": 100
+    },
+    "settings": {
+      "statement_timeout": "5s",
+      "lock_timeout": "250ms",
+      "transaction": "repeatable read",
+      "plan_cache_mode": "force_generic_plan",
+      "jit": "off"
+    },
+    "exactOrderedOutputEquality": true,
+    "dueRows": 2,
+    "rolledBack": true,
+    "samples": [
+      {
+        "cycle": 0,
+        "query": "due",
+        "mode": "original",
+        "executionMs": 382.605,
+        "planningMs": 1.954
+      },
+      {
+        "cycle": 0,
+        "query": "due",
+        "mode": "materialized",
+        "executionMs": 28.306,
+        "planningMs": 0.035
+      },
+      {
+        "cycle": 0,
+        "query": "due",
+        "mode": "scalar",
+        "executionMs": 22.597,
+        "planningMs": 0.078
+      },
+      {
+        "cycle": 0,
+        "query": "list",
+        "mode": "original",
+        "executionMs": 350.391,
+        "planningMs": 1.283
+      },
+      {
+        "cycle": 0,
+        "query": "list",
+        "mode": "materialized",
+        "executionMs": 28.273,
+        "planningMs": 0.032
+      },
+      {
+        "cycle": 0,
+        "query": "list",
+        "mode": "scalar",
+        "executionMs": 20.283,
+        "planningMs": 0.03
+      },
+      {
+        "cycle": 1,
+        "query": "due",
+        "mode": "scalar",
+        "executionMs": 21.727,
+        "planningMs": 0.032
+      },
+      {
+        "cycle": 1,
+        "query": "due",
+        "mode": "materialized",
+        "executionMs": 27.083,
+        "planningMs": 0.054
+      },
+      {
+        "cycle": 1,
+        "query": "due",
+        "mode": "original",
+        "executionMs": 419.76,
+        "planningMs": 0.036
+      },
+      {
+        "cycle": 1,
+        "query": "list",
+        "mode": "scalar",
+        "executionMs": 24.112,
+        "planningMs": 0.059
+      },
+      {
+        "cycle": 1,
+        "query": "list",
+        "mode": "materialized",
+        "executionMs": 36.885,
+        "planningMs": 0.062
+      },
+      {
+        "cycle": 1,
+        "query": "list",
+        "mode": "original",
+        "executionMs": 505.892,
+        "planningMs": 0.035
+      },
+      {
+        "cycle": 2,
+        "query": "due",
+        "mode": "original",
+        "executionMs": 374.234,
+        "planningMs": 0.039
+      },
+      {
+        "cycle": 2,
+        "query": "due",
+        "mode": "materialized",
+        "executionMs": 27.161,
+        "planningMs": 0.035
+      },
+      {
+        "cycle": 2,
+        "query": "due",
+        "mode": "scalar",
+        "executionMs": 23.192,
+        "planningMs": 0.035
+      },
+      {
+        "cycle": 2,
+        "query": "list",
+        "mode": "original",
+        "executionMs": 407.736,
+        "planningMs": 0.031
+      },
+      {
+        "cycle": 2,
+        "query": "list",
+        "mode": "materialized",
+        "executionMs": 26.74,
+        "planningMs": 0.034
+      },
+      {
+        "cycle": 2,
+        "query": "list",
+        "mode": "scalar",
+        "executionMs": 21.75,
+        "planningMs": 0.034
+      },
+      {
+        "cycle": 3,
+        "query": "due",
+        "mode": "scalar",
+        "executionMs": 22.447,
+        "planningMs": 0.071
+      },
+      {
+        "cycle": 3,
+        "query": "due",
+        "mode": "materialized",
+        "executionMs": 30.456,
+        "planningMs": 0.065
+      },
+      {
+        "cycle": 3,
+        "query": "due",
+        "mode": "original",
+        "executionMs": 401.658,
+        "planningMs": 0.04
+      },
+      {
+        "cycle": 3,
+        "query": "list",
+        "mode": "scalar",
+        "executionMs": 24.924,
+        "planningMs": 0.062
+      },
+      {
+        "cycle": 3,
+        "query": "list",
+        "mode": "materialized",
+        "executionMs": 34.43,
+        "planningMs": 0.056
+      },
+      {
+        "cycle": 3,
+        "query": "list",
+        "mode": "original",
+        "executionMs": 371.548,
+        "planningMs": 0.03
+      },
+      {
+        "cycle": 4,
+        "query": "due",
+        "mode": "original",
+        "executionMs": 416.272,
+        "planningMs": 0.063
+      },
+      {
+        "cycle": 4,
+        "query": "due",
+        "mode": "materialized",
+        "executionMs": 33.431,
+        "planningMs": 0.053
+      },
+      {
+        "cycle": 4,
+        "query": "due",
+        "mode": "scalar",
+        "executionMs": 32.59,
+        "planningMs": 0.06
+      },
+      {
+        "cycle": 4,
+        "query": "list",
+        "mode": "original",
+        "executionMs": 350.433,
+        "planningMs": 0.058
+      },
+      {
+        "cycle": 4,
+        "query": "list",
+        "mode": "materialized",
+        "executionMs": 29.75,
+        "planningMs": 0.033
+      },
+      {
+        "cycle": 4,
+        "query": "list",
+        "mode": "scalar",
+        "executionMs": 22.89,
+        "planningMs": 0.06
+      },
+      {
+        "cycle": 5,
+        "query": "due",
+        "mode": "scalar",
+        "executionMs": 22.973,
+        "planningMs": 0.036
+      },
+      {
+        "cycle": 5,
+        "query": "due",
+        "mode": "materialized",
+        "executionMs": 29.077,
+        "planningMs": 0.042
+      },
+      {
+        "cycle": 5,
+        "query": "due",
+        "mode": "original",
+        "executionMs": 399.281,
+        "planningMs": 0.041
+      },
+      {
+        "cycle": 5,
+        "query": "list",
+        "mode": "scalar",
+        "executionMs": 24.179,
+        "planningMs": 0.061
+      },
+      {
+        "cycle": 5,
+        "query": "list",
+        "mode": "materialized",
+        "executionMs": 28.651,
+        "planningMs": 0.058
+      },
+      {
+        "cycle": 5,
+        "query": "list",
+        "mode": "original",
+        "executionMs": 466.658,
+        "planningMs": 0.032
+      }
+    ],
+    "summary": {
+      "due": {
+        "original": {
+          "samples": 6,
+          "medianMs": 400.46950000000004,
+          "minMs": 374.234,
+          "maxMs": 419.76
+        },
+        "materialized": {
+          "samples": 6,
+          "medianMs": 28.6915,
+          "minMs": 27.083,
+          "maxMs": 33.431
+        },
+        "scalar": {
+          "samples": 6,
+          "medianMs": 22.785,
+          "minMs": 21.727,
+          "maxMs": 32.59
+        }
+      },
+      "list": {
+        "original": {
+          "samples": 6,
+          "medianMs": 389.642,
+          "minMs": 350.391,
+          "maxMs": 505.892
+        },
+        "materialized": {
+          "samples": 6,
+          "medianMs": 29.200499999999998,
+          "minMs": 26.74,
+          "maxMs": 36.885
+        },
+        "scalar": {
+          "samples": 6,
+          "medianMs": 23.500999999999998,
+          "minMs": 20.283,
+          "maxMs": 24.924
+        }
+      }
+    }
+  },
+  "implementedSourceProbe": {
+    "metadata": {
+      "now": "2026-11-13T22:39:41.328624+00:00",
+      "version": "PostgreSQL 18.6 (Debian 18.6-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+      "calculation_version": "occurrences-operational-v1",
+      "snapshot": "79128:79128:"
+    },
+    "sourceHashes": {
+      "internal/storage/query/derived_due.sql": "50bb7c88858223f5a5d1ab04fdd4dd79fa7459f2cb06f6a245e4fa03b4da4500",
+      "internal/storage/query/derived_projections.sql": "c1bc896cf748a98eb2aee93fb828f9b3d610a3c200c301119b3bee1a3a61f6ec"
+    },
+    "state": {
+      "objectives": 200,
+      "missing_projection": 0,
+      "source_mismatch": 2,
+      "min_evaluated": "2026-11-13T22:39:00+00:00",
+      "max_evaluated": "2026-11-13T22:39:00+00:00",
+      "minimum_deadline": "2026-11-13T22:39:40.116581+00:00",
+      "maximum_deadline": "2026-11-13T22:40:00+00:00",
+      "failure_rows": 0,
+      "payload_stored_bytes": 1129678,
+      "payload_json_bytes": 11591158
+    },
+    "parameters": {
+      "now": "2026-11-13T22:39:41.328624+00:00",
+      "calculation_version": "occurrences-operational-v1",
+      "metrics_at": "now + 1 minute",
+      "batch_limit": 100
+    },
+    "settings": {
+      "statement_timeout": "5s",
+      "lock_timeout": "250ms",
+      "transaction": "repeatable read",
+      "plan_cache_mode": "force_generic_plan",
+      "jit": "off"
+    },
+    "exactOrderedOutputEquality": true,
+    "dueRows": 2,
+    "rolledBack": true,
+    "samples": [
+      {
+        "cycle": 0,
+        "query": "due",
+        "mode": "original",
+        "executionMs": 410.711,
+        "planningMs": 0.037
+      },
+      {
+        "cycle": 0,
+        "query": "due",
+        "mode": "materialized",
+        "executionMs": 30.268,
+        "planningMs": 0.051
+      },
+      {
+        "cycle": 0,
+        "query": "list",
+        "mode": "original",
+        "executionMs": 364.278,
+        "planningMs": 0.047
+      },
+      {
+        "cycle": 0,
+        "query": "list",
+        "mode": "materialized",
+        "executionMs": 28.654,
+        "planningMs": 2.959
+      },
+      {
+        "cycle": 1,
+        "query": "due",
+        "mode": "materialized",
+        "executionMs": 26.396,
+        "planningMs": 0.064
+      },
+      {
+        "cycle": 1,
+        "query": "due",
+        "mode": "original",
+        "executionMs": 530.334,
+        "planningMs": 0.06
+      },
+      {
+        "cycle": 1,
+        "query": "list",
+        "mode": "materialized",
+        "executionMs": 33.27,
+        "planningMs": 0.041
+      },
+      {
+        "cycle": 1,
+        "query": "list",
+        "mode": "original",
+        "executionMs": 392.887,
+        "planningMs": 0.04
+      },
+      {
+        "cycle": 2,
+        "query": "due",
+        "mode": "original",
+        "executionMs": 347.597,
+        "planningMs": 0.04
+      },
+      {
+        "cycle": 2,
+        "query": "due",
+        "mode": "materialized",
+        "executionMs": 28.569,
+        "planningMs": 0.037
+      },
+      {
+        "cycle": 2,
+        "query": "list",
+        "mode": "original",
+        "executionMs": 410.917,
+        "planningMs": 0.036
+      },
+      {
+        "cycle": 2,
+        "query": "list",
+        "mode": "materialized",
+        "executionMs": 28.194,
+        "planningMs": 0.07
+      },
+      {
+        "cycle": 3,
+        "query": "due",
+        "mode": "materialized",
+        "executionMs": 29.916,
+        "planningMs": 0.038
+      },
+      {
+        "cycle": 3,
+        "query": "due",
+        "mode": "original",
+        "executionMs": 445.026,
+        "planningMs": 0.05
+      },
+      {
+        "cycle": 3,
+        "query": "list",
+        "mode": "materialized",
+        "executionMs": 28.356,
+        "planningMs": 0.066
+      },
+      {
+        "cycle": 3,
+        "query": "list",
+        "mode": "original",
+        "executionMs": 381.217,
+        "planningMs": 0.034
+      },
+      {
+        "cycle": 4,
+        "query": "due",
+        "mode": "original",
+        "executionMs": 386.989,
+        "planningMs": 0.052
+      },
+      {
+        "cycle": 4,
+        "query": "due",
+        "mode": "materialized",
+        "executionMs": 31.913,
+        "planningMs": 0.038
+      },
+      {
+        "cycle": 4,
+        "query": "list",
+        "mode": "original",
+        "executionMs": 386.587,
+        "planningMs": 0.035
+      },
+      {
+        "cycle": 4,
+        "query": "list",
+        "mode": "materialized",
+        "executionMs": 63.962,
+        "planningMs": 0.033
+      },
+      {
+        "cycle": 5,
+        "query": "due",
+        "mode": "materialized",
+        "executionMs": 47.612,
+        "planningMs": 0.107
+      },
+      {
+        "cycle": 5,
+        "query": "due",
+        "mode": "original",
+        "executionMs": 381.99,
+        "planningMs": 0.034
+      },
+      {
+        "cycle": 5,
+        "query": "list",
+        "mode": "materialized",
+        "executionMs": 29.977,
+        "planningMs": 0.059
+      },
+      {
+        "cycle": 5,
+        "query": "list",
+        "mode": "original",
+        "executionMs": 441.052,
+        "planningMs": 0.035
+      }
+    ],
+    "summary": {
+      "due": {
+        "original": {
+          "samples": 6,
+          "medianMs": 398.85,
+          "minMs": 347.597,
+          "maxMs": 530.334
+        },
+        "materialized": {
+          "samples": 6,
+          "medianMs": 30.092,
+          "minMs": 26.396,
+          "maxMs": 47.612
+        }
+      },
+      "list": {
+        "original": {
+          "samples": 6,
+          "medianMs": 389.73699999999997,
+          "minMs": 364.278,
+          "maxMs": 441.052
+        },
+        "materialized": {
+          "samples": 6,
+          "medianMs": 29.3155,
+          "minMs": 28.194,
+          "maxMs": 63.962
+        }
+      }
+    },
+    "probeElapsedSeconds": 7.446668
+  },
+  "planEvidence": {
+    "due": {
+      "original": {
+        "Node Type": "Index Scan",
+        "Actual Loops": 198,
+        "Actual Rows": 0.0,
+        "Actual Total Time": 1.99,
+        "Rows Removed by Filter": 118,
+        "Shared Hit Blocks": 94339
+      },
+      "materialized": {
+        "Node Type": "Index Scan",
+        "Actual Loops": 198,
+        "Actual Rows": 0.0,
+        "Actual Total Time": 0.11,
+        "Rows Removed by Filter": 118,
+        "Shared Hit Blocks": 12211
+      }
+    },
+    "list": {
+      "original": {
+        "Node Type": "Index Scan",
+        "Actual Loops": 198,
+        "Actual Rows": 0.0,
+        "Actual Total Time": 2.334,
+        "Rows Removed by Filter": 118,
+        "Shared Hit Blocks": 94339
+      },
+      "materialized": {
+        "Node Type": "Index Scan",
+        "Actual Loops": 198,
+        "Actual Rows": 0.0,
+        "Actual Total Time": 0.106,
+        "Rows Removed by Filter": 118,
+        "Shared Hit Blocks": 12211
+      }
+    }
+  },
+  "verification": {
+    "guidelines": {
+      "version": "Go 1.27.3",
+      "seconds": 0.59,
+      "result": "complete list and JSON/UUID/errors explanations read"
+    },
+    "preChangeSemanticTests": {
+      "topLevelTests": 2,
+      "parallelSubcases": 4,
+      "seconds": 3.01,
+      "result": "pass"
+    },
+    "sqlc": {
+      "seconds": 0.974,
+      "result": "pass"
+    },
+    "postChangeIntegration": {
+      "topLevelTests": 14,
+      "seconds": 11.94,
+      "result": "pass"
+    },
+    "documentation": {
+      "markdownFiles": 259,
+      "localLinks": 1961,
+      "seconds": 0.787,
+      "result": "pass"
+    },
+    "whitespace": "git diff --check passed",
+    "reviewCorrectionMetadataTests": {
+      "topLevelTests": 2,
+      "parallelSubcases": 4,
+      "seconds": 2.69,
+      "result": "pass after parent test parallelism and calculation-version subcase naming corrections"
+    },
+    "reviewCorrectionDocumentation": {
+      "markdownFiles": 259,
+      "localLinks": 1961,
+      "seconds": 0.797,
+      "result": "pass"
+    }
+  },
+  "failures": [
+    {
+      "stage": "Initial diagnostic launch",
+      "seconds": 0.803,
+      "result": "exit2 before BEGIN: git rev-parse could not resolve host-only worktree metadata inside Docker; probe corrected to use host-captured revision file. Original failure retained."
+    }
+  ],
+  "limitations": [
+    "Forced generic plans; automatic pgx plan choice not established.",
+    "Six alternating samples per variant are backend query evidence, not p95 or end-to-end capacity acceptance.",
+    "Background app remained running, but repeatable-read snapshots fixed all compared row versions.",
+    "TEMP scalar was a diagnostic physical-layout approximation; no schema change was adopted.",
+    "Full live-ingestion/browser contention and alert-calculation adoption remain open.",
+    "The materialized extraction also reads all projection metadata when every calculation version mismatches. This measured branch is slower than original by about5.3ms due/4.6ms list median; the full mixed workload remains necessary."
+  ],
+  "candidateHashes": {
+    "internal/storage/query/derived_due.sql": "50bb7c88858223f5a5d1ab04fdd4dd79fa7459f2cb06f6a245e4fa03b4da4500",
+    "internal/storage/query/derived_projections.sql": "c1bc896cf748a98eb2aee93fb828f9b3d610a3c200c301119b3bee1a3a61f6ec",
+    "internal/storage/dbgen/derived_due.sql.go": "d89d2f0920bb92216327e1f8ff271ea1711afd793947b173b512fcbe7d3d9cab",
+    "internal/storage/dbgen/derived_projections.sql.go": "e749cc1dbc168d8c946dcee137fd2738debd79d7457497a1a60c641ce83456f6",
+    "internal/storage/dbgen/querier.go": "b1cc8d24ef73decc2d00a88abcb5f0e864e5fc12e01eaad8eef8c9e5bccb2d98",
+    "internal/storage/derived_scheduler_metadata_integration_test.go": "334cff50d56dbeea9540f8846a9a949612d2beb201ae5c8beab0dad384c6d9c1"
+  },
+  "allVersionMismatchProbe": {
+    "parameters": {
+      "now": "2026-11-13T22:41:39.83884+00:00",
+      "calculation_version": "occurrences-operational-v1-diagnostic-mismatch",
+      "metrics_at": "now + 1 minute",
+      "batch_limit": 100
+    },
+    "state": {
+      "objectives": 200,
+      "missing_projection": 0,
+      "source_mismatch": 3,
+      "min_evaluated": "2026-11-13T22:41:00+00:00",
+      "max_evaluated": "2026-11-13T22:41:00+00:00",
+      "minimum_deadline": "2026-11-13T22:41:38.866309+00:00",
+      "maximum_deadline": "2026-11-13T22:42:00+00:00",
+      "failure_rows": 0,
+      "payload_stored_bytes": 1129599,
+      "payload_json_bytes": 11591206
+    },
+    "settings": {
+      "statement_timeout": "5s",
+      "lock_timeout": "250ms",
+      "transaction": "repeatable read",
+      "plan_cache_mode": "force_generic_plan",
+      "jit": "off"
+    },
+    "sourceHashes": {
+      "internal/storage/query/derived_due.sql": "50bb7c88858223f5a5d1ab04fdd4dd79fa7459f2cb06f6a245e4fa03b4da4500",
+      "internal/storage/query/derived_projections.sql": "c1bc896cf748a98eb2aee93fb828f9b3d610a3c200c301119b3bee1a3a61f6ec"
+    },
+    "matchingRequestedVersion": 0,
+    "exactOrderedOutputEquality": true,
+    "rolledBack": true,
+    "samples": [
+      {
+        "cycle": 0,
+        "query": "due",
+        "mode": "original",
+        "executionMs": 1.092,
+        "planningMs": 0.065
+      },
+      {
+        "cycle": 0,
+        "query": "due",
+        "mode": "materialized",
+        "executionMs": 7.814,
+        "planningMs": 0.074
+      },
+      {
+        "cycle": 0,
+        "query": "list",
+        "mode": "original",
+        "executionMs": 5.231,
+        "planningMs": 0.066
+      },
+      {
+        "cycle": 0,
+        "query": "list",
+        "mode": "materialized",
+        "executionMs": 5.341,
+        "planningMs": 0.027
+      },
+      {
+        "cycle": 1,
+        "query": "due",
+        "mode": "materialized",
+        "executionMs": 4.657,
+        "planningMs": 0.03
+      },
+      {
+        "cycle": 1,
+        "query": "due",
+        "mode": "original",
+        "executionMs": 0.684,
+        "planningMs": 0.047
+      },
+      {
+        "cycle": 1,
+        "query": "list",
+        "mode": "materialized",
+        "executionMs": 5.581,
+        "planningMs": 0.061
+      },
+      {
+        "cycle": 1,
+        "query": "list",
+        "mode": "original",
+        "executionMs": 0.715,
+        "planningMs": 0.027
+      },
+      {
+        "cycle": 2,
+        "query": "due",
+        "mode": "original",
+        "executionMs": 0.677,
+        "planningMs": 0.045
+      },
+      {
+        "cycle": 2,
+        "query": "due",
+        "mode": "materialized",
+        "executionMs": 5.575,
+        "planningMs": 0.032
+      },
+      {
+        "cycle": 2,
+        "query": "list",
+        "mode": "original",
+        "executionMs": 0.716,
+        "planningMs": 0.026
+      },
+      {
+        "cycle": 2,
+        "query": "list",
+        "mode": "materialized",
+        "executionMs": 4.655,
+        "planningMs": 0.025
+      },
+      {
+        "cycle": 3,
+        "query": "due",
+        "mode": "materialized",
+        "executionMs": 7.567,
+        "planningMs": 0.026
+      },
+      {
+        "cycle": 3,
+        "query": "due",
+        "mode": "original",
+        "executionMs": 0.796,
+        "planningMs": 0.04
+      },
+      {
+        "cycle": 3,
+        "query": "list",
+        "mode": "materialized",
+        "executionMs": 5.368,
+        "planningMs": 0.053
+      },
+      {
+        "cycle": 3,
+        "query": "list",
+        "mode": "original",
+        "executionMs": 0.723,
+        "planningMs": 0.046
+      },
+      {
+        "cycle": 4,
+        "query": "due",
+        "mode": "original",
+        "executionMs": 0.682,
+        "planningMs": 0.028
+      },
+      {
+        "cycle": 4,
+        "query": "due",
+        "mode": "materialized",
+        "executionMs": 4.685,
+        "planningMs": 0.047
+      },
+      {
+        "cycle": 4,
+        "query": "list",
+        "mode": "original",
+        "executionMs": 0.982,
+        "planningMs": 0.052
+      },
+      {
+        "cycle": 4,
+        "query": "list",
+        "mode": "materialized",
+        "executionMs": 5.221,
+        "planningMs": 0.024
+      },
+      {
+        "cycle": 5,
+        "query": "due",
+        "mode": "materialized",
+        "executionMs": 6.498,
+        "planningMs": 0.139
+      },
+      {
+        "cycle": 5,
+        "query": "due",
+        "mode": "original",
+        "executionMs": 0.78,
+        "planningMs": 0.038
+      },
+      {
+        "cycle": 5,
+        "query": "list",
+        "mode": "materialized",
+        "executionMs": 5.564,
+        "planningMs": 0.042
+      },
+      {
+        "cycle": 5,
+        "query": "list",
+        "mode": "original",
+        "executionMs": 0.769,
+        "planningMs": 0.031
+      }
+    ],
+    "metadata": {
+      "now": "2026-11-13T22:41:39.83884+00:00",
+      "version": "PostgreSQL 18.6 (Debian 18.6-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+      "calculation_version": "occurrences-operational-v1",
+      "snapshot": "81796:81796:"
+    },
+    "dueRows": 100,
+    "summary": {
+      "due": {
+        "original": {
+          "samples": 6,
+          "medianMs": 0.732,
+          "minMs": 0.677,
+          "maxMs": 1.092
+        },
+        "materialized": {
+          "samples": 6,
+          "medianMs": 6.0365,
+          "minMs": 4.657,
+          "maxMs": 7.814
+        }
+      },
+      "list": {
+        "original": {
+          "samples": 6,
+          "medianMs": 0.746,
+          "minMs": 0.715,
+          "maxMs": 5.231
+        },
+        "materialized": {
+          "samples": 6,
+          "medianMs": 5.3545,
+          "minMs": 4.655,
+          "maxMs": 5.581
+        }
+      }
+    },
+    "probeElapsedSeconds": 0.388773
+  }
+}

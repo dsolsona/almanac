@@ -1,3 +1,10 @@
+Scheduler correction, 2026-11-13: [F4-T15](tasks/F4-T15.md) removes repeated
+projection JSON extraction from two due-work queries. Same-snapshot probes retain
+exact selection and reduce compatible-projection medians from about 400 ms to
+30 ms; all-version-mismatch scans add about 5 ms. Fourteen focused integrated
+checks pass in 11.774 s and six normal-container collection/SLO journeys pass in
+254.440 s. Full 200-SLO performance and calculation adoption remain open.
+
 Performance investigation, 2026-11-13: the [instrumented baseline](evidence/alert-performance/2026-11-13-instrumented-baseline.json)
 on `925d156` completes 80 browser journeys, 800 baseline batches and all 1,400
 backfill batches. All 400 due intervals are observed; authentication succeeds.

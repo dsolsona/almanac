@@ -24,7 +24,7 @@ integrated capacity pass.
 | --- | --- | --- | --- | --- |
 | 1 | Slow SLO overview and interactive admission exhaustion | Lists exceed one second; three API requests return 503 | Latest cold-list p95 1,830.6 ms; failed pool acquisitions take 250.1–250.8 ms | Page/transfer/resource cost and admission interference remain open |
 | 2 | Live ingestion slows under competing work | Latency isolation fails | Latest p95 14.4–15.1 → 87.3–91.6 ms; 524 accepted and all 400 due intervals present | Absolute p95 passes; relative limit fails |
-| 3 | Expensive scheduling and repeated pending calculations | Background work consumes capacity without publishing current values | Idle PostgreSQL ~98.5% of one CPU; two due queries consume ~58.7 s of elapsed query time in 62.1 s. Loaded phase has 7,866 waiting attempts /13 publications | Repeated metadata extraction reproduced; equivalent query correction in progress |
+| 3 | Expensive scheduling and repeated pending calculations | Background work consumes capacity without publishing current values | Idle PostgreSQL ~98.5% of one CPU; two due queries consume ~58.7 s of elapsed query time in 62.1 s. Loaded phase has 7,866 waiting attempts /13 publications | Metadata correction passes focused and normal-deployment checks; pending work and combined load remain open |
 | 4 | Pending aggregate windows and unproven alert capacity | Proposed alert evaluations would retain pending boundaries | Latest 252/800 baseline batches pending; bounded fallback exactness has separate passing fixtures | Calculation-adoption gate remains open |
 | Corrected | Authentication fails during navigation | Previously prevented page opening | Shared inspection queries preserve authority; 40/40 loaded auth-context calls succeed and all 80 journeys complete | Original conflict corrected and verified under load; other 503s are pool admission failures |
 
@@ -192,7 +192,17 @@ text is extracted once in a materialized relation. Ordered outputs match exactly
 Both plans keep 198 extrema loops and about 118 filtered rows per loop; shared
 buffer hits fall **94,339 → 12,211**. Repeated metadata extraction is the dominant
 cost in this reproduced branch. Generic plans are explicit; this is not full-workload
-acceptance. The query-only correction is under focused verification.
+acceptance.
+
+**Verified scheduler correction:** [F4-T15](../../tasks/F4-T15.md) materializes
+uncast publication text once per projection in both queries. Conditional parsing,
+eligibility, ordering and retry behavior stay unchanged. The
+[implemented-source probe](2026-11-13-scheduler-metadata.json) preserves exact
+ordered outputs and measures medians **398.850 → 30.092 ms** for due checks and
+**389.737 → 29.316 ms** for selection. When all versions mismatch, materialization
+instead adds **5.3/4.6 ms**; that tradeoff is retained. Fourteen integrated storage
+checks pass in **11.774 s**; six normal-container collection/SLO journeys pass in
+**254.440 s** with exact values. A new full-load result is still required.
 
 **Latest loaded retries:** **7,866 waiting attempts /139.665 s cumulative duration**,
 across all 200 opaque objective keys (39.33 attempts per key on average), versus
