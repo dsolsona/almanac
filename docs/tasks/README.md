@@ -229,3 +229,6 @@ and catalogue example; production alert operations remain gated separately.
 
 - [F4-T08](F4-T08.md): Internal maintenance authority, immutable revisions,
   per-SLO exclusion fences and atomic invalidation work; production adoption pending.
+
+[F4-T10](F4-T10.md) builds the selected occurrence list/history presentation with
+supplied evidence, global group totals and acknowledgement callbacks.

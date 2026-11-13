@@ -1,3 +1,10 @@
+Selected alert list presentation, 2026-11-13: [F4-T10](tasks/F4-T10.md) adds
+paired-window evidence, global acknowledgement callbacks, compact filters, supplied
+SLO group totals and distinct history/gap states. Fourteen component cases and ten
+browser cases pass (3.60 s / 36.2 s), including touch and 10/20-row pagination.
+[Reviewed renders](evidence/alert-occurrence-list/README.md) use fictional catalogue
+data; production integration and engine acceptance remain pending.
+
 Overview query and experiment isolation, 2026-11-13: [F4-T07](tasks/F4-T07.md)
 adds a generated projection deadline and single-pass count classification. Focused
 PostgreSQL checks pass (18.320 s). A separately identified disk-backed 200-SLO run

@@ -267,3 +267,12 @@ controls stay visible when sorting is cleared. Long secondary names wrap within
 200 px, with keyboard-accessible horizontal overflow as a fallback.
 
 SLO detail uses the approved B composition under [ADR-0049](../docs/adr/0049-slo-budget-in-context-detail.md). Exact point inspection replaces its table actions; other chart/table pairing rules remain.
+
+The selected alert occurrence list demonstrates its own supplied-page composition
+in the catalogue. Keep alert identity and linked SLO separate, paired burn evidence
+visible, acknowledgement in the row, and filters behind compact column/toolbar
+controls. The selected A reference keeps the SLO identity left aligned alongside
+the alert identity; state, evidence, duration and actions stay centred. At narrow
+widths the table scrolls within its labelled region. Server group totals and
+lifecycle remain authoritative; the presentation never downloads all pages to
+filter or group them, computes alert truth, or optimistically acknowledges a row.

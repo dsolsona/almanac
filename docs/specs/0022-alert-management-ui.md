@@ -4,9 +4,10 @@
 - Created: 2026-11-12
 - Accepted: pending
 - Approval: selected mock direction confirmed by the maintainer; full production behavior pending review
-- Implementation: not started
+- Implementation: in progress
+- Delivery scope: creation/list presentation foundations in F4-T09/F4-T10; production integration pending
 - Related ADRs: [ADR-0051](../adr/0051-durable-alert-policy-state-machine.md) (proposed), [ADR-0028](../adr/0028-unified-operational-ui.md), [ADR-0031](../adr/0031-list-grammar-and-button-roles.md), [ADR-0032](../adr/0032-centred-list-tables-and-data-state-vocabulary.md)
-- Plan: none; design review tracked in [F4-T01](../tasks/F4-T01.md)
+- Plan: [0035](../plans/0035-alerting-delivery.md); design review tracked in [F4-T01](../tasks/F4-T01.md)
 - Supersedes / superseded by: proposed addition to SPEC-0012's alert management contract; shared foundations remain unchanged
 
 ## Purpose
