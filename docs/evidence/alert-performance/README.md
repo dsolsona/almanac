@@ -40,6 +40,25 @@ WAL/I/O/client waits also occur. Sampling is not CPU profiling; `track_io_timing
 is off. The next investigation separates actual prepared-query planning,
 execution, serialization and client transfer before choosing another correction.
 
+**Prepared-plan diagnosis:** the
+[bounded single-reader and eight-reader probes](2026-11-13-overview-planning.json)
+use the actual pgx-cached query and identical complete ordered results. The default
+policy chooses five custom plans, then a generic plan. Warm generic planning is
+0.037–0.089 ms, with 12.46–14.38 ms server execution including serialization;
+repeated 22-ms planning is therefore not the steady path in that snapshot.
+In the eight-reader ABBA comparison, automatic cohorts take 1,601/1,580 ms versus
+831/858 ms with forced generic planning. All 192 executions match. This proves
+initial custom planning contributes to a concurrent startup burst, but forced
+generic first calls still reach 287 ms and do not reproduce the loaded 620–758-ms
+initial calls. No production plan-mode change is adopted.
+
+Loaded traces show the first five observed calls on each of eight backend PIDs
+averaging 492 ms, versus 174 ms for the later 136 calls. Those ordinals are not
+actual server plan counters, and later p95 remains 478 ms. The next bounded
+experiment tests SQL reshaping that reuses scalar selection and postpones metadata
+construction until after pagination, preserving exact filter/keyset behavior.
+Planning policy, pool sizes, workload budgets and public responses stay unchanged.
+
 ## Priorities
 
 Rank reflects observed user impact. Related symptoms are grouped; the suspected
