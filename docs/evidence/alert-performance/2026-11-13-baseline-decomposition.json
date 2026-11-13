@@ -1,0 +1,1032 @@
+{
+  "source": "corrected baseline-only control at 58e2eb6",
+  "cohort": "span-start timestamp; histogram commit cohorts can differ at boundaries",
+  "ingestion": {
+    "ingestion_only": {
+      "span": {
+        "samples": 209,
+        "total_ms": 1315.58925,
+        "mean_ms": 6.294685406698565,
+        "p50_ms": 5.028469,
+        "p95_ms": 12.806623,
+        "maximum_ms": 20.89349
+      },
+      "without_work_key": 209,
+      "operations": {
+        "db.statement": {
+          "samples": 1467,
+          "total_ms": 292.276337,
+          "mean_ms": 0.19923404021813224,
+          "p50_ms": 0.07987,
+          "p95_ms": 0.504527,
+          "maximum_ms": 7.027007
+        },
+        "db.FindAgentAccessCredentialAgent": {
+          "samples": 419,
+          "total_ms": 111.170327,
+          "mean_ms": 0.2653229761336516,
+          "p50_ms": 0.141545,
+          "p95_ms": 0.780389,
+          "maximum_ms": 4.545486
+        },
+        "db.MarkSliObservation": {
+          "samples": 210,
+          "total_ms": 91.264113,
+          "mean_ms": 0.4345910142857143,
+          "p50_ms": 0.31015499999999996,
+          "p95_ms": 1.014608,
+          "maximum_ms": 4.751498
+        },
+        "db.LockAgentAccessAgent": {
+          "samples": 419,
+          "total_ms": 88.424106,
+          "mean_ms": 0.21103605250596658,
+          "p50_ms": 0.086602,
+          "p95_ms": 0.692886,
+          "maximum_ms": 5.009687
+        },
+        "db.GetSliCoverageByCanonicalInterval": {
+          "samples": 210,
+          "total_ms": 82.101646,
+          "mean_ms": 0.3909602190476191,
+          "p50_ms": 0.340437,
+          "p95_ms": 0.617148,
+          "maximum_ms": 2.370503
+        },
+        "db.GetAgentExecutionGrantByLease": {
+          "samples": 210,
+          "total_ms": 67.441922,
+          "mean_ms": 0.3211520095238095,
+          "p50_ms": 0.251861,
+          "p95_ms": 0.540541,
+          "maximum_ms": 3.304799
+        },
+        "db.InsertSliObservation": {
+          "samples": 210,
+          "total_ms": 63.454583,
+          "mean_ms": 0.30216468095238097,
+          "p50_ms": 0.24889050000000001,
+          "p95_ms": 0.651959,
+          "maximum_ms": 2.05822
+        },
+        "db.LockSessionInstallation": {
+          "samples": 419,
+          "total_ms": 59.044537,
+          "mean_ms": 0.14091774940334129,
+          "p50_ms": 0.093094,
+          "p95_ms": 0.232415,
+          "maximum_ms": 5.11614
+        },
+        "db.InsertSliDeliveryReceipt": {
+          "samples": 210,
+          "total_ms": 53.534039,
+          "mean_ms": 0.2549239952380952,
+          "p50_ms": 0.164958,
+          "p95_ms": 0.699488,
+          "maximum_ms": 4.595185
+        },
+        "db.LockSliMeasurementForObservation": {
+          "samples": 210,
+          "total_ms": 45.909003,
+          "mean_ms": 0.2186143,
+          "p50_ms": 0.1713055,
+          "p95_ms": 0.460502,
+          "maximum_ms": 3.066512
+        },
+        "db.AdvanceSliSourceGeneration": {
+          "samples": 210,
+          "total_ms": 45.190902,
+          "mean_ms": 0.21519477142857144,
+          "p50_ms": 0.1466495,
+          "p95_ms": 0.884451,
+          "maximum_ms": 2.320911
+        },
+        "db.LockAgentAccessCredential": {
+          "samples": 419,
+          "total_ms": 44.608742,
+          "mean_ms": 0.10646477804295942,
+          "p50_ms": 0.087334,
+          "p95_ms": 0.198992,
+          "maximum_ms": 1.147296
+        },
+        "db.AdvanceSliLastAttemptedInterval": {
+          "samples": 210,
+          "total_ms": 42.552519000000004,
+          "mean_ms": 0.20263104285714287,
+          "p50_ms": 0.1310155,
+          "p95_ms": 0.328903,
+          "maximum_ms": 5.313855
+        },
+        "db.LockLatestAgentOwnership": {
+          "samples": 210,
+          "total_ms": 31.244942,
+          "mean_ms": 0.1487854380952381,
+          "p50_ms": 0.1100505,
+          "p95_ms": 0.210183,
+          "maximum_ms": 2.429244
+        },
+        "db.FindSliDeliveryReceipt": {
+          "samples": 210,
+          "total_ms": 26.703079,
+          "mean_ms": 0.12715751904761904,
+          "p50_ms": 0.09677050000000001,
+          "p95_ms": 0.321692,
+          "maximum_ms": 0.827177
+        },
+        "db.pool.acquire": {
+          "samples": 419,
+          "total_ms": 10.66996,
+          "mean_ms": 0.02546529832935561,
+          "p50_ms": 0.00554,
+          "p95_ms": 0.027421,
+          "maximum_ms": 4.64097
+        }
+      },
+      "per_selected_span_operation_total": {
+        "db.pool.acquire": {
+          "samples": 209,
+          "total_ms": 10.66996,
+          "mean_ms": 0.05105244019138756,
+          "p50_ms": 0.011913,
+          "p95_ms": 0.044993,
+          "maximum_ms": 4.646351
+        },
+        "db.FindAgentAccessCredentialAgent": {
+          "samples": 209,
+          "total_ms": 111.170327,
+          "mean_ms": 0.5319154401913876,
+          "p50_ms": 0.322052,
+          "p95_ms": 1.9099020000000002,
+          "maximum_ms": 4.653658
+        },
+        "db.statement": {
+          "samples": 209,
+          "total_ms": 292.276337,
+          "mean_ms": 1.3984513732057415,
+          "p50_ms": 0.9807669999999999,
+          "p95_ms": 3.5729409999999997,
+          "maximum_ms": 9.364615
+        },
+        "db.LockSessionInstallation": {
+          "samples": 209,
+          "total_ms": 59.044537,
+          "mean_ms": 0.28250974641148324,
+          "p50_ms": 0.188302,
+          "p95_ms": 0.478856,
+          "maximum_ms": 5.289585
+        },
+        "db.LockAgentAccessAgent": {
+          "samples": 209,
+          "total_ms": 88.424106,
+          "mean_ms": 0.42308184688995215,
+          "p50_ms": 0.17672100000000002,
+          "p95_ms": 2.083881,
+          "maximum_ms": 5.372451
+        },
+        "db.LockAgentAccessCredential": {
+          "samples": 209,
+          "total_ms": 44.608742,
+          "mean_ms": 0.21343895693779905,
+          "p50_ms": 0.17718099999999998,
+          "p95_ms": 0.33932500000000004,
+          "maximum_ms": 1.238085
+        },
+        "db.LockLatestAgentOwnership": {
+          "samples": 209,
+          "total_ms": 31.244942,
+          "mean_ms": 0.14949733014354066,
+          "p50_ms": 0.110176,
+          "p95_ms": 0.211025,
+          "maximum_ms": 2.429244
+        },
+        "db.GetAgentExecutionGrantByLease": {
+          "samples": 209,
+          "total_ms": 67.441922,
+          "mean_ms": 0.3226886220095694,
+          "p50_ms": 0.251861,
+          "p95_ms": 0.540541,
+          "maximum_ms": 3.304799
+        },
+        "db.LockSliMeasurementForObservation": {
+          "samples": 209,
+          "total_ms": 45.909003,
+          "mean_ms": 0.21966030143540669,
+          "p50_ms": 0.171791,
+          "p95_ms": 0.460502,
+          "maximum_ms": 3.066512
+        },
+        "db.FindSliDeliveryReceipt": {
+          "samples": 209,
+          "total_ms": 26.703079,
+          "mean_ms": 0.12776592822966507,
+          "p50_ms": 0.097062,
+          "p95_ms": 0.321692,
+          "maximum_ms": 0.827177
+        },
+        "db.GetSliCoverageByCanonicalInterval": {
+          "samples": 209,
+          "total_ms": 82.101646,
+          "mean_ms": 0.39283084210526314,
+          "p50_ms": 0.341028,
+          "p95_ms": 0.617148,
+          "maximum_ms": 2.370503
+        },
+        "db.AdvanceSliSourceGeneration": {
+          "samples": 209,
+          "total_ms": 45.190902,
+          "mean_ms": 0.21622441148325358,
+          "p50_ms": 0.146744,
+          "p95_ms": 0.884451,
+          "maximum_ms": 2.320911
+        },
+        "db.InsertSliObservation": {
+          "samples": 209,
+          "total_ms": 63.454583,
+          "mean_ms": 0.30361044497607653,
+          "p50_ms": 0.249336,
+          "p95_ms": 0.651959,
+          "maximum_ms": 2.05822
+        },
+        "db.MarkSliObservation": {
+          "samples": 209,
+          "total_ms": 91.264113,
+          "mean_ms": 0.4366703971291866,
+          "p50_ms": 0.3105,
+          "p95_ms": 1.014608,
+          "maximum_ms": 4.751498
+        },
+        "db.InsertSliDeliveryReceipt": {
+          "samples": 209,
+          "total_ms": 53.534039,
+          "mean_ms": 0.2561437272727273,
+          "p50_ms": 0.165199,
+          "p95_ms": 0.699488,
+          "maximum_ms": 4.595185
+        },
+        "db.AdvanceSliLastAttemptedInterval": {
+          "samples": 209,
+          "total_ms": 42.552519000000004,
+          "mean_ms": 0.20360056937799043,
+          "p50_ms": 0.131046,
+          "p95_ms": 0.328903,
+          "maximum_ms": 5.313855
+        }
+      }
+    },
+    "loaded": {
+      "span": {
+        "samples": 343,
+        "total_ms": 8216.98361,
+        "mean_ms": 23.956220437317786,
+        "p50_ms": 17.854952,
+        "p95_ms": 63.180455,
+        "maximum_ms": 143.549321
+      },
+      "without_work_key": 343,
+      "operations": {
+        "db.statement": {
+          "samples": 2401,
+          "total_ms": 2368.218402,
+          "mean_ms": 0.9863466897126197,
+          "p50_ms": 0.158341,
+          "p95_ms": 4.485052,
+          "maximum_ms": 52.040432
+        },
+        "db.FindAgentAccessCredentialAgent": {
+          "samples": 686,
+          "total_ms": 749.987925,
+          "mean_ms": 1.093276858600583,
+          "p50_ms": 0.2755055,
+          "p95_ms": 5.141677,
+          "maximum_ms": 20.839159
+        },
+        "db.LockAgentAccessAgent": {
+          "samples": 686,
+          "total_ms": 585.377715,
+          "mean_ms": 0.8533202842565598,
+          "p50_ms": 0.1062535,
+          "p95_ms": 4.548738,
+          "maximum_ms": 34.782094
+        },
+        "db.InsertSliObservation": {
+          "samples": 343,
+          "total_ms": 482.408382,
+          "mean_ms": 1.4064384314868805,
+          "p50_ms": 0.737339,
+          "p95_ms": 4.528277,
+          "maximum_ms": 26.292185
+        },
+        "db.MarkSliObservation": {
+          "samples": 343,
+          "total_ms": 479.703401,
+          "mean_ms": 1.398552189504373,
+          "p50_ms": 0.598488,
+          "p95_ms": 5.561113,
+          "maximum_ms": 26.947914
+        },
+        "db.InsertSliDeliveryReceipt": {
+          "samples": 343,
+          "total_ms": 458.878169,
+          "mean_ms": 1.3378372274052477,
+          "p50_ms": 0.384169,
+          "p95_ms": 5.469581,
+          "maximum_ms": 17.489499
+        },
+        "db.GetSliCoverageByCanonicalInterval": {
+          "samples": 343,
+          "total_ms": 356.37510100000003,
+          "mean_ms": 1.0389944635568513,
+          "p50_ms": 0.445764,
+          "p95_ms": 3.888503,
+          "maximum_ms": 14.041158
+        },
+        "db.LockAgentAccessCredential": {
+          "samples": 686,
+          "total_ms": 343.866456,
+          "mean_ms": 0.501263055393586,
+          "p50_ms": 0.101104,
+          "p95_ms": 1.991646,
+          "maximum_ms": 31.736281
+        },
+        "db.LockSessionInstallation": {
+          "samples": 686,
+          "total_ms": 334.973051,
+          "mean_ms": 0.4882989081632653,
+          "p50_ms": 0.1057825,
+          "p95_ms": 2.152586,
+          "maximum_ms": 19.133605
+        },
+        "db.AdvanceSliSourceGeneration": {
+          "samples": 343,
+          "total_ms": 326.508815,
+          "mean_ms": 0.9519207434402333,
+          "p50_ms": 0.269435,
+          "p95_ms": 3.976118,
+          "maximum_ms": 25.484244
+        },
+        "db.GetAgentExecutionGrantByLease": {
+          "samples": 343,
+          "total_ms": 322.439193,
+          "mean_ms": 0.9400559562682216,
+          "p50_ms": 0.317895,
+          "p95_ms": 3.478276,
+          "maximum_ms": 17.6982
+        },
+        "db.AdvanceSliLastAttemptedInterval": {
+          "samples": 343,
+          "total_ms": 299.630671,
+          "mean_ms": 0.8735588075801749,
+          "p50_ms": 0.195296,
+          "p95_ms": 3.878829,
+          "maximum_ms": 18.608781
+        },
+        "db.LockSliMeasurementForObservation": {
+          "samples": 343,
+          "total_ms": 298.52608,
+          "mean_ms": 0.8703384256559766,
+          "p50_ms": 0.237501,
+          "p95_ms": 3.738543,
+          "maximum_ms": 15.814445
+        },
+        "db.FindSliDeliveryReceipt": {
+          "samples": 343,
+          "total_ms": 244.741097,
+          "mean_ms": 0.7135308950437318,
+          "p50_ms": 0.155573,
+          "p95_ms": 2.958224,
+          "maximum_ms": 18.796081
+        },
+        "db.LockLatestAgentOwnership": {
+          "samples": 343,
+          "total_ms": 152.322125,
+          "mean_ms": 0.4440878279883382,
+          "p50_ms": 0.116478,
+          "p95_ms": 2.099006,
+          "maximum_ms": 16.319699
+        },
+        "db.pool.acquire": {
+          "samples": 686,
+          "total_ms": 62.814177,
+          "mean_ms": 0.09156585568513119,
+          "p50_ms": 0.005696,
+          "p95_ms": 0.029836,
+          "maximum_ms": 18.326589
+        }
+      },
+      "per_selected_span_operation_total": {
+        "db.pool.acquire": {
+          "samples": 343,
+          "total_ms": 62.814176999999994,
+          "mean_ms": 0.18313171137026238,
+          "p50_ms": 0.012042,
+          "p95_ms": 0.226784,
+          "maximum_ms": 18.332199999999997
+        },
+        "db.FindAgentAccessCredentialAgent": {
+          "samples": 343,
+          "total_ms": 749.987925,
+          "mean_ms": 2.186553717201166,
+          "p50_ms": 0.998318,
+          "p95_ms": 7.724764,
+          "maximum_ms": 32.164229999999996
+        },
+        "db.statement": {
+          "samples": 343,
+          "total_ms": 2368.218402,
+          "mean_ms": 6.904426827988338,
+          "p50_ms": 4.028855,
+          "p95_ms": 24.113423,
+          "maximum_ms": 63.87878800000001
+        },
+        "db.LockSessionInstallation": {
+          "samples": 343,
+          "total_ms": 334.973051,
+          "mean_ms": 0.9765978163265306,
+          "p50_ms": 0.262972,
+          "p95_ms": 3.84354,
+          "maximum_ms": 19.273106
+        },
+        "db.LockAgentAccessAgent": {
+          "samples": 343,
+          "total_ms": 585.377715,
+          "mean_ms": 1.7066405685131196,
+          "p50_ms": 0.283891,
+          "p95_ms": 8.153364,
+          "maximum_ms": 34.868125
+        },
+        "db.LockAgentAccessCredential": {
+          "samples": 343,
+          "total_ms": 343.86645599999997,
+          "mean_ms": 1.002526110787172,
+          "p50_ms": 0.263413,
+          "p95_ms": 3.552837,
+          "maximum_ms": 32.480089
+        },
+        "db.LockLatestAgentOwnership": {
+          "samples": 343,
+          "total_ms": 152.322125,
+          "mean_ms": 0.4440878279883382,
+          "p50_ms": 0.116478,
+          "p95_ms": 2.099006,
+          "maximum_ms": 16.319699
+        },
+        "db.GetAgentExecutionGrantByLease": {
+          "samples": 343,
+          "total_ms": 322.439193,
+          "mean_ms": 0.9400559562682216,
+          "p50_ms": 0.317895,
+          "p95_ms": 3.478276,
+          "maximum_ms": 17.6982
+        },
+        "db.LockSliMeasurementForObservation": {
+          "samples": 343,
+          "total_ms": 298.52608,
+          "mean_ms": 0.8703384256559766,
+          "p50_ms": 0.237501,
+          "p95_ms": 3.738543,
+          "maximum_ms": 15.814445
+        },
+        "db.FindSliDeliveryReceipt": {
+          "samples": 343,
+          "total_ms": 244.741097,
+          "mean_ms": 0.7135308950437318,
+          "p50_ms": 0.155573,
+          "p95_ms": 2.958224,
+          "maximum_ms": 18.796081
+        },
+        "db.GetSliCoverageByCanonicalInterval": {
+          "samples": 343,
+          "total_ms": 356.37510100000003,
+          "mean_ms": 1.0389944635568513,
+          "p50_ms": 0.445764,
+          "p95_ms": 3.888503,
+          "maximum_ms": 14.041158
+        },
+        "db.AdvanceSliSourceGeneration": {
+          "samples": 343,
+          "total_ms": 326.508815,
+          "mean_ms": 0.9519207434402333,
+          "p50_ms": 0.269435,
+          "p95_ms": 3.976118,
+          "maximum_ms": 25.484244
+        },
+        "db.InsertSliObservation": {
+          "samples": 343,
+          "total_ms": 482.408382,
+          "mean_ms": 1.4064384314868805,
+          "p50_ms": 0.737339,
+          "p95_ms": 4.528277,
+          "maximum_ms": 26.292185
+        },
+        "db.MarkSliObservation": {
+          "samples": 343,
+          "total_ms": 479.703401,
+          "mean_ms": 1.398552189504373,
+          "p50_ms": 0.598488,
+          "p95_ms": 5.561113,
+          "maximum_ms": 26.947914
+        },
+        "db.InsertSliDeliveryReceipt": {
+          "samples": 343,
+          "total_ms": 458.878169,
+          "mean_ms": 1.3378372274052477,
+          "p50_ms": 0.384169,
+          "p95_ms": 5.469581,
+          "maximum_ms": 17.489499
+        },
+        "db.AdvanceSliLastAttemptedInterval": {
+          "samples": 343,
+          "total_ms": 299.630671,
+          "mean_ms": 0.8735588075801749,
+          "p50_ms": 0.195296,
+          "p95_ms": 3.878829,
+          "maximum_ms": 18.608781
+        }
+      }
+    }
+  },
+  "current": {
+    "waiting": {
+      "span": {
+        "samples": 6112,
+        "total_ms": 59698.168201,
+        "mean_ms": 9.767370451734294,
+        "p50_ms": 7.9783525,
+        "p95_ms": 22.007563,
+        "maximum_ms": 94.242429
+      },
+      "without_work_key": 6112,
+      "operations": {
+        "db.ReadRetainedWindowBatch": {
+          "samples": 6112,
+          "total_ms": 23342.76399,
+          "mean_ms": 3.8191695009816753,
+          "p50_ms": 3.134081,
+          "p95_ms": 8.632799,
+          "maximum_ms": 58.119467
+        },
+        "db.statement": {
+          "samples": 12224,
+          "total_ms": 5323.351703,
+          "mean_ms": 0.4354836144469895,
+          "p50_ms": 0.0824445,
+          "p95_ms": 2.113524,
+          "maximum_ms": 34.1201
+        },
+        "db.pool.acquire": {
+          "samples": 6112,
+          "total_ms": 5260.951596,
+          "mean_ms": 0.8607577873036649,
+          "p50_ms": 0.004899499999999999,
+          "p95_ms": 4.144803,
+          "maximum_ms": 43.936597
+        },
+        "db.ReadSloReadyTailEnd": {
+          "samples": 6112,
+          "total_ms": 4015.426505,
+          "mean_ms": 0.6569742318390053,
+          "p50_ms": 0.33460049999999997,
+          "p95_ms": 2.141475,
+          "maximum_ms": 19.447475
+        },
+        "db.GetSlo": {
+          "samples": 6112,
+          "total_ms": 2638.069197,
+          "mean_ms": 0.4316212691426702,
+          "p50_ms": 0.190967,
+          "p95_ms": 1.629228,
+          "maximum_ms": 12.161878
+        },
+        "db.GetSloOperationalContext": {
+          "samples": 6112,
+          "total_ms": 2504.584602,
+          "mean_ms": 0.4097815121073298,
+          "p50_ms": 0.1328035,
+          "p95_ms": 1.824372,
+          "maximum_ms": 13.508852
+        }
+      },
+      "per_selected_span_operation_total": {
+        "db.pool.acquire": {
+          "samples": 6112,
+          "total_ms": 5260.951596,
+          "mean_ms": 0.8607577873036649,
+          "p50_ms": 0.004899499999999999,
+          "p95_ms": 4.144803,
+          "maximum_ms": 43.936597
+        },
+        "db.statement": {
+          "samples": 6112,
+          "total_ms": 5323.351703,
+          "mean_ms": 0.870967228893979,
+          "p50_ms": 0.2036905,
+          "p95_ms": 3.725599,
+          "maximum_ms": 34.206341
+        },
+        "db.GetSlo": {
+          "samples": 6112,
+          "total_ms": 2638.069197,
+          "mean_ms": 0.4316212691426702,
+          "p50_ms": 0.190967,
+          "p95_ms": 1.629228,
+          "maximum_ms": 12.161878
+        },
+        "db.GetSloOperationalContext": {
+          "samples": 6112,
+          "total_ms": 2504.584602,
+          "mean_ms": 0.4097815121073298,
+          "p50_ms": 0.1328035,
+          "p95_ms": 1.824372,
+          "maximum_ms": 13.508852
+        },
+        "db.ReadSloReadyTailEnd": {
+          "samples": 6112,
+          "total_ms": 4015.426505,
+          "mean_ms": 0.6569742318390053,
+          "p50_ms": 0.33460049999999997,
+          "p95_ms": 2.141475,
+          "maximum_ms": 19.447475
+        },
+        "db.ReadRetainedWindowBatch": {
+          "samples": 6112,
+          "total_ms": 23342.76399,
+          "mean_ms": 3.8191695009816753,
+          "p50_ms": 3.134081,
+          "p95_ms": 8.632799,
+          "maximum_ms": 58.119467
+        }
+      }
+    },
+    "published": {
+      "span": {
+        "samples": 548,
+        "total_ms": 22347.147144,
+        "mean_ms": 40.77946559124088,
+        "p50_ms": 37.3601,
+        "p95_ms": 71.268737,
+        "maximum_ms": 255.270586
+      },
+      "without_work_key": 548,
+      "operations": {
+        "db.ReadRetainedWindowBatch": {
+          "samples": 1966,
+          "total_ms": 8510.872722,
+          "mean_ms": 4.329029868769075,
+          "p50_ms": 2.804251,
+          "p95_ms": 12.117921,
+          "maximum_ms": 66.439538
+        },
+        "db.PublishDerivedCurrentProjection": {
+          "samples": 548,
+          "total_ms": 1565.838893,
+          "mean_ms": 2.85737024270073,
+          "p50_ms": 1.880132,
+          "p95_ms": 8.103397,
+          "maximum_ms": 28.785923
+        },
+        "db.ReadSloExtremaParts": {
+          "samples": 435,
+          "total_ms": 1564.37929,
+          "mean_ms": 3.5962742298850574,
+          "p50_ms": 3.08316,
+          "p95_ms": 7.939291,
+          "maximum_ms": 13.9725
+        },
+        "db.statement": {
+          "samples": 1644,
+          "total_ms": 1287.169845,
+          "mean_ms": 0.7829500273722628,
+          "p50_ms": 0.164713,
+          "p95_ms": 2.857282,
+          "maximum_ms": 79.051587
+        },
+        "db.ReadSloBudgetExtremaState": {
+          "samples": 548,
+          "total_ms": 959.414993,
+          "mean_ms": 1.7507572864963503,
+          "p50_ms": 0.9096465,
+          "p95_ms": 5.349307,
+          "maximum_ms": 26.10572
+        },
+        "db.pool.acquire": {
+          "samples": 548,
+          "total_ms": 782.260872,
+          "mean_ms": 1.4274833430656935,
+          "p50_ms": 0.584549,
+          "p95_ms": 4.793968,
+          "maximum_ms": 66.817199
+        },
+        "db.ClearCurrentPreparationFailure": {
+          "samples": 548,
+          "total_ms": 425.957402,
+          "mean_ms": 0.7772945291970803,
+          "p50_ms": 0.158575,
+          "p95_ms": 3.046267,
+          "maximum_ms": 15.523539
+        },
+        "db.GetDerivedSourceGeneration": {
+          "samples": 548,
+          "total_ms": 416.803797,
+          "mean_ms": 0.7605908704379563,
+          "p50_ms": 0.187611,
+          "p95_ms": 2.634959,
+          "maximum_ms": 26.056418
+        },
+        "db.ReadSloReadyTailEnd": {
+          "samples": 548,
+          "total_ms": 342.156917,
+          "mean_ms": 0.6243739361313868,
+          "p50_ms": 0.3265105,
+          "p95_ms": 1.971778,
+          "maximum_ms": 20.965011
+        },
+        "db.InsertDerivedGeneration": {
+          "samples": 548,
+          "total_ms": 294.771408,
+          "mean_ms": 0.5379040291970802,
+          "p50_ms": 0.21091100000000002,
+          "p95_ms": 2.157222,
+          "maximum_ms": 13.637821
+        },
+        "db.GetSlo": {
+          "samples": 548,
+          "total_ms": 209.134899,
+          "mean_ms": 0.3816330273722628,
+          "p50_ms": 0.18383899999999997,
+          "p95_ms": 1.200007,
+          "maximum_ms": 14.692013
+        },
+        "db.GetSloOperationalContext": {
+          "samples": 548,
+          "total_ms": 178.812553,
+          "mean_ms": 0.32630027919708027,
+          "p50_ms": 0.1319615,
+          "p95_ms": 1.078245,
+          "maximum_ms": 21.562945
+        }
+      },
+      "per_selected_span_operation_total": {
+        "db.pool.acquire": {
+          "samples": 548,
+          "total_ms": 782.260872,
+          "mean_ms": 1.4274833430656935,
+          "p50_ms": 0.584549,
+          "p95_ms": 4.793968,
+          "maximum_ms": 66.817199
+        },
+        "db.statement": {
+          "samples": 548,
+          "total_ms": 1287.169845,
+          "mean_ms": 2.348850082116788,
+          "p50_ms": 1.0575615,
+          "p95_ms": 7.947214,
+          "maximum_ms": 79.169027
+        },
+        "db.GetSlo": {
+          "samples": 548,
+          "total_ms": 209.134899,
+          "mean_ms": 0.3816330273722628,
+          "p50_ms": 0.18383899999999997,
+          "p95_ms": 1.200007,
+          "maximum_ms": 14.692013
+        },
+        "db.GetSloOperationalContext": {
+          "samples": 548,
+          "total_ms": 178.812553,
+          "mean_ms": 0.32630027919708027,
+          "p50_ms": 0.1319615,
+          "p95_ms": 1.078245,
+          "maximum_ms": 21.562945
+        },
+        "db.ReadSloReadyTailEnd": {
+          "samples": 548,
+          "total_ms": 342.156917,
+          "mean_ms": 0.6243739361313868,
+          "p50_ms": 0.3265105,
+          "p95_ms": 1.971778,
+          "maximum_ms": 20.965011
+        },
+        "db.ReadRetainedWindowBatch": {
+          "samples": 548,
+          "total_ms": 8510.872722,
+          "mean_ms": 15.530789638686132,
+          "p50_ms": 14.2659825,
+          "p95_ms": 28.550425999999998,
+          "maximum_ms": 132.316337
+        },
+        "db.GetDerivedSourceGeneration": {
+          "samples": 548,
+          "total_ms": 416.803797,
+          "mean_ms": 0.7605908704379563,
+          "p50_ms": 0.187611,
+          "p95_ms": 2.634959,
+          "maximum_ms": 26.056418
+        },
+        "db.InsertDerivedGeneration": {
+          "samples": 548,
+          "total_ms": 294.771408,
+          "mean_ms": 0.5379040291970802,
+          "p50_ms": 0.21091100000000002,
+          "p95_ms": 2.157222,
+          "maximum_ms": 13.637821
+        },
+        "db.ReadSloBudgetExtremaState": {
+          "samples": 548,
+          "total_ms": 959.414993,
+          "mean_ms": 1.7507572864963503,
+          "p50_ms": 0.9096465,
+          "p95_ms": 5.349307,
+          "maximum_ms": 26.10572
+        },
+        "db.PublishDerivedCurrentProjection": {
+          "samples": 548,
+          "total_ms": 1565.838893,
+          "mean_ms": 2.85737024270073,
+          "p50_ms": 1.880132,
+          "p95_ms": 8.103397,
+          "maximum_ms": 28.785923
+        },
+        "db.ClearCurrentPreparationFailure": {
+          "samples": 548,
+          "total_ms": 425.957402,
+          "mean_ms": 0.7772945291970803,
+          "p50_ms": 0.158575,
+          "p95_ms": 3.046267,
+          "maximum_ms": 15.523539
+        },
+        "db.ReadSloExtremaParts": {
+          "samples": 435,
+          "total_ms": 1564.37929,
+          "mean_ms": 3.5962742298850574,
+          "p50_ms": 3.08316,
+          "p95_ms": 7.939291,
+          "maximum_ms": 13.9725
+        }
+      }
+    }
+  },
+  "overview": {
+    "span": {
+      "samples": 124,
+      "total_ms": 32834.604867,
+      "mean_ms": 264.7952005403226,
+      "p50_ms": 217.4638925,
+      "p95_ms": 606.92578,
+      "maximum_ms": 803.129031
+    },
+    "without_work_key": 124,
+    "operations": {
+      "db.ListSloOverviewPage": {
+        "samples": 124,
+        "total_ms": 24045.627413000002,
+        "mean_ms": 193.9163501048387,
+        "p50_ms": 143.3555035,
+        "p95_ms": 480.316721,
+        "maximum_ms": 611.114865
+      },
+      "db.pool.acquire": {
+        "samples": 248,
+        "total_ms": 2195.115812,
+        "mean_ms": 8.85127343548387,
+        "p50_ms": 0.048729,
+        "p95_ms": 52.706249,
+        "maximum_ms": 189.338212
+      },
+      "db.statement": {
+        "samples": 514,
+        "total_ms": 2037.56317,
+        "mean_ms": 3.9641306809338523,
+        "p50_ms": 0.48792800000000003,
+        "p95_ms": 23.721635,
+        "maximum_ms": 47.914716
+      },
+      "db.CountSloOverviewGroups": {
+        "samples": 124,
+        "total_ms": 705.990941,
+        "mean_ms": 5.693475330645161,
+        "p50_ms": 2.438485,
+        "p95_ms": 25.588662,
+        "maximum_ms": 67.832733
+      },
+      "db.FindAgentSessionUserID": {
+        "samples": 124,
+        "total_ms": 411.576658,
+        "mean_ms": 3.3191665967741937,
+        "p50_ms": 0.2892555,
+        "p95_ms": 15.288936,
+        "maximum_ms": 38.364108
+      },
+      "db.GetInitialOwnerState": {
+        "samples": 124,
+        "total_ms": 253.658365,
+        "mean_ms": 2.0456319758064514,
+        "p50_ms": 0.5958019999999999,
+        "p95_ms": 7.516762,
+        "maximum_ms": 32.886753
+      },
+      "db.LockSessionUserRead": {
+        "samples": 124,
+        "total_ms": 133.059437,
+        "mean_ms": 1.0730599758064516,
+        "p50_ms": 0.21336349999999998,
+        "p95_ms": 4.980186,
+        "maximum_ms": 10.216505
+      },
+      "db.LockSessionInstallation": {
+        "samples": 124,
+        "total_ms": 132.44317,
+        "mean_ms": 1.0680900806451612,
+        "p50_ms": 0.14535700000000001,
+        "p95_ms": 5.070194,
+        "maximum_ms": 29.01954
+      },
+      "db.LockAgentSessionRead": {
+        "samples": 124,
+        "total_ms": 128.323001,
+        "mean_ms": 1.0348629112903225,
+        "p50_ms": 0.14839750000000002,
+        "p95_ms": 5.07349,
+        "maximum_ms": 12.670301
+      }
+    },
+    "per_selected_span_operation_total": {
+      "db.pool.acquire": {
+        "samples": 124,
+        "total_ms": 2195.115812,
+        "mean_ms": 17.70254687096774,
+        "p50_ms": 1.4189505000000002,
+        "p95_ms": 105.907449,
+        "maximum_ms": 298.952175
+      },
+      "db.GetInitialOwnerState": {
+        "samples": 124,
+        "total_ms": 253.658365,
+        "mean_ms": 2.0456319758064514,
+        "p50_ms": 0.5958019999999999,
+        "p95_ms": 7.516762,
+        "maximum_ms": 32.886753
+      },
+      "db.FindAgentSessionUserID": {
+        "samples": 124,
+        "total_ms": 411.576658,
+        "mean_ms": 3.3191665967741937,
+        "p50_ms": 0.2892555,
+        "p95_ms": 15.288936,
+        "maximum_ms": 38.364108
+      },
+      "db.statement": {
+        "samples": 124,
+        "total_ms": 2037.56317,
+        "mean_ms": 16.431961048387098,
+        "p50_ms": 13.377565,
+        "p95_ms": 41.152067,
+        "maximum_ms": 51.404565
+      },
+      "db.LockSessionInstallation": {
+        "samples": 124,
+        "total_ms": 132.44317,
+        "mean_ms": 1.0680900806451612,
+        "p50_ms": 0.14535700000000001,
+        "p95_ms": 5.070194,
+        "maximum_ms": 29.01954
+      },
+      "db.LockSessionUserRead": {
+        "samples": 124,
+        "total_ms": 133.059437,
+        "mean_ms": 1.0730599758064516,
+        "p50_ms": 0.21336349999999998,
+        "p95_ms": 4.980186,
+        "maximum_ms": 10.216505
+      },
+      "db.LockAgentSessionRead": {
+        "samples": 124,
+        "total_ms": 128.323001,
+        "mean_ms": 1.0348629112903225,
+        "p50_ms": 0.14839750000000002,
+        "p95_ms": 5.07349,
+        "maximum_ms": 12.670301
+      },
+      "db.CountSloOverviewGroups": {
+        "samples": 124,
+        "total_ms": 705.990941,
+        "mean_ms": 5.693475330645161,
+        "p50_ms": 2.438485,
+        "p95_ms": 25.588662,
+        "maximum_ms": 67.832733
+      },
+      "db.ListSloOverviewPage": {
+        "samples": 124,
+        "total_ms": 24045.627413000002,
+        "mean_ms": 193.9163501048387,
+        "p50_ms": 143.3555035,
+        "p95_ms": 480.316721,
+        "maximum_ms": 611.114865
+      }
+    }
+  },
+  "notes": [
+    "Durations are elapsed spans, not CPU or proof of lock blocking.",
+    "No query values or raw error text retained."
+  ],
+  "analysis_seconds": 3.6519970829976955
+}

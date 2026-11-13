@@ -199,14 +199,26 @@ func inspectSession(ctx context.Context, databaseURL string, verifier [32]byte, 
 	if err != nil {
 		return SessionAccess{}, operationError(ctx, "storage: session installation lock failed", err)
 	}
-	user, err := queries.LockSessionUser(ctx, userID)
+	var user dbgen.LockSessionUserRow
+	if touch {
+		user, err = queries.LockSessionUser(ctx, userID)
+	} else {
+		var readUser dbgen.LockSessionUserReadRow
+		readUser, err = queries.LockSessionUserRead(ctx, userID)
+		user = dbgen.LockSessionUserRow(readUser)
+	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		return SessionAccess{}, ErrInvalidSession
 	}
 	if err != nil {
 		return SessionAccess{}, operationError(ctx, "storage: session user lock failed", err)
 	}
-	session, err := queries.LockSession(ctx, verifier[:])
+	var session dbgen.AlmanacSession
+	if touch {
+		session, err = queries.LockSession(ctx, verifier[:])
+	} else {
+		session, err = queries.LockAgentSessionRead(ctx, verifier[:])
+	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		return SessionAccess{}, ErrInvalidSession
 	}

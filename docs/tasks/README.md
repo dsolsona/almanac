@@ -1,5 +1,8 @@
 # Implementation tasks
 
+[F4-T14](F4-T14.md) owns the ranked performance investigation and causal
+reproductions before further alert-calculation adoption or capacity claims.
+
 [F4-T13](F4-T13.md) verifies calculation-fixture eligibility and isolated query
 modes. Its baseline-only control fails latency/browser gates without candidate or
 oracle queries; the harness is in review and calculation adoption remains open.

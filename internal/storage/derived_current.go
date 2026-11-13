@@ -235,6 +235,7 @@ func (r *Runtime) refreshCurrentProjections(ctx context.Context, clock func() ti
 
 func (r *Runtime) refreshCurrentProjection(ctx context.Context, id pgtype.UUID, clock func() time.Time) (resultErr error) {
 	ctx, span := telemetry.Tracer().Start(ctx, "derived.current.evaluate")
+	recordCurrentWork(span, id)
 	defer func() { finishDerivedTrace(ctx, span, resultErr, "published") }()
 	bounded, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
@@ -260,7 +261,7 @@ func (r *Runtime) refreshCurrentProjection(ctx context.Context, id pgtype.UUID, 
 		if resultErr == nil || ctx.Err() != nil {
 			return
 		}
-		cleanup, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		cleanup, cancel := currentPreparationCleanupContext(ctx)
 		defer cancel()
 		if err := tx.Rollback(cleanup); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
 			resultErr = errors.Join(resultErr, err)

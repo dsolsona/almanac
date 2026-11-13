@@ -112,7 +112,7 @@ JOIN (VALUES ${goods}) g(sli_id,good) USING(sli_id);`);
   const ingestionOnly = ingestionDelta(baselineStart, baselineEnd);
   writeFileSync(`${root}/ingestion-baseline.json`, JSON.stringify({ baselineStart, baselineEnd, ingestionOnly }, null, 2));
   const before = resourceSnapshot();
-  const profile = { baseRevision: '58e2eb6', postgresStorage, mode, fixtureVersion: calculationFixtureVersion,
+  const profile = { baseRevision: '35a6318', diagnosticCandidate: 'F4-T14 session inspection and trace correlation', postgresStorage, mode, fixtureVersion: calculationFixtureVersion,
     initialHistoryStart: fleet.initialHistoryStart, eligibleFrom: fleet.eligibleFrom, backfillRanges: ranges,
     eligibilityCheckedSlis: eligibility.length,
     plannedQueryCalls: plannedCalculationCalls(mode, 800), independentReferenceEnabled: mode === 'paired',
@@ -124,6 +124,8 @@ JOIN (VALUES ${goods}) g(sli_id,good) USING(sli_id);`);
       '../internal/storage/query/derived_metrics.sql', '../internal/storage/query/services.sql',
       '../internal/storage/query/derived_history.sql', '../internal/storage/migrations/0053_projection_validity_scalar.sql',
       '../internal/storage/derived_worker.go', '../internal/storage/migrations/0054_maintenance_authority.sql',
+      '../internal/storage/sessions.go', '../internal/storage/runtime_metrics.go', '../internal/storage/derived_trace.go',
+      '../docs/evidence/alert-performance/observe-control.py',
       '../compose.e2e.disk.yaml', '../scripts/e2e.sh', 'e2e/support/stack.ts']
       .map(path => [path, createHash('sha256').update(readFileSync(path)).digest('hex')])),
     cpu: cpus()[0]?.model, logicalCPUs: cpus().length, memoryBytes: totalmem(),

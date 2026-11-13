@@ -1,7 +1,9 @@
 package storage
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -10,7 +12,84 @@ import (
 
 	"github.com/dsolsona/almanac/internal/storage/dbgen"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"go.opentelemetry.io/otel/codes"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
+
+func TestQueryTraceAbsentConnectionAddsNoIdentity(t *testing.T) {
+	t.Parallel()
+	exporter := tracetest.NewInMemoryExporter()
+	provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
+	t.Cleanup(func() { _ = provider.Shutdown(context.Background()) })
+	_, span := provider.Tracer("fixture").Start(t.Context(), "db.fixture")
+	recordQueryConnection(span, nil)
+	recordQueryConnection(span, &pgx.Conn{})
+	span.End()
+	spans := exporter.GetSpans()
+	if len(spans) != 1 || len(spans[0].Attributes) != 0 {
+		t.Fatal("missing connection fabricated a backend identity")
+	}
+}
+
+func TestQueryTraceExportsOnlyValidatedSQLState(t *testing.T) {
+	t.Parallel()
+	var absent *pgconn.PgError
+	cases := []struct {
+		name string
+		err  error
+		code string
+	}{
+		{"success", nil, ""},
+		{"ordinary", errors.New("password SQL argument private"), ""},
+		{"typed nil", absent, ""},
+		{"wrapped", fmt.Errorf("private wrapper: %w", &pgconn.PgError{Code: "55P03", Message: "password private", Detail: "SQL argument private"}), "55P03"},
+		{"numeric", &pgconn.PgError{Code: "57014", Message: "private"}, "57014"},
+	}
+	for _, code := range []string{"", "55P0", "55P030", "55p03", "55P\n3", "55P'3", "秘密123", "SELECT password", "55P\x003"} {
+		cases = append(cases, struct {
+			name string
+			err  error
+			code string
+		}{"invalid " + fmt.Sprintf("%q", code), &pgconn.PgError{Code: code, Message: "private"}, ""})
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			exporter := tracetest.NewInMemoryExporter()
+			provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
+			t.Cleanup(func() { _ = provider.Shutdown(context.Background()) })
+			_, span := provider.Tracer("fixture").Start(t.Context(), "db.fixture")
+			ctx := context.WithValue(t.Context(), queryTimingKey{}, tracedQuery{started: time.Now(), span: span})
+			tracer := runtimeQueryTracer{metrics: &queryMetrics{}}
+			tracer.TraceQueryEnd(ctx, nil, pgx.TraceQueryEndData{Err: tc.err})
+			spans := exporter.GetSpans()
+			if len(spans) != 1 {
+				t.Fatal("query span missing")
+			}
+			got := ""
+			for _, attr := range spans[0].Attributes {
+				switch string(attr.Key) {
+				case "db.response.status_code":
+					got = attr.Value.AsString()
+				case "db.response.returned_rows":
+				default:
+					t.Fatalf("unexpected query attribute %s", attr.Key)
+				}
+			}
+			if got != tc.code {
+				t.Fatalf("SQLSTATE = %q, want %q", got, tc.code)
+			}
+			if len(spans[0].Events) != 0 {
+				t.Fatal("query exported raw error event")
+			}
+			if tc.err != nil && (spans[0].Status.Code != codes.Error || spans[0].Status.Description != "database operation failed") {
+				t.Fatal("query error status is not sanitized")
+			}
+		})
+	}
+}
 
 func TestMetricsScrapesNeedNoDatabaseAndDoNotInventLag(t *testing.T) {
 	runtime := &Runtime{}

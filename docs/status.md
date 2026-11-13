@@ -1,3 +1,15 @@
+Performance investigation, 2026-11-13: [F4-T14](tasks/F4-T14.md) prioritizes the
+[complete issue inventory](evidence/alert-performance/README.md): authentication
+failures, overview/admission latency, ingestion interference and repeated pending
+work. A focused PostgreSQL reproduction confirms that read-only inspection's
+exclusive user/session locks conflict with protected readers; the intended
+regression fails at the existing 250-ms budget. The narrow shared-read correction
+passes focused security/concurrency checks and four normal-container journeys.
+Safe work/PID/SQLSTATE correlation and a bounded runtime observer are verified for
+the next diagnostic run; integrated workload acceptance remains pending.
+The corrected control is published in draft PR #107;
+it fails without candidate/oracle queries and does not permit calculation adoption.
+
 Calculation experiment controls, 2026-11-13: [F4-T13](tasks/F4-T13.md) has verified
 the eligible-backfill harness and isolated query modes; the increment is in review.
 Fourteen focused tests pass in 0.863 s after integration. The corrected seed passes
