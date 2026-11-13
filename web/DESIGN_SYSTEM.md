@@ -232,13 +232,21 @@ share either UTC or local display time. Keep their controls and exact-value acti
 available when chart loading, validation or rendering fails. Budget sparklines also
 break at partial coverage; they must not connect across an unknown interval.
 
-Pair every chart with `ExactValuesTable`, backed by the same sample objects. It
+By default, pair every chart with `ExactValuesTable`, backed by the same sample objects. It
 shows exact decimal strings and coverage in a keyboard-focusable scroll region,
 with controlled pages of at most 50 rows. Keep missing, partial, zero-traffic,
 known-empty, expired and not-applicable labels distinct in charts, tooltips and
 tables. Known-empty, expired and not-applicable samples remain gaps, never numeric
 zero. Synthetic catalogue fixtures must be explicitly labelled and
 must never look like live service data.
+
+The selected alert-detail cards under [SPEC-0022](../docs/specs/0022-alert-management-ui.md)
+use opt-in `TimelineChartView` point inspection instead of a separate exact-values
+table. Hover, persistent touch and arrows/Home/End expose the supplied exact values,
+timestamps and gap reasons; Escape, blur and outside taps dismiss inspection. The
+ordinary chart renderer and table pairing remain unchanged for existing consumers.
+An optional series palette choice preserves the selected recent/sustained colors
+without changing default chart colors.
 
 
 Resource lists for agents, datasources and SLIs opt into `ResourceTableHead`,

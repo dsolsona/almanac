@@ -3,13 +3,12 @@ import type { components } from '../../api/generated.ts';
 import { traceChartRender } from '../../telemetry/client.ts';
 import { percentExact } from '../../slos/detailFormat.ts';
 import './slo-history-chart.css';
+import { pointTime, inspectionIndex } from './pointInspection.ts';
 
 type Sample=components['schemas']['SloOperationalSample'];
 type Props={kind:'budget'|'burn'|'attainment';samples:Sample[];start:string;end:string;target:string;compact?:boolean;zone?:'UTC'|'local';generation?:string;burnLabel?:string};
 const labels:Record<Sample['state'],string>={observed:'Complete evaluation',missing:'Missing',partial:'Partial data',stale:'Stale',zero_traffic:'Zero traffic',known_empty:'Known empty',expired:'Expired history',not_applicable:'Not applicable'};
-export function pointTime(value:string,zone:'UTC'|'local'='UTC'):string {
- return new Date(value).toLocaleString('en-GB',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:false,...(zone==='UTC'?{timeZone:'UTC'}:{timeZoneName:'shortOffset'})})+(zone==='UTC'?' UTC':' local');
-}
+export { pointTime } from './pointInspection.ts';
 export function SloHistoryChart({kind,samples,start,end,target,compact=false,zone='UTC',generation,burnLabel='1 h'}:Props) {
  const host=useRef<HTMLDivElement>(null),tooltip=useRef<HTMLDivElement>(null);
  const [width,setWidth]=useState(980),[index,setIndex]=useState<number|null>(null),[pointerY,setPointerY]=useState<number|undefined>(undefined);
@@ -61,7 +60,7 @@ export function SloHistoryChart({kind,samples,start,end,target,compact=false,zon
  if(!Number.isFinite(min)||!Number.isFinite(max)||max<=min)return <p role="alert">Chart unavailable: Timeline range must have end after start</p>;
  return <div ref={host} className={`slo-history-chart ${kind}`} data-chart-ready="true" data-rendered-generation={generation} data-rendered-zone={zone} role="group" aria-label={`Inspect ${label}. Use arrow keys, Home, End, Escape.`} tabIndex={samples.length?0:undefined}
  onPointerMove={e=>{if(e.pointerType!=='touch')inspect(e);}} onPointerDown={e=>{if(e.pointerType==='touch')inspect(e);}} onPointerLeave={e=>{if(e.pointerType!=='touch')setIndex(null);}} onBlur={()=>setIndex(null)}
- onKeyDown={e=>{setPointerY(undefined);if(e.key==='Escape'){setIndex(null);return;}if(!samples.length||!['Home','End','ArrowLeft','ArrowRight'].includes(e.key))return;e.preventDefault();setIndex(i=>e.key==='Home'?0:e.key==='End'?samples.length-1:Math.max(0,Math.min(samples.length-1,(i??samples.length-1)+(e.key==='ArrowRight'?1:-1))));}}>
+ onKeyDown={e=>{setPointerY(undefined);if(e.key==='Escape'){setIndex(null);return;}if(!samples.length||!['Home','End','ArrowLeft','ArrowRight'].includes(e.key))return;e.preventDefault();setIndex(i=>inspectionIndex(e.key,i,samples.length));}}>
  {samples.length===0?<p className="slo-history-empty">No history available for this period.</p>:<svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${label}; unavailable measurements are gaps.`}>
  {ticks.map((t,i)=><g key={i}><line className="gridline" x1={left} x2={right} y1={y(t)} y2={y(t)}/><text className="axis" x="55" y={y(t)+4} textAnchor="end">{Number(t.toFixed(kind==='attainment'?3:2))}{unit}</text></g>)}
  <line className="ref" x1={left} x2={right} y1={y(kind==='budget'?0:kind==='burn'?1:Number(target)*100)} y2={y(kind==='budget'?0:kind==='burn'?1:Number(target)*100)}/>

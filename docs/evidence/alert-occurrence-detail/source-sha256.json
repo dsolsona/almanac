@@ -1,0 +1,36 @@
+{
+  "base": "a6f47cab9b4599363f4c99567b92eacfda1252b6",
+  "source_files": {
+    "web/src/alerts/AlertOccurrenceDetail.tsx": "1a9784975ab8eee4e66d65d04d68f2d04f2ac0dbe84ce915762f8a2e83b7581b",
+    "web/src/alerts/occurrence-detail.css": "e14558651a2b6b366ea354dab68b238ef7cd44abbcade453f8681a7cc7435b94",
+    "web/src/catalogue/AlertDetailExample.tsx": "fd3b39bfda1257da70f62a892de0119af4fedf2c8dbb7070c89e0e2998d5f273",
+    "web/src/catalogue/Catalogue.tsx": "78a1ed6bb687f1dd60b3538a0b75469f9ca00dcbf17fcc569755abf2cacd3b01",
+    "web/src/components/charts/TimelineChartView.tsx": "eb3bcf3279d84a3e81dc846c321ed2a224c00b3326c04a4b8114250eae2d7bb9",
+    "web/src/components/charts/pointInspection.ts": "fa9edc9d7f840b2394169d39d2ecae0c38968f56454ed91b6967848e84ba995b",
+    "web/src/components/charts/SloHistoryChart.tsx": "3d60d230fff2086d9e41171458b8af495e110adec971bf26ef755482bbb859f7",
+    "web/src/components/charts/timelineModel.ts": "fa9916e50b1ba90b6d58299fc6c884ee5d9088bbde7f338677fca6f06b1160dd",
+    "web/src/components/charts/timelineOption.ts": "5af2b310d583b01be239ec8e7fb8b209faa6a71db3b6e940037490fcf4b9d59d",
+    "web/src/components/charts/charts.css": "aba8ad387c18ceb7cf2a6999d6793dc2c6b7429d1cee000a9ddf404674375882",
+    "web/tests/alert-occurrence-detail.test.tsx": "67f5a626cff4ea564c427894753e3f438597d3abbb873813ffc07f1e2304c80d",
+    "web/tests/timeline-inspection.test.tsx": "ae890f145e2dd4273a0a56443d75addd78aea8f361f55adb4bd9086bfc79d789",
+    "web/tests/charts.test.tsx": "d10c860b5755a0371502118c89f205148d264ba469b61e68c615698017f166bc",
+    "web/browser/alert-occurrence-detail.spec.ts": "f44a19eb21a3838ff91ca9ba7c6c731914345b6b9ba14984423274d56763642b"
+  },
+  "captures": {
+    "calculation-desktop-dark.png": "863088c74b9145184e12b2f3bdda85018f916981575eb478d52a6208901af0e8",
+    "calculation-desktop-light.png": "62e1f0eaf42a4da0cadfeef7182c184d6fa305abdf35bdfcea91042f6a7317bf",
+    "calculation-intermediate-dark.png": "8decb4dae78249ef084d5160825eb36005e99308a6236555eb5655e9bca8e2e9",
+    "calculation-intermediate-light.png": "c841ed613d6c8c06fcf878fdaf855916e0636b1175772e98c4508be284244e2f",
+    "calculation-mobile-dark.png": "628a178aba845e01745d71336066d440e090d3560f24377edb995db157c42915",
+    "calculation-mobile-light.png": "a6af78c252939886594e362cd9c293f3a9426c305352c2f0e378aa8e6fe9f6c8",
+    "desktop-dark.png": "54a0c4b669043f16a5296a50ab40b0080e8354a3af8cb35d45eb95a5bd31b45a",
+    "desktop-light.png": "5d5454363092d2c5199f3e61acff2a744b3fe6d6c1b666fd9c877fe86fcba3f4",
+    "intermediate-dark.png": "12a3bc25ac8de4e39e0192c8f36e748e9be17a89fc22e493726c3a7f39016804",
+    "intermediate-light.png": "0d5e466a2e46b3b5df49ec361f40ebcee833b7d1302d8f570bdac0ffec009cd5",
+    "keyboard-focus-dark.png": "0aebe623037879cbec60e094178e3bfcbd5962271e0fb2336dd55980e2616848",
+    "mobile-dark.png": "b2eedabef4ed9e96f891766c622ac39b3004bcf22f0de296b628f57bd76330bf",
+    "mobile-light.png": "c24fe283ab3a0bc7207bf05ff7c1ab02663ae3e4351911942b88cc8acc2b80d7",
+    "touch-inspection-dark.png": "0b7a494afc47c8649f3d80e7bb1bc852e3a4988a503a13fceab907b8e363f534",
+    "touch-inspection-light.png": "5890298a0f68d2f880ee9568c1503a57f894acbb60c1f02d3690a6a68b2435b6"
+  }
+}

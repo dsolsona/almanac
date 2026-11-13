@@ -57,3 +57,13 @@
 .slo-budget-sparkline__baseline { stroke:var(--border); stroke-width:1; }
 .slo-budget-sparkline__line { fill:none; stroke:var(--s2); stroke-width:2; vector-effect:non-scaling-stroke; }
 .slo-budget-sparkline text { fill:var(--text-3); font:8px var(--mono); }
+
+.timeline-inspection { position: relative; min-width: 0; -webkit-tap-highlight-color: transparent; }
+.timeline-inspection:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 4px; }
+.timeline-inspection__tooltip { position: absolute; z-index: 12; width: max-content; max-width: min(300px, calc(100vw - 32px)); padding: 12px 14px; border: 1px solid var(--border); border-radius: 3px; background: var(--surface); color: var(--text); box-shadow: 0 6px 20px #0002; pointer-events: none; font-size: 12px; overflow-wrap: anywhere; }
+.timeline-inspection__tooltip time { display: block; margin-bottom: 10px; color: var(--text-3); }
+.timeline-inspection__tooltip > div + div { margin-top: 10px; }
+.timeline-inspection__tooltip span, .timeline-inspection__tooltip strong, .timeline-inspection__tooltip small { display: block; }
+.timeline-inspection__tooltip strong { font: 700 16px monospace; }
+.timeline-inspection__tooltip small { color: var(--text-3); }
+.timeline-inspection__cursor { position: absolute; top: 24px; bottom: 30px; border-left: 1px dashed var(--crosshair); pointer-events: none; }

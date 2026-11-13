@@ -7,6 +7,14 @@ browser completion. Its historical SQL fixture also predates declared validity;
 correct that fixture and add a matching control before further capacity claims.
 Calculation adoption and engine implementation remain pending.
 
+Selected alert detail presentation, 2026-11-13: [F4-T12](tasks/F4-T12.md) implements
+original/latest supplied evidence, exact shared-chart inspection and controlled
+acknowledgement cards. Forty-four focused component cases, TypeScript, eleven new
+browser cases and affected shared-consumer checks have passing evidence.
+[Reviewed renders](evidence/alert-occurrence-detail/README.md) retain both themes
+and all three viewport sizes. An unexplained test-wrapper termination remains
+documented. Production alert routes/APIs and engine acceptance remain separate.
+
 Selected alert list presentation, 2026-11-13: [F4-T10](tasks/F4-T10.md) adds
 paired-window evidence, global acknowledgement callbacks, compact filters, supplied
 SLO group totals and distinct history/gap states. Fourteen component cases and ten

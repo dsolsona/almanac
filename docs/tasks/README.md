@@ -235,3 +235,7 @@ and catalogue example; production alert operations remain gated separately.
 
 [F4-T10](F4-T10.md) builds the selected occurrence list/history presentation with
 supplied evidence, global group totals and acknowledgement callbacks.
+
+[F4-T12](F4-T12.md) builds selected occurrence detail cards with supplied original/latest
+evidence, exact shared-chart inspection and controlled acknowledgement; production
+routes, global synchronization and engine acceptance remain separate.
