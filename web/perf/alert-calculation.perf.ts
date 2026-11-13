@@ -122,7 +122,7 @@ ${marker.replaceAll('$1', `'${sli}'::uuid`)} COMMIT;`;
   const profile = { baseRevision: 'c276c553fab3a3854a84e42196aa98dcaa7e6d9e',
     applicationImage: compose('images', '--quiet', 'app').trim(),
     sourceHashes: Object.fromEntries(['../internal/storage/testdata/alert_window_fallback.sql',
-      'perf/alert-calculation.perf.ts', 'perf/alert-calculation.metrics.ts', 'perf/alert-calculation.seed.ts', 'playwright.alert-calculation.config.ts', '../compose.e2e.yaml', '../internal/storage/query/agent_access.sql']
+      'perf/alert-calculation.perf.ts', 'perf/alert-calculation.metrics.ts', 'perf/alert-calculation.seed.ts', 'playwright.alert-calculation.config.ts', '../compose.e2e.yaml', '../internal/storage/query/agent_access.sql', '../internal/storage/query/slis.sql']
       .map(path => [path, createHash('sha256').update(readFileSync(path)).digest('hex')])),
     cpu: cpus()[0]?.model, logicalCPUs: cpus().length, memoryBytes: totalmem(),
     database: psql("SELECT version()"), slis: 200, initialDays: 1, backfillDays: 3,
@@ -192,11 +192,26 @@ SELECT public.alert_experiment_compare('${fleet.slis[index]!.id}','${cutoff}'::t
   const after = resourceSnapshot();
   const metricsAfter = ingestionMetrics();
   const ingestionUnderLoad = ingestionDelta(baselineEnd, metricsAfter);
+  // ADR-0043: observations become due after settling, deterministic dispatch and
+  // one cadence's completion allowance, rounded to snapshot ticks. Counting only
+  // intervals starting after the phase start incorrectly includes not-yet-due work.
+  const dueEnd = (at: string, id: string) => {
+    const phaseMicros = Number(createHash('sha256').update(id).digest().readBigUInt64BE() % 60_000_000n);
+    const tick = Math.floor(Date.parse(at) / 60_000) * 60_000;
+    return new Date(Math.floor((tick - 120_000 - phaseMicros / 1000) / 60_000) * 60_000).toISOString();
+  };
+  const dueRanges = fleet.slis.map(s => `('${s.id}'::uuid,'${dueEnd(before.at, s.id)}'::timestamptz,'${dueEnd(after.at, s.id)}'::timestamptz)`).join(',');
+  const due = JSON.parse(psql(`WITH ranges(sli_id,from_at,to_at) AS (VALUES ${dueRanges}), expected AS (
+    SELECT r.sli_id,point FROM ranges r CROSS JOIN LATERAL generate_series(r.from_at,r.to_at-interval '1 minute',interval '1 minute') point)
+    SELECT json_build_object('intervals',count(*),'missing',count(*) FILTER(WHERE o.interval_start IS NULL),
+    'slisWithMissing',count(DISTINCT e.sli_id) FILTER(WHERE o.interval_start IS NULL),
+    'nonObserved',count(*) FILTER(WHERE o.outcome<>'observed')) FROM expected e LEFT JOIN public.almanac_sli_observations o
+    ON o.sli_id=e.sli_id AND o.measurement_revision=1 AND o.interval_start=e.point AND o.recorded_at<='${after.at}'`));
   const live = JSON.parse(psql(`SELECT json_build_object('slis',count(DISTINCT sli_id),'intervals',count(*),
     'maxReceiptDelaySeconds',max(extract(epoch FROM recorded_at-interval_start-interval '1 minute')))
     FROM public.almanac_sli_observations WHERE recorded_at>='${before.at}' AND recorded_at<='${after.at}'
     AND interval_start>=date_trunc('minute','${before.at}'::timestamptz) AND sli_id=ANY(ARRAY[${ids}]::uuid[])`));
-  const evidence = { profile, before, after, ingestionOnly, ingestionUnderLoad, metricsAfter, ingestedDuringLoad: ingestionBetween(before.at, after.at), live, timings,
+  const evidence = { profile, before, after, ingestionOnly, ingestionUnderLoad, metricsAfter, ingestedDuringLoad: ingestionBetween(before.at, after.at), due, live, timings,
     outcomes: settled.map(r => r.status === 'fulfilled' ? { status: r.status } : { status: r.status, error: String(r.reason) }) };
   writeFileSync(`${root}/results.json`, JSON.stringify(evidence, null, 2));
   const queries = [0,1].flatMap(worker => readFileSync(`${root}/queries-${worker}.jsonl`, 'utf8').split('\n')
@@ -214,7 +229,9 @@ SELECT public.alert_experiment_compare('${fleet.slis[index]!.id}','${cutoff}'::t
   expect(ingestionUnderLoad.p95UpperSeconds).not.toBeNull();
   expect(ingestionUnderLoad.p95UpperSeconds!).toBeLessThanOrEqual(0.250);
   expect(ingestionUnderLoad.p95UpperSeconds!).toBeLessThanOrEqual(1.25 * ingestionOnly.p95LowerSeconds);
-  expect(live.slis, 'real live collection must continue for the whole fleet').toBe(200);
+  expect(due.intervals, 'measurement must cover due work for the fleet').toBeGreaterThanOrEqual(200);
+  expect(due.missing, 'every due live interval must arrive within the canonical allowance').toBe(0);
+  expect(due.nonObserved).toBe(0);
   expect(summary.fallbackBatches, 'contention must actually exercise dirty interiors').toBeGreaterThan(0);
   for (const q of queries) for (const row of q.candidate) if (row.prepared) {
     const raw = q.reference[row.ordinal - 1]!;

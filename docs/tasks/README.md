@@ -4,6 +4,8 @@
 It is design review, not authorization for engine implementation.
 [F4-T02](F4-T02.md) runs the authorized bounded-calculation experiment before
 architecture adoption; production alert engine implementation remains separate.
+[F4-T03](F4-T03.md) fixes measured agent-access lock contention during historical
+writes; the remaining load failures stay in the calculation gate.
 
 Use `FN-TNN.md` for a bounded task within a delivery slice, for example `F1-T01.md`.
 Copy [TEMPLATE.md](TEMPLATE.md). These identifiers are independent of spec/ADR numbers.

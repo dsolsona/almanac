@@ -1,3 +1,12 @@
+Alerting implementation continues under [plan 0035](plans/0035-alerting-delivery.md).
+[F4-T03](tasks/F4-T03.md) fixes the reproduced agent/grant/measurement foreign-key
+lock conflict; focused authority and ingestion checks pass in 6.173 s. The corrected
+200-SLI run still fails ingestion and browser budgets; [evidence](evidence/alert-calculation/2026-11-13-bounded-contention.json)
+preserves 149 exact paired batches, incomplete query lanes and 9/400 overdue live
+intervals. This is not fallback adoption or engine completion. The earlier
+fresh-observation counts below did not account for settling/dispatch allowances
+and must not be read as evidence of missed collection deadlines.
+
 Alerting calculation experiment, 2026-11-13: [F4-T02](tasks/F4-T02.md), published in
 [draft PR #95](https://github.com/dsolsona/almanac/pull/95) above #94 in native
 stack 96, has

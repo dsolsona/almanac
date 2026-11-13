@@ -38,6 +38,11 @@ across much more work than live ingestion. This is a possible confounder, not a
 demonstrated production cause. A three-minute observation gap does not establish
 permanent data loss. No ingestion-handler latency percentile was collected.
 
+Subsequent oracle review found that the fresh-interval count above ignored the
+settling/dispatch/completion allowance in ADR-0043. It cannot establish collection
+lag. Later measurements check clock-derived due intervals instead; the original
+count remains preserved as an observation, not a missed-deadline result.
+
 ## Decision and next evidence
 
 Retain the accepted wait path and the draft status of ADR-0051/SPEC-0020's
@@ -81,3 +86,24 @@ seeding passed; contention failed after 3.0 minutes (5.7 minutes total reported 
 Playwright). Final focused calculator checks passed in 3.323 seconds. No production
 engine, alert lifecycle, excluded-window support or end-to-end detection target
 is claimed.
+
+## Bounded-backfill follow-up
+
+[The corrected run](2026-11-13-bounded-contention.json) uses 720-row, single-SLI
+backfill batches and the F4-T03 immutable-reference lock correction. All 1,400
+backfill batches completed in 124.820 seconds, but the full gate still failed.
+149 paired queries independently match all 596 completed windows; both query
+workers then reach their one-second statement deadline in the reference query.
+Ten browser workers fail opening details, with status 503s; nine first lists take
+7.376–9.671 seconds. Ingestion p95 is 106.076–111.380 ms versus the 16.612–17.443 ms
+baseline, with four unsuccessful batches. The corrected due-interval check finds
+9/400 missing at measurement end, establishing lateness but not permanent loss.
+
+A representative list trace spends 9.671 seconds end to end, with its overview
+HTTP request taking 0.676 seconds. The fixture runs all ten browser renderers on
+the same two-vCPU machine as the server. SPEC-0019 requires ten concurrent API
+users and separately measured rendered journeys; these loads need distinct
+reporting so renderer contention is not mistaken for database cost. No acceptance
+limit is changed. Dirty-current 503s and per-SLI source-generation contention are
+also actionable and remain unresolved. Raw evidence is retained in the ingestion
+worktree under `.local/alert-calculation-ten-browser-failure/`.

@@ -102,6 +102,7 @@ type Querier interface {
 	GetAgent(ctx context.Context, agentID pgtype.UUID) (AlmanacAgent, error)
 	GetAgentConfiguration(ctx context.Context, agentID pgtype.UUID) (GetAgentConfigurationRow, error)
 	GetAgentExecutionGrant(ctx context.Context, arg GetAgentExecutionGrantParams) (GetAgentExecutionGrantRow, error)
+	// The lease key is immutable; updates to its authority must still serialize.
 	GetAgentExecutionGrantByLease(ctx context.Context, leaseID string) (GetAgentExecutionGrantByLeaseRow, error)
 	GetAgentExecutionGrantBySequence(ctx context.Context, arg GetAgentExecutionGrantBySequenceParams) (GetAgentExecutionGrantBySequenceRow, error)
 	GetAgentHandoffConfiguration(ctx context.Context, agentID pgtype.UUID) (int64, error)
@@ -195,6 +196,7 @@ type Querier interface {
 	// Select the current set before ordering locks: a LIMIT-driven primary-key scan
 	// would otherwise walk inactive history. Recheck base rows after any lock wait.
 	LockActiveRotationCredentials(ctx context.Context, arg LockActiveRotationCredentialsParams) ([]LockActiveRotationCredentialsRow, error)
+	// Serialize authority changes without blocking retained observations' ID references.
 	LockAgentAccessAgent(ctx context.Context, agentID pgtype.UUID) (LockAgentAccessAgentRow, error)
 	LockAgentAccessCredential(ctx context.Context, arg LockAgentAccessCredentialParams) (AlmanacAgentCredential, error)
 	LockAgentSession(ctx context.Context, verifier []byte) (AlmanacSession, error)
