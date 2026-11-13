@@ -12,9 +12,12 @@ latency from total detection delay (which has no numeric target yet). The latest
 proposal tests bounded raw calculation of dirty interior portions in the shared
 calculator before accepting the architecture. [SPEC-0020](specs/0020-cumulative-slo-calculation.md)
 records the proposed amendment; its accepted behavior remains in force. The next
-step is the 100/200-policy correctness/resource experiment across rollovers, late
-data, delayed/stopped aggregate workers and budget exhaustion. Complete policy
-evaluations remain ordered; unsuccessful fallback retains durable pending work.
+step is deterministic per-SLI query equivalence and a 200-SLI rollover/backfill
+contention measurement. Ordered breach/recovery, handoff and stopped-worker recovery
+remain in later 100/200-policy engine acceptance. Pending boundaries retry through
+the existing bounded scheduler with fair admission; no separate publication-wakeup
+mechanism or blocked-dependency table is required. Complete policy evaluations
+remain ordered; unsuccessful fallback retains durable pending work.
 The five-minute closed-hour target belongs to chart history, not source aggregate
 readiness. No experiment result, fallback adoption or end-to-end target is claimed.
 [Draft PR #94](https://github.com/dsolsona/almanac/pull/94) includes the contracts,

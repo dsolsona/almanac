@@ -76,11 +76,12 @@ scan an arbitrary whole window. Adoption is gated on the experiment below.
 
 If fallback cannot complete within its budget, treat pending as blocked evaluation
 work, not a completed unavailable condition. Keep the original boundary due and
-its cursor unchanged; record affected aggregate dependencies and release the worker
-claim while waiting. Aggregate
-publication durably wakes blocked work, with a bounded timer recheck to recover
-lost wakeups. Re-evaluate all conditions at that same boundary against one fresh,
-fenced snapshot before committing. Later boundaries remain ordered behind it.
+its cursor unchanged; release the worker claim and resources. The existing bounded
+scheduler makes it eligible again on the next tick, subject to fair admission.
+Do not add a blocked-boundary dependency table or publication-triggered retry path.
+Prevent repeated claims of the same pending boundary within one scheduler tick.
+Re-evaluate all conditions at that same boundary against one fresh, fenced snapshot
+before committing. Later boundaries remain ordered behind it.
 Do not commit a partial condition set or skip a pending boundary.
 
 Pending aggregation is not a failed retry attempt. Passing the preparation target
@@ -101,16 +102,21 @@ work; an unavoidable five-minute pause at every rollover is not the contract.
 ### Calculation experiment and acceptance gate
 
 Before accepting this ADR or starting engine implementation, compare the existing
-wait-for-publication path with bounded fallback at the 100/200-policy fixtures.
-Prove numerical equivalence against an independent canonical-observation reference,
-including quality and revision behavior. Measure total delay, raw work and database
-contention across rollovers, late data and delayed/stopped aggregate workers.
+window query with bounded fallback through deterministic per-SLI equivalence tests
+against an independent canonical-observation reference. Then run one contention
+measurement at 200 SLIs across an hourly rollover while multi-day backfill floods
+the dirty queue. Measure query duration, raw work, fallback/deferral frequency and
+interference with ingestion and SLO navigation. No policy engine is needed.
 Keep dirty-hour, raw-row, deadline and concurrency budgets explicit and fixed for
 each run; SPEC-0021 defines the required cases and evidence. Existing collection
 and interactive-read budgets remain constraints.
 
 Adopt fallback only after correctness and resource evidence support it and the
-maintainer accepts its limits and an end-to-end latency target. If it fails, record
+maintainer accepts its limits. Set a proposed end-to-end target before engine
+implementation; validate actual detection and commit latency with the engine's
+100/200-policy acceptance fixtures. Ordered breach/recovery, condition handoff,
+stopped-worker recovery and acknowledgements belong to that later gate. Query
+measurements do not establish those guarantees. If the experiment fails, record
 the findings and revisit the alternatives; do not silently increase budgets or
 switch to independent condition processing. The experiment is not production
 implementation or acceptance of the whole alerting contract.

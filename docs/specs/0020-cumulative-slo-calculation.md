@@ -103,7 +103,8 @@ The experiment must pin numerical budgets before each run and record actual rows
 dirty hours, duration, fallback frequency, deferrals and database contention.
 Independent reference checks cover clean/mixed/dirty windows, exact thresholds,
 hour/cadence edges, quality states, concurrent publication/ingestion and revision
-changes. SPEC-0021 defines the 100/200-policy comparison and acceptance gate.
+changes. SPEC-0021 defines the query-equivalence and 200-SLI contention gate,
+separate from later 100/200-policy engine acceptance.
 This proposal does not change the retained extrema worker or its five-minute
 closed-hour target; source aggregates can be rebuilt before their hour closes.
 
