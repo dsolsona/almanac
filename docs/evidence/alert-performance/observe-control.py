@@ -57,7 +57,9 @@ containers = set(docker('ps', '--quiet', '--filter', 'label=com.docker.compose.p
 containers.update(docker('ps', '--quiet', '--filter', 'label=almanac.e2e=owned').splitlines())
 containers.update(docker('ps', '--quiet', '--filter', 'name=almanac-dev-dev-run').splitlines())
 containers.discard('')
-query = """SELECT json_build_object('at',clock_timestamp(),'observer_pid',pg_backend_pid(),
+# Normalize nested JSON whitespace: json_agg(record) can insert literal newlines,
+# while the psql/readline protocol requires exactly one record per output line.
+query = """SELECT jsonb_build_object('at',clock_timestamp(),'observer_pid',pg_backend_pid(),
 'track_io_timing',current_setting('track_io_timing'),'backends',(
  SELECT coalesce(json_agg(sample),'[]'::json) FROM (
   SELECT pid,backend_type,state,wait_event_type,wait_event,

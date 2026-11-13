@@ -3,13 +3,16 @@
 Updated 2026-11-13. Owner: primary agent. Work is tracked in
 [F4-T14](../../tasks/F4-T14.md) and [plan 0045](../../plans/0045-alerting-performance-investigation.md).
 
-The current reference is the [corrected baseline-only control](../alert-calculation/2026-11-13-baseline-only-control.json)
-at `58e2eb6`: 200 SLIs/SLOs, real live collection, 1,400 synthetic historical SQL
-batches, ten API clients and one browser on the two-vCPU VM. It executed 800
-baseline calculation batches and **zero proposed fallback or raw-oracle calls**.
-It failed performance acceptance. All 400 due intervals were present; no
-observations preceded measurement/SLO validity. This result locates a problem
-in the existing combined workload, not specifically in the proposed alert query.
+The latest [instrumented baseline-only control](2026-11-13-instrumented-baseline.json)
+at `925d156` uses 200 SLIs/SLOs, live collection, 1,400 historical SQL batches,
+ten API clients and one cohosted browser. All 800 baseline batches and all 80
+browser journeys complete; the proposed fallback and raw oracle are absent.
+All 400 due intervals are present. Authentication succeeds, but overview admission
+and latency plus ingestion isolation still fail. The database observer failed
+before the measured phases; resource samples and application traces are retained.
+The [earlier baseline](../alert-calculation/2026-11-13-baseline-only-control.json)
+remains evidence, but its browser stopped after 27 journeys, so timings are not an
+unchanged-work comparison.
 
 ## Priorities
 
@@ -19,13 +22,13 @@ integrated capacity pass.
 
 | Order | Issue | User impact | Bottleneck evidence | Current status |
 | --- | --- | --- | --- | --- |
-| 1 | Authentication fails during navigation | A page cannot open; auth context returns 503 | Exclusive user/session locks conflict with protected shared readers | Narrow correction passes focused regression/security checks; integrated load verification pending |
-| 2 | Slow SLO overview and interactive admission exhaustion | Lists exceed one second; some earlier requests return 503 | Page SQL dominates measured server time; large JSON transfer; earlier 250-ms admission failures | Cost located; remaining execution/wait/resource breakdown unresolved |
-| 3 | Live ingestion slows under competing work | Latency isolation fails; an older run had overdue intervals | Multiple transaction operations slow; prior FK lock defect corrected; remaining source-generation/resource contention unproved | Latest run preserves due work and absolute limit but fails relative limit |
-| 4 | Repeated pending current calculations and publication lag | Background capacity is spent without producing new values | 6,112 waiting evaluations versus 548 publications in 106 seconds | Repeated work measured; exact dependency and latency contribution unresolved |
-| 5 | Pending aggregate windows and unproven alert detection capacity | Proposed alert evaluations would retain pending boundaries | 150/800 baseline batches pending; bounded fallback exactness has separate passing fixtures | Calculation-adoption gate remains open; no production engine claim |
+| 1 | Slow SLO overview and interactive admission exhaustion | Lists exceed one second; three API requests return 503 | Latest cold-list p95 1,830.6 ms; failed pool acquisitions take 250.1–250.8 ms | Page/transfer/resource cost and admission interference remain open |
+| 2 | Live ingestion slows under competing work | Latency isolation fails | Latest p95 14.4–15.1 → 87.3–91.6 ms; 524 accepted and all 400 due intervals present | Absolute p95 passes; relative limit fails |
+| 3 | Expensive scheduling and repeated pending calculations | Background work consumes capacity without publishing current values | Idle PostgreSQL ~98.5% of one CPU; two due queries consume ~58.7 s of elapsed query time in 62.1 s. Loaded phase has 7,866 waiting attempts /13 publications | Repeated metadata extraction reproduced; equivalent query correction in progress |
+| 4 | Pending aggregate windows and unproven alert capacity | Proposed alert evaluations would retain pending boundaries | Latest 252/800 baseline batches pending; bounded fallback exactness has separate passing fixtures | Calculation-adoption gate remains open |
+| Corrected | Authentication fails during navigation | Previously prevented page opening | Shared inspection queries preserve authority; 40/40 loaded auth-context calls succeed and all 80 journeys complete | Original conflict corrected and verified under load; other 503s are pool admission failures |
 
-## 1. Authentication failures: database lock contention
+## Authentication failures: corrected database lock contention
 
 **Observed:** the corrected baseline browser completed 27 of 80 planned journeys
 before a cold-detail navigation failed. `POST /api/v1/auth/context` returned 503
@@ -54,7 +57,7 @@ and **250.982 ms**. `pg_blocking_pids` identifies the actual holder/waiter;
 Separate-user and authority/expiry/no-idle-touch controls pass. The intended
 regression was red in **1.388 s** on unchanged production code.
 
-**Correction under verification:** only `touch=false` inspection now uses the
+**Verified correction:** only `touch=false` inspection now uses the
 existing shared user/session queries. Touching authentication and authority
 mutations keep their exclusive locks and validation. The original regression and
 four concurrent-writer cases pass in **2.468 s**, nine existing session checks in
@@ -65,16 +68,26 @@ epoch change and session revocation are still rejected; inspection does not touc
 idle time. No timeout, schema or generated query changes.
 
 **Normal deployment:** onboarding and all three account/session Settings journeys
-pass in **11.578 s**, with unchanged session source fingerprints. Full-load
-verification remains pending. The first deployment attempt ran zero tests:
+pass in **11.578 s**, with unchanged session source fingerprints. The subsequent full-load result is recorded below. The first deployment attempt ran zero tests:
 new-worktree Loki/Tempo nonsecret files had mode 0600 and unreadable container
 mounts; correcting only those two nonsecret file modes enabled the passing run.
 That diagnosed setup correction is separate from application performance.
-Close only after the original browser journey also succeeds under the workload.
+**Loaded verification:** on `925d156`, all 80 browser journeys complete and all
+40 traced auth-context requests return 200 (p95 **25.042 ms**, max **55.265 ms**).
+The three remaining overview 503s fail interactive pool acquisition at
+**250.113–250.839 ms**, before page SQL; they are a distinct issue.
 
-## 2. Overview latency: database execution, transfer and admission
+## Overview latency: database execution, transfer and admission
 
-**Observed:** corrected baseline overview API p95 **984.823 ms**, maximum
+**Latest:** overview API p95 **1,496.739 ms**; cold/warm list p95
+**1,830.6/808.6 ms**, cold/warm detail **1,037.8/374.8 ms**. Each browser cohort
+has 20 completed journeys. Three sampled overview API requests return 503; their
+traces identify failed interactive pool admission. Page SQL p95 is **604.820 ms**.
+The resource samples show the cohosted load-client/observer container averaging
+**46.75% of one CPU** during load, application **31.91%**, PostgreSQL **94.20%**.
+These shared two-vCPU constraints require attribution, not a budget waiver.
+
+**Earlier:** corrected baseline overview API p95 **984.823 ms**, maximum
 **1,177.165 ms**; cold-list maximum **1,799.3 ms**. Its 110 sampled overview API
 responses succeeded, but browser coverage is incomplete after issue 1. An earlier
 disk paired run measured **1,254 ms** API p95 and **2,262 ms** cold-list maximum.
@@ -115,9 +128,16 @@ from SQL execution, transferring/decoding rows and browser rendering. Preserve
 count/order/filter/keyset and exact-value behavior in every alternative. Recheck
 full cold and in-app navigation only after a causal correction is demonstrated.
 
-## 3. Ingestion isolation: remaining source/transaction contention
+## Ingestion isolation: remaining source/transaction contention
 
-**Observed:** corrected baseline ingestion p95 increases from
+**Latest:** 208 ingestion-only accepts versus 524 loaded accepts; neither cohort
+has unsuccessful ingestion. Histogram p95 increases **14.350–15.068 →
+87.269–91.633 ms**. All 400 canonically due intervals are observed. Trace-start
+cohorts contain 208/523 calls; their means are **7.622/37.669 ms**, loaded p95
+**90.229 ms**. A trace maximum is **383.886 ms**; the acceptance budget here is
+p95, not a maximum-latency guarantee. No database wait samples cover these phases.
+
+**Earlier:** corrected baseline ingestion p95 increases from
 **12.396–13.016 ms** to **62.021–65.122 ms**. This is below the **250-ms absolute
 limit** but exceeds the permitted **1.25× relative limit**. All 344 measured
 ingestions succeed and all 400 due intervals are present. The same failure persists
@@ -158,9 +178,30 @@ with live database wait/blocker samples and per-container CPU/I/O. Keep exact du
 interval accounting, accepted/duplicate/failed outcomes and both latency gates.
 Do not weaken authority locks or slow the workload merely to make it pass.
 
-## 4. Background preparation: repeated pending evaluations
+## Background preparation: expensive due scans and pending evaluations
 
-**Observed:** corrected baseline has **6,112 current evaluations returning waiting**
+**Latest idle cost:** during 62.084 s of ingestion-only activity, PostgreSQL averages
+**98.49% of one CPU**. `ReadDerivedDue` runs 127 times, totaling **40.260 s**
+(mean **317.006 ms**); `ListDueDerivedObjectives` runs 59 times, totaling
+**18.467 s** (mean **313.008 ms**). Only 402 current publications occur, totaling
+**3.340 s**. Both due queries compare extrema publication times against metadata
+inside the cached chart payload. A bounded same-snapshot probe reproduces the expensive branch with 198/200
+source-current projections. Six alternating samples give due/list medians
+**400.470/389.642 ms** originally, versus **28.692/29.201 ms** when publication
+text is extracted once in a materialized relation. Ordered outputs match exactly.
+Both plans keep 198 extrema loops and about 118 filtered rows per loop; shared
+buffer hits fall **94,339 → 12,211**. Repeated metadata extraction is the dominant
+cost in this reproduced branch. Generic plans are explicit; this is not full-workload
+acceptance. The query-only correction is under focused verification.
+
+**Latest loaded retries:** **7,866 waiting attempts /139.665 s cumulative duration**,
+across all 200 opaque objective keys (39.33 attempts per key on average), versus
+13 publications. Same-outcome attempt starts average **3.898 s** apart. No captured
+SQLSTATE errors or failed `DeferCurrentPreparation` spans occur in those attempts.
+This narrows the error/cleanup hypothesis but does not distinguish every source
+readiness cause. Full resource/database attribution remains incomplete.
+
+**Earlier:** corrected baseline has **6,112 current evaluations returning waiting**
 with **59.698 s cumulative span duration**, versus **548 publications /22.347 s**
 during **106.407 s** of load. The earlier source-first paired run still had
 3,385 waiting attempts. Summed spans are not wall-clock CPU utilization.
@@ -178,8 +219,7 @@ acceptance still fails.
 and transaction work. Derived pool acquisition totals **5.261 s**. All waiting
 spans lack a stable work key, and bounded cleanup starts from a background context
 without the parent trace. Opaque work identity and trace-only cleanup linkage are
-now implemented and pass focused tests without changing scheduling. They have not
-yet been exercised in the next instrumented control.
+now implemented and pass focused tests without changing scheduling. They are exercised in the latest control described above.
 
 **Unresolved:** why each remaining attempt is pending, how long the same eligible
 interior stays dirty, whether scheduling repeatedly selects known blocked work,
@@ -204,9 +244,10 @@ cadence/validity/retention bounds, wake after publication without new ingestion,
 surface exhausted work and keep unrelated healthy work moving. Check both due
 selection and scheduler wakeups to avoid replacing transactions with a tight poll.
 
-## 5. Calculation readiness and alert capacity remain unproven
+## Calculation readiness and alert capacity remain unproven
 
-The baseline control returns pending in **150/800 batches**. This is accepted
+The latest baseline returns pending in **252/800 batches**; the earlier control
+returned **150/800**. This is accepted
 calculator preparation state, not a proven arithmetic defect. The proposed alert
 engine must preserve those boundaries rather than treating them as clear.
 
@@ -227,11 +268,11 @@ transitions and total detection delay require their own later evidence. The
 
 | Defect | Correction and evidence | Remaining limit |
 | --- | --- | --- |
-| Foreign-key locks block live agent authorization | F4-T03 reproducer and narrower non-key-update locks | Other ingestion contention remains open under issue 3 |
+| Foreign-key locks block live agent authorization | F4-T03 reproducer and narrower non-key-update locks | Other ingestion contention remains open under ingestion isolation |
 | SLO detail returns 503 merely because current calculation is pending | [F4-T04](../../tasks/F4-T04.md) preserves compatible published values with explicit stale/failed provenance; incompatible/absent values remain unavailable | Does not fix admission or authentication 503s |
-| Overview repeats classification and detoasts large JSON deadlines | F4-T07 materialized counts and validated generated deadline scalar | Page/transfer/resource cost remains open under issue 2 |
+| Overview repeats classification and detoasts large JSON deadlines | F4-T07 materialized counts and validated generated deadline scalar | Page/transfer/resource cost remains open under overview latency |
 | Malformed/infinite deadlines abort the list or falsely retain Healthy | F4-T07 safe parsing and explicit repair eligibility | Regression correctness, not a capacity result |
-| Current work precedes ready source publication | [F4-T11](../../tasks/F4-T11.md) bounded source-first turn | Remaining waiting work remains open under issue 4 |
+| Current work precedes ready source publication | [F4-T11](../../tasks/F4-T11.md) bounded source-first turn | Remaining waiting work remains open under background preparation |
 
 ## Experiment flaws and environment limitations
 
@@ -239,12 +280,13 @@ These affect interpretation; they must not be reported as application fixes.
 
 | Finding | Evidence and correction | Remaining limitation |
 | --- | --- | --- |
-| Seed history readiness is coupled to live currentness | On `404b638`, all 200 persisted histories and closed-hour extrema were ready at 22:07:34 UTC, but the 22:10:53 API sweep returned 197 ready and 3 stale/preparing rows, all with history generations. The overview deliberately rewrites stale current projections' history state. The seed was interrupted after 9.5 minutes at that poll, preserving its report | A history-specific, revision/cache/extrema-checked predicate passes twelve rollback cases; a fresh seed remains pending. No measured workload started; this delay is not proof of historical calculation slowness. Subsequent currentness/accuracy/latency gates remain required |
+| Seed history readiness is coupled to live currentness | On `404b638`, all 200 persisted histories and closed-hour extrema were ready at 22:07:34 UTC, but the 22:10:53 API sweep returned 197 ready and 3 stale/preparing rows, all with history generations. The overview deliberately rewrites stale current projections' history state. The seed was interrupted after 9.5 minutes at that poll, preserving its report | A history-specific, revision/cache/extrema-checked predicate passes twelve rollback cases; the fresh v3 seed passes two tests in 243.601 s. No measured workload started; this delay is not proof of historical calculation slowness. Subsequent currentness/accuracy/latency gates remain required |
 | PostgreSQL tmpfs competes with the VM's RAM | 6-GiB tmpfs on a roughly 3.85-GiB/no-swap VM; 895-MiB data +1,008-MiB WAL; available memory fell to 90 MiB. [Storage evidence](../slo-overview-performance/storage-isolation.json) records verified backup/restore and explicit disk-backed experiment | No matching OOM kill was found. Fresh disk runs still fail; do not attribute every earlier failure to memory |
 | SQL history precedes declared eligibility | 864,000 observations were outside both validity bounds. F4-T13 declares eligibility before seed and validates every planned range; corrected check finds zero invalid among 1,153,250 observations | Initial missing coverage changes, so legacy/corrected runs are not identical baselines. SQL history bypasses real historical grants/buffering/admission |
 | Oversized/cohosted/combined workload obscures attribution | Initial 12,000-row multi-SLI transactions became at most 720 rows for one SLI. Ten cohosted browsers became ten API clients plus one browser. F4-T13 separates baseline/candidate/paired query modes | Browser still shares server resources; remote capable-client acceptance is outstanding. Paired mode intentionally includes raw-oracle work |
 | Incomplete load and incorrect due accounting | API cohorts now remain active and include slow completions; due oracle includes settling/dispatch/completion allowances instead of counting only fresh observations | An older 149-pair run failed in raw-reference work, not necessarily candidate execution; retain incomplete results |
 | Numeric/evidence reporting could hide errors | F4-T13 compares decimal text exactly, preserves incomplete/mismatched evidence before latency assertions and reports unexecuted equivalence as not_checked | Correct reporting is not a passing capacity result |
+| Observer database framing | Nested JSON emitted literal line breaks with multiple backend rows; the latest run has only 16 pre-phase DB samples, versus 8,604 resource samples. [Regression and correction](observer-framing.md) preserve this failure | Fixed normalization passes a real multi-backend check; it does not restore missing samples in the completed run |
 | Evidence/tool failures | Monitoring configuration readability, duplicate tracing, EPIPE capture and bounded trace export were corrected | Non-TTY wrapper exit 143 remains unexplained. PTY/polling is a precaution, not a proven fix; preserve supervisor and child state on recurrence |
 
 ## Observability needed for the next causal checks

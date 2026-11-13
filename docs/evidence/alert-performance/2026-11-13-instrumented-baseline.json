@@ -1,0 +1,1489 @@
+{
+  "result": "failed",
+  "profile": {
+    "baseRevision": "35a6318",
+    "diagnosticCandidate": "F4-T14 session inspection and trace correlation",
+    "postgresStorage": "disk",
+    "mode": "baseline-only",
+    "fixtureVersion": "eligible-published-history-v3",
+    "initialHistoryStart": "2026-11-12T22:20:00Z",
+    "eligibleFrom": "2026-11-09T22:20:00Z",
+    "historyClosedThrough": "2026-11-13T22:00:00Z",
+    "backfillRanges": [
+      {
+        "from": "2026-11-12T22:20:00.000Z",
+        "to": "2026-11-13T21:24:00Z",
+        "holes": true
+      },
+      {
+        "from": "2026-11-09T22:20:00.000Z",
+        "to": "2026-11-10T10:20:00.000Z",
+        "holes": false
+      },
+      {
+        "from": "2026-11-10T10:20:00.000Z",
+        "to": "2026-11-10T22:20:00.000Z",
+        "holes": false
+      },
+      {
+        "from": "2026-11-10T22:20:00.000Z",
+        "to": "2026-11-11T10:20:00.000Z",
+        "holes": false
+      },
+      {
+        "from": "2026-11-11T10:20:00.000Z",
+        "to": "2026-11-11T22:20:00.000Z",
+        "holes": false
+      },
+      {
+        "from": "2026-11-11T22:20:00.000Z",
+        "to": "2026-11-12T10:20:00.000Z",
+        "holes": false
+      },
+      {
+        "from": "2026-11-12T10:20:00.000Z",
+        "to": "2026-11-12T22:20:00.000Z",
+        "holes": false
+      }
+    ],
+    "eligibilityCheckedSlis": 200,
+    "plannedQueryCalls": {
+      "baseline": 800,
+      "candidate": 0,
+      "reference": 0
+    },
+    "independentReferenceEnabled": false,
+    "applicationImage": "b4a9c834e7a4dd5856e0d7c075b8821ed4ade2d1e33c525faa555f3d2524213a",
+    "sourceHashes": {
+      "../internal/storage/testdata/alert_window_fallback.sql": "2d7261617bf37a2c497103fe3f84a79a72365707bb2229f1b40537b909b6fa2e",
+      "perf/alert-calculation.perf.ts": "5cb6a4732f54142e693cbd581b04abbed6cb20d0a48361a1030461303a23a244",
+      "perf/alert-calculation.experiment.ts": "acc33d8b2175da42e10f978c17fc6f77f78c244aa1505ff57e9eca39f8332eaf",
+      "perf/alert-calculation.metrics.ts": "baa17bcd0604ced066e82941c96432d213f8402eaa7b1b15888a76f0f7ef8b41",
+      "perf/alert-calculation.seed.ts": "7b5b9612ea225c0b6145a845f242cc104f610cc27794b6aac300be38addf6ea4",
+      "playwright.alert-calculation.config.ts": "1b1584176d7b468750b1f6cc1a84f4df47486777a03c425097fd834eba42a1a9",
+      "../compose.e2e.yaml": "4796baeef6c7f8195624098f6c58487818db39b68fac6e4811d8267739b9b4a1",
+      "../internal/storage/query/agent_access.sql": "a50453eaf48acc4655b5a683eeb739c3e6fc6a22468bd3fd981622b3030c6332",
+      "../internal/storage/query/slis.sql": "dd520547b3b05f0a41308c3e6405436d1c71586bd2760c52b94c025607d02499",
+      "../internal/storage/derived_current.go": "f046707657bfc6636cb25e2b5c319daf70f786cd747fda65597a52efd8ef9c4f",
+      "../internal/storage/query/derived_projections.sql": "3bec990efffc6a2d72ca3a6e64796473e7a2b11e13abcfdb8ba06186fd0f6ea7",
+      "../api/openapi.yaml": "8cee7e36a221268d0bb5e05c81f11a28d6e81107b3425b7dabe4f8bbe675b4d8",
+      "../web/src/slos/SloDetailPanels.tsx": "0fa0ff1e854445c99150ec9c7e53bad936826d29f110e37280935a48a58b824b",
+      "../internal/storage/query/derived_overview.sql": "e0fcb6d8ce72bc0ed0c75d4f67cde6d3e0371e62a0b35e651ac64cdca30e0c73",
+      "../internal/storage/query/slo_list_references.sql": "f8f88f270f0666992c1f3e5c5512328594c334d319fd8ba831be29f81f3b84ff",
+      "../internal/storage/query/derived_due.sql": "cfe2a7e1b25c02be497ba3eec2d03e3230a6efb1fd488ae666787bd943dd7aac",
+      "../internal/storage/query/derived_consistency.sql": "7f3a3750d5a6c836ff1c0835def45bce160c3f370357d987b14dd533f7a54da1",
+      "../internal/storage/query/derived_metrics.sql": "0294bc1319786323c8a42e1be514c5d7f8c8919bfd5b667458b5c311fb9d5495",
+      "../internal/storage/query/services.sql": "7b131e6b40c0dff327a18f034f7874cf03cce65074738fd05fb88e46093cc950",
+      "../internal/storage/query/derived_history.sql": "b362ef9a5a1a76a66a0665fdd9eafe9681effebe4e1d078eefe8fd9d8bd5a221",
+      "../internal/storage/migrations/0053_projection_validity_scalar.sql": "1d6a9cc03c682fdde665d94859e0d93693ba8a046bac154787ccbb8a687a76e6",
+      "../internal/storage/derived_worker.go": "5f9c5aeab1ff041914465e8044dcc5751e4d16a21dc5f88e6b8b2bc50dfe7194",
+      "../internal/storage/migrations/0054_maintenance_authority.sql": "38da4705c530300e16bbd461afee82d864516e0d67c696bdb215ee9cde29e5da",
+      "../internal/storage/sessions.go": "d82b2c42f9ae82aad82f896c04b5441eed2d07bb8ce3861f74093c087a088ee3",
+      "../internal/storage/runtime_metrics.go": "e940af367af78dbba1e9ad7aec495f08ebd54049698d2697f54cefeaca215fbd",
+      "../internal/storage/derived_trace.go": "e2f8e802c34361f0dfbd35f9eb425bb7b866f03bef697f2e210cfa5553d9ac87",
+      "../docs/evidence/alert-performance/observe-control.py": "06536a5d99a3fc59ff91c23dfa0cf05f191f3b0bbc33dfa4e6969d0b9de4247a",
+      "perf/alert-calculation.readiness.ts": "959592f6eab3a460b1250150dcb45127f59fb7a9e1f54d661917ab691fd3f6fe",
+      "perf/alert-calculation.readiness.sql": "a1c186bf8a16985b3db5aeb36b397471dc5426072fa9b927e7410043239f0d37",
+      "../compose.e2e.disk.yaml": "695de1b6c5004c7aa2a3b29b9bc91836c5486aee7cf1ad3a6839a2f50a556163",
+      "../scripts/e2e.sh": "31cd79161fe8ab6043044e4f1a9cfd7786682b21cddcf08d0dba6e067135ce9d",
+      "e2e/support/stack.ts": "61b3075ba186b4c4314109d761b6ac786c623e901556c848758403d6f3d4bc22"
+    },
+    "cpu": "AMD EPYC",
+    "logicalCPUs": 2,
+    "memoryBytes": 4130635776,
+    "database": "PostgreSQL 18.6 (Debian 18.6-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+    "slis": 200,
+    "initialDays": 1,
+    "backfillDays": 3,
+    "maxDirtyHours": 8,
+    "maxRawVisits": 7200,
+    "statementTimeoutMs": 1000,
+    "workers": 2,
+    "offeredBatchesPerSecond": 8,
+    "rounds": 4,
+    "cutoff": "2026-11-13T20:00:00Z",
+    "apiUsers": 10,
+    "apiMinimumCyclesPerUser": 10,
+    "apiCycleIntervalMs": 10000,
+    "browserUsers": 1,
+    "browserCycles": 20,
+    "backfillBatchMaxRows": 720,
+    "backfillBatchSLIs": 1,
+    "backfillBatches": 1400,
+    "note": "Controlled historical measurement cutoffs cross a UTC hour; wall-clock engine scheduling is outside this query experiment. Single-query diagnostic control; no independent raw oracle or equivalence claim. Eligibility covers all backfill before initial seeding; initially missing older coverage differs from legacy fixtures."
+  },
+  "phase": {
+    "before": "2026-11-13T22:25:12.564637+00:00",
+    "after": "2026-11-13T22:27:50.609871+00:00"
+  },
+  "reportDurationMS": 239411.027,
+  "queryLanes": [
+    {
+      "worker": 0,
+      "batches": 400,
+      "baselineCalls": 400,
+      "candidateCalls": 0,
+      "oracleCalls": 0,
+      "baselineTotalMS": 5111.616,
+      "process": {
+        "startedAt": "2026-11-13T22:25:12.955Z",
+        "finishedAt": "2026-11-13T22:27:02.990Z"
+      },
+      "wallSeconds": 110.035
+    },
+    {
+      "worker": 1,
+      "batches": 400,
+      "baselineCalls": 400,
+      "candidateCalls": 0,
+      "oracleCalls": 0,
+      "baselineTotalMS": 5267.457,
+      "process": {
+        "startedAt": "2026-11-13T22:25:12.958Z",
+        "finishedAt": "2026-11-13T22:27:03.281Z"
+      },
+      "wallSeconds": 110.323
+    }
+  ],
+  "completedQueryCalls": {
+    "baseline": 800,
+    "candidate": 0,
+    "reference": 0
+  },
+  "actualArrayContractSatisfied": true,
+  "equivalence": {
+    "state": "not_checked",
+    "windows": 0,
+    "expectedWindows": 0,
+    "missingWindows": 0,
+    "mismatches": []
+  },
+  "pendingBaseline": 252,
+  "baselineMS": {
+    "samples": 800,
+    "p50": 11.158000000000001,
+    "p95": 28.991,
+    "maximum": 75.768
+  },
+  "backfill": {
+    "startedAt": "2026-11-13T22:25:12.976Z",
+    "finishedAt": "2026-11-13T22:27:50.087Z",
+    "wallSeconds": 157.111
+  },
+  "completedBackfillBatches": 1400,
+  "ingestionOnly": {
+    "accepted": 208,
+    "duplicate": 0,
+    "unsuccessful": 0,
+    "p95LowerSeconds": 0.014350179,
+    "p95UpperSeconds": 0.015067687,
+    "elapsedSeconds": 62.084
+  },
+  "ingestionUnderLoad": {
+    "accepted": 524,
+    "duplicate": 0,
+    "unsuccessful": 0,
+    "p95LowerSeconds": 0.087269231,
+    "p95UpperSeconds": 0.091632692,
+    "elapsedSeconds": 158.44
+  },
+  "due": {
+    "intervals": 400,
+    "missing": 0,
+    "slisWithMissing": 0,
+    "nonObserved": 0
+  },
+  "apiMS": {
+    "overview": {
+      "samples": 125,
+      "p50": 576.2416800000065,
+      "p95": 1496.7387709999894,
+      "maximum": 1641.6364519999916
+    },
+    "status": {
+      "samples": 122,
+      "p50": 109.03388000000268,
+      "p95": 202.50890400000208,
+      "maximum": 277.28760599999805
+    },
+    "history": {
+      "samples": 122,
+      "p50": 242.09297350000998,
+      "p95": 406.3330249999999,
+      "maximum": 557.9592150000099
+    }
+  },
+  "browserMS": {
+    "list-cold": {
+      "samples": 20,
+      "p50": 1303.5,
+      "p95": 1830.5999999940395,
+      "maximum": 2277.199999988079
+    },
+    "list-warm": {
+      "samples": 20,
+      "p50": 582.0000000074506,
+      "p95": 808.5999999940395,
+      "maximum": 991
+    },
+    "detail-cold": {
+      "samples": 20,
+      "p50": 738.3000000044703,
+      "p95": 1037.7999999970198,
+      "maximum": 1165.2999999970198
+    },
+    "detail-warm": {
+      "samples": 20,
+      "p50": 257.1000000014901,
+      "p95": 374.79999999701977,
+      "maximum": 743.2999999970198
+    }
+  },
+  "apiErrors": [
+    {
+      "name": "overview",
+      "milliseconds": 773.5503139999928,
+      "status": 503,
+      "beganAt": 1794608713179
+    },
+    {
+      "name": "overview",
+      "milliseconds": 796.7566349999979,
+      "status": 503,
+      "beganAt": 1794608713169
+    },
+    {
+      "name": "overview",
+      "milliseconds": 261.06207499999437,
+      "status": 503,
+      "beganAt": 1794608813300
+    }
+  ],
+  "caveats": [
+    "Baseline-only diagnostic: candidate and raw oracle are absent; no independent equality claim.",
+    "Corrected eligibility changes initial missing coverage; legacy fixture timing is not an unchanged baseline.",
+    "Historical backfill still uses direct SQL with fixture provenance, bypassing historical agent grants/buffer/admission; live collection and ingestion are real.",
+    "Controlled historical cutoffs cross an hour, not actual wall-clock engine rollover.",
+    "Browser renderer shares the server VM; remote capable-client acceptance remains outstanding.",
+    "Database observer failed after 16 pre-phase samples on multi-line JSON; no DB wait/blocker samples cover either measured phase. Resource and trace evidence remain available.",
+    "Browser completed 80 journeys versus 27 in the earlier failed baseline, so actual offered work and duration differ. This is not an unchanged timing comparison.",
+    "CPU samples are repeated Docker windows; query spans are elapsed time, not CPU. Correlated scheduler CPU cause needs a physical-plan/control probe.",
+    "Observer framing correction is verified separately; it does not repair this run retroactively."
+  ],
+  "sourceRevision": "925d156",
+  "seed": {
+    "total": 2,
+    "expected": 2,
+    "unexpected": 0,
+    "flaky": 0,
+    "skipped": 0,
+    "ok": true
+  },
+  "seedDurationMS": 243600.765,
+  "observer": {
+    "finished_at": "2026-11-13T22:28:06.807946+00:00",
+    "workload_exit_code": 1,
+    "samples": {
+      "database": 16,
+      "resources": 8604
+    },
+    "samplers_completed": {
+      "database": true,
+      "resources": true
+    },
+    "processes_terminated": true,
+    "errors": [
+      {
+        "stream": "database",
+        "error": "Expecting value: line 2 column 1 (char 276)"
+      }
+    ],
+    "sourceSHA256": "06536a5d99a3fc59ff91c23dfa0cf05f191f3b0bbc33dfa4e6969d0b9de4247a"
+  },
+  "resourceCPU": {
+    "unit": "percent of one CPU; VM has two logical CPUs",
+    "phases": {
+      "ingestion_only": {
+        "almanac-e2e-tempo-1": {
+          "samples": 250,
+          "mean": 0.2572,
+          "p95": 0.33,
+          "max": 0.35
+        },
+        "almanac-e2e-sources-ready-1": {
+          "samples": 250,
+          "mean": 1.68904,
+          "p95": 3.6,
+          "max": 3.92
+        },
+        "almanac-dev-dev-run-57bd5f261ccd": {
+          "samples": 250,
+          "mean": 2.64176,
+          "p95": 8.01,
+          "max": 52.1
+        },
+        "almanac-e2e-app-1": {
+          "samples": 250,
+          "mean": 5.52632,
+          "p95": 10.9,
+          "max": 29.96
+        },
+        "almanac-e2e-postgres-1": {
+          "samples": 250,
+          "mean": 98.49336,
+          "p95": 102.42,
+          "max": 137.29
+        },
+        "almanac-e2e-victoriatraces-1": {
+          "samples": 250,
+          "mean": 0.66032,
+          "p95": 1.38,
+          "max": 5.17
+        },
+        "almanac-e2e-victoriametrics-1": {
+          "samples": 250,
+          "mean": 1.3784,
+          "p95": 3.64,
+          "max": 4.26
+        },
+        "almanac-e2e-loki-1": {
+          "samples": 250,
+          "mean": 0.45072,
+          "p95": 0.54,
+          "max": 0.59
+        },
+        "almanac-e2e-agent-8734445d7623": {
+          "samples": 250,
+          "mean": 0.76848,
+          "p95": 1.44,
+          "max": 2.11
+        }
+      },
+      "loaded": {
+        "almanac-e2e-tempo-1": {
+          "samples": 632,
+          "mean": 0.2596835443037975,
+          "p95": 0.34,
+          "max": 1.96
+        },
+        "almanac-e2e-sources-ready-1": {
+          "samples": 632,
+          "mean": 1.8332278481012658,
+          "p95": 4.01,
+          "max": 4.5
+        },
+        "almanac-dev-dev-run-57bd5f261ccd": {
+          "samples": 632,
+          "mean": 46.74943037974683,
+          "p95": 72.03,
+          "max": 79.16
+        },
+        "almanac-e2e-app-1": {
+          "samples": 632,
+          "mean": 31.90658227848101,
+          "p95": 43.76,
+          "max": 46.06
+        },
+        "almanac-e2e-postgres-1": {
+          "samples": 632,
+          "mean": 94.19664556962026,
+          "p95": 134.92,
+          "max": 142.69
+        },
+        "almanac-e2e-victoriatraces-1": {
+          "samples": 632,
+          "mean": 2.0921835443037975,
+          "p95": 3.81,
+          "max": 25.49
+        },
+        "almanac-e2e-victoriametrics-1": {
+          "samples": 632,
+          "mean": 1.4732911392405064,
+          "p95": 4.12,
+          "max": 4.5
+        },
+        "almanac-e2e-loki-1": {
+          "samples": 632,
+          "mean": 0.4477848101265823,
+          "p95": 0.61,
+          "max": 1.67
+        },
+        "almanac-e2e-agent-8734445d7623": {
+          "samples": 632,
+          "mean": 0.7758227848101266,
+          "p95": 1.61,
+          "max": 2.11
+        }
+      }
+    }
+  },
+  "traces": {
+    "ingestion_only": {
+      "http": {
+        "POST /api/agent/v1/observations": {
+          "duration": {
+            "samples": 208,
+            "unit": "ms",
+            "sum": 1585.342094,
+            "mean": 7.621836990384615,
+            "p95": 14.537544,
+            "max": 31.458977
+          },
+          "statuses": {
+            "200": 208
+          }
+        },
+        "GET /readyz": {
+          "duration": {
+            "samples": 20,
+            "unit": "ms",
+            "sum": 22.571637,
+            "mean": 1.12858185,
+            "p95": 2.734175,
+            "max": 5.271552
+          },
+          "statuses": {
+            "200": 20
+          }
+        }
+      },
+      "current": {
+        "waiting": {
+          "duration": {
+            "samples": 0
+          },
+          "keys": 0,
+          "missing_keys": 0,
+          "attempts_per_key": {
+            "samples": 0
+          },
+          "same_outcome_start_intervals": {
+            "samples": 0
+          },
+          "sqlstates": {},
+          "cleanup_error_spans": 0,
+          "operations": {}
+        },
+        "published": {
+          "duration": {
+            "samples": 402,
+            "unit": "ms",
+            "sum": 3339.729648,
+            "mean": 8.30778519402985,
+            "p95": 11.708129,
+            "max": 18.478982
+          },
+          "keys": 200,
+          "missing_keys": 0,
+          "attempts_per_key": {
+            "samples": 200,
+            "unit": "attempts",
+            "sum": 402,
+            "mean": 2.01,
+            "p95": 2,
+            "max": 3
+          },
+          "same_outcome_start_intervals": {
+            "samples": 202,
+            "unit": "ms",
+            "sum": 4746851.506948471,
+            "mean": 23499.26488588352,
+            "p95": 47826.2460231781,
+            "max": 51442.638874053955
+          },
+          "sqlstates": {},
+          "cleanup_error_spans": 0,
+          "operations": {
+            "db.pool.acquire": {
+              "samples": 402,
+              "unit": "ms",
+              "sum": 1.948667,
+              "mean": 0.004847430348258706,
+              "p95": 0.009538,
+              "max": 0.046908
+            },
+            "db.statement": {
+              "samples": 1206,
+              "unit": "ms",
+              "sum": 231.531498,
+              "mean": 0.191983,
+              "p95": 0.427866,
+              "max": 4.472337
+            },
+            "db.GetSlo": {
+              "samples": 402,
+              "unit": "ms",
+              "sum": 90.121618,
+              "mean": 0.22418312935323384,
+              "p95": 0.364226,
+              "max": 1.552905
+            },
+            "db.GetSloOperationalContext": {
+              "samples": 402,
+              "unit": "ms",
+              "sum": 63.584555,
+              "mean": 0.15817053482587065,
+              "p95": 0.271207,
+              "max": 2.878165
+            },
+            "db.ReadSloReadyTailEnd": {
+              "samples": 402,
+              "unit": "ms",
+              "sum": 155.795964,
+              "mean": 0.3875521492537313,
+              "p95": 0.546302,
+              "max": 5.178678
+            },
+            "db.ReadRetainedWindowBatch": {
+              "samples": 804,
+              "unit": "ms",
+              "sum": 1372.796427,
+              "mean": 1.7074582425373135,
+              "p95": 2.502662,
+              "max": 5.339091
+            },
+            "db.GetDerivedSourceGeneration": {
+              "samples": 402,
+              "unit": "ms",
+              "sum": 77.396749,
+              "mean": 0.1925292263681592,
+              "p95": 0.25633,
+              "max": 5.7436
+            },
+            "db.InsertDerivedGeneration": {
+              "samples": 402,
+              "unit": "ms",
+              "sum": 87.734412,
+              "mean": 0.21824480597014925,
+              "p95": 0.302736,
+              "max": 2.102115
+            },
+            "db.ReadSloBudgetExtremaState": {
+              "samples": 402,
+              "unit": "ms",
+              "sum": 230.957138,
+              "mean": 0.5745202437810946,
+              "p95": 0.793014,
+              "max": 1.996215
+            },
+            "db.PublishDerivedCurrentProjection": {
+              "samples": 402,
+              "unit": "ms",
+              "sum": 587.715691,
+              "mean": 1.4619793308457711,
+              "p95": 2.773921,
+              "max": 4.691648
+            },
+            "db.ClearCurrentPreparationFailure": {
+              "samples": 402,
+              "unit": "ms",
+              "sum": 60.14664,
+              "mean": 0.14961850746268657,
+              "p95": 0.383077,
+              "max": 2.90215
+            }
+          }
+        },
+        "failed": {
+          "duration": {
+            "samples": 0
+          },
+          "keys": 0,
+          "missing_keys": 0,
+          "attempts_per_key": {
+            "samples": 0
+          },
+          "same_outcome_start_intervals": {
+            "samples": 0
+          },
+          "sqlstates": {},
+          "cleanup_error_spans": 0,
+          "operations": {}
+        },
+        "cancelled": {
+          "duration": {
+            "samples": 0
+          },
+          "keys": 0,
+          "missing_keys": 0,
+          "attempts_per_key": {
+            "samples": 0
+          },
+          "same_outcome_start_intervals": {
+            "samples": 0
+          },
+          "sqlstates": {},
+          "cleanup_error_spans": 0,
+          "operations": {}
+        }
+      },
+      "sqlstates": {},
+      "topQueries": {
+        "db.ReadDerivedDue": {
+          "duration": {
+            "samples": 127,
+            "unit": "ms",
+            "sum": 40259.788005,
+            "mean": 317.0062047637795,
+            "p95": 344.389213,
+            "max": 363.893887
+          },
+          "sampled_queries": 0,
+          "sampled_waits": {}
+        },
+        "db.ListDueDerivedObjectives": {
+          "duration": {
+            "samples": 59,
+            "unit": "ms",
+            "sum": 18467.46945,
+            "mean": 313.007956779661,
+            "p95": 359.448994,
+            "max": 417.966577
+          },
+          "sampled_queries": 0,
+          "sampled_waits": {}
+        },
+        "db.ReadRetainedWindowBatch": {
+          "duration": {
+            "samples": 804,
+            "unit": "ms",
+            "sum": 1372.796427,
+            "mean": 1.7074582425373135,
+            "p95": 2.502662,
+            "max": 5.339091
+          },
+          "sampled_queries": 0,
+          "sampled_waits": {}
+        },
+        "db.statement": {
+          "duration": {
+            "samples": 3008,
+            "unit": "ms",
+            "sum": 644.178108,
+            "mean": 0.2141549561170213,
+            "p95": 0.452576,
+            "max": 7.311649
+          },
+          "sampled_queries": 0,
+          "sampled_waits": {}
+        },
+        "db.PublishDerivedCurrentProjection": {
+          "duration": {
+            "samples": 402,
+            "unit": "ms",
+            "sum": 587.715691,
+            "mean": 1.4619793308457711,
+            "p95": 2.773921,
+            "max": 4.691648
+          },
+          "sampled_queries": 0,
+          "sampled_waits": {}
+        },
+        "db.ReadSloBudgetExtremaState": {
+          "duration": {
+            "samples": 402,
+            "unit": "ms",
+            "sum": 230.957138,
+            "mean": 0.5745202437810946,
+            "p95": 0.793014,
+            "max": 1.996215
+          },
+          "sampled_queries": 0,
+          "sampled_waits": {}
+        },
+        "db.ReadSloReadyTailEnd": {
+          "duration": {
+            "samples": 402,
+            "unit": "ms",
+            "sum": 155.795964,
+            "mean": 0.3875521492537313,
+            "p95": 0.546302,
+            "max": 5.178678
+          },
+          "sampled_queries": 0,
+          "sampled_waits": {}
+        },
+        "db.FindAgentAccessCredentialAgent": {
+          "duration": {
+            "samples": 454,
+            "unit": "ms",
+            "sum": 151.724217,
+            "mean": 0.3341943105726872,
+            "p95": 0.8691,
+            "max": 7.82679
+          },
+          "sampled_queries": 0,
+          "sampled_waits": {}
+        },
+        "db.ReadDerivedMaintenanceDue": {
+          "duration": {
+            "samples": 65,
+            "unit": "ms",
+            "sum": 109.390332,
+            "mean": 1.6829281846153845,
+            "p95": 5.448964,
+            "max": 8.02611
+          },
+          "sampled_queries": 0,
+          "sampled_waits": {}
+        },
+        "db.MarkSliObservation": {
+          "duration": {
+            "samples": 208,
+            "unit": "ms",
+            "sum": 102.992879,
+            "mean": 0.4951580721153846,
+            "p95": 1.306614,
+            "max": 3.240168
+          },
+          "sampled_queries": 0,
+          "sampled_waits": {}
+        },
+        "db.GetSliCoverageByCanonicalInterval": {
+          "duration": {
+            "samples": 208,
+            "unit": "ms",
+            "sum": 102.920431,
+            "mean": 0.49480976442307695,
+            "p95": 0.896918,
+            "max": 2.705141
+          },
+          "sampled_queries": 0,
+          "sampled_waits": {}
+        },
+        "db.LockAgentAccessAgent": {
+          "duration": {
+            "samples": 454,
+            "unit": "ms",
+            "sum": 96.95424,
+            "mean": 0.2135555947136564,
+            "p95": 0.428311,
+            "max": 6.628802
+          },
+          "sampled_queries": 0,
+          "sampled_waits": {}
+        }
+      }
+    },
+    "loaded": {
+      "http": {
+        "POST /api/agent/v1/observations": {
+          "duration": {
+            "samples": 523,
+            "unit": "ms",
+            "sum": 19700.976107,
+            "mean": 37.66917037667304,
+            "p95": 90.22908,
+            "max": 383.885722
+          },
+          "statuses": {
+            "200": 523
+          }
+        },
+        "GET /api/v1/slos/overview": {
+          "duration": {
+            "samples": 165,
+            "unit": "ms",
+            "sum": 57063.27923,
+            "mean": 345.83805593939394,
+            "p95": 812.101014,
+            "max": 942.046633
+          },
+          "statuses": {
+            "200": 162,
+            "503": 3
+          }
+        },
+        "GET /api/v1/services": {
+          "duration": {
+            "samples": 40,
+            "unit": "ms",
+            "sum": 1778.521528,
+            "mean": 44.4630382,
+            "p95": 104.929237,
+            "max": 179.667249
+          },
+          "statuses": {
+            "200": 40
+          }
+        },
+        "GET /api/v1/slos/{id}/operational": {
+          "duration": {
+            "samples": 162,
+            "unit": "ms",
+            "sum": 32593.146749,
+            "mean": 201.19226388271605,
+            "p95": 337.69,
+            "max": 609.823099
+          },
+          "statuses": {
+            "200": 162
+          }
+        },
+        "GET /api/v1/slos/{id}": {
+          "duration": {
+            "samples": 40,
+            "unit": "ms",
+            "sum": 1161.47575,
+            "mean": 29.03689375,
+            "p95": 44.259184,
+            "max": 353.422509
+          },
+          "statuses": {
+            "200": 40
+          }
+        },
+        "GET /api/v1/slos/{id}/status": {
+          "duration": {
+            "samples": 162,
+            "unit": "ms",
+            "sum": 10821.127119,
+            "mean": 66.79708098148149,
+            "p95": 134.64271,
+            "max": 340.841435
+          },
+          "statuses": {
+            "200": 162
+          }
+        },
+        "GET /readyz": {
+          "duration": {
+            "samples": 51,
+            "unit": "ms",
+            "sum": 307.42236,
+            "mean": 6.027889411764706,
+            "p95": 18.261906,
+            "max": 30.305944
+          },
+          "statuses": {
+            "200": 51
+          }
+        },
+        "POST /api/v1/auth/context": {
+          "duration": {
+            "samples": 40,
+            "unit": "ms",
+            "sum": 464.231405,
+            "mean": 11.605785125,
+            "p95": 25.042097,
+            "max": 55.264789
+          },
+          "statuses": {
+            "200": 40
+          }
+        },
+        "GET unmatched": {
+          "duration": {
+            "samples": 420,
+            "unit": "ms",
+            "sum": 387.454196,
+            "mean": 0.9225099904761905,
+            "p95": 4.258587,
+            "max": 18.112729
+          },
+          "statuses": {
+            "200": 420
+          }
+        },
+        "GET /slos": {
+          "duration": {
+            "samples": 20,
+            "unit": "ms",
+            "sum": 0.936164,
+            "mean": 0.0468082,
+            "p95": 0.09085,
+            "max": 0.147997
+          },
+          "statuses": {
+            "200": 20
+          }
+        },
+        "GET /slos/{id}": {
+          "duration": {
+            "samples": 20,
+            "unit": "ms",
+            "sum": 1.225943,
+            "mean": 0.06129715,
+            "p95": 0.17612,
+            "max": 0.185377
+          },
+          "statuses": {
+            "200": 20
+          }
+        }
+      },
+      "current": {
+        "waiting": {
+          "duration": {
+            "samples": 7866,
+            "unit": "ms",
+            "sum": 139664.640929,
+            "mean": 17.755484481184848,
+            "p95": 40.526178,
+            "max": 303.417434
+          },
+          "keys": 200,
+          "missing_keys": 0,
+          "attempts_per_key": {
+            "samples": 200,
+            "unit": "attempts",
+            "sum": 7866,
+            "mean": 39.33,
+            "p95": 40,
+            "max": 40
+          },
+          "same_outcome_start_intervals": {
+            "samples": 7666,
+            "unit": "ms",
+            "sum": 29884141.62325859,
+            "mean": 3898.2704961203485,
+            "p95": 5694.530963897705,
+            "max": 5983.357906341553
+          },
+          "sqlstates": {},
+          "cleanup_error_spans": 0,
+          "operations": {
+            "db.GetSloOperationalContext": {
+              "samples": 7866,
+              "unit": "ms",
+              "sum": 5666.052904,
+              "mean": 0.7203220066107298,
+              "p95": 3.178536,
+              "max": 34.813009
+            },
+            "db.ReadSloReadyTailEnd": {
+              "samples": 7866,
+              "unit": "ms",
+              "sum": 8101.439711,
+              "mean": 1.0299313133740147,
+              "p95": 3.632686,
+              "max": 56.171902
+            },
+            "db.ReadRetainedWindowBatch": {
+              "samples": 7866,
+              "unit": "ms",
+              "sum": 54301.259958,
+              "mean": 6.903287561403509,
+              "p95": 16.671169,
+              "max": 89.071027
+            },
+            "db.statement": {
+              "samples": 23598,
+              "unit": "ms",
+              "sum": 28992.279193,
+              "mean": 1.2285905243240953,
+              "p95": 5.659287,
+              "max": 71.027374
+            },
+            "db.DeferCurrentPreparation": {
+              "samples": 7866,
+              "unit": "ms",
+              "sum": 17796.950575,
+              "mean": 2.2625159642766337,
+              "p95": 7.706204,
+              "max": 73.303845
+            },
+            "db.pool.acquire": {
+              "samples": 7866,
+              "unit": "ms",
+              "sum": 16473.213999,
+              "mean": 2.094230104118993,
+              "p95": 9.193694,
+              "max": 197.803866
+            },
+            "db.GetSlo": {
+              "samples": 7866,
+              "unit": "ms",
+              "sum": 5760.231849,
+              "mean": 0.7322949210526316,
+              "p95": 2.919619,
+              "max": 46.202878
+            }
+          }
+        },
+        "published": {
+          "duration": {
+            "samples": 13,
+            "unit": "ms",
+            "sum": 377.205235,
+            "mean": 29.015787307692307,
+            "p95": 68.724734,
+            "max": 68.724734
+          },
+          "keys": 13,
+          "missing_keys": 0,
+          "attempts_per_key": {
+            "samples": 13,
+            "unit": "attempts",
+            "sum": 13,
+            "mean": 1,
+            "p95": 1,
+            "max": 1
+          },
+          "same_outcome_start_intervals": {
+            "samples": 0
+          },
+          "sqlstates": {},
+          "cleanup_error_spans": 0,
+          "operations": {
+            "db.pool.acquire": {
+              "samples": 13,
+              "unit": "ms",
+              "sum": 0.18155200000000002,
+              "mean": 0.013965538461538462,
+              "p95": 0.127508,
+              "max": 0.127508
+            },
+            "db.statement": {
+              "samples": 39,
+              "unit": "ms",
+              "sum": 48.747852,
+              "mean": 1.249944923076923,
+              "p95": 8.524324,
+              "max": 15.31929
+            },
+            "db.GetSlo": {
+              "samples": 13,
+              "unit": "ms",
+              "sum": 16.231854,
+              "mean": 1.2486041538461539,
+              "p95": 10.33241,
+              "max": 10.33241
+            },
+            "db.GetSloOperationalContext": {
+              "samples": 13,
+              "unit": "ms",
+              "sum": 3.8890890000000002,
+              "mean": 0.2991606923076923,
+              "p95": 0.829933,
+              "max": 0.829933
+            },
+            "db.ReadSloReadyTailEnd": {
+              "samples": 13,
+              "unit": "ms",
+              "sum": 7.8182160000000005,
+              "mean": 0.6014012307692308,
+              "p95": 2.009933,
+              "max": 2.009933
+            },
+            "db.ReadRetainedWindowBatch": {
+              "samples": 26,
+              "unit": "ms",
+              "sum": 134.219411,
+              "mean": 5.162285038461539,
+              "p95": 15.279205,
+              "max": 16.726004
+            },
+            "db.GetDerivedSourceGeneration": {
+              "samples": 13,
+              "unit": "ms",
+              "sum": 23.850528,
+              "mean": 1.834656,
+              "p95": 12.95164,
+              "max": 12.95164
+            },
+            "db.InsertDerivedGeneration": {
+              "samples": 13,
+              "unit": "ms",
+              "sum": 9.474901,
+              "mean": 0.7288385384615385,
+              "p95": 3.334098,
+              "max": 3.334098
+            },
+            "db.ReadSloBudgetExtremaState": {
+              "samples": 13,
+              "unit": "ms",
+              "sum": 26.429146,
+              "mean": 2.033011230769231,
+              "p95": 7.054398,
+              "max": 7.054398
+            },
+            "db.PublishDerivedCurrentProjection": {
+              "samples": 13,
+              "unit": "ms",
+              "sum": 65.66842199999999,
+              "mean": 5.051417076923077,
+              "p95": 18.260588,
+              "max": 18.260588
+            },
+            "db.ClearCurrentPreparationFailure": {
+              "samples": 13,
+              "unit": "ms",
+              "sum": 8.625806,
+              "mean": 0.6635235384615384,
+              "p95": 2.374202,
+              "max": 2.374202
+            }
+          }
+        },
+        "failed": {
+          "duration": {
+            "samples": 0
+          },
+          "keys": 0,
+          "missing_keys": 0,
+          "attempts_per_key": {
+            "samples": 0
+          },
+          "same_outcome_start_intervals": {
+            "samples": 0
+          },
+          "sqlstates": {},
+          "cleanup_error_spans": 0,
+          "operations": {}
+        },
+        "cancelled": {
+          "duration": {
+            "samples": 0
+          },
+          "keys": 0,
+          "missing_keys": 0,
+          "attempts_per_key": {
+            "samples": 0
+          },
+          "same_outcome_start_intervals": {
+            "samples": 0
+          },
+          "sqlstates": {},
+          "cleanup_error_spans": 0,
+          "operations": {}
+        }
+      },
+      "sqlstates": {},
+      "topQueries": {
+        "db.ReadRetainedWindowBatch": {
+          "duration": {
+            "samples": 14732,
+            "unit": "ms",
+            "sum": 143811.346147,
+            "mean": 9.761834519888678,
+            "p95": 24.593969,
+            "max": 101.122884
+          },
+          "sampled_queries": 0,
+          "sampled_waits": {}
+        },
+        "db.pool.acquire": {
+          "duration": {
+            "samples": 25363,
+            "unit": "ms",
+            "sum": 109502.824574,
+            "mean": 4.317423986673501,
+            "p95": 18.957081,
+            "max": 250.839168
+          },
+          "sampled_queries": 0,
+          "sampled_waits": {}
+        },
+        "db.statement": {
+          "duration": {
+            "samples": 41104,
+            "unit": "ms",
+            "sum": 54933.022869,
+            "mean": 1.3364398323520825,
+            "p95": 6.053115,
+            "max": 141.988504
+          },
+          "sampled_queries": 0,
+          "sampled_waits": {}
+        },
+        "db.ListSloOverviewPage": {
+          "duration": {
+            "samples": 162,
+            "unit": "ms",
+            "sum": 41516.820985,
+            "mean": 256.27667274691356,
+            "p95": 604.820133,
+            "max": 678.497318
+          },
+          "sampled_queries": 0,
+          "sampled_waits": {}
+        },
+        "db.DeferCurrentPreparation": {
+          "duration": {
+            "samples": 7866,
+            "unit": "ms",
+            "sum": 17796.950575,
+            "mean": 2.2625159642766337,
+            "p95": 7.706204,
+            "max": 73.303845
+          },
+          "sampled_queries": 0,
+          "sampled_waits": {}
+        },
+        "db.DeleteExpiredDerivedGenerations": {
+          "duration": {
+            "samples": 3018,
+            "unit": "ms",
+            "sum": 15817.646097,
+            "mean": 5.2411020864811135,
+            "p95": 13.568202,
+            "max": 170.940697
+          },
+          "sampled_queries": 0,
+          "sampled_waits": {}
+        },
+        "db.ReadSloReadyTailEnd": {
+          "duration": {
+            "samples": 8196,
+            "unit": "ms",
+            "sum": 9760.864762,
+            "mean": 1.190930302830649,
+            "p95": 4.460303,
+            "max": 56.171902
+          },
+          "sampled_queries": 0,
+          "sampled_waits": {}
+        },
+        "db.ReadDerivedMaintenanceDue": {
+          "duration": {
+            "samples": 4677,
+            "unit": "ms",
+            "sum": 9686.914256,
+            "mean": 2.071181153731024,
+            "p95": 6.67101,
+            "max": 39.191857
+          },
+          "sampled_queries": 0,
+          "sampled_waits": {}
+        },
+        "db.GetSlo": {
+          "duration": {
+            "samples": 11524,
+            "unit": "ms",
+            "sum": 8792.863271,
+            "mean": 0.7630044490628254,
+            "p95": 3.029718,
+            "max": 62.214709
+          },
+          "sampled_queries": 0,
+          "sampled_waits": {}
+        },
+        "db.GetSloOperationalContext": {
+          "duration": {
+            "samples": 11484,
+            "unit": "ms",
+            "sum": 8595.932104,
+            "mean": 0.748513767328457,
+            "p95": 3.128463,
+            "max": 34.813009
+          },
+          "sampled_queries": 0,
+          "sampled_waits": {}
+        },
+        "db.DeferSloExtremaCursor": {
+          "duration": {
+            "samples": 3287,
+            "unit": "ms",
+            "sum": 7996.398332,
+            "mean": 2.4327345092789776,
+            "p95": 8.295793,
+            "max": 55.87884
+          },
+          "sampled_queries": 0,
+          "sampled_waits": {}
+        },
+        "db.ClaimSloExtremaCursor": {
+          "duration": {
+            "samples": 3288,
+            "unit": "ms",
+            "sum": 7655.195955,
+            "mean": 2.328222614051095,
+            "p95": 7.316489,
+            "max": 95.742699
+          },
+          "sampled_queries": 0,
+          "sampled_waits": {}
+        }
+      }
+    }
+  },
+  "admissionFailures": [
+    [
+      {
+        "_time": "2026-11-13T22:25:13.555835847Z",
+        "duration": "250752170",
+        "name": "db.pool.acquire",
+        "parent_span_id": "694eae6695518777",
+        "span_attr:almanac.traffic.class": "interactive",
+        "span_id": "706641abb982d730",
+        "status_code": "2",
+        "trace_id": "c7511d7d86099a966aa296d7bdf967c4"
+      },
+      {
+        "_time": "2026-11-13T22:25:13.555636153Z",
+        "duration": "251006195",
+        "name": "slo.overview.read",
+        "parent_span_id": "1cca278c7ae5dd8d",
+        "span_id": "694eae6695518777",
+        "status_code": "0",
+        "trace_id": "c7511d7d86099a966aa296d7bdf967c4"
+      },
+      {
+        "_time": "2026-11-13T22:25:13.538579437Z",
+        "duration": "16945247",
+        "name": "db.GetInitialOwnerState",
+        "parent_span_id": "1cca278c7ae5dd8d",
+        "span_attr:almanac.traffic.class": "interactive",
+        "span_id": "05b90987fd3b092d",
+        "status_code": "0",
+        "trace_id": "c7511d7d86099a966aa296d7bdf967c4"
+      },
+      {
+        "_time": "2026-11-13T22:25:13.53836187Z",
+        "duration": "198071",
+        "name": "db.statement",
+        "parent_span_id": "f65c36a029e9f955",
+        "span_attr:almanac.traffic.class": "interactive",
+        "span_id": "5e5378756c3d6356",
+        "status_code": "0",
+        "trace_id": "c7511d7d86099a966aa296d7bdf967c4"
+      },
+      {
+        "_time": "2026-11-13T22:25:13.523408054Z",
+        "duration": "14928589",
+        "name": "db.statement",
+        "parent_span_id": "f65c36a029e9f955",
+        "span_attr:almanac.traffic.class": "interactive",
+        "span_id": "c9971c2f47d22767",
+        "status_code": "0",
+        "trace_id": "c7511d7d86099a966aa296d7bdf967c4"
+      },
+      {
+        "_time": "2026-11-13T22:25:13.508345773Z",
+        "duration": "15054527",
+        "name": "db.statement",
+        "parent_span_id": "f65c36a029e9f955",
+        "span_attr:almanac.traffic.class": "interactive",
+        "span_id": "4a240eb40abb4c1e",
+        "status_code": "0",
+        "trace_id": "c7511d7d86099a966aa296d7bdf967c4"
+      },
+      {
+        "_time": "2026-11-13T22:25:13.446785491Z",
+        "duration": "91788987",
+        "name": "db.pool.acquire",
+        "parent_span_id": "1cca278c7ae5dd8d",
+        "span_attr:almanac.traffic.class": "interactive",
+        "span_id": "f65c36a029e9f955",
+        "status_code": "0",
+        "trace_id": "c7511d7d86099a966aa296d7bdf967c4"
+      },
+      {
+        "_time": "2026-11-13T22:25:13.429683785Z",
+        "duration": "377056818",
+        "name": "GET /api/v1/slos/overview",
+        "span_attr:http.response.status_code": "503",
+        "span_id": "1cca278c7ae5dd8d",
+        "status_code": "2",
+        "trace_id": "c7511d7d86099a966aa296d7bdf967c4"
+      }
+    ],
+    [
+      {
+        "_time": "2026-11-13T22:25:13.546245284Z",
+        "duration": "250112908",
+        "name": "db.pool.acquire",
+        "parent_span_id": "c9ff4c9a36507fb8",
+        "span_attr:almanac.traffic.class": "interactive",
+        "span_id": "0d09f847b0c199dd",
+        "status_code": "2",
+        "trace_id": "636ca9e0d0350f13bc69740c146b631d"
+      },
+      {
+        "_time": "2026-11-13T22:25:13.546084874Z",
+        "duration": "250285190",
+        "name": "slo.overview.read",
+        "parent_span_id": "73b371319983a622",
+        "span_id": "c9ff4c9a36507fb8",
+        "status_code": "0",
+        "trace_id": "636ca9e0d0350f13bc69740c146b631d"
+      },
+      {
+        "_time": "2026-11-13T22:25:13.522290964Z",
+        "duration": "23690827",
+        "name": "db.GetInitialOwnerState",
+        "parent_span_id": "73b371319983a622",
+        "span_attr:almanac.traffic.class": "interactive",
+        "span_id": "6b7c90c821f1a3a4",
+        "status_code": "0",
+        "trace_id": "636ca9e0d0350f13bc69740c146b631d"
+      },
+      {
+        "_time": "2026-11-13T22:25:13.515374553Z",
+        "duration": "6893689",
+        "name": "db.statement",
+        "parent_span_id": "8b1e596ddca40d06",
+        "span_attr:almanac.traffic.class": "interactive",
+        "span_id": "7093557345253238",
+        "status_code": "0",
+        "trace_id": "636ca9e0d0350f13bc69740c146b631d"
+      },
+      {
+        "_time": "2026-11-13T22:25:13.514410579Z",
+        "duration": "961720",
+        "name": "db.statement",
+        "parent_span_id": "8b1e596ddca40d06",
+        "span_attr:almanac.traffic.class": "interactive",
+        "span_id": "dc7f63f194c9c104",
+        "status_code": "0",
+        "trace_id": "636ca9e0d0350f13bc69740c146b631d"
+      },
+      {
+        "_time": "2026-11-13T22:25:13.512376153Z",
+        "duration": "2029678",
+        "name": "db.statement",
+        "parent_span_id": "8b1e596ddca40d06",
+        "span_attr:almanac.traffic.class": "interactive",
+        "span_id": "ac5138009557b1a4",
+        "status_code": "0",
+        "trace_id": "636ca9e0d0350f13bc69740c146b631d"
+      },
+      {
+        "_time": "2026-11-13T22:25:13.422483063Z",
+        "duration": "99803443",
+        "name": "db.pool.acquire",
+        "parent_span_id": "73b371319983a622",
+        "span_attr:almanac.traffic.class": "interactive",
+        "span_id": "8b1e596ddca40d06",
+        "status_code": "0",
+        "trace_id": "636ca9e0d0350f13bc69740c146b631d"
+      },
+      {
+        "_time": "2026-11-13T22:25:13.422476631Z",
+        "duration": "373959888",
+        "name": "GET /api/v1/slos/overview",
+        "span_attr:http.response.status_code": "503",
+        "span_id": "73b371319983a622",
+        "status_code": "2",
+        "trace_id": "636ca9e0d0350f13bc69740c146b631d"
+      }
+    ],
+    [
+      {
+        "_time": "2026-11-13T22:26:53.305500104Z",
+        "duration": "250839168",
+        "name": "db.pool.acquire",
+        "parent_span_id": "126086950ee0441c",
+        "span_attr:almanac.traffic.class": "interactive",
+        "span_id": "7bf7fb2ce54c9bb1",
+        "status_code": "2",
+        "trace_id": "a43425749cd86cce60779eb2c19cfd37"
+      },
+      {
+        "_time": "2026-11-13T22:26:53.305453337Z",
+        "duration": "251155018",
+        "name": "GET /api/v1/slos/overview",
+        "span_attr:http.response.status_code": "503",
+        "span_id": "126086950ee0441c",
+        "status_code": "2",
+        "trace_id": "a43425749cd86cce60779eb2c19cfd37"
+      }
+    ]
+  ],
+  "traceExport": {
+    "rows": 256054,
+    "seconds": 14.357113925987505
+  },
+  "traceArchiveSHA256": "8275ebfed4ee1838a53b2211c3fbdec07e1f48748c2d399af133d7d9355af348"
+}

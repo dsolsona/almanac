@@ -1,4 +1,15 @@
-Performance investigation, 2026-11-13: [F4-T14](tasks/F4-T14.md) prioritizes the
+Performance investigation, 2026-11-13: the [instrumented baseline](evidence/alert-performance/2026-11-13-instrumented-baseline.json)
+on `925d156` completes 80 browser journeys, 800 baseline batches and all 1,400
+backfill batches. All 400 due intervals are observed; authentication succeeds.
+Three overview admission failures and list/ingestion latency still fail acceptance.
+PostgreSQL consumes about one CPU during ingestion-only activity, with two due
+queries totaling 58.7 s elapsed in a 62.1-s phase; physical-plan attribution follows.
+The database observer's multiline-JSON failure is preserved and corrected separately;
+resource samples/traces remain usable, but no wait samples cover the measured phases.
+Draft [PR #108](https://github.com/dsolsona/almanac/pull/108) contains the verified
+session correction and diagnostics above #107; calculation adoption remains open.
+
+Earlier investigation, 2026-11-13: [F4-T14](tasks/F4-T14.md) prioritizes the
 [complete issue inventory](evidence/alert-performance/README.md): authentication
 failures, overview/admission latency, ingestion interference and repeated pending
 work. A focused PostgreSQL reproduction confirms that read-only inspection's
