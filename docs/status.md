@@ -1,3 +1,11 @@
+Alerting follow-up [F4-T04](tasks/F4-T04.md) keeps SLO current status usable during
+preparation, with explicit last-known or unavailable evidence and preserved auth.
+Focused storage/frontend/browser checks pass; the next contention run completes
+800 paired batches, all bounded backfill and all 400 due live intervals, but still
+fails ingestion/list latency and navigation gates. [Measured evidence](evidence/alert-calculation/2026-11-13-api-contention.json)
+preserves the failures and API-load overlap limitation. Overview SQL investigation
+continues; no fallback adoption or alert-engine completion is claimed.
+
 Alerting implementation continues under [plan 0035](plans/0035-alerting-delivery.md).
 [F4-T03](tasks/F4-T03.md) fixes the reproduced agent/grant/measurement foreign-key
 lock conflict; focused authority and ingestion checks pass in 6.173 s. The corrected

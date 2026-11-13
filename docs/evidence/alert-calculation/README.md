@@ -107,3 +107,23 @@ reporting so renderer contention is not mistaken for database cost. No acceptanc
 limit is changed. Dirty-current 503s and per-SLI source-generation contention are
 also actionable and remain unresolved. Raw evidence is retained in the ingestion
 worktree under `.local/alert-calculation-ten-browser-failure/`.
+
+## Separate API load and rendered journeys
+
+[The API-user run](2026-11-13-api-contention.json) uses F4-T04's explicit last-known
+current status and separates ten API clients from one browser renderer. All 800
+paired batches independently match 3,200 windows; all 1,400 bounded backfill
+batches finish in 125.590 seconds and all 400 due live intervals are present.
+Candidate p95 is 30.519 ms. The overall gate still fails: ingestion p95 is
+83.114–87.269 ms against 19.231–20.192 ms, overview p95 is 1,564 ms and the three
+completed cold list renders reach 2,531 ms. Two API workers fail on overview 503s;
+the browser worker also fails. Successful samples are partial evidence.
+
+The finite API cycles ended before the query lanes, so this is not sustained
+concurrency acceptance. The subsequent harness correction keeps clients running
+through the other lanes and records per-request overlap; it is not yet measured.
+A representative trace attributes 931 ms to the list SQL and 250 ms to group-count
+SQL. Post-load literal plans do not reproduce that cost; prepared plans and
+concurrent JSON/classification work require investigation. External experiment
+queries also bypass the backend's derived pool, so this fixture cannot establish
+production admission or attribute interference to fallback alone.

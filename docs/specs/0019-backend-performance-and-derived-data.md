@@ -107,7 +107,12 @@ staleness instead of blanking them during updates. Operational list rows report
 intact last-published values and their generation while newer source inputs or
 clock boundaries await publication; show their evaluation time and mark them
 stale, or failed when the update has exhausted its budget. This calculation state
-is separate from the original observations' freshness. Never show an unconfirmed
+is separate from the original observations' freshness. The independent current-status
+response uses the same optional `current_state` field: pending/exhausted calculation
+retains compatible values and provenance as stale/failed; without a compatible result
+it returns unavailable values without performance numbers. Successful bounded
+clock-driven recalculation still returns fresh values. This availability behavior
+does not waive the currentness target below. Never show an unconfirmed
 Healthy badge/group: retain prior Needs attention, otherwise use Watch. Definition,
 measurement or calculation-version mismatches, corrupt payloads and values older
 than the retained horizon remain unavailable. Pinned exact-value pages preserve

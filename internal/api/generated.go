@@ -1452,6 +1452,30 @@ func (e SloBurnValueWindowSeconds) Valid() bool {
 	}
 }
 
+// Defines values for SloCurrentStatusCurrentState.
+const (
+	SloCurrentStatusCurrentStateFailed      SloCurrentStatusCurrentState = "failed"
+	SloCurrentStatusCurrentStateReady       SloCurrentStatusCurrentState = "ready"
+	SloCurrentStatusCurrentStateStale       SloCurrentStatusCurrentState = "stale"
+	SloCurrentStatusCurrentStateUnavailable SloCurrentStatusCurrentState = "unavailable"
+)
+
+// Valid indicates whether the value is a known member of the SloCurrentStatusCurrentState enum.
+func (e SloCurrentStatusCurrentState) Valid() bool {
+	switch e {
+	case SloCurrentStatusCurrentStateFailed:
+		return true
+	case SloCurrentStatusCurrentStateReady:
+		return true
+	case SloCurrentStatusCurrentStateStale:
+		return true
+	case SloCurrentStatusCurrentStateUnavailable:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SloCurrentStatusUrgency.
 const (
 	SloCurrentStatusUrgencyHealthy        SloCurrentStatusUrgency = "healthy"
@@ -3459,16 +3483,22 @@ type SloCreateRequest struct {
 
 // SloCurrentStatus defines model for SloCurrentStatus.
 type SloCurrentStatus struct {
-	Burn1h        SloBurnValue            `json:"burn_1h"`
-	Burn6h        SloBurnValue            `json:"burn_6h"`
-	Current       SloOperationalValue     `json:"current"`
-	Exhaustion    SloExhaustionEstimate   `json:"exhaustion"`
-	Generation    DerivedGeneration       `json:"generation"`
-	LeadingReason SloUrgencyReason        `json:"leading_reason"`
-	Reasons       []SloUrgencyReason      `json:"reasons"`
-	Slo           Slo                     `json:"slo"`
-	Urgency       SloCurrentStatusUrgency `json:"urgency"`
+	Burn1h  SloBurnValue        `json:"burn_1h"`
+	Burn6h  SloBurnValue        `json:"burn_6h"`
+	Current SloOperationalValue `json:"current"`
+
+	// CurrentState Calculation readiness. Stale/failed values retain the original evaluation and generation; unavailable values contain no performance numbers. Observation freshness is separate.
+	CurrentState  *SloCurrentStatusCurrentState `json:"current_state,omitempty"`
+	Exhaustion    SloExhaustionEstimate         `json:"exhaustion"`
+	Generation    DerivedGeneration             `json:"generation"`
+	LeadingReason SloUrgencyReason              `json:"leading_reason"`
+	Reasons       []SloUrgencyReason            `json:"reasons"`
+	Slo           Slo                           `json:"slo"`
+	Urgency       SloCurrentStatusUrgency       `json:"urgency"`
 }
+
+// SloCurrentStatusCurrentState Calculation readiness. Stale/failed values retain the original evaluation and generation; unavailable values contain no performance numbers. Observation freshness is separate.
+type SloCurrentStatusCurrentState string
 
 // SloCurrentStatusUrgency defines model for SloCurrentStatus.Urgency.
 type SloCurrentStatusUrgency string

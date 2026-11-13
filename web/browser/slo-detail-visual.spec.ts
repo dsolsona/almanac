@@ -69,3 +69,22 @@ test('SLO point inspection keeps following panels in place',{tag:'@matrix'},asyn
  await page.keyboard.press('Escape');const bounds=(await chart.locator('svg').boundingBox())!;await page.mouse.move(bounds.x+bounds.width*.45,bounds.y+bounds.height*.5);await expect(chart.getByRole('tooltip')).toBeVisible();expect(await next.evaluate(el=>el.getBoundingClientRect().top+scrollY)).toBe(nextBefore);
  await page.screenshot({path:`../.local/slo-hover-${info.project.name}.png`,fullPage:true});await page.mouse.move(0,0);await expect(chart.getByRole('tooltip')).toHaveCount(0);
 });
+
+test('last-known SLO status stays readable and exposes the original evaluation',{tag:'@matrix'},async({page},info)=>{
+ const theme=info.project.name.endsWith('dark')?'dark':'light';
+ await page.addInitScript(theme=>localStorage.setItem('almanac-theme',theme),theme);
+ const detail=sloFixture();await installSloFixture(page,detail);
+ for(const state of ['stale','failed'] as const){
+  await page.route(`**/api/v1/slos/${sloID}/status`,route=>route.fulfill({json:{...detail,slo:detail.objective,current_state:state,generation:{generation_id:'60000000-0000-4000-8000-000000000001',source_generation:'1',measurement_revision:'1',definition_revision:'1',exclusion_revision:'0',calculation_version:'slo-v1',evaluated_through:detail.current.evaluation_at,published_at:detail.current.evaluation_at,calculation_lag_seconds:60}}}));
+  await page.goto(`/slos/${sloID}?range=7d`);
+  const verdict=page.getByLabel('Current SLO status');
+  await expect(verdict).toContainText('Last known values from 12 Nov 2026, 10:00 UTC.');
+  await expect(verdict).toContainText(state==='failed'?'The current calculation failed.':'Current results are updating.');
+  await expect(verdict).not.toContainText('The objective is met.');
+  await expect(page.locator('.slo-detail-metrics')).toContainText('18%');
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  const action=verdict.getByRole('link',{name:'Inspect data ↓'});await action.focus();await page.keyboard.press('Enter');
+  await expect(page.locator('#definition')).toHaveAttribute('open','');await expect(page.locator('#definition summary')).toBeFocused();
+  await page.screenshot({path:`../.local/slo-current-${state}-${info.project.name}.png`,fullPage:true});
+ }
+});

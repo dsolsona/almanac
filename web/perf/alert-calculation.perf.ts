@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { cpus, totalmem } from 'node:os';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, request as apiRequest, type Page } from '@playwright/test';
 import { compose, psql } from '../e2e/support/stack.ts';
 import { resourceSnapshot, ingestionBetween } from './resources.ts';
 import { ingestionMetrics, ingestionDelta } from './alert-calculation.metrics.ts';
@@ -119,15 +119,15 @@ ${marker.replaceAll('$1', `'${sli}'::uuid`)} COMMIT;`;
   const ingestionOnly = ingestionDelta(baselineStart, baselineEnd);
   writeFileSync(`${root}/ingestion-baseline.json`, JSON.stringify({ baselineStart, baselineEnd, ingestionOnly }, null, 2));
   const before = resourceSnapshot();
-  const profile = { baseRevision: 'c276c553fab3a3854a84e42196aa98dcaa7e6d9e',
+  const profile = { baseRevision: '0d028cd',
     applicationImage: compose('images', '--quiet', 'app').trim(),
     sourceHashes: Object.fromEntries(['../internal/storage/testdata/alert_window_fallback.sql',
-      'perf/alert-calculation.perf.ts', 'perf/alert-calculation.metrics.ts', 'perf/alert-calculation.seed.ts', 'playwright.alert-calculation.config.ts', '../compose.e2e.yaml', '../internal/storage/query/agent_access.sql', '../internal/storage/query/slis.sql']
+      'perf/alert-calculation.perf.ts', 'perf/alert-calculation.metrics.ts', 'perf/alert-calculation.seed.ts', 'playwright.alert-calculation.config.ts', '../compose.e2e.yaml', '../internal/storage/query/agent_access.sql', '../internal/storage/query/slis.sql', '../internal/storage/derived_current.go', '../internal/storage/query/derived_projections.sql', '../api/openapi.yaml', '../web/src/slos/SloDetailPanels.tsx']
       .map(path => [path, createHash('sha256').update(readFileSync(path)).digest('hex')])),
     cpu: cpus()[0]?.model, logicalCPUs: cpus().length, memoryBytes: totalmem(),
     database: psql("SELECT version()"), slis: 200, initialDays: 1, backfillDays: 3,
     maxDirtyHours: 8, maxRawVisits: 7200, statementTimeoutMs: 1000, workers: 2,
-    offeredBatchesPerSecond: 8, rounds: 4, cutoff, browserUsers: 10, backfillBatchMaxRows: 720, backfillBatchSLIs: 1, backfillBatches: backfill.length,
+    offeredBatchesPerSecond: 8, rounds: 4, cutoff, apiUsers: 10, apiMinimumCyclesPerUser: 10, apiCycleIntervalMs: 10000, browserUsers: 1, browserCycles: 20, backfillBatchMaxRows: 720, backfillBatchSLIs: 1, backfillBatches: backfill.length,
     note: 'Controlled historical measurement cutoffs cross a UTC hour; wall-clock engine scheduling is outside this query experiment. Each paired query also runs an independent raw-population reference in the same snapshot; its extra work is part of the contention load.' };
   writeFileSync(`${root}/profile.json`, JSON.stringify(profile, null, 2));
   const queryWorkers = [0, 1].map(worker => {
@@ -144,8 +144,37 @@ SELECT public.alert_experiment_compare('${fleet.slis[index]!.id}','${cutoff}'::t
   });
   const backfillWork = asynchronousSQL(backfill.map((batch, index) => `${batch}\nSELECT json_build_object('completedBatch',${index},'at',clock_timestamp());`).join('\n'), 'backfill');
   const timings: Record<string, number[]> = { 'list-cold': [], 'list-warm': [], 'detail-cold': [], 'detail-warm': [] };
-  const pageWorkers = Array.from({ length: 10 }, async () => {
-    for (let run = 0; run < 10; run++) {
+  const apiSamples: { name: string; beganAt: number; finishedAt: number; milliseconds: number; status: number }[] = [];
+  let workloadRunning = true;
+  // Ten concurrent API users exercise server admission independently of browser
+  // rendering. SPEC-0019 measures browser journeys separately on a capable client;
+  // ten simultaneous renderers on this two-vCPU server confounded the prior run.
+  const apiWorkers = Array.from({ length: 10 }, async (_, user) => {
+    const client = await apiRequest.newContext({ baseURL: process.env.E2E_BASE_URL ?? 'https://localhost:18188',
+      storageState: 'e2e/.auth/admin.json', ignoreHTTPSErrors: true });
+    try {
+      for (let cycle = 0; cycle < 10 || workloadRunning; cycle++) {
+        const cycleStarted = performance.now();
+        const id = fleet.slos[(user * 10 + cycle) % fleet.slos.length]!.id;
+        for (const [name, path] of [['overview', '/api/v1/slos/overview?limit=20'],
+          ['status', `/api/v1/slos/${id}/status`], ['history', `/api/v1/slos/${id}/operational?period=window&burn_window_seconds=3600`]] as const) {
+          const began = performance.now(), beganAt = Date.now();
+          const response = await client.get(path);
+          const body = await response.json();
+          apiSamples.push({ name, beganAt, finishedAt: Date.now(), milliseconds: performance.now() - began, status: response.status() });
+          expect(response.status(), `${name} HTTP status`).toBe(200);
+          if (name === 'overview') expect(body.items).toHaveLength(20);
+          else expect(body.current).toBeDefined();
+          await response.dispose();
+        }
+        if (cycle < 9 || workloadRunning) await new Promise(resolve => setTimeout(resolve, Math.max(0, 10000 - (performance.now() - cycleStarted))));
+      }
+    } finally { await client.dispose(); }
+  });
+  // Observe failures immediately while the other lanes finish collecting evidence.
+  const apiResults = Promise.allSettled(apiWorkers);
+  const pageWorkers = Array.from({ length: 1 }, async () => {
+    for (let run = 0; run < 20; run++) {
       const context = await browser.newContext({ storageState: 'e2e/.auth/admin.json', ignoreHTTPSErrors: true });
       try {
         await context.addInitScript(() => {
@@ -188,9 +217,16 @@ SELECT public.alert_experiment_compare('${fleet.slis[index]!.id}','${cutoff}'::t
     }
   });
   // Collect every lane's outcome before asserting; never discard failed-work evidence.
-  const settled = await Promise.allSettled([...queryWorkers, backfillWork, ...pageWorkers]);
+  const workOutcomes = await Promise.allSettled([...queryWorkers, backfillWork, ...pageWorkers]);
   const after = resourceSnapshot();
   const metricsAfter = ingestionMetrics();
+  workloadRunning = false;
+  const apiOutcomes = await apiResults;
+  const settled = [...workOutcomes, ...apiOutcomes];
+  const apiTimings: Record<string, number[]> = { overview: [], status: [], history: [] };
+  for (const sample of apiSamples) {
+    if (sample.beganAt >= Date.parse(before.at) && sample.beganAt <= Date.parse(after.at)) apiTimings[sample.name]!.push(sample.milliseconds);
+  }
   const ingestionUnderLoad = ingestionDelta(baselineEnd, metricsAfter);
   // ADR-0043: observations become due after settling, deterministic dispatch and
   // one cadence's completion allowance, rounded to snapshot ticks. Counting only
@@ -211,7 +247,7 @@ SELECT public.alert_experiment_compare('${fleet.slis[index]!.id}','${cutoff}'::t
     'maxReceiptDelaySeconds',max(extract(epoch FROM recorded_at-interval_start-interval '1 minute')))
     FROM public.almanac_sli_observations WHERE recorded_at>='${before.at}' AND recorded_at<='${after.at}'
     AND interval_start>=date_trunc('minute','${before.at}'::timestamptz) AND sli_id=ANY(ARRAY[${ids}]::uuid[])`));
-  const evidence = { profile, before, after, ingestionOnly, ingestionUnderLoad, metricsAfter, ingestedDuringLoad: ingestionBetween(before.at, after.at), due, live, timings,
+  const evidence = { profile, before, after, ingestionOnly, ingestionUnderLoad, metricsAfter, ingestedDuringLoad: ingestionBetween(before.at, after.at), due, live, timings, apiTimings, apiSamples,
     outcomes: settled.map(r => r.status === 'fulfilled' ? { status: r.status } : { status: r.status, error: String(r.reason) }) };
   writeFileSync(`${root}/results.json`, JSON.stringify(evidence, null, 2));
   const queries = [0,1].flatMap(worker => readFileSync(`${root}/queries-${worker}.jsonl`, 'utf8').split('\n')
@@ -240,8 +276,15 @@ SELECT public.alert_experiment_compare('${fleet.slis[index]!.id}','${cutoff}'::t
     for (const key of ['observed','known_empty','zero_traffic','first_observation','last_observation','latest_receipt']) expect(row[key], key).toEqual(raw[key]);
     expect(row.raw_rows).toBeLessThanOrEqual(7200);
   }
+  for (const [name, values] of Object.entries(apiTimings)) {
+    expect(values.length, `${name} API samples within contention phase`).toBeGreaterThanOrEqual(100);
+    const sorted = [...values].sort((a, b) => a - b);
+    // Client round-trip includes server time, so this is conservative evidence
+    // for the server limit. Traces distinguish server cost when it fails.
+    expect(sorted[Math.ceil(sorted.length * 0.95) - 1], `${name} API p95`).toBeLessThanOrEqual(name === 'history' ? 500 : 200);
+  }
   for (const [name, values] of Object.entries(timings)) {
-    expect(values, name).toHaveLength(100);
+    expect(values, name).toHaveLength(20);
     const sorted = [...values].sort((a, b) => a - b);
     expect(sorted.at(-1), `${name} maximum`).toBeLessThan(1000);
   }

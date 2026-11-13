@@ -5,6 +5,7 @@ from datetime import datetime
 
 root = Path('.local/alert-calculation')
 results = json.loads((root / 'results.json').read_text())
+assert results['profile']['sourceHashes']['perf/alert-calculation.perf.ts'] == 'b85ea3e9238cf41742c7fb1c2f642dcf0d6f2efe92e6704b1ed4d0d12bdc35bf', 'This analyzer is only for the original recorded run; refusing to overwrite it with a different workload.'
 queries = [json.loads(line) for i in range(2) for line in (root / f'queries-{i}.jsonl').read_text().splitlines() if line.startswith('{')]
 assert len(queries) == 800
 fields = ['observed', 'known_empty', 'zero_traffic', 'first_observation', 'last_observation', 'latest_receipt']

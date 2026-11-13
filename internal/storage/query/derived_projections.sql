@@ -98,13 +98,18 @@ WHERE EXISTS (
 );
 
 -- name: GetPublishedCurrentProjection :one
-SELECT ((p.payload-'budget_sparkline'-'budget_history_generation'-'budget_history_state') ||
+SELECT s.id AS slo_id, ((p.payload-'budget_sparkline'-'budget_history_generation'-'budget_history_state') ||
        jsonb_build_object('slo',(p.payload->'slo')||jsonb_build_object(
            'display_name',s.display_name,'version',s.version::text,'updated_at',s.updated_at,
            'service_display_name',service.display_name,'sli_display_name',measurement.display_name)))::jsonb AS payload,
        g.id AS generation_id, g.source_generation,
        g.definition_revision, g.measurement_revision, g.exclusion_revision,
        g.calculation_version, g.evaluated_through, g.published_at,g.retention_start,
+       coalesce(g.definition_revision=s.definition_revision
+         AND g.measurement_revision=d.measurement_revision
+         AND g.exclusion_revision=0 AND g.calculation_version=sqlc.arg(calculation_version)
+         AND g.source_generation<=coalesce(source.generation,0)
+         AND g.evaluated_through>=sqlc.arg(now)::timestamptz-interval '365 days',false)::boolean AS usable,
        coalesce((g.definition_revision=s.definition_revision
          AND g.measurement_revision=d.measurement_revision
          AND g.calculation_version=sqlc.arg(calculation_version)

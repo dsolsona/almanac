@@ -1359,6 +1359,7 @@ components:
       type: object
       required: [generation, slo, urgency, leading_reason, reasons, current, burn_1h, burn_6h, exhaustion]
       properties:
+        current_state: {type: string, enum: [ready, stale, failed, unavailable], description: Calculation readiness. Stale/failed values retain the original evaluation and generation; unavailable values contain no performance numbers. Observation freshness is separate.}
         generation: {$ref: '#/components/schemas/DerivedGeneration'}
         slo: {$ref: '#/components/schemas/Slo'}
         urgency: {type: string, enum: [needs_attention, watch, healthy]}

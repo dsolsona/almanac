@@ -79,13 +79,18 @@ func (q *Queries) DeferCurrentPreparation(ctx context.Context, arg DeferCurrentP
 }
 
 const getPublishedCurrentProjection = `-- name: GetPublishedCurrentProjection :one
-SELECT ((p.payload-'budget_sparkline'-'budget_history_generation'-'budget_history_state') ||
+SELECT s.id AS slo_id, ((p.payload-'budget_sparkline'-'budget_history_generation'-'budget_history_state') ||
        jsonb_build_object('slo',(p.payload->'slo')||jsonb_build_object(
            'display_name',s.display_name,'version',s.version::text,'updated_at',s.updated_at,
            'service_display_name',service.display_name,'sli_display_name',measurement.display_name)))::jsonb AS payload,
        g.id AS generation_id, g.source_generation,
        g.definition_revision, g.measurement_revision, g.exclusion_revision,
        g.calculation_version, g.evaluated_through, g.published_at,g.retention_start,
+       coalesce(g.definition_revision=s.definition_revision
+         AND g.measurement_revision=d.measurement_revision
+         AND g.exclusion_revision=0 AND g.calculation_version=$1
+         AND g.source_generation<=coalesce(source.generation,0)
+         AND g.evaluated_through>=$2::timestamptz-interval '365 days',false)::boolean AS usable,
        coalesce((g.definition_revision=s.definition_revision
          AND g.measurement_revision=d.measurement_revision
          AND g.calculation_version=$1
@@ -111,6 +116,7 @@ type GetPublishedCurrentProjectionParams struct {
 }
 
 type GetPublishedCurrentProjectionRow struct {
+	SloID               pgtype.UUID        `json:"slo_id"`
 	Payload             []byte             `json:"payload"`
 	GenerationID        pgtype.UUID        `json:"generation_id"`
 	SourceGeneration    pgtype.Int8        `json:"source_generation"`
@@ -121,6 +127,7 @@ type GetPublishedCurrentProjectionRow struct {
 	EvaluatedThrough    pgtype.Timestamptz `json:"evaluated_through"`
 	PublishedAt         pgtype.Timestamptz `json:"published_at"`
 	RetentionStart      pgtype.Timestamptz `json:"retention_start"`
+	Usable              bool               `json:"usable"`
 	Current             bool               `json:"current"`
 }
 
@@ -128,6 +135,7 @@ func (q *Queries) GetPublishedCurrentProjection(ctx context.Context, arg GetPubl
 	row := q.db.QueryRow(ctx, getPublishedCurrentProjection, arg.CalculationVersion, arg.Now, arg.SloID)
 	var i GetPublishedCurrentProjectionRow
 	err := row.Scan(
+		&i.SloID,
 		&i.Payload,
 		&i.GenerationID,
 		&i.SourceGeneration,
@@ -138,6 +146,7 @@ func (q *Queries) GetPublishedCurrentProjection(ctx context.Context, arg GetPubl
 		&i.EvaluatedThrough,
 		&i.PublishedAt,
 		&i.RetentionStart,
+		&i.Usable,
 		&i.Current,
 	)
 	return i, err

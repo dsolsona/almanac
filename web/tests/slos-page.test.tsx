@@ -180,3 +180,18 @@ it('preselects the stable service UUID when creating an SLO from the catalog',as
  expect(await screen.findByText('Checkout',{exact:true})).toBeVisible();
  expect(screen.queryByLabelText('Service',{exact:true})).not.toBeInTheDocument();
 });
+
+it('labels retained current values as last known while calculation is pending',async()=>{
+ const id='33333333-3333-3333-3333-333333333333';history.replaceState({},'',`/slos/${id}`);
+ const detail=operationalDetail({state:'complete',missing:0,remaining:'50',fraction:'0.5',burn:'0.5'});
+ detail.current.performance.state='met';detail.current.performance.provisional=false;
+ mocks.get.mockResolvedValue({value:detail.objective,etag:`"slo:${id}:1"`});
+ mocks.current.mockResolvedValue({...detail,slo:detail.objective,urgency:'watch',current_state:'stale',leading_reason:{code:'on_track',provisional:false},reasons:[]});
+ render(<SlosPage context={admin}/>);
+ const verdict=await screen.findByLabelText('Current SLO status');
+ await waitFor(()=>expect(verdict).toHaveTextContent('Last known'));
+ expect(verdict).toHaveTextContent('02 Oct 2026, 00:00 UTC');
+ expect(verdict).not.toHaveTextContent('The objective is met');
+ expect(screen.queryByText('Healthy')).not.toBeInTheDocument();
+ expect(screen.queryByText('Current status could not refresh')).not.toBeInTheDocument();
+});

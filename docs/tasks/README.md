@@ -6,6 +6,8 @@ It is design review, not authorization for engine implementation.
 architecture adoption; production alert engine implementation remains separate.
 [F4-T03](F4-T03.md) fixes measured agent-access lock contention during historical
 writes; the remaining load failures stay in the calculation gate.
+[F4-T04](F4-T04.md) preserves explicitly labelled SLO status during preparation and
+separates API concurrency from rendered-browser measurements.
 
 Use `FN-TNN.md` for a bounded task within a delivery slice, for example `F1-T01.md`.
 Copy [TEMPLATE.md](TEMPLATE.md). These identifiers are independent of spec/ADR numbers.

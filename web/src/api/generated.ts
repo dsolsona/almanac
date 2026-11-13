@@ -1180,6 +1180,11 @@ export interface components {
             retention_start?: string;
         };
         SloCurrentStatus: {
+            /**
+             * @description Calculation readiness. Stale/failed values retain the original evaluation and generation; unavailable values contain no performance numbers. Observation freshness is separate.
+             * @enum {string}
+             */
+            current_state?: "ready" | "stale" | "failed" | "unavailable";
             generation: components["schemas"]["DerivedGeneration"];
             slo: components["schemas"]["Slo"];
             /** @enum {string} */

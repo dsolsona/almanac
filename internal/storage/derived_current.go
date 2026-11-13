@@ -45,50 +45,150 @@ func ReadCurrentSloStatus(ctx context.Context, databaseURL string, input Current
 	if err != nil {
 		return api.SloCurrentStatus{}, err
 	}
-	if !row.Current || !row.GenerationID.Valid {
-		exhausted, err := q.CurrentPreparationExhausted(ctx, dbgen.CurrentPreparationExhaustedParams{SloID: id, CalculationVersion: operationalCalculationVersion})
+	var result api.SloCurrentStatus
+	if row.Current && row.GenerationID.Valid {
+		result, err = publishedCurrentStatus(row)
 		if err != nil {
-			return api.SloCurrentStatus{}, err
+			definition, readErr := q.GetSlo(ctx, id)
+			if readErr != nil {
+				return api.SloCurrentStatus{}, readErr
+			}
+			row.Usable = false
+			result, err = currentStatusDuringPreparation(ctx, q, row, definition, now, ErrDerivedFailed)
 		}
-		if exhausted {
-			return api.SloCurrentStatus{}, ErrDerivedFailed
+	} else {
+		definition, readErr := q.GetSlo(ctx, id)
+		if readErr != nil {
+			return api.SloCurrentStatus{}, readErr
 		}
-		definition, err := q.GetSlo(ctx, id)
-		if err != nil {
-			return api.SloCurrentStatus{}, err
+		exhausted, readErr := q.CurrentPreparationExhausted(ctx, dbgen.CurrentPreparationExhaustedParams{SloID: id, CalculationVersion: operationalCalculationVersion})
+		if readErr != nil {
+			return api.SloCurrentStatus{}, readErr
 		}
-		failed, err := hasFailedSourceAt(ctx, q, definition, now, floorSliBoundary(now, time.Duration(definition.CadenceSeconds)*time.Second))
-		if err != nil {
-			return api.SloCurrentStatus{}, err
+		failed, readErr := hasFailedSourceAt(ctx, q, definition, now, floorSliBoundary(now, time.Duration(definition.CadenceSeconds)*time.Second))
+		if readErr != nil {
+			return api.SloCurrentStatus{}, readErr
 		}
-		if failed {
-			return api.SloCurrentStatus{}, ErrDerivedSourceFailed
+		switch {
+		case exhausted:
+			err = ErrDerivedFailed
+		case failed:
+			err = ErrDerivedSourceFailed
+		default:
+			// Clock-only changes still use exact bounded reads when available.
+			result, err = readCurrentSloFromAggregates(ctx, q, definition, now)
 		}
-		// A clock boundary must not turn a bounded current read into a job wait.
-		result, err := readCurrentSloFromAggregates(ctx, q, definition, now)
-		if err != nil {
-			return api.SloCurrentStatus{}, err
+		if errors.Is(err, ErrDerivedPending) || errors.Is(err, ErrDerivedFailed) || errors.Is(err, ErrDerivedSourceFailed) {
+			result, err = currentStatusDuringPreparation(ctx, q, row, definition, now, err)
 		}
-		if err := finishAgentRead(ctx, tx, input.Now, started, user, installation, session); err != nil {
-			return api.SloCurrentStatus{}, err
-		}
-		return result, nil
 	}
-	var item api.SloOperationalOverviewItem
-	if err := json.Unmarshal(row.Payload, &item); err != nil {
-		return api.SloCurrentStatus{}, errors.New("storage: invalid current projection")
+	if err != nil {
+		return api.SloCurrentStatus{}, err
 	}
-	result := api.SloCurrentStatus{Slo: item.Slo, Current: item.Current, Urgency: api.SloCurrentStatusUrgency(item.Urgency), LeadingReason: item.LeadingReason, Reasons: item.Reasons,
-		Burn1h: item.Burn1h, Burn6h: item.Burn6h, Exhaustion: item.Exhaustion, Generation: api.DerivedGeneration{
-			GenerationId: openapi_types.UUID(row.GenerationID.Bytes), SourceGeneration: strconv.FormatInt(row.SourceGeneration.Int64, 10),
-			MeasurementRevision: strconv.FormatInt(row.MeasurementRevision.Int64, 10), DefinitionRevision: strconv.FormatInt(row.DefinitionRevision.Int64, 10),
-			ExclusionRevision: strconv.FormatInt(row.ExclusionRevision.Int64, 10), CalculationVersion: row.CalculationVersion.String,
-			EvaluatedThrough: row.EvaluatedThrough.Time.UTC(), PublishedAt: row.PublishedAt.Time.UTC(), RetentionStart: new(row.RetentionStart.Time.UTC()), CalculationLagSeconds: 0,
-		}}
+
 	if err := finishAgentRead(ctx, tx, input.Now, started, user, installation, session); err != nil {
 		return api.SloCurrentStatus{}, err
 	}
 	return result, nil
+}
+
+func publishedCurrentStatus(row dbgen.GetPublishedCurrentProjectionRow) (api.SloCurrentStatus, error) {
+	var item api.SloOperationalOverviewItem
+	if err := json.Unmarshal(row.Payload, &item); err != nil || !validPublishedCurrentItem(item, row) {
+		return api.SloCurrentStatus{}, errors.New("storage: invalid current projection")
+	}
+	return api.SloCurrentStatus{CurrentState: new(api.SloCurrentStatusCurrentState("ready")), Slo: item.Slo, Current: item.Current,
+		Urgency: api.SloCurrentStatusUrgency(item.Urgency), LeadingReason: item.LeadingReason, Reasons: item.Reasons,
+		Burn1h: item.Burn1h, Burn6h: item.Burn6h, Exhaustion: item.Exhaustion, Generation: api.DerivedGeneration{
+			GenerationId: openapi_types.UUID(row.GenerationID.Bytes), SourceGeneration: strconv.FormatInt(row.SourceGeneration.Int64, 10),
+			MeasurementRevision: strconv.FormatInt(row.MeasurementRevision.Int64, 10), DefinitionRevision: strconv.FormatInt(row.DefinitionRevision.Int64, 10),
+			ExclusionRevision: strconv.FormatInt(row.ExclusionRevision.Int64, 10), CalculationVersion: row.CalculationVersion.String,
+			EvaluatedThrough: row.EvaluatedThrough.Time.UTC(), PublishedAt: row.PublishedAt.Time.UTC(), RetentionStart: new(row.RetentionStart.Time.UTC()),
+		}}, nil
+}
+
+// A JSON object can decode successfully while missing required nested values.
+// Validate its identity and provenance before treating it as retained evidence.
+func validPublishedCurrentItem(item api.SloOperationalOverviewItem, row dbgen.GetPublishedCurrentProjectionRow) bool {
+	g := item.Generation
+	if !item.Urgency.Valid() || item.Slo.Id != openapi_types.UUID(row.SloID.Bytes) ||
+		item.Slo.DefinitionRevision != strconv.FormatInt(row.DefinitionRevision.Int64, 10) ||
+		g == nil || g.GenerationId != openapi_types.UUID(row.GenerationID.Bytes) ||
+		g.DefinitionRevision != item.Slo.DefinitionRevision || g.MeasurementRevision != strconv.FormatInt(row.MeasurementRevision.Int64, 10) ||
+		g.ExclusionRevision != strconv.FormatInt(row.ExclusionRevision.Int64, 10) || g.SourceGeneration != strconv.FormatInt(row.SourceGeneration.Int64, 10) ||
+		g.CalculationVersion != row.CalculationVersion.String || !g.EvaluatedThrough.Equal(row.EvaluatedThrough.Time) ||
+		!timestamp(g.PublishedAt).Time.Equal(row.PublishedAt.Time) || !item.Current.EvaluationAt.Equal(g.EvaluatedThrough) ||
+		!item.LeadingReason.Code.Valid() || len(item.Reasons) == 0 || len(item.Reasons) > 14 || !item.Exhaustion.State.Valid() || item.Exhaustion.Assumptions == nil {
+		return false
+	}
+	for _, reason := range item.Reasons {
+		if !reason.Code.Valid() {
+			return false
+		}
+	}
+	w := item.Current.Window
+	if w.RequestedStart.IsZero() || w.EffectiveStart.IsZero() || w.End.IsZero() || w.EligibleStart.IsZero() ||
+		w.RetentionStart.IsZero() || w.ActivatedAt.IsZero() || w.EvaluationValidFrom.IsZero() {
+		return false
+	}
+	for _, quality := range []api.SloOperationalQuality{item.Current.Quality, item.Burn1h.Quality, item.Burn6h.Quality, item.Exhaustion.CurrentQuality, item.Exhaustion.OneHourQuality} {
+		if !quality.State.Valid() || !quality.Freshness.Valid() {
+			return false
+		}
+	}
+	for _, performance := range []api.SloEvaluationPerformance{item.Current.Performance, item.Burn1h.Performance, item.Burn6h.Performance} {
+		if !performance.State.Valid() || !performance.BudgetUnit.Valid() {
+			return false
+		}
+	}
+	return item.Burn1h.WindowSeconds == 3600 && item.Burn6h.WindowSeconds == 21600 &&
+		!item.Burn1h.Start.IsZero() && !item.Burn1h.End.IsZero() && !item.Burn6h.Start.IsZero() && !item.Burn6h.End.IsZero()
+}
+
+func currentStatusDuringPreparation(ctx context.Context, q *dbgen.Queries, row dbgen.GetPublishedCurrentProjectionRow, definition dbgen.GetSloRow, now time.Time, preparationErr error) (api.SloCurrentStatus, error) {
+	state, reason := api.SloCurrentStatusCurrentState("stale"), "current_calculation_pending"
+	if errors.Is(preparationErr, ErrDerivedSourceFailed) {
+		state, reason = "failed", "source_aggregate_failed"
+	} else if errors.Is(preparationErr, ErrDerivedFailed) {
+		state, reason = "failed", "current_calculation_failed"
+	}
+	if row.Usable && row.GenerationID.Valid {
+		result, err := publishedCurrentStatus(row)
+		if err == nil {
+			result.CurrentState = &state
+			result.Generation.CalculationLagSeconds = float32(max(0, now.Sub(result.Generation.EvaluatedThrough).Seconds()))
+			if result.Urgency != "needs_attention" {
+				result.Urgency = "watch"
+			}
+			return result, nil
+		}
+		reason = "current_calculation_failed"
+	}
+	// There is no compatible prior evaluation. Return explicit unavailable values
+	// for this read, not values from a different definition or a successful zero.
+	item := unavailableOverviewItem(api.SloOperationalOverviewItem{Slo: sloRecordDTO(sloRecord(definition))}, now, reason)
+	generation, err := currentReadGeneration(ctx, q, definition, item.Current.EvaluationAt, now)
+	if err != nil {
+		return api.SloCurrentStatus{}, err
+	}
+	return api.SloCurrentStatus{CurrentState: new(api.SloCurrentStatusCurrentState("unavailable")), Slo: item.Slo, Current: item.Current,
+		Urgency: api.SloCurrentStatusUrgency(item.Urgency), LeadingReason: item.LeadingReason, Reasons: item.Reasons,
+		Burn1h: item.Burn1h, Burn6h: item.Burn6h, Exhaustion: item.Exhaustion, Generation: generation}, nil
+}
+
+func currentReadGeneration(ctx context.Context, q *dbgen.Queries, row dbgen.GetSloRow, at, now time.Time) (api.DerivedGeneration, error) {
+	generation, err := q.GetDerivedSourceGeneration(ctx, dbgen.GetDerivedSourceGenerationParams{SliID: row.SliID, MeasurementRevision: row.MeasurementRevision})
+	if errors.Is(err, pgx.ErrNoRows) {
+		generation = 0
+	} else if err != nil {
+		return api.DerivedGeneration{}, err
+	}
+	id, err := uuid.NewRandom()
+	if err != nil {
+		return api.DerivedGeneration{}, err
+	}
+	return generationStamp(pgtype.UUID{Bytes: id, Valid: true}, generation, row.DefinitionRevision, row.MeasurementRevision,
+		operationalCalculationVersion, at, now, ceilSliBoundary(now.Add(-sli.ObservationRetention), time.Duration(row.CadenceSeconds)*time.Second)), nil
 }
 
 func readCurrentSloFromAggregates(ctx context.Context, q *dbgen.Queries, row dbgen.GetSloRow, now time.Time) (api.SloCurrentStatus, error) {
@@ -100,19 +200,11 @@ func readCurrentSloFromAggregates(ctx context.Context, q *dbgen.Queries, row dbg
 	if err != nil {
 		return api.SloCurrentStatus{}, err
 	}
-	generation, err := q.GetDerivedSourceGeneration(ctx, dbgen.GetDerivedSourceGenerationParams{SliID: row.SliID, MeasurementRevision: row.MeasurementRevision})
-	if errors.Is(err, pgx.ErrNoRows) {
-		generation = 0
-	} else if err != nil {
-		return api.SloCurrentStatus{}, err
-	}
-	id, err := uuid.NewRandom()
+	stamp, err := currentReadGeneration(ctx, q, row, detail.EffectiveAt, now)
 	if err != nil {
 		return api.SloCurrentStatus{}, err
 	}
-	stamp := generationStamp(pgtype.UUID{Bytes: id, Valid: true}, generation, row.DefinitionRevision, row.MeasurementRevision,
-		detail.CalculationVersion, detail.EffectiveAt, now, ceilSliBoundary(now.Add(-sli.ObservationRetention), time.Duration(row.CadenceSeconds)*time.Second))
-	return api.SloCurrentStatus{Slo: detail.Objective, Current: detail.Current, Urgency: api.SloCurrentStatusUrgency(detail.Urgency),
+	return api.SloCurrentStatus{CurrentState: new(api.SloCurrentStatusCurrentState("ready")), Slo: detail.Objective, Current: detail.Current, Urgency: api.SloCurrentStatusUrgency(detail.Urgency),
 		LeadingReason: detail.LeadingReason, Reasons: detail.Reasons, Burn1h: detail.Burn1h, Burn6h: detail.Burn6h, Exhaustion: detail.Exhaustion, Generation: stamp}, nil
 }
 
