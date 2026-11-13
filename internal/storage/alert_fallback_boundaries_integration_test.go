@@ -143,44 +143,51 @@ WHERE sli_id=$1 AND range_start=(SELECT max(range_start) FROM public.almanac_der
 
 func TestIntegrationAlertFallbackRawScanBudget(t *testing.T) {
 	t.Parallel()
-	s := newFallbackFixture(t, time.Minute)
-	p, err := derivedWindowBatchParams(mustPGUUID(s.sliID), 1, fallbackInputs(s))
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, maxDirty := range []int{0, 8} {
-		var plan []byte
-		if err := s.conn.QueryRow(t.Context(), "EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON,TIMING OFF) "+experimentFallbackSQL,
-			p.SliID, p.MeasurementRevision, p.WindowEnds, p.FullStarts, p.FullEnds, p.EdgeAStarts, p.EdgeAEnds, p.EdgeBStarts, p.EdgeBEnds, p.Now, maxDirty, 7200).Scan(&plan); err != nil {
-			t.Fatal(err)
-		}
-		var decoded []struct{ Plan map[string]any }
-		if err := json.Unmarshal(plan, &decoded); err != nil {
-			t.Fatal(err)
-		}
-		var visits float64
-		var walk func(map[string]any)
-		walk = func(n map[string]any) {
-			if relation, _ := n["Relation Name"].(string); strings.HasPrefix(relation, "almanac_sli_observations") {
-				rows, _ := n["Actual Rows"].(float64)
-				filtered, _ := n["Rows Removed by Filter"].(float64)
-				rechecked, _ := n["Rows Removed by Index Recheck"].(float64)
-				loops, _ := n["Actual Loops"].(float64)
-				visits += (rows + filtered + rechecked) * loops
+	for _, fixture := range []struct {
+		name          string
+		cadence, span time.Duration
+	}{{"small", time.Minute, 8 * time.Hour}, {"retained", 15 * time.Second, 14 * 24 * time.Hour}} {
+		t.Run(fixture.name, func(t *testing.T) {
+			s := newFallbackFixtureSpan(t, fixture.cadence, fixture.span)
+			p, err := derivedWindowBatchParams(mustPGUUID(s.sliID), 1, fallbackInputs(s))
+			if err != nil {
+				t.Fatal(err)
 			}
-			if children, ok := n["Plans"].([]any); ok {
-				for _, child := range children {
-					walk(child.(map[string]any))
+			for _, maxDirty := range []int{0, 8} {
+				var plan []byte
+				if err := s.conn.QueryRow(t.Context(), "EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON,TIMING OFF) "+experimentFallbackSQL,
+					p.SliID, p.MeasurementRevision, p.WindowEnds, p.FullStarts, p.FullEnds, p.EdgeAStarts, p.EdgeAEnds, p.EdgeBStarts, p.EdgeBEnds, p.Now, maxDirty, 7200).Scan(&plan); err != nil {
+					t.Fatal(err)
 				}
+				var decoded []struct{ Plan map[string]any }
+				if err := json.Unmarshal(plan, &decoded); err != nil {
+					t.Fatal(err)
+				}
+				var visits float64
+				var walk func(map[string]any)
+				walk = func(n map[string]any) {
+					if relation, _ := n["Relation Name"].(string); strings.HasPrefix(relation, "almanac_sli_observations") {
+						rows, _ := n["Actual Rows"].(float64)
+						filtered, _ := n["Rows Removed by Filter"].(float64)
+						rechecked, _ := n["Rows Removed by Index Recheck"].(float64)
+						loops, _ := n["Actual Loops"].(float64)
+						visits += (rows + filtered + rechecked) * loops
+					}
+					if children, ok := n["Plans"].([]any); ok {
+						for _, child := range children {
+							walk(child.(map[string]any))
+						}
+					}
+				}
+				walk(decoded[0].Plan)
+				if maxDirty == 0 && visits != 0 {
+					t.Fatalf("refused budget scanned %.0f raw rows", visits)
+				}
+				if maxDirty > 0 && (visits == 0 || visits > 7200) {
+					t.Fatalf("admitted budget scanned %.0f raw rows", visits)
+				}
+				t.Logf("maxDirty=%d: plan raw visits=%.0f (including filtered/rechecked rows)", maxDirty, visits)
 			}
-		}
-		walk(decoded[0].Plan)
-		if maxDirty == 0 && visits != 0 {
-			t.Fatalf("refused budget scanned %.0f raw rows", visits)
-		}
-		if maxDirty > 0 && (visits == 0 || visits > 7200) {
-			t.Fatalf("admitted budget scanned %.0f raw rows", visits)
-		}
-		t.Logf("maxDirty=%d: plan raw visits=%.0f (including filtered/rechecked rows)", maxDirty, visits)
+		})
 	}
 }

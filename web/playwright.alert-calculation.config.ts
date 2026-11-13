@@ -4,7 +4,7 @@ import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
   testDir: '.', outputDir: './test-results/alert-calculation',
   timeout: 60_000, expect: { timeout: 10_000 }, retries: 0, workers: 1,
-  reporter: [['list']],
+  reporter: [['list'], ['html', { outputFolder: '../.local/alert-calculation/report', open: 'never' }]],
   use: { baseURL: process.env.E2E_BASE_URL ?? 'https://localhost:18188',
     ignoreHTTPSErrors: true, trace: 'retain-on-failure', ...devices['Desktop Chrome'] },
   projects: [

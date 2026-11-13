@@ -3,8 +3,9 @@ import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { cpus, totalmem } from 'node:os';
 import { expect, test, type Page } from '@playwright/test';
-import { psql } from '../e2e/support/stack.ts';
+import { compose, psql } from '../e2e/support/stack.ts';
 import { resourceSnapshot, ingestionBetween } from './resources.ts';
+import { ingestionMetrics, ingestionDelta } from './alert-calculation.metrics.ts';
 
 // F4-T02: SQL prototype is installed only in the disposable almanac-e2e database.
 const root = '../.local/alert-calculation';
@@ -97,26 +98,36 @@ JOIN (VALUES ${goods}) g(sli_id,good) USING(sli_id);`);
   const cutoff = psql("SELECT to_char(date_trunc('hour',now())-interval '2 hours','YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"')");
   const initial = psql(`SELECT to_char(min(interval_start),'YYYY-MM-DD"T"HH24:MI:SS"Z"') FROM public.almanac_sli_observations WHERE sli_id=ANY(ARRAY[${ids}]::uuid[])`);
   const marker = readFileSync('../internal/storage/testdata/mark_observation_fixture.sql', 'utf8');
-  const marking = fleet.slis.map(s => marker.replaceAll('$1', `'${s.id}'::uuid`)).join('\n');
-  const insert = (from: string, to: string) => `BEGIN; SET LOCAL statement_timeout='5s';
+  const insert = (sli: string, from: string, to: string, holes = false) => `BEGIN; SET LOCAL statement_timeout='5s'; SET LOCAL lock_timeout='250ms';
 INSERT INTO public.almanac_sli_observations(interval_start,sli_id,measurement_revision,outcome,good_count,total_count,result_digest,missing_components,execution_id,delivery_id,agent_id,session_generation,configuration_revision,lease_id,agent_created_at,recorded_at)
 SELECT point,p.sli_id,p.measurement_revision,'observed',p.good,10000,decode(repeat('ab',32),'hex'),'{}',gen_random_uuid(),gen_random_uuid(),p.agent_id,p.session_generation,p.configuration_revision,p.lease_id,point,clock_timestamp()
-FROM public.alert_experiment_proofs p CROSS JOIN generate_series(${from},${to}-interval '1 minute',interval '1 minute') point ON CONFLICT DO NOTHING;
-${marking} COMMIT;`;
+FROM public.alert_experiment_proofs p CROSS JOIN generate_series(${from},${to}-interval '1 minute',interval '1 minute') point
+WHERE p.sli_id='${sli}' ${holes ? 'AND extract(minute FROM point)=17' : ''} ON CONFLICT DO NOTHING;
+${marker.replaceAll('$1', `'${sli}'::uuid`)} COMMIT;`;
   // Fill genuine late holes first, then flood the dirty queue with three older days.
-  const backfill = [insert(`'${initial}'::timestamptz`, `date_trunc('minute',now())-interval '1 hour'`)];
-  for (let hour = 72; hour > 0; hour--) {
-    backfill.push(insert(`'${initial}'::timestamptz-interval '${hour} hours'`, `'${initial}'::timestamptz-interval '${hour - 1} hours'`));
+  const backfill = fleet.slis.map(s => insert(s.id, `'${initial}'::timestamptz`, `date_trunc('minute',now())-interval '1 hour'`, true));
+  for (let hour = 72; hour > 0; hour -= 12) {
+    for (const sli of fleet.slis) backfill.push(insert(sli.id, `'${initial}'::timestamptz-interval '${hour} hours'`, `'${initial}'::timestamptz-interval '${hour - 12} hours'`));
   }
+  const baselineStart = ingestionMetrics();
+  let baselineEnd = baselineStart;
+  await expect.poll(() => {
+    baselineEnd = ingestionMetrics();
+    const sample = ingestionDelta(baselineStart, baselineEnd);
+    return sample.elapsedSeconds >= 60 && sample.accepted >= 20;
+  }, { timeout: 90_000, intervals: [5_000] }).toBe(true);
+  const ingestionOnly = ingestionDelta(baselineStart, baselineEnd);
+  writeFileSync(`${root}/ingestion-baseline.json`, JSON.stringify({ baselineStart, baselineEnd, ingestionOnly }, null, 2));
   const before = resourceSnapshot();
   const profile = { baseRevision: 'c276c553fab3a3854a84e42196aa98dcaa7e6d9e',
+    applicationImage: compose('images', '--quiet', 'app').trim(),
     sourceHashes: Object.fromEntries(['../internal/storage/testdata/alert_window_fallback.sql',
-      'perf/alert-calculation.perf.ts', 'perf/alert-calculation.seed.ts', 'playwright.alert-calculation.config.ts']
+      'perf/alert-calculation.perf.ts', 'perf/alert-calculation.metrics.ts', 'perf/alert-calculation.seed.ts', 'playwright.alert-calculation.config.ts', '../compose.e2e.yaml', '../internal/storage/query/agent_access.sql']
       .map(path => [path, createHash('sha256').update(readFileSync(path)).digest('hex')])),
     cpu: cpus()[0]?.model, logicalCPUs: cpus().length, memoryBytes: totalmem(),
     database: psql("SELECT version()"), slis: 200, initialDays: 1, backfillDays: 3,
     maxDirtyHours: 8, maxRawVisits: 7200, statementTimeoutMs: 1000, workers: 2,
-    offeredBatchesPerSecond: 8, rounds: 4, cutoff, browserUsers: 10,
+    offeredBatchesPerSecond: 8, rounds: 4, cutoff, browserUsers: 10, backfillBatchMaxRows: 720, backfillBatchSLIs: 1, backfillBatches: backfill.length,
     note: 'Controlled historical measurement cutoffs cross a UTC hour; wall-clock engine scheduling is outside this query experiment. Each paired query also runs an independent raw-population reference in the same snapshot; its extra work is part of the contention load.' };
   writeFileSync(`${root}/profile.json`, JSON.stringify(profile, null, 2));
   const queryWorkers = [0, 1].map(worker => {
@@ -171,17 +182,21 @@ SELECT public.alert_experiment_compare('${fleet.slis[index]!.id}','${cutoff}'::t
           await coldPage.goto(detailPath!);
           timings['detail-cold']!.push(await rendered(coldPage, 'slo.detail', 0));
         } finally { await coldContext.close(); }
-      } finally { await context.close(); }
+      } finally {
+        await context.close();
+      }
     }
   });
   // Collect every lane's outcome before asserting; never discard failed-work evidence.
   const settled = await Promise.allSettled([...queryWorkers, backfillWork, ...pageWorkers]);
   const after = resourceSnapshot();
+  const metricsAfter = ingestionMetrics();
+  const ingestionUnderLoad = ingestionDelta(baselineEnd, metricsAfter);
   const live = JSON.parse(psql(`SELECT json_build_object('slis',count(DISTINCT sli_id),'intervals',count(*),
     'maxReceiptDelaySeconds',max(extract(epoch FROM recorded_at-interval_start-interval '1 minute')))
     FROM public.almanac_sli_observations WHERE recorded_at>='${before.at}' AND recorded_at<='${after.at}'
     AND interval_start>=date_trunc('minute','${before.at}'::timestamptz) AND sli_id=ANY(ARRAY[${ids}]::uuid[])`));
-  const evidence = { profile, before, after, ingestedDuringLoad: ingestionBetween(before.at, after.at), live, timings,
+  const evidence = { profile, before, after, ingestionOnly, ingestionUnderLoad, metricsAfter, ingestedDuringLoad: ingestionBetween(before.at, after.at), live, timings,
     outcomes: settled.map(r => r.status === 'fulfilled' ? { status: r.status } : { status: r.status, error: String(r.reason) }) };
   writeFileSync(`${root}/results.json`, JSON.stringify(evidence, null, 2));
   const queries = [0,1].flatMap(worker => readFileSync(`${root}/queries-${worker}.jsonl`, 'utf8').split('\n')
@@ -194,6 +209,11 @@ SELECT public.alert_experiment_compare('${fleet.slis[index]!.id}','${cutoff}'::t
   writeFileSync(`${root}/summary.json`, JSON.stringify(summary, null, 2));
   for (const outcome of settled) if (outcome.status === 'rejected') throw outcome.reason;
   expect(queries).toHaveLength(800);
+  expect(ingestionUnderLoad.accepted).toBeGreaterThanOrEqual(20);
+  expect(ingestionUnderLoad.unsuccessful).toBe(0);
+  expect(ingestionUnderLoad.p95UpperSeconds).not.toBeNull();
+  expect(ingestionUnderLoad.p95UpperSeconds!).toBeLessThanOrEqual(0.250);
+  expect(ingestionUnderLoad.p95UpperSeconds!).toBeLessThanOrEqual(1.25 * ingestionOnly.p95LowerSeconds);
   expect(live.slis, 'real live collection must continue for the whole fleet').toBe(200);
   expect(summary.fallbackBatches, 'contention must actually exercise dirty interiors').toBeGreaterThan(0);
   for (const q of queries) for (const row of q.candidate) if (row.prepared) {
