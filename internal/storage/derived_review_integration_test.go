@@ -44,7 +44,7 @@ FROM public.almanac_slo_definitions d JOIN public.almanac_slos s ON s.id=d.slo_i
 			return
 		}
 		defer rollbackTransaction(tx)
-		for _, table := range []string{"almanac_slo_extrema", "almanac_slo_extrema_cursor", "almanac_slo_current_projections", "almanac_slo_current_failures", "almanac_slo_derived_generations", "almanac_slo_definitions", "almanac_slos"} {
+		for _, table := range []string{"almanac_slo_extrema", "almanac_slo_extrema_cursor", "almanac_slo_current_projections", "almanac_slo_current_failures", "almanac_slo_derived_generations", "almanac_slo_exclusion_state", "almanac_slo_definitions", "almanac_slos"} {
 			key := "slo_id"
 			if table == "almanac_slos" {
 				key = "id"
