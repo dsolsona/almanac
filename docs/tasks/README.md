@@ -226,3 +226,6 @@ production storage and maintenance management remain separate work.
 
 [F4-T09](F4-T09.md) builds the approved policy form's reusable presentation controls
 and catalogue example; production alert operations remain gated separately.
+
+- [F4-T08](F4-T08.md): Internal maintenance authority, immutable revisions,
+  per-SLO exclusion fences and atomic invalidation work; production adoption pending.

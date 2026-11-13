@@ -12,8 +12,11 @@ import (
 
 type Querier interface {
 	AcknowledgeDerivedBatch(ctx context.Context, arg AcknowledgeDerivedBatchParams) error
+	AcknowledgeMaintenanceWork(ctx context.Context, arg AcknowledgeMaintenanceWorkParams) (int64, error)
 	ActivateDatasourceAgent(ctx context.Context, arg ActivateDatasourceAgentParams) (AlmanacDatasource, error)
 	ActivateSliMeasurement(ctx context.Context, arg ActivateSliMeasurementParams) (int64, error)
+	AdvanceMaintenanceIdentity(ctx context.Context, arg AdvanceMaintenanceIdentityParams) error
+	AdvanceMaintenanceState(ctx context.Context, arg AdvanceMaintenanceStateParams) (int64, error)
 	AdvanceRetentionCleanup(ctx context.Context, arg AdvanceRetentionCleanupParams) (int64, error)
 	AdvanceSliLastAttemptedInterval(ctx context.Context, arg AdvanceSliLastAttemptedIntervalParams) error
 	// The measurement lock serializes acceptance. All three writes share that
@@ -78,6 +81,7 @@ type Querier interface {
 	DeleteUserChallenges(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserSessions(ctx context.Context, userID pgtype.UUID) error
 	DisableAgent(ctx context.Context, arg DisableAgentParams) (AlmanacAgent, error)
+	EnqueueMaintenanceWork(ctx context.Context, arg EnqueueMaintenanceWorkParams) error
 	EnsureAgentConfiguration(ctx context.Context, arg EnsureAgentConfigurationParams) error
 	EnsureSloExtremaCursors(ctx context.Context, arg EnsureSloExtremaCursorsParams) (int64, error)
 	ExhaustRetentionWork(ctx context.Context, nextAttemptAt pgtype.Timestamptz) error
@@ -86,6 +90,7 @@ type Querier interface {
 	FailLoginAttempt(ctx context.Context, arg FailLoginAttemptParams) error
 	FailRetentionWork(ctx context.Context, arg FailRetentionWorkParams) error
 	FailSloExtremaCursor(ctx context.Context, arg FailSloExtremaCursorParams) error
+	FenceMaintenanceState(ctx context.Context, sloID pgtype.UUID) (int64, error)
 	FindAgentAccessCredentialAgent(ctx context.Context, credentialID pgtype.UUID) (pgtype.UUID, error)
 	FindAgentLifecycleReceipt(ctx context.Context, arg FindAgentLifecycleReceiptParams) (FindAgentLifecycleReceiptRow, error)
 	FindAgentReceipt(ctx context.Context, arg FindAgentReceiptParams) (FindAgentReceiptRow, error)
@@ -148,6 +153,11 @@ type Querier interface {
 	InsertInitialOwnerAudit(ctx context.Context, arg InsertInitialOwnerAuditParams) error
 	InsertLifecycleAudit(ctx context.Context, arg InsertLifecycleAuditParams) error
 	InsertLoginAttempt(ctx context.Context, arg InsertLoginAttemptParams) (pgtype.UUID, error)
+	InsertMaintenanceAudit(ctx context.Context, arg InsertMaintenanceAuditParams) (pgtype.UUID, error)
+	InsertMaintenanceChange(ctx context.Context, arg InsertMaintenanceChangeParams) error
+	InsertMaintenanceIdentity(ctx context.Context, arg InsertMaintenanceIdentityParams) error
+	InsertMaintenanceRevision(ctx context.Context, arg InsertMaintenanceRevisionParams) error
+	InsertMaintenanceScope(ctx context.Context, arg InsertMaintenanceScopeParams) error
 	InsertManagedUser(ctx context.Context, arg InsertManagedUserParams) (AlmanacUser, error)
 	InsertObjectiveCreateReceipt(ctx context.Context, arg InsertObjectiveCreateReceiptParams) error
 	InsertPasswordRotationAudit(ctx context.Context, arg InsertPasswordRotationAuditParams) error
@@ -179,6 +189,9 @@ type Querier interface {
 	ListDatasourceSliMeasurements(ctx context.Context, datasourceID pgtype.UUID) ([]ListDatasourceSliMeasurementsRow, error)
 	ListDatasources(ctx context.Context, arg ListDatasourcesParams) ([]AlmanacDatasource, error)
 	ListDueDerivedObjectives(ctx context.Context, arg ListDueDerivedObjectivesParams) ([]pgtype.UUID, error)
+	ListMaintenanceGrids(ctx context.Context, sloID pgtype.UUID) ([]ListMaintenanceGridsRow, error)
+	ListMaintenanceIdentities(ctx context.Context, arg ListMaintenanceIdentitiesParams) ([]ListMaintenanceIdentitiesRow, error)
+	ListMaintenanceScopes(ctx context.Context, arg ListMaintenanceScopesParams) ([]pgtype.UUID, error)
 	ListManagedUsers(ctx context.Context, arg ListManagedUsersParams) ([]AlmanacUser, error)
 	ListPendingSlisForAgent(ctx context.Context, agentID pgtype.UUID) ([]ListPendingSlisForAgentRow, error)
 	ListReadyDatasourceReassignments(ctx context.Context, retryAt pgtype.Timestamptz) ([]ListReadyDatasourceReassignmentsRow, error)
@@ -210,6 +223,9 @@ type Querier interface {
 	LockLifecycleAgent(ctx context.Context, agentID pgtype.UUID) (AlmanacAgent, error)
 	LockLifecycleCredential(ctx context.Context, arg LockLifecycleCredentialParams) (LockLifecycleCredentialRow, error)
 	LockLoginAttemptForFinish(ctx context.Context, id pgtype.UUID) (AlmanacLoginAttempt, error)
+	LockMaintenanceIdentity(ctx context.Context, id pgtype.UUID) (AlmanacMaintenanceExclusion, error)
+	LockMaintenanceSlo(ctx context.Context, id pgtype.UUID) (pgtype.UUID, error)
+	LockMaintenanceState(ctx context.Context, sloID pgtype.UUID) (int64, error)
 	LockManagedUser(ctx context.Context, id pgtype.UUID) (AlmanacUser, error)
 	LockPasswordRotationInstallation(ctx context.Context) (LockPasswordRotationInstallationRow, error)
 	LockRetentionWork(ctx context.Context, arg LockRetentionWorkParams) (pgtype.UUID, error)
@@ -239,6 +255,9 @@ type Querier interface {
 	ReadDerivedWindowTotals(ctx context.Context, arg ReadDerivedWindowTotalsParams) (ReadDerivedWindowTotalsRow, error)
 	ReadExtremaDue(ctx context.Context, arg ReadExtremaDueParams) (ReadExtremaDueRow, error)
 	ReadLocalIdentity(ctx context.Context, login string) (ReadLocalIdentityRow, error)
+	ReadMaintenanceRevision(ctx context.Context, arg ReadMaintenanceRevisionParams) (ReadMaintenanceRevisionRow, error)
+	ReadMaintenanceSnapshot(ctx context.Context, arg ReadMaintenanceSnapshotParams) ([]AlmanacMaintenanceExclusionRevision, error)
+	ReadMaintenanceState(ctx context.Context, sloID pgtype.UUID) (int64, error)
 	// Exact table pages read only one bounded, immutable prepared generation.
 	ReadPreparedSloValuePage(ctx context.Context, arg ReadPreparedSloValuePageParams) (ReadPreparedSloValuePageRow, error)
 	// Adjacent evaluation endpoints share whole-hour interiors. Aggregate each distinct

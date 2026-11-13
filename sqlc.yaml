@@ -57,6 +57,7 @@ sql:
       - internal/storage/migrations/0051_session_inactivity_policy.sql
       - internal/storage/migrations/0052_trace_log_datasources.sql
       - internal/storage/migrations/0053_projection_validity_scalar.sql
+      - internal/storage/migrations/0054_maintenance_authority.sql
     gen:
       go:
         package: dbgen
