@@ -1,3 +1,14 @@
+Alerting calculation experiment, 2026-11-13: [F4-T02](tasks/F4-T02.md) has
+[reviewable evidence](evidence/alert-calculation/README.md), with no production
+adoption. Focused exact-calculation checks pass (3.323 s); 800 paired contention
+batches independently match all 3,200 windows, candidate query p95 46.066 ms.
+The combined workload fails: first SLO lists take about 8 seconds, navigation
+workers fail, 190/200 SLIs deliver fresh intervals and bulk backfill reaches its
+deadline. The unpaced bulk-SQL fixture is a confounder; this does not establish
+fallback as the cause. Retain accepted calculation behavior and obtain bounded
+backfill/ingestion-baseline evidence before adoption. Details and missing admission,
+ingestion-latency and physical-plan guarantees are explicit in the task.
+
 Alerting design review, 2026-11-13: [F4-T01](tasks/F4-T01.md) prepares proposed
 [ADR-0051](adr/0051-durable-alert-policy-state-machine.md), draft
 [SPEC-0021](specs/0021-alert-policy-engine.md) and
@@ -19,7 +30,8 @@ the existing bounded scheduler with fair admission; no separate publication-wake
 mechanism or blocked-dependency table is required. Complete policy evaluations
 remain ordered; unsuccessful fallback retains durable pending work.
 The five-minute closed-hour target belongs to chart history, not source aggregate
-readiness. No experiment result, fallback adoption or end-to-end target is claimed.
+readiness. F4-T02 records the subsequent experiment; no fallback adoption or
+end-to-end target is claimed.
 [Draft PR #94](https://github.com/dsolsona/almanac/pull/94) includes the contracts,
 interactive mocks and selected renders. Local mock checks passed 288 assertions;
 staged-only documentation validation passed. No engine implementation, benchmark

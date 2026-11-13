@@ -1,0 +1,92 @@
+{
+  "profile": {
+    "baseRevision": "c276c553fab3a3854a84e42196aa98dcaa7e6d9e",
+    "sourceHashes": {
+      "../internal/storage/testdata/alert_window_fallback.sql": "2d7261617bf37a2c497103fe3f84a79a72365707bb2229f1b40537b909b6fa2e",
+      "perf/alert-calculation.perf.ts": "b85ea3e9238cf41742c7fb1c2f642dcf0d6f2efe92e6704b1ed4d0d12bdc35bf",
+      "perf/alert-calculation.seed.ts": "3f5544a5816cd550ff152f31a4b2bb154422b52bb224b3fcf062895d67f92228",
+      "playwright.alert-calculation.config.ts": "52bf00f6d262cd9b7558f35a8664311f72680890cd356c75f9ec624e17abfe54"
+    },
+    "cpu": "AMD EPYC",
+    "logicalCPUs": 2,
+    "memoryBytes": 4130635776,
+    "database": "PostgreSQL 18.6 (Debian 18.6-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+    "slis": 200,
+    "initialDays": 1,
+    "backfillDays": 3,
+    "maxDirtyHours": 8,
+    "maxRawVisits": 7200,
+    "statementTimeoutMs": 1000,
+    "workers": 2,
+    "offeredBatchesPerSecond": 8,
+    "rounds": 4,
+    "cutoff": "2026-11-13T13:00:00Z",
+    "browserUsers": 10,
+    "note": "Controlled historical measurement cutoffs cross a UTC hour; wall-clock engine scheduling is outside this query experiment. Each paired query also runs an independent raw-population reference in the same snapshot; its extra work is part of the contention load."
+  },
+  "result": "not accepted: contention failed",
+  "elapsedSeconds": 180.893589,
+  "pairedBatches": 800,
+  "independentlyVerifiedWindows": 3200,
+  "pendingBaseline": 236,
+  "pendingCandidate": 0,
+  "fallbackBatches": 236,
+  "maximumEmittedRawRows": 455,
+  "baselineMilliseconds": {
+    "samples": 800,
+    "p50": 6.987,
+    "p95": 41.962,
+    "maximum": 169.425
+  },
+  "candidateMilliseconds": {
+    "samples": 800,
+    "p50": 7.323,
+    "p95": 46.066,
+    "maximum": 162.349
+  },
+  "completedQuerySpanSeconds": 124.579637,
+  "completedQueriesPerMeasuredSecond": 4.4224895112230875,
+  "browserMilliseconds": {
+    "list-cold": {
+      "samples": 9,
+      "p50": 8466.40000000596,
+      "p95": 8609.59999999404,
+      "maximum": 8609.59999999404
+    },
+    "list-warm": {
+      "samples": 0
+    },
+    "detail-cold": {
+      "samples": 0
+    },
+    "detail-warm": {
+      "samples": 0
+    }
+  },
+  "live": {
+    "slis": 190,
+    "intervals": 249,
+    "maxReceiptDelaySeconds": 140.51675
+  },
+  "persistedObservationsDuringLoad": 569158,
+  "failedWorkers": 11,
+  "artifactHashes": {
+    "queries-0.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "summary.json": "60ea26f3031dce70d546cddeed83977d455e634f97952a27c7f12295ff2d5c87",
+    "queries-1.jsonl": "69e557d8cd3b9adebed46ef5d4d49be1f120c73c935f407eb69ccf0be39493f1",
+    "queries-1.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "queries-0.jsonl": "277b3e9fdd70d1306a75a8b4838c2b379558fef1971a474c676286d5819fee50",
+    "profile.json": "4aca787c87e53b1048bb3d83ed94f5543c763969b00314226b170f3f64dc3214",
+    "backfill.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "backfill.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "results.json": "6f3b4c35cea423122f2925e766ba3b76a95e1db88be4afeadeeb0b9523199432"
+  },
+  "caveats": [
+    "Query timing excludes client admission; closed-loop throughput is not an open-loop capacity result.",
+    "Backfill exceeded its 180-second process deadline; exact completed batches were not recorded in this measured harness.",
+    "Nine first-list successes were followed by navigation errors/timeouts; all ten browser workers failed. There are no completed detail samples.",
+    "Live counts measure continuity, not ingestion handler latency. They do not establish data loss.",
+    "The run combines backfill, baseline, candidate, raw reference and browser load; it cannot attribute interference to fallback alone.",
+    "Emitted raw rows are not physical visits; separate EXPLAIN fixtures are reported in the task."
+  ]
+}

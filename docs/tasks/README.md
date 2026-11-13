@@ -2,6 +2,8 @@
 
 [F4-T01](F4-T01.md) tracks the draft alert engine/UI contracts and selected mocks.
 It is design review, not authorization for engine implementation.
+[F4-T02](F4-T02.md) runs the authorized bounded-calculation experiment before
+architecture adoption; production alert engine implementation remains separate.
 
 Use `FN-TNN.md` for a bounded task within a delivery slice, for example `F1-T01.md`.
 Copy [TEMPLATE.md](TEMPLATE.md). These identifiers are independent of spec/ADR numbers.
