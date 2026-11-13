@@ -1,5 +1,8 @@
 # Implementation tasks
 
+[F4-T16](F4-T16.md) avoids canonical sums for a known-pending first window while
+preserving snapshot and error-order semantics; combined workload verification follows.
+
 [F4-T15](F4-T15.md) removes repeated projection-metadata extraction from current
 scheduler scans while preserving selection and retry semantics.
 

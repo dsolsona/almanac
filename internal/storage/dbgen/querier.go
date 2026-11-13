@@ -258,6 +258,9 @@ type Querier interface {
 	ReadDerivedDue(ctx context.Context, arg ReadDerivedDueParams) (ReadDerivedDueRow, error)
 	ReadDerivedMaintenanceDue(ctx context.Context, arg ReadDerivedMaintenanceDueParams) (ReadDerivedMaintenanceDueRow, error)
 	ReadDerivedMetrics(ctx context.Context, arg ReadDerivedMetricsParams) (ReadDerivedMetricsRow, error)
+	// Same interior and lease semantics as ReadRetainedWindowBatch. A ready result is
+	// advisory: the caller must still execute that authoritative batch in its snapshot.
+	ReadDerivedWindowReadiness(ctx context.Context, arg ReadDerivedWindowReadinessParams) (ReadDerivedWindowReadinessRow, error)
 	ReadDerivedWindowTotals(ctx context.Context, arg ReadDerivedWindowTotalsParams) (ReadDerivedWindowTotalsRow, error)
 	ReadExtremaDue(ctx context.Context, arg ReadExtremaDueParams) (ReadExtremaDueRow, error)
 	ReadLocalIdentity(ctx context.Context, login string) (ReadLocalIdentityRow, error)

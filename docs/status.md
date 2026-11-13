@@ -1,3 +1,13 @@
+Combined performance control, 2026-11-13: [F4-T16](tasks/F4-T16.md) skips canonical
+aggregation for known-pending first windows while preserving snapshot/error order.
+Integrated storage checks pass in 11.497 s and the normal-container seed passes
+in 254.995 s. The [200-SLO control](evidence/alert-performance/2026-11-13-scheduler-preflight-control.json)
+still fails: two overview admission 503s, cold-list p95 1.994 s and ingestion
+isolation. All 400 due intervals, 800 calculation batches, 1,400 backfill batches
+and 80 browser journeys complete. Complete observer coverage now narrows attribution;
+all 8,226 waiting current attempts skip canonical calculation, and idle PostgreSQL
+CPU falls to 49.48% of one core. Overview planning/execution investigation follows.
+
 Scheduler correction, 2026-11-13: [F4-T15](tasks/F4-T15.md) removes repeated
 projection JSON extraction from two due-work queries. Same-snapshot probes retain
 exact selection and reduce compatible-projection medians from about 400 ms to

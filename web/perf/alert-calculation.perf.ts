@@ -113,7 +113,7 @@ JOIN (VALUES ${goods}) g(sli_id,good) USING(sli_id);`);
   const ingestionOnly = ingestionDelta(baselineStart, baselineEnd);
   writeFileSync(`${root}/ingestion-baseline.json`, JSON.stringify({ baselineStart, baselineEnd, ingestionOnly }, null, 2));
   const before = resourceSnapshot();
-  const profile = { baseRevision: '35a6318', diagnosticCandidate: 'F4-T14 session inspection and trace correlation', postgresStorage, mode, fixtureVersion: calculationFixtureVersion,
+  const profile = { baseRevision: '0dfbca5', diagnosticCandidate: 'F4-T15 scheduler metadata and F4-T16 first-window readiness', postgresStorage, mode, fixtureVersion: calculationFixtureVersion,
     initialHistoryStart: fleet.initialHistoryStart, eligibleFrom: fleet.eligibleFrom, historyClosedThrough: fleet.historyClosedThrough, backfillRanges: ranges,
     eligibilityCheckedSlis: eligibility.length,
     plannedQueryCalls: plannedCalculationCalls(mode, 800), independentReferenceEnabled: mode === 'paired',
@@ -122,6 +122,8 @@ JOIN (VALUES ${goods}) g(sli_id,good) USING(sli_id);`);
       'perf/alert-calculation.perf.ts', 'perf/alert-calculation.experiment.ts', 'perf/alert-calculation.metrics.ts', 'perf/alert-calculation.seed.ts', 'playwright.alert-calculation.config.ts', '../compose.e2e.yaml', '../internal/storage/query/agent_access.sql', '../internal/storage/query/slis.sql', '../internal/storage/derived_current.go', '../internal/storage/query/derived_projections.sql', '../api/openapi.yaml', '../web/src/slos/SloDetailPanels.tsx',
       '../internal/storage/query/derived_overview.sql', '../internal/storage/query/slo_list_references.sql',
       '../internal/storage/query/derived_due.sql', '../internal/storage/query/derived_consistency.sql',
+      '../internal/storage/derived_evaluation.go', '../internal/storage/query/derived_readiness.sql',
+      '../internal/storage/query/retained_window_batch.sql', '../internal/storage/dbgen/derived_readiness.sql.go',
       '../internal/storage/query/derived_metrics.sql', '../internal/storage/query/services.sql',
       '../internal/storage/query/derived_history.sql', '../internal/storage/migrations/0053_projection_validity_scalar.sql',
       '../internal/storage/derived_worker.go', '../internal/storage/migrations/0054_maintenance_authority.sql',

@@ -77,6 +77,23 @@ func evaluateDerivedWindows(ctx context.Context, q *dbgen.Queries, sliID pgtype.
 	if err != nil {
 		return nil, err
 	}
+	// Callers keep this check and the authoritative batch in their existing
+	// repeatable-read snapshot. Only the first window may short-circuit: a later
+	// pending window must not hide an earlier window's inconsistent facts.
+	if params.FullStarts[0].Time.Before(params.FullEnds[0].Time) {
+		readiness, err := q.ReadDerivedWindowReadiness(ctx, dbgen.ReadDerivedWindowReadinessParams{
+			SliID: sliID, MeasurementRevision: revision, FullStart: params.FullStarts[0], FullEnd: params.FullEnds[0], Now: params.Now,
+		})
+		if err != nil {
+			return nil, operationError(ctx, "storage: exact aggregate window batch read failed", err)
+		}
+		if readiness.Exhausted {
+			return nil, ErrDerivedSourceFailed
+		}
+		if !readiness.Prepared {
+			return nil, ErrDerivedPending
+		}
+	}
 	counts, err := q.ReadRetainedWindowBatch(ctx, params)
 	if err != nil {
 		return nil, operationError(ctx, "storage: exact aggregate window batch read failed", err)

@@ -39,7 +39,7 @@ func logRetainedRepairPlan(t *testing.T, conn *pgx.Conn, id string, start, end, 
 	if err != nil {
 		t.Fatal(err)
 	}
-	capture := &factsQueryCapture{}
+	capture := &factsQueryCapture{DBTX: conn}
 	_, err = buildRetainedRepairPoints(t.Context(), dbgen.New(capture), row, source, start, end, now)
 	// Production error sanitization strips the capture marker; verify the actual SQL.
 	if err == nil || !strings.HasPrefix(capture.statement, "-- name: ReadRetainedWindowBatch :many\n") {
@@ -128,7 +128,10 @@ func (c *factsQueryCapture) Query(_ context.Context, statement string, arguments
 	return nil, errFactsQueryCaptured
 }
 
-func (c *factsQueryCapture) QueryRow(_ context.Context, statement string, arguments ...any) pgx.Row {
+func (c *factsQueryCapture) QueryRow(ctx context.Context, statement string, arguments ...any) pgx.Row {
+	if c.DBTX != nil && strings.HasPrefix(statement, "-- name: ReadDerivedWindowReadiness :one\n") {
+		return c.DBTX.QueryRow(ctx, statement, arguments...)
+	}
 	c.statement, c.arguments = statement, append([]any(nil), arguments...)
 	return factsCapturedRow{}
 }

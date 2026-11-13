@@ -3,7 +3,7 @@
 Updated 2026-11-13. Owner: primary agent. Work is tracked in
 [F4-T14](../../tasks/F4-T14.md) and [plan 0045](../../plans/0045-alerting-performance-investigation.md).
 
-The latest [instrumented baseline-only control](2026-11-13-instrumented-baseline.json)
+The earlier [instrumented baseline-only control](2026-11-13-instrumented-baseline.json)
 at `925d156` uses 200 SLIs/SLOs, live collection, 1,400 historical SQL batches,
 ten API clients and one cohosted browser. All 800 baseline batches and all 80
 browser journeys complete; the proposed fallback and raw oracle are absent.
@@ -14,6 +14,32 @@ The [earlier baseline](../alert-calculation/2026-11-13-baseline-only-control.jso
 remains evidence, but its browser stopped after 27 journeys, so timings are not an
 unchanged-work comparison.
 
+## Latest combined control
+
+[F4-T15](../../tasks/F4-T15.md) and [F4-T16](../../tasks/F4-T16.md) are measured
+in the [combined control](2026-11-13-scheduler-preflight-control.json). The normal
+seed passes in 254.995 s; the control fails in 249.851 s. All 800 baseline batches,
+1,400 backfill batches and 80 browser journeys complete. All 400 due intervals are
+observed with zero unsuccessful ingestions. Two overview requests fail interactive
+pool admission at 250.106/251.305 ms, before page SQL. Cold-list p95 is 1,993.6 ms;
+ingestion p95 is 18.315–19.231 ms alone and 75.386–79.156 ms loaded.
+
+The observer covers both phases without errors (625/1,614 database samples).
+Ingestion-only PostgreSQL averages 49.48% of one CPU, down from 98.49% in the prior
+control. Due/selection query means are 39.544/35.611 ms, but faster scheduling also
+increases their frequency: 474/178 calls, 25.083 s cumulative query time. All 8,226
+waiting current evaluations skip canonical sums; cumulative duration is 80.318 s
+and 776 current publications complete. This verifies the intended mechanisms,
+while different fixture dispatch phases and publication rates limit broader
+before/after attribution.
+
+Loaded overview page SQL p95 remains 665.576 ms. Correlated samples predominantly
+show active work without a wait event (406 samples); I/O/client-write waits are
+rare on that query. Across the database, transaction-lock waits are sparse and
+WAL/I/O/client waits also occur. Sampling is not CPU profiling; `track_io_timing`
+is off. The next investigation separates actual prepared-query planning,
+execution, serialization and client transfer before choosing another correction.
+
 ## Priorities
 
 Rank reflects observed user impact. Related symptoms are grouped; the suspected
@@ -22,10 +48,10 @@ integrated capacity pass.
 
 | Order | Issue | User impact | Bottleneck evidence | Current status |
 | --- | --- | --- | --- | --- |
-| 1 | Slow SLO overview and interactive admission exhaustion | Lists exceed one second; three API requests return 503 | Latest cold-list p95 1,830.6 ms; failed pool acquisitions take 250.1–250.8 ms | Page/transfer/resource cost and admission interference remain open |
-| 2 | Live ingestion slows under competing work | Latency isolation fails | Latest p95 14.4–15.1 → 87.3–91.6 ms; 524 accepted and all 400 due intervals present | Absolute p95 passes; relative limit fails |
-| 3 | Expensive scheduling and repeated pending calculations | Background work consumes capacity without publishing current values | Idle PostgreSQL ~98.5% of one CPU; two due queries consume ~58.7 s of elapsed query time in 62.1 s. Loaded phase has 7,866 waiting attempts /13 publications | Metadata correction passes focused and normal-deployment checks; pending work and combined load remain open |
-| 4 | Pending aggregate windows and unproven alert capacity | Proposed alert evaluations would retain pending boundaries | Latest 252/800 baseline batches pending; bounded fallback exactness has separate passing fixtures | Calculation-adoption gate remains open |
+| 1 | Slow SLO overview and interactive admission exhaustion | Lists exceed one second; two API requests return 503 | Combined cold-list p95 1,993.6 ms; failed pool acquisitions take 250.1/251.3 ms | Page/transfer/resource cost and admission interference remain open |
+| 2 | Live ingestion slows under competing work | Latency isolation fails | Combined p95 18.3–19.2 → 75.4–79.2 ms; 541 accepted and all 400 due intervals present | Absolute p95 passes; relative limit fails |
+| 3 | Expensive scheduling and repeated pending calculations | Background work consumes capacity without publishing current values | Idle PostgreSQL ~49.5% of one CPU; due queries consume ~25.1 s in 62.6 s. Loaded phase has 8,226 waiting attempts /776 publications | Scheduler/readiness corrections verified; waiting calculations skip canonical sums; residual scheduling and load remain open |
+| 4 | Pending aggregate windows and unproven alert capacity | Proposed alert evaluations would retain pending boundaries | Combined 6/800 baseline batches pending; bounded fallback exactness has separate passing fixtures | Calculation-adoption gate remains open |
 | Corrected | Authentication fails during navigation | Previously prevented page opening | Shared inspection queries preserve authority; 40/40 loaded auth-context calls succeed and all 80 journeys complete | Original conflict corrected and verified under load; other 503s are pool admission failures |
 
 ## Authentication failures: corrected database lock contention
@@ -79,7 +105,7 @@ The three remaining overview 503s fail interactive pool acquisition at
 
 ## Overview latency: database execution, transfer and admission
 
-**Latest:** overview API p95 **1,496.739 ms**; cold/warm list p95
+**Earlier instrumented control:** overview API p95 **1,496.739 ms**; cold/warm list p95
 **1,830.6/808.6 ms**, cold/warm detail **1,037.8/374.8 ms**. Each browser cohort
 has 20 completed journeys. Three sampled overview API requests return 503; their
 traces identify failed interactive pool admission. Page SQL p95 is **604.820 ms**.
@@ -130,7 +156,7 @@ full cold and in-app navigation only after a causal correction is demonstrated.
 
 ## Ingestion isolation: remaining source/transaction contention
 
-**Latest:** 208 ingestion-only accepts versus 524 loaded accepts; neither cohort
+**Earlier instrumented control:** 208 ingestion-only accepts versus 524 loaded accepts; neither cohort
 has unsuccessful ingestion. Histogram p95 increases **14.350–15.068 →
 87.269–91.633 ms**. All 400 canonically due intervals are observed. Trace-start
 cohorts contain 208/523 calls; their means are **7.622/37.669 ms**, loaded p95
@@ -180,7 +206,7 @@ Do not weaken authority locks or slow the workload merely to make it pass.
 
 ## Background preparation: expensive due scans and pending evaluations
 
-**Latest idle cost:** during 62.084 s of ingestion-only activity, PostgreSQL averages
+**Before scheduler correction:** during 62.084 s of ingestion-only activity, PostgreSQL averages
 **98.49% of one CPU**. `ReadDerivedDue` runs 127 times, totaling **40.260 s**
 (mean **317.006 ms**); `ListDueDerivedObjectives` runs 59 times, totaling
 **18.467 s** (mean **313.008 ms**). Only 402 current publications occur, totaling
@@ -202,9 +228,9 @@ ordered outputs and measures medians **398.850 → 30.092 ms** for due checks an
 **389.737 → 29.316 ms** for selection. When all versions mismatch, materialization
 instead adds **5.3/4.6 ms**; that tradeoff is retained. Fourteen integrated storage
 checks pass in **11.774 s**; six normal-container collection/SLO journeys pass in
-**254.440 s** with exact values. A new full-load result is still required.
+**254.440 s** with exact values. The combined control above verifies lower scheduler cost but still fails workload acceptance.
 
-**Latest loaded retries:** **7,866 waiting attempts /139.665 s cumulative duration**,
+**Before readiness correction:** **7,866 waiting attempts /139.665 s cumulative duration**,
 across all 200 opaque objective keys (39.33 attempts per key on average), versus
 13 publications. Same-outcome attempt starts average **3.898 s** apart. No captured
 SQLSTATE errors or failed `DeferCurrentPreparation` spans occur in those attempts.
