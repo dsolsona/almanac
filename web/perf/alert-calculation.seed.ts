@@ -4,6 +4,7 @@ import { api, expectOk, unique } from '../e2e/support/api.ts';
 import { psql, startAgent } from '../e2e/support/stack.ts';
 import { resourceSnapshot, writeResources } from './resources.ts';
 import { calculationBackfillDays, calculationFixtureVersion } from './alert-calculation.experiment.ts';
+import { publishedHistoryReadinessSQL } from './alert-calculation.readiness.ts';
 
 // F4-T02 experiment only: 200 SLIs/SLOs, one day of initial history.
 // Minute 17 is left absent in historical hours for genuine late insertion during load.
@@ -120,19 +121,15 @@ UPDATE public.almanac_sli_measurements SET effective_from = '${eligibleFrom}' WH
     slos.push({ id: created.body.id, sli: sli.id, expectedBudget: expectedBudget(sli.good) });
   }
 
-  // Preparation runs in the backend; measurement starts only once every SLO's history is published.
-  await expect.poll(async () => {
-    let cursor = '';
-    let ready = 0;
-    do {
-      const overview = await expectOk(api(page, 'GET', `/api/v1/slos/overview?limit=50${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`));
-      ready += overview.body.items.filter((item: { budget_history_state?: string }) => item.budget_history_state === 'ready').length;
-      cursor = overview.body.next_cursor ?? '';
-    } while (cursor);
-    return ready;
-  }, { timeout: 20 * 60_000, intervals: [10_000] }).toBe(SIZE);
+  // Published closed history is independent of continuously advancing current status.
+  // Pin the preparation boundary once; the subsequent workload still checks freshness,
+  // currentness, exact values and latency without changing any acceptance budget.
+  const historyClosedThrough = psql(`SELECT to_char(date_trunc('hour',now() AT TIME ZONE 'UTC'),'YYYY-MM-DD"T"HH24:MI:SS"Z"')`);
+  const readinessSQL = publishedHistoryReadinessSQL(slos.map((slo) => slo.id), historyClosedThrough);
+  await expect.poll(() => Number(psql(`BEGIN READ ONLY; SET LOCAL statement_timeout='10s'; ${readinessSQL}; COMMIT;`)),
+    { timeout: 20 * 60_000, intervals: [10_000] }).toBe(SIZE);
 
   writeFileSync('perf/.alert-fleet.json', JSON.stringify({ fixtureVersion: calculationFixtureVersion,
-    initialHistoryStart: start, eligibleFrom, backfillDays: calculationBackfillDays,
+    initialHistoryStart: start, eligibleFrom, historyClosedThrough, backfillDays: calculationBackfillDays,
     days: DAYS, size: SIZE, slis, slos, agentContainer }, null, 2));
 });

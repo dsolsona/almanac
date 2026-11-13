@@ -187,6 +187,16 @@ and how much that work contributes to ingestion/list tails. Global source
 generation changes and historical invalidation are relevant mechanisms, not yet
 a quantified attribution or authorization to change consistency semantics.
 
+**Code-level distinctions for the next control:** `waiting` includes retryable
+SQLSTATEs and exhausted source work as well as dirty interiors; joined cleanup
+failures can retain that label. The new child SQLSTATE and parented deferral spans
+must distinguish these before attributing the count. Ordinary missing observations
+alone are not pending. Current retries are deferred two seconds, while each source
+turn rebuilds at most 100 newest-first keys independently of the next 100 current
+objectives. The fixture's rolling window includes the older backfill, so short
+burn-window readiness does not imply complete current readiness. These mechanisms
+are supported by code; their contribution to the measured failures is not yet known.
+
 **Next:** group attempts by SLO/source generation and reason; decompose their child
 queries and compare with source publication progress. Reproduce redundant attempts
 with fixed time and specific dirty ranges. Any selection change must retain exact
@@ -229,6 +239,7 @@ These affect interpretation; they must not be reported as application fixes.
 
 | Finding | Evidence and correction | Remaining limitation |
 | --- | --- | --- |
+| Seed history readiness is coupled to live currentness | On `404b638`, all 200 persisted histories and closed-hour extrema were ready at 22:07:34 UTC, but the 22:10:53 API sweep returned 197 ready and 3 stale/preparing rows, all with history generations. The overview deliberately rewrites stale current projections' history state. The seed was interrupted after 9.5 minutes at that poll, preserving its report | A history-specific, revision/cache/extrema-checked predicate passes twelve rollback cases; a fresh seed remains pending. No measured workload started; this delay is not proof of historical calculation slowness. Subsequent currentness/accuracy/latency gates remain required |
 | PostgreSQL tmpfs competes with the VM's RAM | 6-GiB tmpfs on a roughly 3.85-GiB/no-swap VM; 895-MiB data +1,008-MiB WAL; available memory fell to 90 MiB. [Storage evidence](../slo-overview-performance/storage-isolation.json) records verified backup/restore and explicit disk-backed experiment | No matching OOM kill was found. Fresh disk runs still fail; do not attribute every earlier failure to memory |
 | SQL history precedes declared eligibility | 864,000 observations were outside both validity bounds. F4-T13 declares eligibility before seed and validates every planned range; corrected check finds zero invalid among 1,153,250 observations | Initial missing coverage changes, so legacy/corrected runs are not identical baselines. SQL history bypasses real historical grants/buffering/admission |
 | Oversized/cohosted/combined workload obscures attribution | Initial 12,000-row multi-SLI transactions became at most 720 rows for one SLI. Ten cohosted browsers became ten API clients plus one browser. F4-T13 separates baseline/candidate/paired query modes | Browser still shares server resources; remote capable-client acceptance is outstanding. Paired mode intentionally includes raw-oracle work |

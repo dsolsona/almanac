@@ -1,5 +1,5 @@
 export type CalculationMode = 'paired' | 'baseline-only' | 'candidate-only';
-export const calculationFixtureVersion = 'eligible-backfill-v2';
+export const calculationFixtureVersion = 'eligible-published-history-v3';
 export const calculationBackfillDays = 3;
 
 export function calculationMode(value: string | undefined): CalculationMode {

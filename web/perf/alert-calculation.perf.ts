@@ -49,10 +49,11 @@ test('200-SLI query contention across rollover and three-day backfill', async ({
   test.setTimeout(5 * 60_000);
   mkdirSync(root, { recursive: true });
   const fleet = JSON.parse(readFileSync('perf/.alert-fleet.json', 'utf8')) as {
-    fixtureVersion: string; initialHistoryStart: string; eligibleFrom: string; backfillDays: number;
+    fixtureVersion: string; initialHistoryStart: string; eligibleFrom: string; historyClosedThrough: string; backfillDays: number;
     slis: { id: string; good: number }[]; slos: { id: string }[];
   };
   expect(fleet.fixtureVersion, 'fresh eligible-backfill seed required').toBe(calculationFixtureVersion);
+  expect(fleet.historyClosedThrough).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:00:00Z$/);
   expect(fleet.backfillDays).toBe(calculationBackfillDays);
   expect(fleet.slis).toHaveLength(200);
   if (fleet.slis.some(s => !/^[0-9a-f-]{36}$/.test(s.id))) throw new Error('invalid fixture UUID');
@@ -113,7 +114,7 @@ JOIN (VALUES ${goods}) g(sli_id,good) USING(sli_id);`);
   writeFileSync(`${root}/ingestion-baseline.json`, JSON.stringify({ baselineStart, baselineEnd, ingestionOnly }, null, 2));
   const before = resourceSnapshot();
   const profile = { baseRevision: '35a6318', diagnosticCandidate: 'F4-T14 session inspection and trace correlation', postgresStorage, mode, fixtureVersion: calculationFixtureVersion,
-    initialHistoryStart: fleet.initialHistoryStart, eligibleFrom: fleet.eligibleFrom, backfillRanges: ranges,
+    initialHistoryStart: fleet.initialHistoryStart, eligibleFrom: fleet.eligibleFrom, historyClosedThrough: fleet.historyClosedThrough, backfillRanges: ranges,
     eligibilityCheckedSlis: eligibility.length,
     plannedQueryCalls: plannedCalculationCalls(mode, 800), independentReferenceEnabled: mode === 'paired',
     applicationImage: compose('images', '--quiet', 'app').trim(),
@@ -126,6 +127,7 @@ JOIN (VALUES ${goods}) g(sli_id,good) USING(sli_id);`);
       '../internal/storage/derived_worker.go', '../internal/storage/migrations/0054_maintenance_authority.sql',
       '../internal/storage/sessions.go', '../internal/storage/runtime_metrics.go', '../internal/storage/derived_trace.go',
       '../docs/evidence/alert-performance/observe-control.py',
+      'perf/alert-calculation.readiness.ts', 'perf/alert-calculation.readiness.sql',
       '../compose.e2e.disk.yaml', '../scripts/e2e.sh', 'e2e/support/stack.ts']
       .map(path => [path, createHash('sha256').update(readFileSync(path)).digest('hex')])),
     cpu: cpus()[0]?.model, logicalCPUs: cpus().length, memoryBytes: totalmem(),
