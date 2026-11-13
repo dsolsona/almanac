@@ -28,6 +28,7 @@ type Props = {
   badge?: (option: ComboboxOption) => string | undefined;
   noMatch?: { text: (term: string) => string; action?: { label: (term: string) => string; onSelect: (term: string) => void } };
   searchLabelOnly?: boolean;
+  selectionPresentation?: 'summary' | 'compact';
   multiple?: {selected: ComboboxOption[]; onRemove: (id:string)=>void; removeLabel?: (option:ComboboxOption)=>string};
   // The caller supplies filtered options when handling search.
   onSearch?: (term:string)=>void;
@@ -42,7 +43,7 @@ function highlight(text: string, term: string): ReactNode {
 
 // Type-ahead picker. Options show their state before selection; the chosen option
 // collapses to a summary card with a Change action that returns focus to the input.
-export function Combobox({ id, label, options, value, onChange, placeholder, hint, error, disabled, badge, noMatch, searchLabelOnly = false, multiple, onSearch }: Props) {
+export function Combobox({ id, label, options, value, onChange, placeholder, hint, error, disabled, badge, noMatch, searchLabelOnly = false, selectionPresentation = 'summary', multiple, onSearch }: Props) {
   const [term, setTerm] = useState('');
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
@@ -98,7 +99,10 @@ export function Combobox({ id, label, options, value, onChange, placeholder, hin
   if (selected && !multiple) {
     return <div className="ui-field">
       <span className="ui-label" id={`${id}-label`}>{label}</span>
-      <SelectionSummary
+      {selectionPresentation === 'compact' ? <div className={`ui-combobox__selection ui-control ${error ? 'ui-control--invalid' : ''}`} role="group" aria-labelledby={`${id}-label`} aria-describedby={describedBy}>
+        <span className="ui-combobox__selected-title" title={selected.label}>{selected.label}</span>
+        {!disabled && <button ref={changeButton} id={id} type="button" className="ui-summary__action" aria-label={`Change ${label}`} onClick={change}>Change</button>}
+      </div> : <SelectionSummary
         tone={selected.tone ?? 'none'}
         status={selected.status ?? 'Selected'}
         title={selected.label}
@@ -107,7 +111,7 @@ export function Combobox({ id, label, options, value, onChange, placeholder, hin
         message={selected.summaryMessage}
         variant={selected.tone === 'warning' || selected.tone === 'stale' ? 'warning' : 'default'}
         action={disabled ? undefined : { label: 'Change', onClick: change, ref: changeButton }}
-      />
+      />}
       {hint && <p className="ui-hint" id={hintId}>{hint}</p>}
       {error && <p className="ui-error" id={errorId} role="alert">{error}</p>}
     </div>;

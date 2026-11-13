@@ -1,3 +1,11 @@
+Alert policy form foundation, 2026-11-13: [F4-T09](tasks/F4-T09.md) implements
+the selected compact creation form as shared controls and a development catalogue
+example. Focused checks pass 45 component cases (5.82 s), typecheck and nine browser
+cases (37.6 s), including both themes and touch. Reviewed
+[screenshots and limits](evidence/alert-policy-form/README.md) distinguish this
+presentation increment from production API/engine acceptance. The calculation
+gate and subsequent implementation in plan 0035 remain open.
+
 Alerting follow-up [F4-T04](tasks/F4-T04.md) keeps SLO current status usable during
 preparation, with explicit last-known or unavailable evidence and preserved auth.
 Focused storage/frontend/browser checks pass; the next contention run completes

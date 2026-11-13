@@ -158,6 +158,14 @@ Operational controls (ADR-0028), demonstrated in the catalogue's Operational sec
   the input. Supplying `onSearch` delegates filtering to the caller; returned
   options are not filtered again by display text. This preserves API matches on
   UUIDs, labels and other metadata. Local pickers keep their normal text filter.
+  The opt-in compact selected presentation keeps the control height unchanged for
+  aligned form rows, with the selected title and a labelled Change action. Context
+  stays below the control; existing summary-card consumers keep their layout.
+- `InlineValue` presents an editable value as text until activated. Its owner holds
+  the active editor and raw draft; typing updates that draft, Enter/blur normalizes,
+  and Escape restores the original text. Input and display use matching geometry,
+  padded suffixes and associated errors. Invalid values remain visible and cannot
+  silently submit the previous value. The alert-policy catalogue demonstrates it.
 - `SelectionSummary` shows status, title, badge, detail, optional message and
   action; the warning variant uses the warning wash.
 - `FormSection` and `FormActions` compose create and edit forms as numbered

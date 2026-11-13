@@ -221,3 +221,6 @@ point inspection, completed-day blocks and structured disclosures under
 
 [F4-T05](F4-T05.md) adds the pure maintenance-exclusion calculation foundation;
 production storage and maintenance management remain separate work.
+
+[F4-T09](F4-T09.md) builds the approved policy form's reusable presentation controls
+and catalogue example; production alert operations remain gated separately.

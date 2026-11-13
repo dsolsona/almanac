@@ -187,3 +187,22 @@ describe('operational controls', () => {
     expect(onSelect).toHaveBeenCalledWith('zeta');
   });
 });
+
+describe('compact combobox selection', () => {
+  it('keeps the selected title and change action in a labelled control and restores search focus', async () => {
+    function CompactPicker() {
+      const [value, setValue] = useState<string | null>(null);
+      return <Combobox id="compact-slo" label="SLO" options={sources} value={value} onChange={setValue} selectionPresentation="compact" hint="Target context remains below the control." />;
+    }
+    const user = userEvent.setup();
+    render(<CompactPicker />);
+    await user.click(screen.getByRole('combobox', { name: 'SLO' }));
+    await user.keyboard('{ArrowDown}{Enter}');
+    expect(screen.getByRole('button', { name: 'Change SLO' })).toHaveFocus();
+    expect(screen.getByText('local-victoriametrics')).toBeVisible();
+    expect(screen.getByText('Target context remains below the control.')).toBeVisible();
+    expect(document.querySelector('.ui-summary')).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Change SLO' }));
+    expect(screen.getByRole('combobox', { name: 'SLO' })).toHaveFocus();
+  });
+});
