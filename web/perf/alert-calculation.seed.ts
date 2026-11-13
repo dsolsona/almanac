@@ -3,6 +3,7 @@ import { expect, test } from '@playwright/test';
 import { api, expectOk, unique } from '../e2e/support/api.ts';
 import { psql, startAgent } from '../e2e/support/stack.ts';
 import { resourceSnapshot, writeResources } from './resources.ts';
+import { calculationBackfillDays, calculationFixtureVersion } from './alert-calculation.experiment.ts';
 
 // F4-T02 experiment only: 200 SLIs/SLOs, one day of initial history.
 // Minute 17 is left absent in historical hours for genuine late insertion during load.
@@ -61,6 +62,9 @@ test('seed the isolated 200-SLI calculation experiment', async ({ page }) => {
   const marking = slis.map((sli) => markObservations.replaceAll('$1', `'${sli.id}'::uuid`)).join('\n');
   const goods = slis.map((sli) => `('${sli.id}'::uuid, ${sli.good})`).join(',');
   const start = psql(`SELECT to_char(date_trunc('minute', now() AT TIME ZONE 'UTC') - interval '${DAYS} days', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`);
+  // Later SQL backfill must lie inside the calculation's declared eligibility.
+  // Only the most recent day is initially populated; the older eligible days are missing.
+  const eligibleFrom = psql(`SELECT to_char('${start}'::timestamptz - interval '${calculationBackfillDays} days', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`);
   const chunks: string[] = [];
   for (let day = 0; day <= DAYS; day += 1) {
     const from = `'${start}'::timestamptz + interval '${day} days'`;
@@ -89,11 +93,11 @@ SELECT proof.*, g.good, first.first_live FROM (
 JOIN (VALUES ${goods}) AS g(sli_id, good) USING (sli_id)
 JOIN (SELECT sli_id, min(interval_start) AS first_live FROM public.almanac_sli_observations WHERE sli_id = ANY(${ids}) GROUP BY sli_id) first USING (sli_id);
 DO $$ DECLARE month date; BEGIN
-  FOR month IN SELECT generate_series(date_trunc('month', '${start}'::timestamptz), now(), interval '1 month')::date LOOP
+  FOR month IN SELECT generate_series(date_trunc('month', '${eligibleFrom}'::timestamptz), now(), interval '1 month')::date LOOP
     EXECUTE format('CREATE TABLE IF NOT EXISTS public.%I PARTITION OF public.almanac_sli_observations FOR VALUES FROM (%L) TO (%L)', 'almanac_sli_observations_' || to_char(month, 'YYYYMM'), month, month + interval '1 month');
   END LOOP;
 END $$;
-UPDATE public.almanac_sli_measurements SET effective_from = '${start}' WHERE sli_id = ANY(${ids});
+UPDATE public.almanac_sli_measurements SET effective_from = '${eligibleFrom}' WHERE sli_id = ANY(${ids});
 `);
   // One day per call keeps each call short and shows progress; a day is 20 × 1,440 intervals.
   for (const [day, chunk] of chunks.entries()) {
@@ -111,7 +115,7 @@ UPDATE public.almanac_sli_measurements SET effective_from = '${start}' WHERE sli
   for (const [index, sli] of slis.entries()) {
     const created = await expectOk(api(page, 'POST', '/api/v1/slos', {
       name: `perf-slo-${index}`, display_name: `Performance SLO ${String(index).padStart(2, '0')}`, service_id: services[index % services.length],
-      sli_id: sli.id, target: String(TARGET), rolling_window_seconds: 30 * 86400, evaluation_valid_from: start,
+      sli_id: sli.id, target: String(TARGET), rolling_window_seconds: 30 * 86400, evaluation_valid_from: eligibleFrom,
     }));
     slos.push({ id: created.body.id, sli: sli.id, expectedBudget: expectedBudget(sli.good) });
   }
@@ -128,5 +132,7 @@ UPDATE public.almanac_sli_measurements SET effective_from = '${start}' WHERE sli
     return ready;
   }, { timeout: 20 * 60_000, intervals: [10_000] }).toBe(SIZE);
 
-  writeFileSync('perf/.alert-fleet.json', JSON.stringify({ days: DAYS, size: SIZE, slis, slos, agentContainer }, null, 2));
+  writeFileSync('perf/.alert-fleet.json', JSON.stringify({ fixtureVersion: calculationFixtureVersion,
+    initialHistoryStart: start, eligibleFrom, backfillDays: calculationBackfillDays,
+    days: DAYS, size: SIZE, slis, slos, agentContainer }, null, 2));
 });

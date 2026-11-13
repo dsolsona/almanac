@@ -1,7 +1,12 @@
 # Implementation tasks
 
+[F4-T13](F4-T13.md) verifies calculation-fixture eligibility and isolated query
+modes. Its baseline-only control fails latency/browser gates without candidate or
+oracle queries; the harness is in review and calculation adoption remains open.
+
 [F4-T11](F4-T11.md) prepares one bounded source batch before due current work,
-preserving current fairness and repair wakeups; combined performance remains pending.
+preserving current fairness and repair wakeups; its combined run retained exact
+calculation and due ingestion but failed performance, which remains open.
 
 [F4-T01](F4-T01.md) tracks the draft alert engine/UI contracts and selected mocks.
 It is design review, not authorization for engine implementation.

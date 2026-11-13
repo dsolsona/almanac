@@ -1,10 +1,21 @@
+Calculation experiment controls, 2026-11-13: [F4-T13](tasks/F4-T13.md) has verified
+the eligible-backfill harness and isolated query modes; the increment is in review.
+Fourteen focused tests pass in 0.863 s after integration. The corrected seed passes
+in 249.071 s, but the [baseline-only control](evidence/alert-calculation/2026-11-13-baseline-only-control.json)
+fails in 182.838 s without candidate or oracle queries: ingestion p95 rises from
+12.4–13.0 ms to 62.0–65.1 ms, and a browser auth-context request returns 503.
+All 400 due intervals are present and no observations precede either validity
+bound. The lock blocker remains unknown; this is no capacity pass or causal
+attribution. Candidate-only and corrected paired measurements remain unrun;
+calculation adoption stays open. Earlier failures retain their validity limitation.
+
 Derived scheduling follow-up, 2026-11-13: [F4-T11](tasks/F4-T11.md) rebuilds one
 bounded source batch before due current projections, avoiding a reproduced
 one-turn waiting deferral. Integrated scheduler checks pass in 5.554 s; the
 [200-SLI diagnostic run](evidence/slo-overview-performance/2026-11-13-source-first-contention.json)
 matches all 3,200 windows and retains all due ingestion, but fails latency and
 browser completion. Its historical SQL fixture also predates declared validity;
-correct that fixture and add a matching control before further capacity claims.
+F4-T13 corrects that fixture and records a failed baseline-only control above.
 Calculation adoption and engine implementation remain pending.
 
 Selected alert detail presentation, 2026-11-13: [F4-T12](tasks/F4-T12.md) implements

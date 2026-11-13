@@ -6,11 +6,12 @@ import { expect, test, request as apiRequest, type Page } from '@playwright/test
 import { compose, composeArgs, postgresStorage, psql } from '../e2e/support/stack.ts';
 import { resourceSnapshot, ingestionBetween } from './resources.ts';
 import { ingestionMetrics, ingestionDelta } from './alert-calculation.metrics.ts';
+import { assertEligibleBackfill, calculationBackfillDays, calculationFixtureVersion, calculationMode,
+  experimentSQL, plannedCalculationCalls, verifyQueryEquivalence, type BackfillRange, type EligibilityBounds } from './alert-calculation.experiment.ts';
 
 // F4-T02: SQL prototype is installed only in the disposable almanac-e2e database.
 const root = '../.local/alert-calculation';
-const columns = 'ordinal integer,good text,total text,observed bigint,known_empty bigint,zero_traffic bigint,first_observation timestamptz,last_observation timestamptz,latest_receipt timestamptz,prepared boolean,exhausted boolean';
-const parameters = 'uuid,bigint,timestamptz[],timestamptz[],timestamptz[],timestamptz[],timestamptz[],timestamptz[],timestamptz[],timestamptz';
+const mode = calculationMode(process.env.ALERT_CALCULATION_MODE);
 
 function asynchronousSQL(sql: string, label: string): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -47,55 +48,26 @@ const count = (page: Page, route: string) => page.evaluate(route =>
 test('200-SLI query contention across rollover and three-day backfill', async ({ browser }) => {
   test.setTimeout(5 * 60_000);
   mkdirSync(root, { recursive: true });
-  const fleet = JSON.parse(readFileSync('perf/.alert-fleet.json', 'utf8')) as { slis: { id: string; good: number }[]; slos: { id: string }[] };
+  const fleet = JSON.parse(readFileSync('perf/.alert-fleet.json', 'utf8')) as {
+    fixtureVersion: string; initialHistoryStart: string; eligibleFrom: string; backfillDays: number;
+    slis: { id: string; good: number }[]; slos: { id: string }[];
+  };
+  expect(fleet.fixtureVersion, 'fresh eligible-backfill seed required').toBe(calculationFixtureVersion);
+  expect(fleet.backfillDays).toBe(calculationBackfillDays);
   expect(fleet.slis).toHaveLength(200);
   if (fleet.slis.some(s => !/^[0-9a-f-]{36}$/.test(s.id))) throw new Error('invalid fixture UUID');
   const candidate = readFileSync('../internal/storage/testdata/alert_window_fallback.sql', 'utf8');
   const generated = readFileSync('../internal/storage/dbgen/retained_window_batch.sql.go', 'utf8');
   const baseline = generated.match(/const readRetainedWindowBatch = `([\s\S]*?)`/)?.[1];
   if (!baseline) throw new Error('cannot read current generated baseline query');
-  psql(`CREATE FUNCTION public.alert_experiment_baseline(${parameters}) RETURNS TABLE(${columns}) LANGUAGE sql STABLE AS $query$${baseline}$query$;
-CREATE FUNCTION public.alert_experiment_candidate(${parameters},integer,integer) RETURNS TABLE(${columns},dirty_hours bigint,raw_rows bigint) LANGUAGE sql STABLE AS $query$${candidate}$query$;
-CREATE FUNCTION public.alert_experiment_compare(id uuid,cut timestamptz,candidate_first boolean) RETURNS jsonb LANGUAGE plpgsql AS $fn$
-DECLARE duration interval; start_at timestamptz; fs timestamptz; fe timestamptz; began timestamptz;
-ends timestamptz[]='{}'; starts timestamptz[]='{}'; finishes timestamptz[]='{}'; a timestamptz[]='{}'; b timestamptz[]='{}'; c timestamptz[]='{}'; d timestamptz[]='{}';
-base jsonb; proposed jsonb; reference jsonb; base_ms numeric; proposed_ms numeric;
-BEGIN
- FOREACH duration IN ARRAY ARRAY[interval '5 minutes',interval '1 hour',interval '30 minutes',interval '6 hours'] LOOP
-  start_at=cut-duration;fs=date_trunc('hour',start_at);IF fs<start_at THEN fs=fs+interval '1 hour';END IF;
-  fe=date_trunc('hour',cut);IF fs>fe THEN fs=cut;fe=cut;END IF;
-  ends=array_append(ends,cut);starts=array_append(starts,fs);finishes=array_append(finishes,fe);
-  a=array_append(a,start_at);b=array_append(b,fs);c=array_append(c,fe);d=array_append(d,cut);
- END LOOP;
- IF candidate_first THEN
-  began=clock_timestamp();SELECT jsonb_agg(to_jsonb(r)) INTO proposed FROM public.alert_experiment_candidate(id,1,ends,starts,finishes,a,b,c,d,cut+interval '10 seconds',8,7200) r;proposed_ms=extract(epoch FROM clock_timestamp()-began)*1000;
- END IF;
- began=clock_timestamp();SELECT jsonb_agg(to_jsonb(r)) INTO base FROM public.alert_experiment_baseline(id,1,ends,starts,finishes,a,b,c,d,cut+interval '10 seconds') r;base_ms=extract(epoch FROM clock_timestamp()-began)*1000;
- IF NOT candidate_first THEN
-  began=clock_timestamp();SELECT jsonb_agg(to_jsonb(r)) INTO proposed FROM public.alert_experiment_candidate(id,1,ends,starts,finishes,a,b,c,d,cut+interval '10 seconds',8,7200) r;proposed_ms=extract(epoch FROM clock_timestamp()-began)*1000;
- END IF;
- SELECT jsonb_agg(to_jsonb(r)) INTO reference FROM (
-  SELECT n AS ordinal,coalesce(sum(o.good_count) FILTER(WHERE o.outcome='observed'),0)::text AS good,
-   coalesce(sum(o.total_count) FILTER(WHERE o.outcome='observed'),0)::text AS total,
-   count(*) FILTER(WHERE o.outcome='observed') AS observed,count(*) FILTER(WHERE o.outcome='complete_empty') AS known_empty,
-   count(*) FILTER(WHERE o.outcome='observed' AND o.total_count=0) AS zero_traffic,
-   min(o.interval_start) FILTER(WHERE o.outcome='observed') AS first_observation,
-   max(o.interval_start+interval '1 minute') FILTER(WHERE o.outcome='observed') AS last_observation,max(o.recorded_at) AS latest_receipt
-  FROM generate_subscripts(ends,1) n LEFT JOIN public.almanac_sli_observations o
-   ON o.sli_id=id AND o.measurement_revision=1 AND o.interval_start>=a[n] AND o.interval_start<ends[n]
-   AND o.interval_start+interval '1 minute'<=ends[n] GROUP BY n ORDER BY n
- ) r;
- RETURN jsonb_build_object('sli',id,'cutoff',cut,'baseline_ms',base_ms,'candidate_ms',proposed_ms,'baseline',base,'candidate',proposed,'reference',reference,'at',clock_timestamp());
-END $fn$;`);
-
   const ids = fleet.slis.map(s => `'${s.id}'`).join(',');
   const goods = fleet.slis.map(s => `('${s.id}'::uuid,${s.good})`).join(',');
-  psql(`CREATE UNLOGGED TABLE public.alert_experiment_proofs AS
-SELECT p.*,g.good FROM (SELECT DISTINCT ON (sli_id) sli_id,measurement_revision,agent_id,session_generation,configuration_revision,lease_id
-FROM public.almanac_sli_observations WHERE sli_id=ANY(ARRAY[${ids}]::uuid[]) ORDER BY sli_id,interval_start DESC) p
-JOIN (VALUES ${goods}) g(sli_id,good) USING(sli_id);`);
+  expect(psql("SELECT to_regclass('public.alert_experiment_proofs') IS NULL"), 'each mode requires a fresh seed').toBe('t');
   const cutoff = psql("SELECT to_char(date_trunc('hour',now())-interval '2 hours','YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"')");
-  const initial = psql(`SELECT to_char(min(interval_start),'YYYY-MM-DD"T"HH24:MI:SS"Z"') FROM public.almanac_sli_observations WHERE sli_id=ANY(ARRAY[${ids}]::uuid[])`);
+  // Minute 17 is intentionally absent: the first observation may be later than
+  // the declared history boundary. Anchor all modes to the seeded boundary.
+  const initial = new Date(fleet.initialHistoryStart).toISOString();
+  const lateEnd = psql("SELECT to_char(date_trunc('minute',now())-interval '1 hour','YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"')");
   const marker = readFileSync('../internal/storage/testdata/mark_observation_fixture.sql', 'utf8');
   const insert = (sli: string, from: string, to: string, holes = false) => `BEGIN; SET LOCAL statement_timeout='5s'; SET LOCAL lock_timeout='250ms';
 INSERT INTO public.almanac_sli_observations(interval_start,sli_id,measurement_revision,outcome,good_count,total_count,result_digest,missing_components,execution_id,delivery_id,agent_id,session_generation,configuration_revision,lease_id,agent_created_at,recorded_at)
@@ -104,10 +76,32 @@ FROM public.alert_experiment_proofs p CROSS JOIN generate_series(${from},${to}-i
 WHERE p.sli_id='${sli}' ${holes ? 'AND extract(minute FROM point)=17' : ''} ON CONFLICT DO NOTHING;
 ${marker.replaceAll('$1', `'${sli}'::uuid`)} COMMIT;`;
   // Fill genuine late holes first, then flood the dirty queue with three older days.
-  const backfill = fleet.slis.map(s => insert(s.id, `'${initial}'::timestamptz`, `date_trunc('minute',now())-interval '1 hour'`, true));
-  for (let hour = 72; hour > 0; hour -= 12) {
-    for (const sli of fleet.slis) backfill.push(insert(sli.id, `'${initial}'::timestamptz-interval '${hour} hours'`, `'${initial}'::timestamptz-interval '${hour - 12} hours'`));
+  const ranges: (BackfillRange & { holes: boolean })[] = [{ from: initial, to: lateEnd, holes: true }];
+  for (let hour = calculationBackfillDays * 24; hour > 0; hour -= 12) {
+    ranges.push({ from: new Date(Date.parse(initial) - hour * 3600_000).toISOString(),
+      to: new Date(Date.parse(initial) - (hour - 12) * 3600_000).toISOString(), holes: false });
   }
+  const eligibility = JSON.parse(psql(`SELECT json_agg(json_build_object('sli',m.sli_id,
+ 'measurementEffectiveFrom',m.effective_from,'sloEvaluationValidFrom',d.evaluation_valid_from,'cadenceSeconds',d.cadence_seconds))
+FROM public.almanac_sli_measurements m JOIN public.almanac_slo_definitions d ON d.sli_id=m.sli_id AND d.measurement_revision=m.revision
+JOIN public.almanac_slos s ON s.id=d.slo_id AND s.definition_revision=d.revision
+WHERE m.sli_id=ANY(ARRAY[${ids}]::uuid[])`)) as (EligibilityBounds & { sli: string })[];
+  expect(eligibility).toHaveLength(200);
+  expect(new Set(eligibility.map(row => row.sli)).size).toBe(200);
+  for (const bounds of eligibility) {
+    assertEligibleBackfill(ranges, bounds);
+    expect(Date.parse(bounds.measurementEffectiveFrom)).toBe(Date.parse(fleet.eligibleFrom));
+    expect(Date.parse(bounds.sloEvaluationValidFrom)).toBe(Date.parse(fleet.eligibleFrom));
+  }
+  const backfill = ranges.flatMap(range => fleet.slis.map(s => insert(s.id,
+    `'${range.from}'::timestamptz`, `'${range.to}'::timestamptz`, range.holes)));
+  expect(backfill).toHaveLength(1400);
+  // Every planned insert is eligible before any experiment function/table is created.
+  psql(experimentSQL(mode, baseline, candidate));
+  psql(`CREATE UNLOGGED TABLE public.alert_experiment_proofs AS
+SELECT p.*,g.good FROM (SELECT DISTINCT ON (sli_id) sli_id,measurement_revision,agent_id,session_generation,configuration_revision,lease_id
+FROM public.almanac_sli_observations WHERE sli_id=ANY(ARRAY[${ids}]::uuid[]) ORDER BY sli_id,interval_start DESC) p
+JOIN (VALUES ${goods}) g(sli_id,good) USING(sli_id);`);
   const baselineStart = ingestionMetrics();
   let baselineEnd = baselineStart;
   await expect.poll(() => {
@@ -118,10 +112,13 @@ ${marker.replaceAll('$1', `'${sli}'::uuid`)} COMMIT;`;
   const ingestionOnly = ingestionDelta(baselineStart, baselineEnd);
   writeFileSync(`${root}/ingestion-baseline.json`, JSON.stringify({ baselineStart, baselineEnd, ingestionOnly }, null, 2));
   const before = resourceSnapshot();
-  const profile = { baseRevision: 'a6f47ca', postgresStorage,
+  const profile = { baseRevision: '58e2eb6', postgresStorage, mode, fixtureVersion: calculationFixtureVersion,
+    initialHistoryStart: fleet.initialHistoryStart, eligibleFrom: fleet.eligibleFrom, backfillRanges: ranges,
+    eligibilityCheckedSlis: eligibility.length,
+    plannedQueryCalls: plannedCalculationCalls(mode, 800), independentReferenceEnabled: mode === 'paired',
     applicationImage: compose('images', '--quiet', 'app').trim(),
     sourceHashes: Object.fromEntries(['../internal/storage/testdata/alert_window_fallback.sql',
-      'perf/alert-calculation.perf.ts', 'perf/alert-calculation.metrics.ts', 'perf/alert-calculation.seed.ts', 'playwright.alert-calculation.config.ts', '../compose.e2e.yaml', '../internal/storage/query/agent_access.sql', '../internal/storage/query/slis.sql', '../internal/storage/derived_current.go', '../internal/storage/query/derived_projections.sql', '../api/openapi.yaml', '../web/src/slos/SloDetailPanels.tsx',
+      'perf/alert-calculation.perf.ts', 'perf/alert-calculation.experiment.ts', 'perf/alert-calculation.metrics.ts', 'perf/alert-calculation.seed.ts', 'playwright.alert-calculation.config.ts', '../compose.e2e.yaml', '../internal/storage/query/agent_access.sql', '../internal/storage/query/slis.sql', '../internal/storage/derived_current.go', '../internal/storage/query/derived_projections.sql', '../api/openapi.yaml', '../web/src/slos/SloDetailPanels.tsx',
       '../internal/storage/query/derived_overview.sql', '../internal/storage/query/slo_list_references.sql',
       '../internal/storage/query/derived_due.sql', '../internal/storage/query/derived_consistency.sql',
       '../internal/storage/query/derived_metrics.sql', '../internal/storage/query/services.sql',
@@ -133,7 +130,7 @@ ${marker.replaceAll('$1', `'${sli}'::uuid`)} COMMIT;`;
     database: psql("SELECT version()"), slis: 200, initialDays: 1, backfillDays: 3,
     maxDirtyHours: 8, maxRawVisits: 7200, statementTimeoutMs: 1000, workers: 2,
     offeredBatchesPerSecond: 8, rounds: 4, cutoff, apiUsers: 10, apiMinimumCyclesPerUser: 10, apiCycleIntervalMs: 10000, browserUsers: 1, browserCycles: 20, backfillBatchMaxRows: 720, backfillBatchSLIs: 1, backfillBatches: backfill.length,
-    note: 'Controlled historical measurement cutoffs cross a UTC hour; wall-clock engine scheduling is outside this query experiment. Each paired query also runs an independent raw-population reference in the same snapshot; its extra work is part of the contention load.' };
+    note: `Controlled historical measurement cutoffs cross a UTC hour; wall-clock engine scheduling is outside this query experiment. ${mode === 'paired' ? 'Each paired query also runs an independent raw-population reference in the same snapshot; its extra work is part of the contention load.' : 'Single-query diagnostic control; no independent raw oracle or equivalence claim.'} Eligibility covers all backfill before initial seeding; initially missing older coverage differs from legacy fixtures.` };
   writeFileSync(`${root}/profile.json`, JSON.stringify(profile, null, 2));
   const queryWorkers = [0, 1].map(worker => {
     const statements: string[] = [];
@@ -253,18 +250,36 @@ SELECT public.alert_experiment_compare('${fleet.slis[index]!.id}','${cutoff}'::t
     FROM public.almanac_sli_observations WHERE recorded_at>='${before.at}' AND recorded_at<='${after.at}'
     AND interval_start>=date_trunc('minute','${before.at}'::timestamptz) AND sli_id=ANY(ARRAY[${ids}]::uuid[])`));
   const evidence = { profile, before, after, ingestionOnly, ingestionUnderLoad, metricsAfter, ingestedDuringLoad: ingestionBetween(before.at, after.at), due, live, timings, apiTimings, apiSamples,
+    completedQueryCalls: { baseline: 0, candidate: 0, reference: 0 },
+    equivalence: verifyQueryEquivalence(mode, [], 800),
     outcomes: settled.map(r => r.status === 'fulfilled' ? { status: r.status } : { status: r.status, error: String(r.reason) }) };
   writeFileSync(`${root}/results.json`, JSON.stringify(evidence, null, 2));
   const queries = [0,1].flatMap(worker => readFileSync(`${root}/queries-${worker}.jsonl`, 'utf8').split('\n')
-    .filter(line => line.startsWith('{')).map(line => JSON.parse(line))) as { baseline_ms: number; candidate_ms: number; baseline: { prepared: boolean }[]; candidate: { ordinal: number; prepared: boolean; dirty_hours: number; raw_rows: number; good: string; total: string; observed: number; [key: string]: unknown }[]; reference: { good: string; total: string; [key: string]: unknown }[]; sli: string }[];
-  const summary = { queryCount: queries.length, pendingBaseline: queries.filter(q => q.baseline.some(r => !r.prepared)).length,
-    pendingCandidate: queries.filter(q => q.candidate.some(r => !r.prepared)).length,
-    fallbackBatches: queries.filter(q => q.candidate.some(r => r.dirty_hours > 0)).length,
-    maxRawRows: Math.max(...queries.flatMap(q => q.candidate.map(r => r.raw_rows))),
-    baselineMs: queries.map(q => q.baseline_ms), candidateMs: queries.map(q => q.candidate_ms) };
+    .filter(line => line.startsWith('{')).map(line => JSON.parse(line))) as { mode: string; baseline_ms: number | null; candidate_ms: number | null;
+      baseline: { prepared: boolean }[] | null;
+      candidate: { ordinal: number; prepared: boolean; dirty_hours: number; raw_rows: number; good: string; total: string; observed: number; [key: string]: unknown }[] | null;
+      reference: { ordinal: number; good: string; total: string; [key: string]: unknown }[] | null; sli: string; cutoff: string }[];
+  evidence.completedQueryCalls = { baseline: queries.filter(q => Array.isArray(q.baseline)).length,
+    candidate: queries.filter(q => Array.isArray(q.candidate)).length, reference: queries.filter(q => Array.isArray(q.reference)).length };
+  evidence.equivalence = verifyQueryEquivalence(mode, queries, 800);
+  const summary = { mode, queryCount: queries.length, completedQueryCalls: evidence.completedQueryCalls,
+    independentReferenceEnabled: mode === 'paired', equivalence: evidence.equivalence,
+    pendingBaseline: mode === 'candidate-only' ? null : queries.filter(q => q.baseline?.some(r => !r.prepared)).length,
+    pendingCandidate: mode === 'baseline-only' ? null : queries.filter(q => q.candidate?.some(r => !r.prepared)).length,
+    fallbackBatches: mode === 'baseline-only' ? null : queries.filter(q => q.candidate?.some(r => r.dirty_hours > 0)).length,
+    maxRawRows: mode === 'baseline-only' ? null : Math.max(...queries.flatMap(q => q.candidate?.map(r => r.raw_rows) ?? [])),
+    baselineMs: queries.flatMap(q => q.baseline_ms === null ? [] : [q.baseline_ms]),
+    candidateMs: queries.flatMap(q => q.candidate_ms === null ? [] : [q.candidate_ms]) };
+  writeFileSync(`${root}/results.json`, JSON.stringify(evidence, null, 2));
   writeFileSync(`${root}/summary.json`, JSON.stringify(summary, null, 2));
   for (const outcome of settled) if (outcome.status === 'rejected') throw outcome.reason;
   expect(queries).toHaveLength(800);
+  expect(evidence.completedQueryCalls).toEqual(plannedCalculationCalls(mode, 800));
+  for (const query of queries) expect(query.mode).toBe(mode);
+  if (mode === 'paired') {
+    expect(evidence.equivalence.mismatches, 'exact canonical population equivalence').toEqual([]);
+    expect(evidence.equivalence.state, 'complete four-window equivalence evidence').toBe('matched');
+  }
   expect(ingestionUnderLoad.accepted).toBeGreaterThanOrEqual(20);
   expect(ingestionUnderLoad.unsuccessful).toBe(0);
   expect(ingestionUnderLoad.p95UpperSeconds).not.toBeNull();
@@ -273,12 +288,8 @@ SELECT public.alert_experiment_compare('${fleet.slis[index]!.id}','${cutoff}'::t
   expect(due.intervals, 'measurement must cover due work for the fleet').toBeGreaterThanOrEqual(200);
   expect(due.missing, 'every due live interval must arrive within the canonical allowance').toBe(0);
   expect(due.nonObserved).toBe(0);
-  expect(summary.fallbackBatches, 'contention must actually exercise dirty interiors').toBeGreaterThan(0);
-  for (const q of queries) for (const row of q.candidate) if (row.prepared) {
-    const raw = q.reference[row.ordinal - 1]!;
-    expect(Number(row.good)).toBe(Number(raw.good));
-    expect(Number(row.total)).toBe(Number(raw.total));
-    for (const key of ['observed','known_empty','zero_traffic','first_observation','last_observation','latest_receipt']) expect(row[key], key).toEqual(raw[key]);
+  if (mode !== 'baseline-only') expect(summary.fallbackBatches, 'contention must actually exercise dirty interiors').toBeGreaterThan(0);
+  for (const q of queries) for (const row of q.candidate ?? []) if (row.prepared) {
     expect(row.raw_rows).toBeLessThanOrEqual(7200);
   }
   for (const [name, values] of Object.entries(apiTimings)) {

@@ -1,0 +1,395 @@
+{
+  "result": "failed",
+  "seed": {
+    "passedTests": 2,
+    "reportDurationMS": 249071.406
+  },
+  "interpretation": "The baseline-only workload fails without the proposed fallback or raw oracle. This does not identify a causal fix, waive a gate, or establish capacity or calculation adoption.",
+  "browserFailure": {
+    "completedJourneys": 27,
+    "route": "POST /api/v1/auth/context",
+    "status": 503,
+    "at": "2026-11-13T20:53:21.943Z",
+    "traceID": "f1b5196e293496d6e95c02256b95f5c6",
+    "requestMS": 365.611208,
+    "failedOperation": "db.LockSessionUser",
+    "failedOperationMS": 256.081553,
+    "remainingUnknown": "Trace reports generic database operation failed. The 250ms read-only session lock budget is consistent with the timing, but SQLSTATE and lock-blocker identity were not established."
+  },
+  "traceObservations": {
+    "exportedRecords": 305635,
+    "exportSeconds": 12.865853608003817,
+    "analysis": "Deduplicated trace/span identifiers, restricted to workload phase; cumulative span durations are not wall-clock utilization or causal attribution.",
+    "currentWaiting": { "attempts": 6112, "cumulativeMS": 59698.168201 },
+    "currentPublished": { "attempts": 548, "cumulativeMS": 22347.147144 },
+    "overviewPage": { "samples": 124, "p95MS": 480.316721, "maximumMS": 611.114865 },
+    "overviewGroupCount": { "samples": 124, "p95MS": 25.588662, "maximumMS": 67.832733 }
+  },
+  "profile": {
+    "baseRevision": "58e2eb6",
+    "postgresStorage": "disk",
+    "mode": "baseline-only",
+    "fixtureVersion": "eligible-backfill-v2",
+    "initialHistoryStart": "2026-11-12T20:46:00Z",
+    "eligibleFrom": "2026-11-09T20:46:00Z",
+    "backfillRanges": [
+      {
+        "from": "2026-11-12T20:46:00.000Z",
+        "to": "2026-11-13T19:51:00Z",
+        "holes": true
+      },
+      {
+        "from": "2026-11-09T20:46:00.000Z",
+        "to": "2026-11-10T08:46:00.000Z",
+        "holes": false
+      },
+      {
+        "from": "2026-11-10T08:46:00.000Z",
+        "to": "2026-11-10T20:46:00.000Z",
+        "holes": false
+      },
+      {
+        "from": "2026-11-10T20:46:00.000Z",
+        "to": "2026-11-11T08:46:00.000Z",
+        "holes": false
+      },
+      {
+        "from": "2026-11-11T08:46:00.000Z",
+        "to": "2026-11-11T20:46:00.000Z",
+        "holes": false
+      },
+      {
+        "from": "2026-11-11T20:46:00.000Z",
+        "to": "2026-11-12T08:46:00.000Z",
+        "holes": false
+      },
+      {
+        "from": "2026-11-12T08:46:00.000Z",
+        "to": "2026-11-12T20:46:00.000Z",
+        "holes": false
+      }
+    ],
+    "eligibilityCheckedSlis": 200,
+    "plannedQueryCalls": {
+      "baseline": 800,
+      "candidate": 0,
+      "reference": 0
+    },
+    "independentReferenceEnabled": false,
+    "applicationImage": "87001e873922de2ed1911c440c775e43997b9abc6de38368aa0c9d0e1d584b99",
+    "sourceHashes": {
+      "../internal/storage/testdata/alert_window_fallback.sql": "2d7261617bf37a2c497103fe3f84a79a72365707bb2229f1b40537b909b6fa2e",
+      "perf/alert-calculation.perf.ts": "8efaf35f0d902c42f10a6506569463e44869da5a05dfc3556f7e4455d1052002",
+      "perf/alert-calculation.experiment.ts": "57ec2b904e19535bce51f4d3f580a08c0420c28e81f6e7c268013b912aaa9020",
+      "perf/alert-calculation.metrics.ts": "baa17bcd0604ced066e82941c96432d213f8402eaa7b1b15888a76f0f7ef8b41",
+      "perf/alert-calculation.seed.ts": "9203671a5cef0a5dc8c020eedb1127b972c08f10d7329c3b623b406a1257d4df",
+      "playwright.alert-calculation.config.ts": "1b1584176d7b468750b1f6cc1a84f4df47486777a03c425097fd834eba42a1a9",
+      "../compose.e2e.yaml": "4796baeef6c7f8195624098f6c58487818db39b68fac6e4811d8267739b9b4a1",
+      "../internal/storage/query/agent_access.sql": "a50453eaf48acc4655b5a683eeb739c3e6fc6a22468bd3fd981622b3030c6332",
+      "../internal/storage/query/slis.sql": "dd520547b3b05f0a41308c3e6405436d1c71586bd2760c52b94c025607d02499",
+      "../internal/storage/derived_current.go": "4a0992a791240024c320027984a78ac7b6e344ff4f9d0dc4274b12238427f92a",
+      "../internal/storage/query/derived_projections.sql": "3bec990efffc6a2d72ca3a6e64796473e7a2b11e13abcfdb8ba06186fd0f6ea7",
+      "../api/openapi.yaml": "8cee7e36a221268d0bb5e05c81f11a28d6e81107b3425b7dabe4f8bbe675b4d8",
+      "../web/src/slos/SloDetailPanels.tsx": "0fa0ff1e854445c99150ec9c7e53bad936826d29f110e37280935a48a58b824b",
+      "../internal/storage/query/derived_overview.sql": "e0fcb6d8ce72bc0ed0c75d4f67cde6d3e0371e62a0b35e651ac64cdca30e0c73",
+      "../internal/storage/query/slo_list_references.sql": "f8f88f270f0666992c1f3e5c5512328594c334d319fd8ba831be29f81f3b84ff",
+      "../internal/storage/query/derived_due.sql": "cfe2a7e1b25c02be497ba3eec2d03e3230a6efb1fd488ae666787bd943dd7aac",
+      "../internal/storage/query/derived_consistency.sql": "7f3a3750d5a6c836ff1c0835def45bce160c3f370357d987b14dd533f7a54da1",
+      "../internal/storage/query/derived_metrics.sql": "0294bc1319786323c8a42e1be514c5d7f8c8919bfd5b667458b5c311fb9d5495",
+      "../internal/storage/query/services.sql": "7b131e6b40c0dff327a18f034f7874cf03cce65074738fd05fb88e46093cc950",
+      "../internal/storage/query/derived_history.sql": "b362ef9a5a1a76a66a0665fdd9eafe9681effebe4e1d078eefe8fd9d8bd5a221",
+      "../internal/storage/migrations/0053_projection_validity_scalar.sql": "1d6a9cc03c682fdde665d94859e0d93693ba8a046bac154787ccbb8a687a76e6",
+      "../internal/storage/derived_worker.go": "5f9c5aeab1ff041914465e8044dcc5751e4d16a21dc5f88e6b8b2bc50dfe7194",
+      "../internal/storage/migrations/0054_maintenance_authority.sql": "38da4705c530300e16bbd461afee82d864516e0d67c696bdb215ee9cde29e5da",
+      "../compose.e2e.disk.yaml": "695de1b6c5004c7aa2a3b29b9bc91836c5486aee7cf1ad3a6839a2f50a556163",
+      "../scripts/e2e.sh": "31cd79161fe8ab6043044e4f1a9cfd7786682b21cddcf08d0dba6e067135ce9d",
+      "e2e/support/stack.ts": "61b3075ba186b4c4314109d761b6ac786c623e901556c848758403d6f3d4bc22"
+    },
+    "cpu": "AMD EPYC",
+    "logicalCPUs": 2,
+    "memoryBytes": 4130635776,
+    "database": "PostgreSQL 18.6 (Debian 18.6-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+    "slis": 200,
+    "initialDays": 1,
+    "backfillDays": 3,
+    "maxDirtyHours": 8,
+    "maxRawVisits": 7200,
+    "statementTimeoutMs": 1000,
+    "workers": 2,
+    "offeredBatchesPerSecond": 8,
+    "rounds": 4,
+    "cutoff": "2026-11-13T18:00:00Z",
+    "apiUsers": 10,
+    "apiMinimumCyclesPerUser": 10,
+    "apiCycleIntervalMs": 10000,
+    "browserUsers": 1,
+    "browserCycles": 20,
+    "backfillBatchMaxRows": 720,
+    "backfillBatchSLIs": 1,
+    "backfillBatches": 1400,
+    "note": "Controlled historical measurement cutoffs cross a UTC hour; wall-clock engine scheduling is outside this query experiment. Single-query diagnostic control; no independent raw oracle or equivalence claim. Eligibility covers all backfill before initial seeding; initially missing older coverage differs from legacy fixtures."
+  },
+  "phase": {
+    "before": "2026-11-13T20:52:51.062448+00:00",
+    "after": "2026-11-13T20:54:37.469058+00:00"
+  },
+  "reportDurationMS": 182837.95,
+  "queryLanes": [
+    {
+      "worker": 0,
+      "batches": 400,
+      "baselineCalls": 400,
+      "candidateCalls": 0,
+      "oracleCalls": 0,
+      "baselineTotalMS": 2796.186000000001,
+      "process": {
+        "startedAt": "2026-11-13T20:52:51.441Z",
+        "finishedAt": "2026-11-13T20:54:37.078Z"
+      },
+      "wallSeconds": 105.637
+    },
+    {
+      "worker": 1,
+      "batches": 400,
+      "baselineCalls": 400,
+      "candidateCalls": 0,
+      "oracleCalls": 0,
+      "baselineTotalMS": 2806.5979999999986,
+      "process": {
+        "startedAt": "2026-11-13T20:52:51.446Z",
+        "finishedAt": "2026-11-13T20:54:36.768Z"
+      },
+      "wallSeconds": 105.322
+    }
+  ],
+  "completedQueryCalls": {
+    "baseline": 800,
+    "candidate": 0,
+    "reference": 0
+  },
+  "actualArrayContractSatisfied": true,
+  "equivalence": {
+    "state": "not_checked",
+    "windows": 0,
+    "expectedWindows": 0,
+    "missingWindows": 0,
+    "mismatches": []
+  },
+  "pendingBaseline": 150,
+  "baselineMS": {
+    "samples": 800,
+    "p50": 5.6075,
+    "p95": 16.17,
+    "maximum": 54.434
+  },
+  "backfill": {
+    "startedAt": "2026-11-13T20:52:51.460Z",
+    "finishedAt": "2026-11-13T20:54:26.896Z",
+    "wallSeconds": 95.436
+  },
+  "completedBackfillBatches": 1400,
+  "ingestionOnly": {
+    "accepted": 209,
+    "duplicate": 0,
+    "unsuccessful": 0,
+    "p95LowerSeconds": 0.012396226,
+    "p95UpperSeconds": 0.013016037,
+    "elapsedSeconds": 61.634
+  },
+  "ingestionUnderLoad": {
+    "accepted": 344,
+    "duplicate": 0,
+    "unsuccessful": 0,
+    "p95LowerSeconds": 0.062020616,
+    "p95UpperSeconds": 0.065121646,
+    "elapsedSeconds": 106.772
+  },
+  "due": {
+    "intervals": 400,
+    "missing": 0,
+    "slisWithMissing": 0,
+    "nonObserved": 0
+  },
+  "live": {
+    "slis": 108,
+    "intervals": 108,
+    "maxReceiptDelaySeconds": 97.231685
+  },
+  "apiMS": {
+    "overview": {
+      "samples": 110,
+      "p50": 341.0281154999975,
+      "p95": 984.8231079999969,
+      "maximum": 1177.1650290000034
+    },
+    "status": {
+      "samples": 110,
+      "p50": 87.04541200000676,
+      "p95": 220.57508000000962,
+      "maximum": 350.4075589999993
+    },
+    "history": {
+      "samples": 110,
+      "p50": 206.90425149999646,
+      "p95": 358.8725309999936,
+      "maximum": 406.91665200001444
+    }
+  },
+  "browserMS": {
+    "list-cold": {
+      "samples": 7,
+      "p50": 1083.300000011921,
+      "p95": 1799.2999999970198,
+      "maximum": 1799.2999999970198
+    },
+    "list-warm": {
+      "samples": 7,
+      "p50": 583.0999999940395,
+      "p95": 631.7000000029802,
+      "maximum": 631.7000000029802
+    },
+    "detail-cold": {
+      "samples": 6,
+      "p50": 522.9499999955297,
+      "p95": 639.5999999940395,
+      "maximum": 639.5999999940395
+    },
+    "detail-warm": {
+      "samples": 7,
+      "p50": 227.3999999910593,
+      "p95": 352.29999999701977,
+      "maximum": 352.29999999701977
+    }
+  },
+  "apiErrors": [],
+  "outcomes": [
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "rejected",
+      "error": "Error: expect(received).toBe(expected) // Object.is equality\n\nExpected: \"ready\"\nReceived: \"error\""
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "fulfilled"
+    }
+  ],
+  "resources": {
+    "before": {
+      "at": "2026-11-13T20:52:51.062448+00:00",
+      "wal_lsn": "0/2EADFDF0",
+      "pg_stat_statements_installed": false,
+      "shared_preload_libraries": "",
+      "compute_query_id": "auto",
+      "pg_stat_statements_track": null,
+      "pg_stat_statements_preloaded": false,
+      "statement_counter_unavailable_reason": "pg_stat_statements requires server startup with shared_preload_libraries",
+      "statements": null
+    },
+    "after": {
+      "at": "2026-11-13T20:54:37.469058+00:00",
+      "wal_lsn": "0/AB8F3A78",
+      "pg_stat_statements_installed": false,
+      "shared_preload_libraries": "",
+      "compute_query_id": "auto",
+      "pg_stat_statements_track": null,
+      "pg_stat_statements_preloaded": false,
+      "statement_counter_unavailable_reason": "pg_stat_statements requires server startup with shared_preload_libraries",
+      "statements": null
+    }
+  },
+  "caveats": [
+    "Baseline-only diagnostic: candidate and raw oracle are absent; no independent equality claim.",
+    "Corrected eligibility changes initial missing coverage; legacy fixture timing is not an unchanged baseline.",
+    "Historical backfill still uses direct SQL with fixture provenance, bypassing historical agent grants/buffer/admission; live collection and ingestion are real.",
+    "Controlled historical cutoffs cross an hour, not actual wall-clock engine rollover.",
+    "Browser renderer shares the server VM; remote capable-client acceptance remains outstanding."
+  ],
+  "artifactHashes": {
+    "queries-0.process.json": "dc49140145966ddd60f915063440cebf50c532f504cf7e912b3fd39a05efd0cb",
+    "queries-0.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "summary.json": "59739274d845eab3da42f45887efacfcb39a46887c1290f44fb2db08b2019d38",
+    "queries-1.jsonl": "fc8cc2c668a5ca8881019b306f352afcc654d7f25231dc9879daeeda708960ad",
+    "queries-1.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "queries-0.jsonl": "1365cdb344bd54b90d37ce77336fef97b7861be9dbef1d07c85e88a14d60783d",
+    "ingestion-baseline.json": "997ddc7dccaee38f8e3fbde077c25177eca08c322f2932a23618f6b936af950e",
+    "queries-1.process.json": "b85775e317591b99e79429d4a83e94969995542d912b1db8d4b43e935e19f34f",
+    "backfill.process.json": "b0944349b3b82f00fc7d38a8232b8d87a177065122df5448decb40b8a708bab9",
+    "profile.json": "cf591d8b2bd3ffc70044ffa7d41d45cbdd251d54ae5c8b5cbdf055cae3619772",
+    "backfill.jsonl": "27923809486beb8b8e20aedc6a8e82763c933667c8c7342b31b3c6a5d8a0b3dc",
+    "backfill.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "results.json": "edb80d37db98723e7e3a0e8ecd854bf41a157b4a920b5bc1408ff15968732a19"
+  },
+  "hostMemory": {
+    "host-during-seed.txt": {
+      "MemTotal": 4130635776,
+      "MemAvailable": 2135859200,
+      "SwapTotal": 0,
+      "Shmem": 294563840
+    },
+    "host-before-workload.txt": {
+      "MemTotal": 4130635776,
+      "MemAvailable": 2476244992,
+      "SwapTotal": 0,
+      "Shmem": 301768704
+    },
+    "host-after-workload.txt": {
+      "MemTotal": 4130635776,
+      "MemAvailable": 2344767488,
+      "SwapTotal": 0,
+      "Shmem": 317358080
+    },
+    "host-before-seed.txt": {
+      "MemTotal": 4130635776,
+      "MemAvailable": 2350653440,
+      "SwapTotal": 0,
+      "Shmem": 332353536
+    }
+  },
+  "persistedValidityBounds": {
+    "slis": 200,
+    "earliest_observation": "2026-11-09T20:46:00+00:00",
+    "latest_observation": "2026-11-13T20:53:00+00:00",
+    "minimum_measurement_effective_from": "2026-11-09T20:46:00+00:00",
+    "maximum_measurement_effective_from": "2026-11-09T20:46:00+00:00",
+    "minimum_slo_evaluation_valid_from": "2026-11-09T20:46:00+00:00",
+    "maximum_slo_evaluation_valid_from": "2026-11-09T20:46:00+00:00",
+    "observations_before_measurement_effective_from": 0,
+    "observations_before_slo_evaluation_valid_from": 0,
+    "total_observations": 1153250,
+    "diagnosticSeconds": 1.2886319019889925
+  }
+}
