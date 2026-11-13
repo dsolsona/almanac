@@ -59,6 +59,25 @@ experiment tests SQL reshaping that reuses scalar selection and postpones metada
 construction until after pagination, preserving exact filter/keyset behavior.
 Planning policy, pool sizes, workload budgets and public responses stay unchanged.
 
+The subsequent [query reshape](2026-11-13-overview-reshape.json) reuses scalar
+classification and constructs metadata only after page selection. Two initial
+versions are rejected because maximum pages sort assembled JSON to disk. The
+corrected ordered-subquery boundary keeps both sorts in memory (126/208 KiB),
+with zero temporary I/O and exact generated-query results. Eight-reader prototype
+cohorts fall from 1,502/1,445 ms to 578/754 ms; focused PostgreSQL checks pass in
+15.188 s. [F4-T17](../../tasks/F4-T17.md) records implementation and verification;
+the [new loaded control](2026-11-13-overview-control.json) still fails. All 800
+baseline batches, 1,400 backfill batches, 80 browser journeys and 600 due intervals
+complete. Page SQL p95 is 317.589 ms; cold-list p95 is 1,626.8 ms. Two overview
+requests still fail pool admission before SQL at 253.345/257.390 ms. Ingestion p95
+is 28.412–29.833 ms alone versus 79.156–83.114 ms loaded. The same observer covers
+both phases without errors. No full performance or alert-calculation pass is claimed.
+
+The newly separated canonical-query parents show 4,784 calls/62.120 s in historical
+extrema rebuilding. Waiting current work still skips canonical sums. Maintenance
+and current-deferral writes remain competing work, with affected-row counts not
+yet captured; sparse lock samples do not identify a dominant ingestion blocker.
+
 ## Priorities
 
 Rank reflects observed user impact. Related symptoms are grouped; the suspected
@@ -67,10 +86,10 @@ integrated capacity pass.
 
 | Order | Issue | User impact | Bottleneck evidence | Current status |
 | --- | --- | --- | --- | --- |
-| 1 | Slow SLO overview and interactive admission exhaustion | Lists exceed one second; two API requests return 503 | Combined cold-list p95 1,993.6 ms; failed pool acquisitions take 250.1/251.3 ms | Page/transfer/resource cost and admission interference remain open |
-| 2 | Live ingestion slows under competing work | Latency isolation fails | Combined p95 18.3–19.2 → 75.4–79.2 ms; 541 accepted and all 400 due intervals present | Absolute p95 passes; relative limit fails |
+| 1 | Slow SLO overview and interactive admission exhaustion | Lists exceed one second; two API requests return 503 | Latest cold-list p95 1,626.8 ms; failed pool acquisitions take 253.3/257.4 ms | Page query p95 improves to 317.6 ms; transfer/resource and admission interference remain open |
+| 2 | Live ingestion slows under competing work | Latency isolation fails | Latest p95 28.4–29.8 → 79.2–83.1 ms; 529 accepted and all 600 due intervals present | Absolute p95 passes; relative limit fails |
 | 3 | Expensive scheduling and repeated pending calculations | Background work consumes capacity without publishing current values | Idle PostgreSQL ~49.5% of one CPU; due queries consume ~25.1 s in 62.6 s. Loaded phase has 8,226 waiting attempts /776 publications | Scheduler/readiness corrections verified; waiting calculations skip canonical sums; residual scheduling and load remain open |
-| 4 | Pending aggregate windows and unproven alert capacity | Proposed alert evaluations would retain pending boundaries | Combined 6/800 baseline batches pending; bounded fallback exactness has separate passing fixtures | Calculation-adoption gate remains open |
+| 4 | Pending aggregate windows and unproven alert capacity | Proposed alert evaluations would retain pending boundaries | Latest 102/800 baseline batches pending (prior six; publication progress differs); bounded fallback exactness has separate passing fixtures | Calculation-adoption gate remains open |
 | Corrected | Authentication fails during navigation | Previously prevented page opening | Shared inspection queries preserve authority; 40/40 loaded auth-context calls succeed and all 80 journeys complete | Original conflict corrected and verified under load; other 503s are pool admission failures |
 
 ## Authentication failures: corrected database lock contention

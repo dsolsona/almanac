@@ -1,3 +1,13 @@
+Overview query correction, 2026-11-13: [F4-T17](tasks/F4-T17.md) reduces redundant
+planning and page presentation work while preserving exact keyset results.
+Focused PostgreSQL checks pass in 15.188 s and normal-container seeding passes in
+267.802 s. The [full 200-SLO control](evidence/alert-performance/2026-11-13-overview-control.json)
+still fails: page SQL p95 improves to 317.589 ms, but cold-list p95 is 1.627 s,
+two overview requests fail pool admission and ingestion isolation remains outside
+budget. All 800 batches, 1,400 backfill batches, 80 browser journeys and 600 due
+intervals complete. Retained traces attribute most remaining canonical query work
+to historical extrema rebuilding; further causal investigation remains necessary.
+
 Combined performance control, 2026-11-13: [F4-T16](tasks/F4-T16.md) skips canonical
 aggregation for known-pending first windows while preserving snapshot/error order.
 Integrated storage checks pass in 11.497 s and the normal-container seed passes

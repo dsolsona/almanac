@@ -205,6 +205,10 @@ type Querier interface {
 	// Enrich only a bounded canonical page; missing receipt IDs use the caller's natural-key fallback.
 	ListSliObservations(ctx context.Context, arg ListSliObservationsParams) ([]ListSliObservationsRow, error)
 	ListSlis(ctx context.Context, arg ListSlisParams) ([]ListSlisRow, error)
+	// Reuse classification scalars without expanding them through every presentation
+	// expression. Fetch chart payloads and construct metadata only for the chosen page.
+	// Keep assembly above the scalar/reference sort, including maximum API pages.
+	// Expose order keys through the subquery so the outer order needs no payload sort.
 	ListSloOverviewPage(ctx context.Context, arg ListSloOverviewPageParams) ([]ListSloOverviewPageRow, error)
 	ListSloPreparationJobs(ctx context.Context, arg ListSloPreparationJobsParams) ([]ListSloPreparationJobsRow, error)
 	ListSloTimelineFacts(ctx context.Context, arg ListSloTimelineFactsParams) ([]ListSloTimelineFactsRow, error)

@@ -1,5 +1,8 @@
 # Implementation tasks
 
+[F4-T17](F4-T17.md) investigates and corrects overview startup/query work while
+preserving exact pages and avoiding maximum-page payload sorts.
+
 [F4-T16](F4-T16.md) avoids canonical sums for a known-pending first window while
 preserving snapshot and error-order semantics; combined workload verification follows.
 
