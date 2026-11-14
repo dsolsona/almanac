@@ -1,15 +1,12 @@
-Review consolidation, 2026-11-14: [F4-T28](tasks/F4-T28.md) closes validated
-review findings and the failed integration/collection checks before integrating
-the existing alerting stack. All 26 stack PRs are ready and their initial reviews
-have completed. New optimization work is paused. The maintainer authorized fixing
-valid feedback, refreshing reviews, merging the stack and resuming alerting delivery.
-This authorization does not itself adopt the experimental calculator or complete
-the production alert lifecycle. All four application CI gates pass on cumulative
-head `29035f2`. Its fresh CodeRabbit review identified additional maintenance,
-focus, documentation and diagnostic-evidence corrections; those are integrated
-and receive focused verification plus current-head CI before merge. The proposed
-extra migration lock is already supplied by its foreign keys; readiness evidence
-is recorded without imposing an incompatible ready-only HTTP gate.
+Review consolidation, 2026-11-14: [F4-T28](tasks/F4-T28.md) is integrated into main
+as `412d397` through PR #120. All 26 original stack heads and Merged PR states are
+verified. All four application CI gates pass on final candidate `ab58ecd`
+(3m49s/9m17s/7m12s/9m34s); CodeRabbit's incremental review completes successfully
+before merge, and final comments have corrections or concrete dispositions.
+Both task worktrees have pulled main. Separate documentation PR #84 remains open.
+New optimization work is paused. The checkpoint delivers reviewed pipeline,
+calculation, maintenance-authority and selected UI foundations; it does not adopt
+experimental fallback/capacity or complete the production alert lifecycle.
 
 Writer attribution, 2026-11-14: [F4-T26](tasks/F4-T26.md) exposes the existing
 explicit omission mode in the CPU-control workflow. Default complete controls

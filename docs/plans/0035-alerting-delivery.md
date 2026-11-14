@@ -57,3 +57,15 @@ Each stage receives concrete task records and focused commands before editing it
 production code. Do not start the engine by bypassing a failed calculation gate;
 resolve the evidence or document a justified alternative within the agreed design.
 No stage is done merely because a draft PR is open.
+
+### Unwired foundation sequence, 2026-11-14
+
+After the authorized stack integration, the primary chooses a bounded staging
+alternative under the maintainer's instruction to own implementation and work
+structure: [F4-T29](../tasks/F4-T29.md) first proves exact decisions and lifecycle
+reduction without any runtime, database or calculator adoption. Durable foundations
+can then consume deterministic supplied evidence before production adapter work.
+The failed calculation/capacity evidence remains failed. Calculator adoption,
+production integration/activation and release still require their contracts and
+acceptance; proposed architecture and public limits are not accepted by this
+sequencing choice. The earlier gate must not be misreported as passed.

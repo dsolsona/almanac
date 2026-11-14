@@ -1,5 +1,8 @@
 # Implementation tasks
 
+[F4-T29](F4-T29.md) implements the unwired exact alert domain increment under the
+maintainer's implementation ownership direction; calculation adoption remains gated.
+
 [F4-T28](F4-T28.md) closes valid alerting-stack review findings, diagnoses required
 check failures and integrates the authorized checkpoint before engine delivery resumes.
 
