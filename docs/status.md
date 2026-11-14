@@ -1,3 +1,9 @@
+Writer attribution, 2026-11-14: [F4-T26](tasks/F4-T26.md) exposes the existing
+explicit omission mode in the CPU-control workflow. Default complete controls
+retain all historical batches. Reduced controls record their mode and zero
+planned/actual writes; neither can silently substitute for capacity acceptance.
+The next diagnostic isolates writer pressure on the current application source.
+
 Resource-table verification, 2026-11-14: [F4-T25](tasks/F4-T25.md) traces the CI
 failure to a positional locator retargeted when sorting finishes after Back.
 The test waits for sorting and binds keyboard/source-link actions to captured

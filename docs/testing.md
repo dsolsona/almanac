@@ -37,6 +37,12 @@ isolates CPU placement, while memory, storage and kernel resources remain shared
 it does not replace remote-client or full acceptance evidence. Only allowlisted
 diagnostic artifacts are uploaded, never authentication files or browser traces.
 The default manual `standard` profile retains the ordinary suites and performance run.
+For attribution, the alert diagnostic additionally accepts `backfill=omitted-diagnostic`
+to omit its synthetic historical SQL writer while retaining live ingestion, all
+800 baseline calls, ten API clients and eighty browser journeys. This reduced
+workload cannot establish capacity acceptance. `backfill=enabled` remains the
+default complete control. The staged profile records the mode and planned work;
+writer timestamps, when enabled, disclose the elapsed offered-write pressure.
 In one checkout, run `make check` and `make test-e2e` sequentially: the catalogue
 runner clears `web/test-results`, which contains the E2E runner's output directory.
 CI jobs have separate workspaces and do not share these artifacts.

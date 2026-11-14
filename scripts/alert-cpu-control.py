@@ -250,11 +250,88 @@ def safe_resource(row):
     return output
 
 
-def stage_evidence(root, target, old_observers):
+def backfill_settings(mode):
+    if mode not in ('enabled', 'omitted-diagnostic'):
+        raise Failure('invalid_backfill_mode')
+    return {'backfill': mode, 'backfillBatches': 1400 if mode == 'enabled' else 0,
+            'fullWorkload': mode == 'enabled', 'capacityAcceptance': False}
+
+
+def stage_backfill(calculation, target, actual, mode):
+    settings = backfill_settings(mode)
+    planned = settings['backfillBatches']
+    errors, completed, times = [], [], []
+    safe = {'mode': mode, 'plannedBatches': planned, 'completedBatches': 0,
+            'fullWorkload': settings['fullWorkload'], 'capacityAcceptance': False,
+            'firstCompletedBatchAt': None, 'lastCompletedBatchAt': None,
+            'process': {'status': 'unavailable', 'startedAt': None, 'finishedAt': None}}
+    if (not isinstance(actual, dict) or actual.get('mode') != mode or
+            type(actual.get('plannedBatches')) is not int or actual['plannedBatches'] != planned or
+            actual.get('fullWorkload') is not settings['fullWorkload']):
+        errors.append('backfill_profile_mismatch')
+    output = calculation / 'backfill.jsonl'
+    process_path = calculation / 'backfill.process.json'
+    try:
+        if output.exists():
+            if output.stat().st_size > 16 * 1024 * 1024:
+                raise Failure('backfill_size_bound')
+            with output.open() as source:
+                for line in source:
+                    if len(line) > 65536:
+                        raise Failure('backfill_line_bound')
+                    if line.startswith('{'):
+                        entry = json.loads(line)
+                        batch = entry.get('completedBatch')
+                        if type(batch) is not int or not 0 <= batch < 1400:
+                            errors.append('invalid_backfill_batch')
+                            continue
+                        completed.append(batch)
+                        times.append(timestamp(entry.get('at')))
+        if mode == 'omitted-diagnostic':
+            # Even an empty SQL output file contradicts the no-client contract.
+            if output.exists():
+                errors.append('unexpected_backfill_output')
+            process = load(process_path)
+            if (process.get('state') != mode or process.get('plannedBatches') != 0 or
+                    process.get('startedAt') is not None or process.get('finishedAt') is not None or
+                    any(key in process for key in ('code', 'signal', 'killed', 'inputError'))):
+                errors.append('unexpected_backfill_process')
+            else:
+                safe['process']['status'] = mode
+        else:
+            if len(completed) != planned or len(set(completed)) != planned:
+                errors.append('incomplete_backfill')
+            if process_path.exists():
+                process = load(process_path)
+                started, finished = timestamp(process.get('startedAt')), timestamp(process.get('finishedAt'))
+                failed = any(process.get(key) for key in ('code', 'signal', 'killed', 'inputError'))
+                safe['process'] = {'startedAt': started, 'finishedAt': finished,
+                                   'status': 'failed' if failed else 'finished' if started and finished else 'incomplete'}
+                if failed:
+                    errors.append('backfill_process_failed')
+    except (OSError, ValueError, TypeError, AttributeError, Failure):
+        errors.append('backfill_artifact_unavailable')
+    safe['completedBatches'] = len(set(completed))
+    # JSONL order follows the single SQL client's completed-batch statements.
+    safe['firstCompletedBatchAt'] = times[0] if times else None
+    safe['lastCompletedBatchAt'] = times[-1] if times else None
+    write_json(target / 'backfill.json', safe)
+    return errors
+
+
+def stage_evidence(root, target, old_observers, backfill='enabled'):
     errors = []
     calculation = root / '.local/alert-calculation'
+    raw, actual_backfill = {}, None
     try:
         raw = load(calculation / 'results.json')
+        actual_backfill = raw.get('profile', {}).get('backfill')
+    except (OSError, ValueError, TypeError, AttributeError, Failure):
+        errors.append('workload_artifact_unavailable')
+    # Partial SQL/process evidence remains useful if the workload never wrote its
+    # final result. Missing profile/outcome still prevents complete evidence.
+    errors.extend(stage_backfill(calculation, target, actual_backfill, backfill))
+    try:
         safe = {'before': timestamp(raw.get('before', {}).get('at')), 'after': timestamp(raw.get('after', {}).get('at'))}
         baseline = load(calculation / 'ingestion-baseline.json')
         safe['baselineStart'] = timestamp(baseline.get('baselineStart', {}).get('at'))
@@ -277,20 +354,6 @@ def stage_evidence(root, target, old_observers):
                 len(safe['outcomes']) != 14 or any(v['status'] != 'fulfilled' for v in safe['outcomes']) or
                 safe['completedQueryCalls'] != {'baseline': 800, 'candidate': 0, 'reference': 0}):
             errors.append('incomplete_workload_result')
-        completed = []
-        if (calculation / 'backfill.jsonl').stat().st_size > 16 * 1024 * 1024:
-            raise Failure('backfill_size_bound')
-        with (calculation / 'backfill.jsonl').open() as source:
-            for line in source:
-                if len(line) > 65536:
-                    raise Failure('backfill_line_bound')
-                if line.startswith('{'):
-                    entry = json.loads(line)
-                    if isinstance(entry.get('completedBatch'), int) and 0 <= entry['completedBatch'] < 1400:
-                        completed.append(entry['completedBatch'])
-        write_json(target / 'backfill.json', {'plannedBatches': 1400, 'completedBatches': len(set(completed))})
-        if len(set(completed)) != 1400:
-            errors.append('incomplete_backfill')
         summary = load(calculation / 'summary.json')
         write_json(target / 'queries.json', numeric_fields(summary, ('queryCount', 'pendingBaseline')) |
                    {'baselineMS': [v for v in summary.get('baselineMs', []) if number(v)]})
@@ -408,10 +471,11 @@ def export_traces(root, target):
     return result
 
 
-def run(placement, root, command=None):
+def run(placement, root, command=None, backfill='enabled'):
     # All preconditions before Docker, affinity mutation or even artifact creation.
     try:
         profile = host_profile(placement)
+        profile.update(backfill_settings(backfill))
     except Failure:
         return 2
     target = root / '.local/alert-cpu-control-artifacts' / placement
@@ -435,7 +499,7 @@ def run(placement, root, command=None):
         finally:
             record['elapsedSeconds'] = time.monotonic() - started
     env = os.environ | {'E2E_POSTGRES_STORAGE': 'disk', 'ALERT_CALCULATION_MODE': 'baseline-only',
-                        'ALERT_BACKFILL_MODE': 'enabled', 'COMPOSE_PROJECT_NAME': 'almanac-e2e',
+                        'ALERT_BACKFILL_MODE': backfill, 'COMPOSE_PROJECT_NAME': 'almanac-e2e',
                         'E2E_BASE_URL': 'https://localhost:18188', 'E2E_PORT': '18188',
                         'E2E_METRICS_PORT': '18528', 'E2E_TRACES_PORT': '19528',
                         'E2E_METRICS_URL': 'http://localhost:18528', 'E2E_TRACES_URL': 'http://localhost:19528',
@@ -443,8 +507,8 @@ def run(placement, root, command=None):
                         'ALMANAC_LOKI_PORT': '13101', 'ALMANAC_TEMPO_PORT': '13201', 'ALMANAC_TEMPO_OTLP_PORT': '14319'}
     old_observers = set((root / '.local/runtime-observer').glob('*'))
     profile.update({'startedAt': now(), 'sourceHashes': {}, 'commands': command_records,
-                    'workload': {'mode': 'baseline-only', 'backfill': 'enabled', 'SLIs': 200,
-                                 'baselineCalls': 800, 'backfillBatches': 1400, 'browserJourneys': 80,
+                    'workload': {'mode': 'baseline-only', **backfill_settings(backfill), 'SLIs': 200,
+                                 'baselineCalls': 800, 'browserJourneys': 80,
                                  'APIUsers': 10, 'minimumCyclesPerAPIUser': 10, 'APICadenceSeconds': 10,
                                  'seedTestTimeoutSeconds': 1800, 'calculationTestTimeoutSeconds': 300}})
     for name in ('scripts/alert-cpu-control.py', 'scripts/e2e.sh', 'docs/evidence/alert-performance/observe-control.py',
@@ -503,7 +567,7 @@ def run(placement, root, command=None):
         failure, code = 'orchestration_failed', code or 1
     finally:
         try:
-            if not stage_evidence(root, target, old_observers):
+            if not stage_evidence(root, target, old_observers, backfill):
                 code = code or 1
             if not export_traces(root, target)['complete']:
                 code = code or 1
@@ -538,18 +602,19 @@ def run(placement, root, command=None):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--placement', required=True, choices=('shared', 'split'))
+    parser.add_argument('--backfill', choices=('enabled', 'omitted-diagnostic'), default='enabled')
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument('--check-host', action='store_true')
     mode.add_argument('--run', action='store_true')
     args = parser.parse_args()
     if args.check_host:
         try:
-            print(json.dumps(host_profile(args.placement)))
+            print(json.dumps(host_profile(args.placement) | backfill_settings(args.backfill)))
             return 0
         except Failure as error:
             print(json.dumps({'supported': False, 'error': error.code}))
             return 2
-    return run(args.placement, Path(__file__).resolve().parent.parent)
+    return run(args.placement, Path(__file__).resolve().parent.parent, backfill=args.backfill)
 
 
 if __name__ == '__main__':

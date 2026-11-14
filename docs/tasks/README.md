@@ -1,5 +1,8 @@
 # Implementation tasks
 
+[F4-T26](F4-T26.md) isolates synthetic historical write pressure using the existing
+explicit omission mode, preserving all remaining workload counts and budgets.
+
 [F4-T25](F4-T25.md) corrects a proved positional-locator race in the resource-table
 keyboard journey, preserving focus and exact navigation assertions.
 

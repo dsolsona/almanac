@@ -73,13 +73,135 @@ class ControlTests(unittest.TestCase):
         self.assertFalse(cpu.allowed(alien))
         self.assertFalse(cpu.allowed(container('e')))
 
-    def exercise(self, fail=None, mismatch=False):
+    def exercise(self, fail=None, mismatch=False, backfill=None):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); commands = Commands(root, fail, mismatch)
             with patch.object(cpu.os, 'sched_getaffinity', side_effect=[{2, 5, 8, 11}, {8, 11}]), patch.object(cpu.os, 'sched_setaffinity'), \
                     patch.object(cpu, 'stage_evidence', return_value=True), patch.object(cpu, 'export_traces', return_value={'complete': True}):
-                code = cpu.run('split', root, commands)
+                code = cpu.run('split', root, commands, **({'backfill': backfill} if backfill else {}))
             return code, commands.calls
+
+    def test_omitted_mode_reaches_original_seed_and_measurement(self):
+        code, calls = self.exercise(backfill='omitted-diagnostic')
+        self.assertEqual(code, 0)
+        for marker in ('--project=seed', '--run-baseline'):
+            call = next(call for call in calls if marker in call[0])
+            self.assertEqual(call[3]['ALERT_BACKFILL_MODE'], 'omitted-diagnostic')
+            self.assertEqual(call[3]['ALERT_CALCULATION_MODE'], 'baseline-only')
+
+    def test_cli_backfill_default_and_explicit_read_only_profile(self):
+        for option, expected in (([], 'enabled'), (['--backfill', 'omitted-diagnostic'], 'omitted-diagnostic')):
+            with patch.object(cpu.sys, 'argv', ['control', '--placement', 'shared', '--check-host'] + option), \
+                    patch.object(cpu.os, 'sched_getaffinity', return_value={2, 5, 8, 11}), \
+                    patch.object(cpu.os, 'sched_setaffinity') as affinity, patch.object(cpu, 'Commands') as commands, \
+                    patch.object(cpu, 'write_json') as write, patch('sys.stdout', new_callable=io.StringIO) as output:
+                self.assertEqual(cpu.main(), 0)
+                profile = json.loads(output.getvalue())
+                self.assertEqual(profile['backfill'], expected)
+                self.assertEqual(profile['fullWorkload'], expected == 'enabled')
+                self.assertFalse(profile['capacityAcceptance'])
+                affinity.assert_not_called(); commands.assert_not_called(); write.assert_not_called()
+
+    def staged_fixture(self, root, mode):
+        """Complete bookkeeping input, not a simulated performance acceptance."""
+        calc = root / '.local/alert-calculation'; calc.mkdir(parents=True)
+        observer = root / '.local/runtime-observer/new'; observer.mkdir(parents=True)
+        at = '2026-11-14T10:00:00Z'
+        raw = {'before': {'at': at}, 'after': {'at': '2026-11-14T10:03:00Z'},
+               'profile': {'backfill': {'mode': mode, 'availableBatches': 1400,
+                    'plannedBatches': 1400 if mode == 'enabled' else 0, 'fullWorkload': mode == 'enabled'}},
+               'timings': {key: [1200] * 20 for key in ('list-cold', 'list-warm', 'detail-cold', 'detail-warm')},
+               'apiTimings': {key: [1200] * 100 for key in ('overview', 'status', 'history')},
+               'outcomes': [{'status': 'fulfilled'}] * 14,
+               'completedQueryCalls': {'baseline': 800, 'candidate': 0, 'reference': 0}}
+        cpu.write_json(calc / 'results.json', raw)
+        cpu.write_json(calc / 'ingestion-baseline.json', {'baselineStart': {'at': at}, 'baselineEnd': {'at': at}})
+        cpu.write_json(calc / 'summary.json', {'queryCount': 800, 'baselineMs': [1]})
+        if mode == 'enabled':
+            with (calc / 'backfill.jsonl').open('w') as output:
+                for index in range(1400):
+                    output.write(json.dumps({'completedBatch': index, 'at': at if index < 1399 else '2026-11-14T10:02:00Z',
+                                             'secret': 'PRIVATE_BATCH'}) + '\n')
+            cpu.write_json(calc / 'backfill.process.json', {'startedAt': at, 'finishedAt': '2026-11-14T10:02:01Z',
+                                                         'private': 'PRIVATE_PROCESS'})
+        else:
+            cpu.write_json(calc / 'backfill.process.json', {'state': 'omitted-diagnostic', 'startedAt': None,
+                                                         'finishedAt': None, 'plannedBatches': 0})
+        cpu.write_json(observer / 'result.json', {'workload_exit_code': 1, 'samples': {'database': 1, 'resources': 1},
+            'samplers_completed': {'database': True, 'resources': True}, 'processes_terminated': True, 'errors': []})
+        (observer / 'database.jsonl').write_text(json.dumps({'at': at, 'backends': []}) + '\n')
+        (observer / 'resources.jsonl').write_text(json.dumps({'at': at, 'resource': {'CPUPerc': '12.0%'}}) + '\n')
+        return calc, raw
+
+    def test_backfill_bookkeeping_and_timestamps_are_safe_in_both_modes(self):
+        for mode in ('enabled', 'omitted-diagnostic'):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory); target = root / 'safe'; target.mkdir()
+                self.staged_fixture(root, mode)
+                self.assertTrue(cpu.stage_evidence(root, target, set(), mode))
+                staged = json.loads((target / 'backfill.json').read_text())
+                self.assertEqual(staged['plannedBatches'], 1400 if mode == 'enabled' else 0)
+                self.assertEqual(staged['completedBatches'], staged['plannedBatches'])
+                self.assertEqual(staged['fullWorkload'], mode == 'enabled')
+                self.assertFalse(staged['capacityAcceptance'])
+                if mode == 'enabled':
+                    self.assertEqual(staged['firstCompletedBatchAt'], '2026-11-14T10:00:00+00:00')
+                    self.assertEqual(staged['lastCompletedBatchAt'], '2026-11-14T10:02:00+00:00')
+                    self.assertEqual(staged['process']['finishedAt'], '2026-11-14T10:02:01+00:00')
+                else:
+                    self.assertIsNone(staged['firstCompletedBatchAt'])
+                    self.assertEqual(staged['process']['status'], 'omitted-diagnostic')
+                self.assertNotIn('PRIVATE', ''.join(p.read_text() for p in target.iterdir()))
+
+    def test_backfill_profile_mismatch_and_unexpected_writes_fail(self):
+        for mutation in ('wrong_mode', 'wrong_count', 'wrong_full_workload', 'unexpected_batch', 'empty_output', 'started_process'):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory); target = root / 'safe'; target.mkdir()
+                calc, raw = self.staged_fixture(root, 'omitted-diagnostic')
+                if mutation == 'wrong_mode': raw['profile']['backfill']['mode'] = 'enabled'
+                if mutation == 'wrong_count': raw['profile']['backfill']['plannedBatches'] = 1400
+                if mutation == 'wrong_full_workload': raw['profile']['backfill']['fullWorkload'] = True
+                if mutation == 'unexpected_batch': (calc / 'backfill.jsonl').write_text('{"completedBatch":0,"at":"2026-11-14T10:00:00Z"}\n')
+                if mutation == 'empty_output': (calc / 'backfill.jsonl').write_text('')
+                if mutation == 'started_process': cpu.write_json(calc / 'backfill.process.json', {'startedAt': '2026-11-14T10:00:00Z'})
+                cpu.write_json(calc / 'results.json', raw)
+                self.assertFalse(cpu.stage_evidence(root, target, set(), 'omitted-diagnostic'))
+                if mutation == 'unexpected_batch':
+                    staged = json.loads((target / 'backfill.json').read_text())
+                    self.assertEqual(staged['completedBatches'], 1)
+
+    def test_backfill_missing_boundary_timestamp_is_not_replaced_by_middle_batch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); target = root / 'safe'; target.mkdir()
+            calc, _ = self.staged_fixture(root, 'enabled')
+            path = calc / 'backfill.jsonl'
+            rows = [json.loads(line) for line in path.read_text().splitlines()]
+            rows[0].pop('at'); rows[-1].pop('at')
+            path.write_text(''.join(json.dumps(row) + '\n' for row in rows))
+            self.assertTrue(cpu.stage_evidence(root, target, set()))
+            staged = json.loads((target / 'backfill.json').read_text())
+            self.assertIsNone(staged['firstCompletedBatchAt'])
+            self.assertIsNone(staged['lastCompletedBatchAt'])
+
+    def test_backfill_timings_survive_missing_final_workload_result(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); target = root / 'safe'; target.mkdir()
+            calc, _ = self.staged_fixture(root, 'enabled')
+            (calc / 'results.json').unlink()
+            self.assertFalse(cpu.stage_evidence(root, target, set()))
+            staged = json.loads((target / 'backfill.json').read_text())
+            self.assertEqual(staged['completedBatches'], 1400)
+            self.assertEqual(staged['lastCompletedBatchAt'], '2026-11-14T10:02:00+00:00')
+
+    def test_enabled_missing_or_extra_batch_fails(self):
+        for mutation in ('missing', 'extra'):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory); target = root / 'safe'; target.mkdir()
+                calc, _ = self.staged_fixture(root, 'enabled')
+                path = calc / 'backfill.jsonl'
+                lines = path.read_text().splitlines()
+                path.write_text('\n'.join(lines[:-1] if mutation == 'missing' else lines + ['{"completedBatch":1400}']) + '\n')
+                self.assertFalse(cpu.stage_evidence(root, target, set()))
 
     def test_new_seed_agent_pinned_and_original_workload_invoked(self):
         code, calls = self.exercise()
