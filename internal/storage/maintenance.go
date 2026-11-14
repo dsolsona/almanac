@@ -352,7 +352,7 @@ func maintenancePermission(op, role string, old MaintenanceRecord, input CreateM
 			return ErrMaintenanceInvalid
 		}
 	case "end":
-		if old.Start.After(now) || !old.End.After(now) || !input.End.After(now) || !input.End.After(old.Start) {
+		if old.Start.After(now) || !old.End.After(now) || !input.End.After(now) || !input.End.After(old.Start) || !input.End.Before(old.End) {
 			return ErrAgentForbidden
 		}
 		return nil
