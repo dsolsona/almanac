@@ -113,7 +113,7 @@ JOIN (VALUES ${goods}) g(sli_id,good) USING(sli_id);`);
   const ingestionOnly = ingestionDelta(baselineStart, baselineEnd);
   writeFileSync(`${root}/ingestion-baseline.json`, JSON.stringify({ baselineStart, baselineEnd, ingestionOnly }, null, 2));
   const before = resourceSnapshot();
-  const profile = { baseRevision: 'f71c55e', diagnosticCandidate: 'F4-T17 bounded overview planning and presentation', postgresStorage, mode, fixtureVersion: calculationFixtureVersion,
+  const profile = { baseRevision: 'd40690e', diagnosticCandidate: 'F4-T18 bounded unsuccessful historical turns', postgresStorage, mode, fixtureVersion: calculationFixtureVersion,
     initialHistoryStart: fleet.initialHistoryStart, eligibleFrom: fleet.eligibleFrom, historyClosedThrough: fleet.historyClosedThrough, backfillRanges: ranges,
     eligibilityCheckedSlis: eligibility.length,
     plannedQueryCalls: plannedCalculationCalls(mode, 800), independentReferenceEnabled: mode === 'paired',
@@ -127,7 +127,7 @@ JOIN (VALUES ${goods}) g(sli_id,good) USING(sli_id);`);
       '../internal/storage/query/retained_window_batch.sql', '../internal/storage/dbgen/derived_readiness.sql.go',
       '../internal/storage/query/derived_metrics.sql', '../internal/storage/query/services.sql',
       '../internal/storage/query/derived_history.sql', '../internal/storage/migrations/0053_projection_validity_scalar.sql',
-      '../internal/storage/derived_worker.go', '../internal/storage/migrations/0054_maintenance_authority.sql',
+      '../internal/storage/derived_worker.go', '../internal/storage/derived_history.go', '../internal/storage/migrations/0054_maintenance_authority.sql',
       '../internal/storage/sessions.go', '../internal/storage/runtime_metrics.go', '../internal/storage/derived_trace.go',
       '../docs/evidence/alert-performance/observe-control.py',
       'perf/alert-calculation.readiness.ts', 'perf/alert-calculation.readiness.sql',

@@ -1,5 +1,8 @@
 # Implementation tasks
 
+[F4-T18](F4-T18.md) bounds unsuccessful historical turns without skipping window
+validation, changing durable retry rules or slowing successful draining.
+
 [F4-T17](F4-T17.md) investigates and corrects overview startup/query work while
 preserving exact pages and avoiding maximum-page payload sorts.
 

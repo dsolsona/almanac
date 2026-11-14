@@ -1,0 +1,249 @@
+{
+  "scope": "F4-T18 pending history retry diagnosis; not capacity acceptance",
+  "dependencyRevision": "d40690e",
+  "priorControlTraceCohorts": {
+    "rootCounts": {
+      "waiting": 3451,
+      "extrema": 484
+    },
+    "queryCounts": {
+      "waiting": {
+        "db.ReadRetainedWindowBatch": 3451,
+        "db.ReadDerivedWindowReadiness": 523
+      },
+      "extrema": {
+        "db.AdvanceSloExtremaCursor": 483,
+        "db.PublishSloExtrema": 1815,
+        "db.ReadSloExtremaHours": 483,
+        "db.ReadRetainedWindowBatch": 1333,
+        "db.ReadDerivedWindowReadiness": 1080
+      }
+    },
+    "cumulativeQueryMs": {
+      "waiting": {
+        "db.ReadRetainedWindowBatch": 47165.72930700005,
+        "db.ReadDerivedWindowReadiness": 787.8475910000002
+      },
+      "extrema": {
+        "db.AdvanceSloExtremaCursor": 526.9502359999996,
+        "db.PublishSloExtrema": 3256.9427310000015,
+        "db.ReadSloExtremaHours": 1898.9373320000002,
+        "db.ReadRetainedWindowBatch": 14954.147323999996,
+        "db.ReadDerivedWindowReadiness": 818.6949850000004
+      }
+    },
+    "seconds": 1.7563747100066394
+  },
+  "tailPendingReproduction": {
+    "failed": false,
+    "automaticSamples": [
+      {
+        "rows": 240,
+        "firstPending": 237,
+        "hash": "5cfd213c2e8a19e5dcc70f3b443d43213b29a184b1bfdf604d3a9bc88162f94a",
+        "index": 0,
+        "clientMs": 5.794167,
+        "generic": 0,
+        "custom": 1
+      },
+      {
+        "index": 1,
+        "clientMs": 4.803373,
+        "generic": 0,
+        "custom": 2,
+        "rows": 240,
+        "firstPending": 237,
+        "hash": "5cfd213c2e8a19e5dcc70f3b443d43213b29a184b1bfdf604d3a9bc88162f94a"
+      },
+      {
+        "rows": 240,
+        "firstPending": 237,
+        "hash": "5cfd213c2e8a19e5dcc70f3b443d43213b29a184b1bfdf604d3a9bc88162f94a",
+        "index": 2,
+        "clientMs": 4.845159,
+        "generic": 0,
+        "custom": 3
+      },
+      {
+        "rows": 240,
+        "firstPending": 237,
+        "hash": "5cfd213c2e8a19e5dcc70f3b443d43213b29a184b1bfdf604d3a9bc88162f94a",
+        "index": 3,
+        "clientMs": 5.720802,
+        "generic": 0,
+        "custom": 4
+      },
+      {
+        "generic": 0,
+        "custom": 5,
+        "rows": 240,
+        "firstPending": 237,
+        "hash": "5cfd213c2e8a19e5dcc70f3b443d43213b29a184b1bfdf604d3a9bc88162f94a",
+        "index": 4,
+        "clientMs": 4.157401
+      },
+      {
+        "hash": "5cfd213c2e8a19e5dcc70f3b443d43213b29a184b1bfdf604d3a9bc88162f94a",
+        "index": 5,
+        "clientMs": 7.496784,
+        "generic": 0,
+        "custom": 6,
+        "rows": 240,
+        "firstPending": 237
+      },
+      {
+        "custom": 7,
+        "rows": 240,
+        "firstPending": 237,
+        "hash": "5cfd213c2e8a19e5dcc70f3b443d43213b29a184b1bfdf604d3a9bc88162f94a",
+        "index": 6,
+        "clientMs": 3.833856,
+        "generic": 0
+      },
+      {
+        "rows": 240,
+        "firstPending": 237,
+        "hash": "5cfd213c2e8a19e5dcc70f3b443d43213b29a184b1bfdf604d3a9bc88162f94a",
+        "index": 7,
+        "clientMs": 4.091709,
+        "generic": 0,
+        "custom": 8
+      },
+      {
+        "generic": 0,
+        "custom": 9,
+        "rows": 240,
+        "firstPending": 237,
+        "hash": "5cfd213c2e8a19e5dcc70f3b443d43213b29a184b1bfdf604d3a9bc88162f94a",
+        "index": 8,
+        "clientMs": 4.028575
+      },
+      {
+        "custom": 10,
+        "rows": 240,
+        "firstPending": 237,
+        "hash": "5cfd213c2e8a19e5dcc70f3b443d43213b29a184b1bfdf604d3a9bc88162f94a",
+        "index": 9,
+        "clientMs": 3.622932,
+        "generic": 0
+      },
+      {
+        "hash": "5cfd213c2e8a19e5dcc70f3b443d43213b29a184b1bfdf604d3a9bc88162f94a",
+        "index": 10,
+        "clientMs": 3.701503,
+        "generic": 0,
+        "custom": 11,
+        "rows": 240,
+        "firstPending": 237
+      },
+      {
+        "custom": 12,
+        "rows": 240,
+        "firstPending": 237,
+        "hash": "5cfd213c2e8a19e5dcc70f3b443d43213b29a184b1bfdf604d3a9bc88162f94a",
+        "index": 11,
+        "clientMs": 3.676003,
+        "generic": 0
+      }
+    ],
+    "waitingWorker": {
+      "cursorUnchanged": true,
+      "publishedRows": 0,
+      "queryCount": 10
+    },
+    "recoveryAdvanced": true,
+    "elapsedSeconds": 0.512714215
+  },
+  "plans": {
+    "auto": [
+      {
+        "planningMs": 2.539,
+        "executionMs": 3.666,
+        "sharedHitBlocks": 514,
+        "artifactSHA256": "9f421218e2974b0061a93e10ba8bdeb45b9305f9f7911e1be2821bca480ff86b"
+      },
+      {
+        "planningMs": 1.685,
+        "executionMs": 3.298,
+        "sharedHitBlocks": 514,
+        "artifactSHA256": "e38864641e41b45e138a0a3d8e62930c079fc044479732e3df14171b9870e2a2"
+      },
+      {
+        "planningMs": 1.851,
+        "executionMs": 2.912,
+        "sharedHitBlocks": 514,
+        "artifactSHA256": "917e6dabd436014334594e44c1e08567314fce30a2bbae305888805bec02619b"
+      }
+    ],
+    "force_custom_plan": [
+      {
+        "planningMs": 2.168,
+        "executionMs": 2.927,
+        "sharedHitBlocks": 514,
+        "artifactSHA256": "89d694e83e11ebc04932862cbdb956aae1531b465c6c7a70aeaf5f996c57eff0"
+      },
+      {
+        "planningMs": 1.61,
+        "executionMs": 3.085,
+        "sharedHitBlocks": 514,
+        "artifactSHA256": "86974153319c5deac0e1a2d769aa2ddfd039fadad18b03bf52f6de75cddc9185"
+      },
+      {
+        "planningMs": 1.575,
+        "executionMs": 2.861,
+        "sharedHitBlocks": 514,
+        "artifactSHA256": "3c8825287d50cd6ecbaaf212448e5059567a450eb25e2ddaa0cb3f0f63200116"
+      }
+    ],
+    "force_generic_plan": [
+      {
+        "planningMs": 0.967,
+        "executionMs": 3.176,
+        "sharedHitBlocks": 514,
+        "artifactSHA256": "f609b95a3d6a4668dd52f2efdb391f10d462fe451da61c542fd482933f8ab1f1"
+      },
+      {
+        "planningMs": 0.807,
+        "executionMs": 3.52,
+        "sharedHitBlocks": 514,
+        "artifactSHA256": "d8ba68c968835b71f5a521952fe4a98990e5205aa626afb9484f36fa33c2a24e"
+      },
+      {
+        "planningMs": 0.826,
+        "executionMs": 3.19,
+        "sharedHitBlocks": 514,
+        "artifactSHA256": "6fae4a7af34471133bb2891135b8c5222e4c54f8fce1830284309a78bb3dfc17"
+      }
+    ]
+  },
+  "testPackageSeconds": 0.627,
+  "failedLaunches": [
+    "Make/shell quoting rejected the command before tests.",
+    "Overlay used the host path instead of /workspace and selected no tests; this was detected and is not a passing reproduction."
+  ],
+  "schedulingRegression": {
+    "redPackageSeconds": 0.448,
+    "expectedFailure": "Work finishing at 16:00:03 returned a next wakeup at 16:00:00.010, consuming its pause.",
+    "greenPackageSeconds": 3.498,
+    "topLevelTests": 7,
+    "coverage": [
+      "pending post-completion pause",
+      "released pool connections",
+      "durable retry/attempt/cursor preservation",
+      "exact recovered 990/1000 inputs",
+      "successful immediate draining",
+      "locked cursor scheduling",
+      "15/60/70/7200-second cadence",
+      "lease and arrival/version fences",
+      "first-day bounded prefix queries",
+      "earlier inconsistent facts before later pending"
+    ],
+    "fairnessExtensionSeconds": 0.391,
+    "fixtureFailure": "The first ready-neighbor setup reused the single-SLO session-issuance helper and collided with its fixed verifier (0.314 s); corrected by creating the second SLO with the existing authenticated session."
+  },
+  "limitations": [
+    "Fixed isolated fixture and query plans do not prove loaded history readiness or ingestion isolation.",
+    "The possible multi-hour rollback mechanism was not present in waiting turns in the preceding control.",
+    "No global PostgreSQL planning-policy change is adopted."
+  ]
+}

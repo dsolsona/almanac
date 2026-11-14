@@ -1,3 +1,16 @@
+Historical retry pacing, 2026-11-14: [F4-T18](tasks/F4-T18.md) preserves calculation
+order and durable work while pausing after unsuccessful history turns. Focused
+checks pass in 3.498 s, fairness in 0.391 s and normal-container seeding in 217.459 s.
+The [full control](evidence/alert-performance/2026-11-14-history-retry-control.json)
+completes all 800 calculations, 1,400 backfill batches, 80 browser journeys and
+400 due intervals without API errors. Waiting historical query time falls to
+5.261 s while successful cursor advances increase to 823. Acceptance still fails:
+cold-list p95 1.531 s and ingestion p95 87–92 ms versus 17 ms alone. The same SQL
+backfill now finishes faster, increasing offered write pressure; further attribution
+and production-admission evidence remain necessary. The preceding
+[PR #111](https://github.com/dsolsona/almanac/pull/111) passes all four CI gates.
+No merge or alert-calculation adoption is authorized.
+
 Overview query correction, 2026-11-13: [F4-T17](tasks/F4-T17.md) reduces redundant
 planning and page presentation work while preserving exact keyset results.
 Focused PostgreSQL checks pass in 15.188 s and normal-container seeding passes in
