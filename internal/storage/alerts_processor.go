@@ -108,7 +108,7 @@ func (r *Runtime) processAlertClaim(ctx context.Context, claim alertClaim, optio
 		if errors.Is(err, ErrAlertStale) {
 			reason = "snapshot_changed"
 		}
-		deferred := r.deferAlertWork(ctx, claim, clock, normalizedAgentNow(clock).Add(options.PendingRetry), reason)
+		deferred := r.deferAlertWork(ctx, claim, clock, options.PendingRetry, reason)
 		if errors.Is(deferred, ErrAlertStale) {
 			return "stale", nil
 		}

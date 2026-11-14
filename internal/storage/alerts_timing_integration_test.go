@@ -32,7 +32,7 @@ func TestIntegrationAlertDeferralExpiresWhileWaiting(t *testing.T) {
 	readClock := func() time.Time { return time.Unix(0, clock.Load()).UTC() }
 	done := make(chan error, 1)
 	go func() {
-		done <- f.runtime.deferAlertWork(t.Context(), claim, readClock, f.at.Add(2*time.Minute), "aggregation_pending")
+		done <- f.runtime.deferAlertWork(t.Context(), claim, readClock, time.Second, "aggregation_pending")
 	}()
 	observer := integrationConnect(t, f.f.databaseURL)
 	defer closeIntegrationConn(observer)
@@ -47,6 +47,52 @@ func TestIntegrationAlertDeferralExpiresWhileWaiting(t *testing.T) {
 	reclaimed, err := f.runtime.claimAlertWork(t.Context(), readClock(), readClock(), time.Minute, 1)
 	if err != nil || len(reclaimed) != 1 || !reclaimed[0].ScheduledAt.Equal(claim.ScheduledAt) {
 		t.Fatalf("expired work was delayed or advanced: %+v %v", reclaimed, err)
+	}
+}
+
+func TestIntegrationAlertDeferralRetryElapsesWhileWaiting(t *testing.T) {
+	t.Parallel()
+	f := newAlertTestFixture(t)
+	f.policy(t, "Deferred retry wait")
+	claim := f.claim(t, f.at)
+	var clock atomic.Int64
+	clock.Store(f.at.Add(time.Second).UnixNano())
+	readClock := func() time.Time { return time.Unix(0, clock.Load()).UTC() }
+	pin, err := f.runtime.pinAlertCutoff(t.Context(), claim, readClock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tx, err := f.conn.Begin(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rollbackTransaction(tx)
+	if _, err := dbgen.New(tx).LockAlertCursor(t.Context(), dbgen.LockAlertCursorParams{PolicyID: mustPGUUID(claim.PolicyID), Revision: claim.Revision}); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() {
+		done <- f.runtime.deferAlertWork(t.Context(), claim, readClock, 10*time.Millisecond, "aggregate_pending")
+	}()
+	observer := integrationConnect(t, f.f.databaseURL)
+	defer closeIntegrationConn(observer)
+	waitForAgentQueryWait(t, observer, "%almanac_alert_cursors%")
+	clock.Store(f.at.Add(time.Second + 20*time.Millisecond).UnixNano())
+	if err := tx.Rollback(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-done; err != nil {
+		t.Fatalf("pending retry elapsed during lock wait: %v", err)
+	}
+	var next, cutoff, available time.Time
+	var attempts int
+	var held bool
+	var reason string
+	if err := f.conn.QueryRow(t.Context(), `SELECT next_scheduled_at,pending_cutoff,available_at,failure_attempts,claim_token IS NOT NULL,waiting_reason FROM almanac_alert_cursors WHERE policy_id=$1`, claim.PolicyID).Scan(&next, &cutoff, &available, &attempts, &held, &reason); err != nil {
+		t.Fatal(err)
+	}
+	if !next.Equal(claim.ScheduledAt) || !cutoff.Equal(pin) || !available.Equal(f.at.Add(time.Second+30*time.Millisecond)) || attempts != 0 || held || reason != "aggregate_pending" {
+		t.Fatalf("pending lost boundary or retry state: next=%s cutoff=%s available=%s attempts=%d held=%v reason=%s", next, cutoff, available, attempts, held, reason)
 	}
 }
 
