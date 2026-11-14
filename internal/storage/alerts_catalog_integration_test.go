@@ -77,6 +77,54 @@ func TestIntegrationAlertCatalogPaginationAndGrouping(t *testing.T) {
 	if _, err := ListAlerts(t.Context(), f.f.databaseURL, input); !errors.Is(err, ErrAlertInvalid) {
 		t.Fatalf("cursor reused with changed filter: %v", err)
 	}
+	input = alertCatalogInput(f)
+	input.GroupBy, input.Sort = "slo", "severity"
+	grouped := map[string]bool{}
+	groupSizes := map[string]int{}
+	priority := map[string]int{"high": 0, "medium": 1, "low": 2}
+	var previousSLO string
+	previousPriority := -1
+	for pageNumber := range 3 {
+		page, err := ListAlerts(t.Context(), f.f.databaseURL, input)
+		if err != nil || page.Total != 6 || len(page.Items) != 2 {
+			t.Fatalf("grouped severity page %d: %+v %v", pageNumber, page, err)
+		}
+		pageSLOs := map[string]bool{}
+		for _, item := range page.Items {
+			id := item.Alert.Occurrence.ID
+			if grouped[id] || !seen[id] {
+				t.Fatalf("grouped pagination duplicated or invented occurrence %s", id)
+			}
+			grouped[id] = true
+			if item.SLOID < previousSLO || item.SLOID == previousSLO && priority[item.Severity] < previousPriority {
+				t.Fatalf("grouped severity order regressed: previous=%s/%d current=%s/%s", previousSLO, previousPriority, item.SLOID, item.Severity)
+			}
+			previousSLO, previousPriority = item.SLOID, priority[item.Severity]
+			groupSizes[item.SLOID]++
+			pageSLOs[item.SLOID] = true
+		}
+		if len(page.Groups) != len(pageSLOs) || pageNumber == 1 && len(page.Groups) != 2 {
+			t.Fatalf("cross-group page lost group metadata: %+v", page)
+		}
+		for _, group := range page.Groups {
+			if !pageSLOs[group.SLOID] || group.Total != 3 {
+				t.Fatalf("group total is not global filtered total: %+v", group)
+			}
+			delete(pageSLOs, group.SLOID)
+		}
+		if pageNumber < 2 && page.NextCursor == "" || pageNumber == 2 && page.NextCursor != "" {
+			t.Fatalf("incorrect grouped continuation on page %d: %q", pageNumber, page.NextCursor)
+		}
+		input.Cursor = page.NextCursor
+	}
+	if len(grouped) != 6 || len(groupSizes) != 2 {
+		t.Fatalf("grouped pagination omitted rows: occurrences=%d groups=%v", len(grouped), groupSizes)
+	}
+	for id, count := range groupSizes {
+		if count != 3 {
+			t.Fatalf("SLO %s lost occurrences: %d", id, count)
+		}
+	}
 	for _, search := range []string{"%", "_"} {
 		input = alertCatalogInput(f)
 		input.Filter.Search = search
@@ -222,5 +270,51 @@ func TestIntegrationAlertCatalogPoliciesBeforeFiring(t *testing.T) {
 	page, err = ListAlertPolicies(t.Context(), f.f.databaseURL, input)
 	if err != nil || page.Total != 1 || page.Items[0].Policy.ID != disabled || page.Items[0].Policy.Enabled || page.Items[0].Processing.Schedulable {
 		t.Fatalf("disabled policy filter: %+v %v", page, err)
+	}
+}
+
+func TestIntegrationAlertCatalogReadAuthority(t *testing.T) {
+	t.Parallel()
+	f := newAlertTestFixture(t)
+	f.policy(t, "Viewer catalogue")
+	f.drain(t, "viewer catalogue")
+	if got, err := f.runtime.processAlertTick(t.Context(), f.at, alertProcessorTestOptions(f), f.clock); err != nil || got.Evaluations != 1 {
+		t.Fatalf("seed catalogue: %+v %v", got, err)
+	}
+	input := alertCatalogInput(f)
+	policies := ListAlertPoliciesInput{Runtime: f.runtime, Proof: input.Proof, Now: f.clock, Limit: 2}
+	setIntegrationUserRole(t, f.f, "viewer")
+	page, err := ListAlerts(t.Context(), f.f.databaseURL, input)
+	if err != nil || page.Total != 1 || len(page.Items) != 1 {
+		t.Fatalf("viewer cannot read occurrence catalogue: %+v %v", page, err)
+	}
+	saved, err := ListAlertPolicies(t.Context(), f.f.databaseURL, policies)
+	if err != nil || saved.Total != 1 || len(saved.Items) != 1 {
+		t.Fatalf("viewer cannot read policy catalogue: %+v %v", saved, err)
+	}
+	if _, err := f.conn.Exec(t.Context(), `UPDATE almanac_sessions SET restricted=true WHERE verifier=$1`, input.Proof.SessionVerifier[:]); err != nil {
+		t.Fatal(err)
+	}
+	page, err = ListAlerts(t.Context(), f.f.databaseURL, input)
+	if !errors.Is(err, ErrAgentForbidden) || len(page.Items) != 0 || page.Total != 0 {
+		t.Fatalf("restricted session received occurrence catalogue: %+v %v", page, err)
+	}
+	saved, err = ListAlertPolicies(t.Context(), f.f.databaseURL, policies)
+	if !errors.Is(err, ErrAgentForbidden) || len(saved.Items) != 0 || saved.Total != 0 {
+		t.Fatalf("restricted session received policy catalogue: %+v %v", saved, err)
+	}
+	if _, err := f.conn.Exec(t.Context(), `UPDATE almanac_sessions SET restricted=false WHERE verifier=$1`, input.Proof.SessionVerifier[:]); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := RevokeSession(t.Context(), f.f.databaseURL, input.Proof.SessionVerifier, f.now, "revoke-catalogue"); err != nil {
+		t.Fatal(err)
+	}
+	page, err = ListAlerts(t.Context(), f.f.databaseURL, input)
+	if !errors.Is(err, ErrInvalidSession) || len(page.Items) != 0 || page.Total != 0 {
+		t.Fatalf("revoked session received occurrence catalogue: %+v %v", page, err)
+	}
+	saved, err = ListAlertPolicies(t.Context(), f.f.databaseURL, policies)
+	if !errors.Is(err, ErrInvalidSession) || len(saved.Items) != 0 || saved.Total != 0 {
+		t.Fatalf("revoked session received policy catalogue: %+v %v", saved, err)
 	}
 }
