@@ -94,16 +94,22 @@ test('resource lists share the services table, sort all results, and open select
   await expect(page).toHaveURL(new RegExp(href!.replace(/[?]/g,'\\?')+'$'));
   await page.goBack();
   await expect(page.locator('.ui-resource-table tbody tr').first()).toBeVisible();
-  const nameLink=rows.first().locator('td').first().locator('a').first();
-  const keyboardHref=await nameLink.getAttribute('href');
-  await nameLink.focus(); await page.keyboard.press('Enter');
+  // Back restores visible page rows before the complete global sort finishes.
+  // Bind the action to a resource, since a positional locator can change targets.
+  await expect(page.locator('.ui-resource-table th[aria-sort="descending"]')).toHaveCount(1);
+  const keyboardHref=await rows.first().locator('td').first().locator('a').first().getAttribute('href');
+  const nameLink=page.locator(`.ui-resource-table a[href="${keyboardHref}"]`);
+  await nameLink.focus();
+  await expect(nameLink).toBeFocused();
+  await page.keyboard.press('Enter');
   await expect(page).toHaveURL(new RegExp(keyboardHref!.replace(/[?]/g,'\\?')+'$'));
   await page.goBack();
   await expect(rows.first()).toBeVisible();
+  await expect(page.locator('.ui-resource-table th[aria-sort="descending"]')).toHaveCount(1);
   if(resource==='slis'){
    const sourceLink=rows.first().locator('a[href^="/datasources/"]');
    const sourceHref=await sourceLink.getAttribute('href');
-   await sourceLink.click();
+   await page.locator(`.ui-resource-table a[href="${sourceHref}"]`).first().click();
    await expect(page).toHaveURL(new RegExp(sourceHref!+'$'));
    await page.goBack();
   }

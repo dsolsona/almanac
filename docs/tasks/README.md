@@ -1,5 +1,8 @@
 # Implementation tasks
 
+[F4-T25](F4-T25.md) corrects a proved positional-locator race in the resource-table
+keyboard journey, preserving focus and exact navigation assertions.
+
 [F4-T24](F4-T24.md) profiles historical rebuild CPU and defers decimal formatting
 until exact extrema selection, with canonical equality and workload validation.
 

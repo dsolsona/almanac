@@ -1,3 +1,10 @@
+Resource-table verification, 2026-11-14: [F4-T25](tasks/F4-T25.md) traces the CI
+failure to a positional locator retargeted when sorting finishes after Back.
+The test waits for sorting and binds keyboard/source-link actions to captured
+resource hrefs. The actual onboarding/resource-table journey passes in 22.9 s;
+independent review finds no actionable defects. Broad CI follows on the corrected
+candidate; original failed evidence is retained.
+
 Historical CPU correction, 2026-11-14: [F4-T24](tasks/F4-T24.md) identifies eager
 decimal formatting before extrema selection. The scoped change keeps exact
 summaries until selection; focused canonical/oracle/odd-cadence/retention checks
