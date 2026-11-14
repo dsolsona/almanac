@@ -75,6 +75,7 @@ query = """SELECT jsonb_build_object('at',clock_timestamp(),'observer_pid',pg_ba
  ) sample));
 """
 profile = {'started_at': now(), 'mode': 'smoke' if args.smoke else 'baseline-only',
+           'backfill_mode': os.environ.get('ALERT_BACKFILL_MODE', 'enabled'),
            'sample_interval_seconds': 0.1, 'database_statement_timeout_ms': 250,
            'database_lock_timeout_ms': 100, 'max_output_bytes_per_stream': 16 * 1024 * 1024,
            'containers': sorted(containers), 'postgres': postgres[0],

@@ -101,6 +101,35 @@ in 129.404 s, so its offered write pressure increases; minimum pacing is not a
 fixed arrival rate. The next attribution must retain that distinction and the
 historical SQL path's missing production admission.
 
+## Cold-list critical path and write attribution
+
+[F4-T19](../../tasks/F4-T19.md) keeps the cold list first in priority. The
+[matched browser traces](2026-11-14-cold-list-breakdown.json) cover all twenty cold
+loads; fourteen exceed one second. In the p95 and maximum samples, overview JSON
+is complete at 935.3/886.3 ms, but content/chart readiness is at 1,511.5/1,705.9 ms.
+The resulting 576.2/819.6-ms gaps include uninstrumented validation, React/module
+work and sparkline rendering. No list trace contains `ui.chart.render`. Font waits
+are only 3.3/0.2 ms; assets arrive early. These are matched spans, not subtraction
+of unrelated percentiles.
+
+The [explicit no-backfill diagnostic](2026-11-14-write-attribution.json) preserves
+application code, live ingestion, 800 baseline queries, ten API clients and all
+80 browser journeys. It performs zero historical batches and is marked ineligible
+for capacity evidence. Cold-list p95/max remains 1,223.8/1,414 ms; warm-list and
+both detail cohorts have all samples below one second. No API errors or due-work
+loss occurs. PostgreSQL averages 44.56% of one CPU rather than 91.02% in the prior
+full control. Ingestion still fails relative isolation at 62–65 ms versus 12–13 ms.
+Changed fixture/clock alignment and phase duration prevent treating the cross-run
+difference as a controlled effect size. Both the frontend gap and overview API
+latency remain open.
+
+[Chromium profiles](2026-11-14-cold-list-profile.json) complete three unloaded cold
+loads in 405–470 ms and three ten-reader bursts in 959–1,049 ms. Each renders all
+twenty charts. Samples identify ECharts dimension reads in initialization and
+observer-driven resize; whether redundant layout explains the loaded gap needs
+further instrumentation. Profiles carry overhead and omit the other workload
+lanes; neither their timings nor the reduced-load result substitute for acceptance.
+
 ## Priorities
 
 Rank reflects observed user impact. Related symptoms are grouped; the suspected

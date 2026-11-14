@@ -6,12 +6,13 @@ import { expect, test, request as apiRequest, type Page } from '@playwright/test
 import { compose, composeArgs, postgresStorage, psql } from '../e2e/support/stack.ts';
 import { resourceSnapshot, ingestionBetween } from './resources.ts';
 import { ingestionMetrics, ingestionDelta } from './alert-calculation.metrics.ts';
-import { assertEligibleBackfill, calculationBackfillDays, calculationFixtureVersion, calculationMode,
-  experimentSQL, plannedCalculationCalls, verifyQueryEquivalence, type BackfillRange, type EligibilityBounds } from './alert-calculation.experiment.ts';
+import { assertEligibleBackfill, backfillMode, backfillProfile, calculationBackfillDays, calculationFixtureVersion, calculationMode,
+  experimentSQL, plannedCalculationCalls, runBackfill, verifyQueryEquivalence, type BackfillRange, type EligibilityBounds } from './alert-calculation.experiment.ts';
 
 // F4-T02: SQL prototype is installed only in the disposable almanac-e2e database.
 const root = '../.local/alert-calculation';
 const mode = calculationMode(process.env.ALERT_CALCULATION_MODE);
+const historicalWrites = backfillMode(process.env.ALERT_BACKFILL_MODE);
 
 function asynchronousSQL(sql: string, label: string): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -113,7 +114,9 @@ JOIN (VALUES ${goods}) g(sli_id,good) USING(sli_id);`);
   const ingestionOnly = ingestionDelta(baselineStart, baselineEnd);
   writeFileSync(`${root}/ingestion-baseline.json`, JSON.stringify({ baselineStart, baselineEnd, ingestionOnly }, null, 2));
   const before = resourceSnapshot();
-  const profile = { baseRevision: 'd40690e', diagnosticCandidate: 'F4-T18 bounded unsuccessful historical turns', postgresStorage, mode, fixtureVersion: calculationFixtureVersion,
+  const backfillPlan = backfillProfile(historicalWrites, backfill.length);
+  const profile = { baseRevision: '5b2c1a4', diagnosticCandidate: 'F4-T19 historical-write attribution; application unchanged', postgresStorage, mode, fixtureVersion: calculationFixtureVersion,
+    backfill: backfillPlan, capacityEligible: backfillPlan.fullWorkload && mode === 'paired',
     initialHistoryStart: fleet.initialHistoryStart, eligibleFrom: fleet.eligibleFrom, historyClosedThrough: fleet.historyClosedThrough, backfillRanges: ranges,
     eligibilityCheckedSlis: eligibility.length,
     plannedQueryCalls: plannedCalculationCalls(mode, 800), independentReferenceEnabled: mode === 'paired',
@@ -136,7 +139,7 @@ JOIN (VALUES ${goods}) g(sli_id,good) USING(sli_id);`);
     cpu: cpus()[0]?.model, logicalCPUs: cpus().length, memoryBytes: totalmem(),
     database: psql("SELECT version()"), slis: 200, initialDays: 1, backfillDays: 3,
     maxDirtyHours: 8, maxRawVisits: 7200, statementTimeoutMs: 1000, workers: 2,
-    offeredBatchesPerSecond: 8, rounds: 4, cutoff, apiUsers: 10, apiMinimumCyclesPerUser: 10, apiCycleIntervalMs: 10000, browserUsers: 1, browserCycles: 20, backfillBatchMaxRows: 720, backfillBatchSLIs: 1, backfillBatches: backfill.length,
+    offeredBatchesPerSecond: 8, rounds: 4, cutoff, apiUsers: 10, apiMinimumCyclesPerUser: 10, apiCycleIntervalMs: 10000, browserUsers: 1, browserCycles: 20, backfillBatchMaxRows: 720, backfillBatchSLIs: 1, backfillBatches: backfillPlan.plannedBatches,
     note: `Controlled historical measurement cutoffs cross a UTC hour; wall-clock engine scheduling is outside this query experiment. ${mode === 'paired' ? 'Each paired query also runs an independent raw-population reference in the same snapshot; its extra work is part of the contention load.' : 'Single-query diagnostic control; no independent raw oracle or equivalence claim.'} Eligibility covers all backfill before initial seeding; initially missing older coverage differs from legacy fixtures.` };
   writeFileSync(`${root}/profile.json`, JSON.stringify(profile, null, 2));
   const queryWorkers = [0, 1].map(worker => {
@@ -151,7 +154,10 @@ SELECT public.alert_experiment_compare('${fleet.slis[index]!.id}','${cutoff}'::t
       return output.split('\n').filter(line => line.startsWith('{')).map(line => JSON.parse(line));
     });
   });
-  const backfillWork = asynchronousSQL(backfill.map((batch, index) => `${batch}\nSELECT json_build_object('completedBatch',${index},'at',clock_timestamp());`).join('\n'), 'backfill');
+  if (historicalWrites === 'omitted-diagnostic') {
+    writeFileSync(`${root}/backfill.process.json`, JSON.stringify({ state: 'omitted-diagnostic', startedAt: null, finishedAt: null, plannedBatches: 0 }, null, 2));
+  }
+  const backfillWork = runBackfill(historicalWrites, () => asynchronousSQL(backfill.map((batch, index) => `${batch}\nSELECT json_build_object('completedBatch',${index},'at',clock_timestamp());`).join('\n'), 'backfill'));
   const timings: Record<string, number[]> = { 'list-cold': [], 'list-warm': [], 'detail-cold': [], 'detail-warm': [] };
   const apiSamples: { name: string; beganAt: number; finishedAt: number; milliseconds: number; status: number }[] = [];
   let workloadRunning = true;

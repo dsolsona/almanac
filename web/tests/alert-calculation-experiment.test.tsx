@@ -1,11 +1,46 @@
 import { describe, expect, it } from 'vitest';
 import {
   assertEligibleBackfill,
+  backfillMode,
+  backfillProfile,
   calculationMode,
   experimentSQL,
   plannedCalculationCalls,
+  runBackfill,
   verifyQueryEquivalence,
 } from '../perf/alert-calculation.experiment.ts';
+
+describe('explicit write-attribution diagnostic', () => {
+  it('keeps full backfill as the default and rejects ambiguous settings', () => {
+    expect(backfillMode(undefined)).toBe('enabled');
+    expect(backfillMode('enabled')).toBe('enabled');
+    expect(backfillMode('omitted-diagnostic')).toBe('omitted-diagnostic');
+    for (const value of ['', 'disabled', 'omit', 'enabled ', 'ENABLED']) {
+      expect(() => backfillMode(value)).toThrow(/ALERT_BACKFILL_MODE/);
+    }
+  });
+
+  it('never starts SQL for an omitted diagnostic or labels it capacity eligible', async () => {
+    let writes = 0;
+    const execute = async () => { writes++; return 'completed'; };
+    expect(await runBackfill('omitted-diagnostic', execute)).toBe('');
+    expect(writes).toBe(0);
+    expect(backfillProfile('omitted-diagnostic', 1400)).toEqual({
+      mode: 'omitted-diagnostic', availableBatches: 1400, plannedBatches: 0, fullWorkload: false,
+    });
+  });
+
+  it('executes full backfill once and preserves its output and failure', async () => {
+    let writes = 0;
+    const execute = async () => { writes++; return 'completed'; };
+    expect(await runBackfill(backfillMode(undefined), execute)).toBe('completed');
+    expect(writes).toBe(1);
+    expect(backfillProfile('enabled', 1400)).toEqual({
+      mode: 'enabled', availableBatches: 1400, plannedBatches: 1400, fullWorkload: true,
+    });
+    await expect(runBackfill('enabled', async () => { throw new Error('write failed'); })).rejects.toThrow('write failed');
+  });
+});
 
 describe('alert-calculation experiment controls', () => {
   it('defaults only an absent mode and rejects mistyped or empty explicit modes', () => {

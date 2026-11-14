@@ -1,3 +1,13 @@
+Cold-list attribution, 2026-11-14: [F4-T19](tasks/F4-T19.md) prioritizes the
+user-visible list failure. Matched traces put 576–820 ms after overview JSON and
+before chart/content readiness in the two slowest loads. Omitting synthetic SQL
+backfill lowers cold-list p95 from 1.531 to 1.224 s, still outside budget; all
+80 journeys and 200 due intervals complete without API errors. This reduced-load
+result cannot establish capacity. Three unloaded browser profiles take 405–470 ms;
+three ten-reader burst profiles take 959–1,049 ms, exposing frontend work amplified
+by contention. Resize/layout attribution follows; application source is unchanged.
+PR #112 passes all four CI gates. No merge or alert-calculation adoption is authorized.
+
 Historical retry pacing, 2026-11-14: [F4-T18](tasks/F4-T18.md) preserves calculation
 order and durable work while pausing after unsuccessful history turns. Focused
 checks pass in 3.498 s, fairness in 0.391 s and normal-container seeding in 217.459 s.

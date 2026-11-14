@@ -2,6 +2,25 @@ export type CalculationMode = 'paired' | 'baseline-only' | 'candidate-only';
 export const calculationFixtureVersion = 'eligible-published-history-v3';
 export const calculationBackfillDays = 3;
 
+export type BackfillMode = 'enabled' | 'omitted-diagnostic';
+
+export function backfillMode(value: string | undefined): BackfillMode {
+  if (value === undefined) return 'enabled';
+  if (value === 'enabled' || value === 'omitted-diagnostic') return value;
+  throw new Error('ALERT_BACKFILL_MODE must be enabled or omitted-diagnostic');
+}
+
+export function backfillProfile(mode: BackfillMode, availableBatches: number) {
+  return { mode, availableBatches, plannedBatches: mode === 'enabled' ? availableBatches : 0,
+    fullWorkload: mode === 'enabled' };
+}
+
+// Omission is an explicit attribution experiment, never capacity evidence.
+// Do not even start a SQL client for that lane when it is omitted.
+export async function runBackfill(mode: BackfillMode, execute: () => Promise<string>): Promise<string> {
+  return mode === 'enabled' ? execute() : '';
+}
+
 export function calculationMode(value: string | undefined): CalculationMode {
   if (value === undefined) return 'paired';
   if (value === 'paired' || value === 'baseline-only' || value === 'candidate-only') return value;
