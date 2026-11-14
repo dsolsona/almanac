@@ -13,7 +13,7 @@ import (
 
 const readDerivedDue = `-- name: ReadDerivedDue :one
 WITH projection_metadata AS MATERIALIZED (
-    SELECT slo_id,generation_id,current_valid_until,
+    SELECT slo_id,generation_id,current_valid_until,performance_complete,
            payload#>>'{_budget_cache,published_at}' AS budget_published_at
     FROM public.almanac_slo_current_projections
 ), aggregate_due AS (
@@ -25,6 +25,7 @@ WITH projection_metadata AS MATERIALIZED (
     SELECT min(CASE
         WHEN f.slo_id IS NOT NULL AND f.attempts>=5 AND f.failing_since<=$1::timestamptz-interval '7 days' THEN NULL
         WHEN g.id IS NULL OR g.definition_revision<>d.revision OR g.measurement_revision<>d.measurement_revision
+          OR p.performance_complete IS NOT TRUE
           OR g.calculation_version<>$2
           OR g.source_generation<>coalesce(source.generation,0)
           OR g.retention_start<>to_timestamp(ceil(extract(epoch FROM ($1::timestamptz-interval '365 days'))/d.cadence_seconds)*d.cadence_seconds)

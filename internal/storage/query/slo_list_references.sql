@@ -4,11 +4,11 @@
 WITH scalar_scope AS MATERIALIZED (
     SELECT s.id,lower(s.name) AS sort_name,p.urgency AS published_urgency,
            coalesce(g.definition_revision=d.revision AND g.measurement_revision=d.measurement_revision
-             AND g.calculation_version=sqlc.arg(calculation_version) AND p.slo_id IS NOT NULL
+             AND g.calculation_version=sqlc.arg(calculation_version) AND p.slo_id IS NOT NULL AND p.performance_complete
              AND g.source_generation<=coalesce(source.generation,0)
              AND g.evaluated_through>=sqlc.arg(now)::timestamptz-interval '365 days',false)::boolean AS usable,
            coalesce(g.definition_revision=d.revision AND g.measurement_revision=d.measurement_revision
-             AND g.calculation_version=sqlc.arg(calculation_version) AND p.slo_id IS NOT NULL
+             AND g.calculation_version=sqlc.arg(calculation_version) AND p.slo_id IS NOT NULL AND p.performance_complete
              AND g.source_generation=coalesce(source.generation,0)
              AND g.retention_start=to_timestamp(ceil(extract(epoch FROM (sqlc.arg(now)::timestamptz-interval '365 days'))/d.cadence_seconds)*d.cadence_seconds)
              AND g.evaluated_through>=to_timestamp(floor(extract(epoch FROM sqlc.arg(now)::timestamptz)/d.cadence_seconds)*d.cadence_seconds)
@@ -59,7 +59,7 @@ ORDER BY CASE WHEN sqlc.arg(reverse)::boolean THEN rank END DESC,
          rank,sort_name,id
 LIMIT sqlc.arg(page_limit)
 ), page_metadata AS MATERIALIZED (
-    SELECT page.*,p.payload AS projection_payload,
+    SELECT page.*,CASE WHEN p.performance_complete THEN p.payload END AS projection_payload,
            jsonb_build_object('slo',jsonb_build_object(
                'id',page.id,'name',page.name,'display_name',page.display_name,'version',page.version,'definition_revision',page.definition_revision,
                'service_id',page.service_id,'service_display_name',page.service_display_name,'sli_id',page.sli_id,'sli_display_name',page.sli_display_name,

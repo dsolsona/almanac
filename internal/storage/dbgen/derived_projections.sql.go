@@ -189,7 +189,7 @@ func (q *Queries) InsertDerivedGeneration(ctx context.Context, arg InsertDerived
 
 const listDueDerivedObjectives = `-- name: ListDueDerivedObjectives :many
 WITH projection_metadata AS MATERIALIZED (
-    SELECT slo_id,generation_id,current_valid_until,
+    SELECT slo_id,generation_id,current_valid_until,performance_complete,
            payload#>>'{_budget_cache,published_at}' AS budget_published_at
     FROM public.almanac_slo_current_projections
 )
@@ -205,6 +205,7 @@ LEFT JOIN public.almanac_slo_current_failures f
 WHERE (f.slo_id IS NULL OR ((f.attempts<5 OR f.failing_since IS NULL OR f.failing_since>$2::timestamptz-interval '7 days') AND f.next_attempt_at<=$2::timestamptz))
   AND (g.id IS NULL OR g.definition_revision<>d.revision
    OR g.measurement_revision<>d.measurement_revision
+   OR p.performance_complete IS NOT TRUE
    OR g.calculation_version<>$1
    OR g.retention_start<>to_timestamp(ceil(extract(epoch FROM ($2::timestamptz-interval '365 days'))/d.cadence_seconds)*d.cadence_seconds)
    OR g.source_generation<>coalesce(source.generation,0)

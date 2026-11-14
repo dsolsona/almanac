@@ -15,11 +15,11 @@ const listSloOverviewPage = `-- name: ListSloOverviewPage :many
 WITH scalar_scope AS MATERIALIZED (
     SELECT s.id,lower(s.name) AS sort_name,p.urgency AS published_urgency,
            coalesce(g.definition_revision=d.revision AND g.measurement_revision=d.measurement_revision
-             AND g.calculation_version=$1 AND p.slo_id IS NOT NULL
+             AND g.calculation_version=$1 AND p.slo_id IS NOT NULL AND p.performance_complete
              AND g.source_generation<=coalesce(source.generation,0)
              AND g.evaluated_through>=$2::timestamptz-interval '365 days',false)::boolean AS usable,
            coalesce(g.definition_revision=d.revision AND g.measurement_revision=d.measurement_revision
-             AND g.calculation_version=$1 AND p.slo_id IS NOT NULL
+             AND g.calculation_version=$1 AND p.slo_id IS NOT NULL AND p.performance_complete
              AND g.source_generation=coalesce(source.generation,0)
              AND g.retention_start=to_timestamp(ceil(extract(epoch FROM ($2::timestamptz-interval '365 days'))/d.cadence_seconds)*d.cadence_seconds)
              AND g.evaluated_through>=to_timestamp(floor(extract(epoch FROM $2::timestamptz)/d.cadence_seconds)*d.cadence_seconds)
@@ -70,7 +70,7 @@ ORDER BY CASE WHEN $7::boolean THEN rank END DESC,
          rank,sort_name,id
 LIMIT $10
 ), page_metadata AS MATERIALIZED (
-    SELECT page.id, page.sort_name, page.published_urgency, page.usable, page.current, page.name, page.display_name, page.version, page.definition_revision, page.service_id, page.service_display_name, page.sli_id, page.sli_display_name, page.target, page.rolling_window_seconds, page.cadence_seconds, page.activated_at, page.evaluation_valid_from, page.historical_requested_by, page.historical_requested_at, page.created_at, page.updated_at, page.measurement_revision, page.full_start, page.full_end, page.preparation_failed, page.urgency, page.rank,p.payload AS projection_payload,
+    SELECT page.id, page.sort_name, page.published_urgency, page.usable, page.current, page.name, page.display_name, page.version, page.definition_revision, page.service_id, page.service_display_name, page.sli_id, page.sli_display_name, page.target, page.rolling_window_seconds, page.cadence_seconds, page.activated_at, page.evaluation_valid_from, page.historical_requested_by, page.historical_requested_at, page.created_at, page.updated_at, page.measurement_revision, page.full_start, page.full_end, page.preparation_failed, page.urgency, page.rank,CASE WHEN p.performance_complete THEN p.payload END AS projection_payload,
            jsonb_build_object('slo',jsonb_build_object(
                'id',page.id,'name',page.name,'display_name',page.display_name,'version',page.version,'definition_revision',page.definition_revision,
                'service_id',page.service_id,'service_display_name',page.service_display_name,'sli_id',page.sli_id,'sli_display_name',page.sli_display_name,

@@ -455,14 +455,15 @@ type AlmanacSloCurrentFailure struct {
 }
 
 type AlmanacSloCurrentProjection struct {
-	SloID              pgtype.UUID `json:"slo_id"`
-	GenerationID       pgtype.UUID `json:"generation_id"`
-	ServiceID          pgtype.UUID `json:"service_id"`
-	SortName           string      `json:"sort_name"`
-	Urgency            string      `json:"urgency"`
-	Payload            []byte      `json:"payload"`
-	BudgetHistoryState pgtype.Text `json:"budget_history_state"`
-	CurrentValidUntil  pgtype.Text `json:"current_valid_until"`
+	SloID               pgtype.UUID `json:"slo_id"`
+	GenerationID        pgtype.UUID `json:"generation_id"`
+	ServiceID           pgtype.UUID `json:"service_id"`
+	SortName            string      `json:"sort_name"`
+	Urgency             string      `json:"urgency"`
+	Payload             []byte      `json:"payload"`
+	BudgetHistoryState  pgtype.Text `json:"budget_history_state"`
+	CurrentValidUntil   pgtype.Text `json:"current_valid_until"`
+	PerformanceComplete bool        `json:"performance_complete"`
 }
 
 type AlmanacSloDefinition struct {

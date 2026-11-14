@@ -26,7 +26,7 @@ WITH slo AS (
     SELECT s.id,d.revision,d.measurement_revision,d.cadence_seconds,
            coalesce(source.generation,0) AS source_generation,g.id AS generation_id,g.definition_revision AS g_revision,
            g.measurement_revision AS g_measurement_revision,g.calculation_version AS g_calculation_version,g.source_generation AS g_source_generation,
-           g.evaluated_through,g.retention_start,public.almanac_projection_deadline(p.current_valid_until) AS current_valid_until,w.id AS cursor_id,w.built_through
+           g.evaluated_through,g.retention_start,p.performance_complete,public.almanac_projection_deadline(p.current_valid_until) AS current_valid_until,w.id AS cursor_id,w.built_through
     FROM public.almanac_slos s
     JOIN public.almanac_slo_definitions d ON d.slo_id=s.id AND d.revision=s.definition_revision
     LEFT JOIN public.almanac_slo_current_projections p ON p.slo_id=s.id
@@ -50,7 +50,7 @@ WITH slo AS (
            bool_or(w.attempts>=5 AND w.failing_since<=sqlc.arg(now)::timestamptz-interval '7 days') AS stopped,
            bool_or(w.attempts>=5) AS failing,
            bool_or(w.slo_id IS NOT NULL) AS queued,
-           bool_or(s.generation_id IS NULL OR s.g_revision<>s.revision OR s.g_measurement_revision<>s.measurement_revision
+           bool_or(s.generation_id IS NULL OR s.performance_complete IS NOT TRUE OR s.g_revision<>s.revision OR s.g_measurement_revision<>s.measurement_revision
                OR s.g_calculation_version<>sqlc.arg(calculation_version)::text OR s.g_source_generation<>s.source_generation
                OR s.retention_start<>to_timestamp(ceil(extract(epoch FROM (sqlc.arg(now)::timestamptz-interval '365 days'))/s.cadence_seconds)*s.cadence_seconds)
                OR s.cursor_id IS NULL OR s.built_through<date_trunc('hour',sqlc.arg(now)::timestamptz AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'

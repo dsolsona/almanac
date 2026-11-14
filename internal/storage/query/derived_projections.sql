@@ -3,7 +3,7 @@
 -- Keep timestamp parsing in its conditional predicate so unrelated due/backoff
 -- branches retain their existing behavior for malformed cache metadata.
 WITH projection_metadata AS MATERIALIZED (
-    SELECT slo_id,generation_id,current_valid_until,
+    SELECT slo_id,generation_id,current_valid_until,performance_complete,
            payload#>>'{_budget_cache,published_at}' AS budget_published_at
     FROM public.almanac_slo_current_projections
 )
@@ -19,6 +19,7 @@ LEFT JOIN public.almanac_slo_current_failures f
 WHERE (f.slo_id IS NULL OR ((f.attempts<5 OR f.failing_since IS NULL OR f.failing_since>sqlc.arg(now)::timestamptz-interval '7 days') AND f.next_attempt_at<=sqlc.arg(now)::timestamptz))
   AND (g.id IS NULL OR g.definition_revision<>d.revision
    OR g.measurement_revision<>d.measurement_revision
+   OR p.performance_complete IS NOT TRUE
    OR g.calculation_version<>sqlc.arg(calculation_version)
    OR g.retention_start<>to_timestamp(ceil(extract(epoch FROM (sqlc.arg(now)::timestamptz-interval '365 days'))/d.cadence_seconds)*d.cadence_seconds)
    OR g.source_generation<>coalesce(source.generation,0)

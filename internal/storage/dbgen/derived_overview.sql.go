@@ -15,11 +15,11 @@ const countSloOverviewGroups = `-- name: CountSloOverviewGroups :one
 WITH scope AS (
     SELECT p.urgency AS published_urgency,
            coalesce(g.definition_revision=d.revision AND g.measurement_revision=d.measurement_revision
-             AND g.calculation_version=$1 AND p.slo_id IS NOT NULL
+             AND g.calculation_version=$1 AND p.slo_id IS NOT NULL AND p.performance_complete
              AND g.source_generation<=coalesce(source.generation,0)
              AND g.evaluated_through>=$2::timestamptz-interval '365 days',false)::boolean AS usable,
            coalesce(g.definition_revision=d.revision AND g.measurement_revision=d.measurement_revision
-             AND g.calculation_version=$1 AND p.slo_id IS NOT NULL
+             AND g.calculation_version=$1 AND p.slo_id IS NOT NULL AND p.performance_complete
              AND g.source_generation=coalesce(source.generation,0)
              AND g.retention_start=to_timestamp(ceil(extract(epoch FROM ($2::timestamptz-interval '365 days'))/d.cadence_seconds)*d.cadence_seconds)
              AND g.evaluated_through>=to_timestamp(floor(extract(epoch FROM $2::timestamptz)/d.cadence_seconds)*d.cadence_seconds)

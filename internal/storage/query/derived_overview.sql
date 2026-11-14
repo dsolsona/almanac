@@ -2,11 +2,11 @@
 WITH scope AS (
     SELECT p.urgency AS published_urgency,
            coalesce(g.definition_revision=d.revision AND g.measurement_revision=d.measurement_revision
-             AND g.calculation_version=sqlc.arg(calculation_version) AND p.slo_id IS NOT NULL
+             AND g.calculation_version=sqlc.arg(calculation_version) AND p.slo_id IS NOT NULL AND p.performance_complete
              AND g.source_generation<=coalesce(source.generation,0)
              AND g.evaluated_through>=sqlc.arg(now)::timestamptz-interval '365 days',false)::boolean AS usable,
            coalesce(g.definition_revision=d.revision AND g.measurement_revision=d.measurement_revision
-             AND g.calculation_version=sqlc.arg(calculation_version) AND p.slo_id IS NOT NULL
+             AND g.calculation_version=sqlc.arg(calculation_version) AND p.slo_id IS NOT NULL AND p.performance_complete
              AND g.source_generation=coalesce(source.generation,0)
              AND g.retention_start=to_timestamp(ceil(extract(epoch FROM (sqlc.arg(now)::timestamptz-interval '365 days'))/d.cadence_seconds)*d.cadence_seconds)
              AND g.evaluated_through>=to_timestamp(floor(extract(epoch FROM sqlc.arg(now)::timestamptz)/d.cadence_seconds)*d.cadence_seconds)
