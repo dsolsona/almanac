@@ -1,5 +1,8 @@
 # Implementation tasks
 
+[F4-T23](F4-T23.md) prepares a controlled CI comparison with server/client CPUs
+shared or separated, retaining the complete existing baseline workload.
+
 [F4-T22](F4-T22.md) attributes overview CPU scheduling/serialization costs and
 removes duplicate protected-read transaction configuration with authority preserved.
 

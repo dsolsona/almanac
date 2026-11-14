@@ -30,6 +30,13 @@ focused local pass does not waive a required CI gate.
 CI uses built-in path filters to skip application jobs
 when all changes are Markdown, `docs/`, `.agents/`, `.codex/` or the CI workflow itself.
 Mixed changes run the existing four application suites; nightly/manual performance runs remain.
+An explicit manual `alert-cpu-control` profile instead runs two independent
+200-SLO diagnostics, with server/client CPUs shared or split. Both require at
+least four available CPUs and keep the server and client at two CPUs each. This
+isolates CPU placement, while memory, storage and kernel resources remain shared;
+it does not replace remote-client or full acceptance evidence. Only allowlisted
+diagnostic artifacts are uploaded, never authentication files or browser traces.
+The default manual `standard` profile retains the ordinary suites and performance run.
 In one checkout, run `make check` and `make test-e2e` sequentially: the catalogue
 runner clears `web/test-results`, which contains the E2E runner's output directory.
 CI jobs have separate workspaces and do not share these artifacts.

@@ -1,3 +1,9 @@
+CPU-placement comparison, 2026-11-14: [F4-T23](tasks/F4-T23.md) prepares an explicit
+manual CI diagnostic with two server CPUs in both variants and two client CPUs
+either shared or separate. It requires four available CPUs, preserves the existing
+200-SLO workload and stages only filtered evidence. Actual runner execution and
+the comparison remain pending; this is not separate-machine acceptance.
+
 Server attribution, 2026-11-14: [F4-T22](tasks/F4-T22.md) finds measured runnable
 CPU wait amplifying concurrent overview queries, with roughly 13–24 ms of bracketed
 CPU work. SQL serialization and typed codec probes do not justify a payload rewrite.
