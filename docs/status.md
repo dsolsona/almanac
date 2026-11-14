@@ -20,6 +20,13 @@ status. The integrated focused race/upgrade selection passes 60 cases in 16.943 
 These unregistered foundations remain one local feature candidate; public
 activation/default contracts, maintenance calculations and API/CLI/UI delivery
 remain explicit next work.
+Independent foundation review corrections now include post-lock acknowledgement
+time, exact pin preservation and safe database-backpressure deferral without
+failure-budget consumption. The integrated focused storage race/upgrade selection
+passes 116 cases in 24.186 s. [F4-T35](tasks/F4-T35.md) presents the concrete
+[public contract proposal](design/alerting-public-contract.md) for the remaining
+activation/default/chart decisions; it does not accept the failed calculation
+profile or activate production workers.
 
 Review consolidation, 2026-11-14: [F4-T28](tasks/F4-T28.md) is integrated into main
 as `412d397` through PR #120. All 26 original stack heads and Merged PR states are

@@ -10,9 +10,17 @@ the calculator, maintenance or 100/200-policy acceptance gates.
 
 Use the management transaction's authoritative server time after resource locks
 as the effective configuration time. Create/enable/semantic edits start a fresh
-evaluation revision at the first whole-minute boundary at or after that time.
-Retained measurements can satisfy full windows immediately; never create an
-occurrence before activation or replay a disabled period as new occurrences.
+evaluation revision with scheduling at the first whole-minute boundary at or after
+that time. An initial canonical cutoff before activation is ineligible: record an
+explicit `before_policy_activation` range and advance to the next scheduled
+boundary without a numerical decision or occurrence. Do not leave that initial
+head pinned forever. The first occurrence requires a cutoff at or after activation;
+older measurements inside its full windows remain usable. This can add source
+eligibility delay after creation/enable, separate from full-window warmup.
+For activation at 12:00:10, the 12:01 boundary cannot fire from a 12:00 cutoff;
+it may first fire when a later boundary's canonical cutoff reaches 12:01 or later.
+The clock eventually exposes missing observations even if no new data arrives.
+Never replay a disabled period as new occurrences.
 
 Disable and semantic supersession take effect in that same transaction: fence
 claims, record every remaining due old boundary through effective time, close an
@@ -30,6 +38,17 @@ new bindings or new occurrence IDs and asks for a refreshed preview. Acknowledgi
 an already listed occurrence does not invalidate confirmation. Already-resolved
 occurrences reduce impact. Preserve enabled preferences and original evidence,
 set binding reason `slo_archived`, and expose a historical SLO link.
+
+For each dependent revision, the preview envelope starts at its oldest pending
+boundary and ends immediately after the last minute boundary due at preview time.
+An empty pending range authorizes no numerical cancellation. Confirmation uses its
+post-lock server time and requires its actual remaining cancellation range to be
+a subset. A 12:34:59 preview can authorize `[12:34,12:35)`; if still pending at
+12:35:01, the required `[12:34,12:36)` is larger and confirmation returns a
+refreshable conflict. If processing has caught up, the empty remaining range is
+allowed. Explain this normal time-based invalidation in the confirmation response
+and UI; do not silently expand the authorized envelope. There is no fixed preview
+TTL that substitutes for the dependency/envelope checks.
 
 This is the immediate-activation alternative to the previously open scheduled
 archive clock. It requires approval before implementing those public mutations.
@@ -103,6 +122,36 @@ Use the operations/components already enumerated in plan 0037, generated from
 evaluation revision and occurrence state version. Return original/latest immutable
 evidence, complete condition outcomes, exact counts, actual SLO identity, lifecycle
 transitions, explicit history ranges and processing status separately.
+
+### Interactive chart source
+
+Add `GET /api/v1/alerts/{id}/series`, selecting one condition ID from that
+occurrence's immutable policy revision. Return paired short/long burn samples
+from stored alert evaluations, not a live SLO recalculation. UI context defaults
+to the two hours ending at the selected latest/firing evidence cutoff. Accept
+explicit inclusive UTC sample bounds spanning at most 24 hours and a requested
+limit of 2–120 evaluation points (default 120); one point contains both windows,
+counts, quality, threshold,
+condition outcome, evaluation ID and snapshot identity. Include effective cutoff
+and original scheduled/commit times. No fresh source read is needed to explain
+an already committed decision, including custom windows unsupported by the
+existing 1h/6h SLO-chart API.
+
+When more points exist, select actual evaluations deterministically by time
+buckets, retaining each bucket's first/last and short/long burn extrema, plus
+the response endpoints, within the 120-point limit. Return sampling/resolution
+metadata. This graph does not claim to preserve every transition; the separately
+paged lifecycle does. Preserve unavailable intervals as explicit gaps and never
+join a line through them or average values into invented decision evidence.
+All numeric points retain their actual timestamps/counts and immutable
+`as_evaluated` provenance; different points may have different source generations.
+
+Do not extend a line to wall-clock now or manufacture duplicate samples for
+repeated cutoffs. Pending/unreconstructed/compacted/outside-revision history is a
+gap with a reason. Older history can have only pinned original/latest/transition
+evidence after compaction; that limitation remains visible rather than rebuilding
+a curve from changed source facts. Hover/touch/keyboard inspection uses the
+shared chart components and each retained point's actual values.
 
 Response timestamps are UTC with explicit scheduled boundary, effective cutoff,
 commit/detection time. Durations are integer seconds; exact counts/thresholds and
