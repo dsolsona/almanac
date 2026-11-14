@@ -1,5 +1,8 @@
 # Implementation tasks
 
+[F4-T30](F4-T30.md) builds durable alert claims and atomic occurrence/evidence
+journaling against the exact core; production activation remains gated.
+
 [F4-T29](F4-T29.md) implements the unwired exact alert domain increment under the
 maintainer's implementation ownership direction; calculation adoption remains gated.
 

@@ -69,3 +69,7 @@ The failed calculation/capacity evidence remains failed. Calculator adoption,
 production integration/activation and release still require their contracts and
 acceptance; proposed architecture and public limits are not accepted by this
 sequencing choice. The earlier gate must not be misreported as passed.
+
+The maintainer explicitly confirmed this sequence: build the unwired state
+machine and durable storage first; keep calculator adoption, production activation
+and release behind the existing correctness/performance gates.

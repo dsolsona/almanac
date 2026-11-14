@@ -93,6 +93,112 @@ type AlmanacAgentRuntimeStatus struct {
 	UpdatedAt                    pgtype.Timestamptz `json:"updated_at"`
 }
 
+type AlmanacAlertCursor struct {
+	PolicyID         pgtype.UUID        `json:"policy_id"`
+	Revision         int64              `json:"revision"`
+	Schedulable      bool               `json:"schedulable"`
+	OriginAt         pgtype.Timestamptz `json:"origin_at"`
+	NextScheduledAt  pgtype.Timestamptz `json:"next_scheduled_at"`
+	AvailableAt      pgtype.Timestamptz `json:"available_at"`
+	Version          int64              `json:"version"`
+	Epoch            int64              `json:"epoch"`
+	ClaimToken       pgtype.UUID        `json:"claim_token"`
+	ClaimUntil       pgtype.Timestamptz `json:"claim_until"`
+	LastAttemptTick  pgtype.Timestamptz `json:"last_attempt_tick"`
+	LastDispatchedAt pgtype.Timestamptz `json:"last_dispatched_at"`
+	LastCutoff       pgtype.Timestamptz `json:"last_cutoff"`
+	LastEvaluationID pgtype.UUID        `json:"last_evaluation_id"`
+	OpenOccurrenceID pgtype.UUID        `json:"open_occurrence_id"`
+	WaitingReason    string             `json:"waiting_reason"`
+}
+
+type AlmanacAlertEvaluation struct {
+	ID                pgtype.UUID        `json:"id"`
+	PolicyID          pgtype.UUID        `json:"policy_id"`
+	Revision          int64              `json:"revision"`
+	ScheduledAt       pgtype.Timestamptz `json:"scheduled_at"`
+	EffectiveCutoff   pgtype.Timestamptz `json:"effective_cutoff"`
+	Truth             string             `json:"truth"`
+	SourceGeneration  int64              `json:"source_generation"`
+	ExclusionRevision int64              `json:"exclusion_revision"`
+	ClaimEpoch        int64              `json:"claim_epoch"`
+	ClaimToken        pgtype.UUID        `json:"claim_token"`
+	InputDigest       []byte             `json:"input_digest"`
+	Evidence          []byte             `json:"evidence"`
+	Result            []byte             `json:"result"`
+	CommittedAt       pgtype.Timestamptz `json:"committed_at"`
+}
+
+type AlmanacAlertOccurrence struct {
+	ID                 pgtype.UUID        `json:"id"`
+	PolicyID           pgtype.UUID        `json:"policy_id"`
+	Revision           int64              `json:"revision"`
+	State              string             `json:"state"`
+	Version            int64              `json:"version"`
+	TransitionSequence int64              `json:"transition_sequence"`
+	FiringEvaluationID pgtype.UUID        `json:"firing_evaluation_id"`
+	LatestEvaluationID pgtype.UUID        `json:"latest_evaluation_id"`
+	Payload            []byte             `json:"payload"`
+	PolicySnapshot     []byte             `json:"policy_snapshot"`
+	OpenedAt           pgtype.Timestamptz `json:"opened_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	TerminalAt         pgtype.Timestamptz `json:"terminal_at"`
+}
+
+type AlmanacAlertPolicy struct {
+	ID                 pgtype.UUID        `json:"id"`
+	Name               string             `json:"name"`
+	SloID              pgtype.UUID        `json:"slo_id"`
+	EvaluationRevision int64              `json:"evaluation_revision"`
+	Version            int64              `json:"version"`
+	Enabled            bool               `json:"enabled"`
+	Severity           string             `json:"severity"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+}
+
+type AlmanacAlertPolicyRevision struct {
+	PolicyID           pgtype.UUID        `json:"policy_id"`
+	Revision           int64              `json:"revision"`
+	SloID              pgtype.UUID        `json:"slo_id"`
+	DefinitionRevision int64              `json:"definition_revision"`
+	CalculationVersion string             `json:"calculation_version"`
+	Conditions         []byte             `json:"conditions"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
+type AlmanacAlertRange struct {
+	ID                    pgtype.UUID        `json:"id"`
+	PolicyID              pgtype.UUID        `json:"policy_id"`
+	Revision              int64              `json:"revision"`
+	StartsAt              pgtype.Timestamptz `json:"starts_at"`
+	EndsAt                pgtype.Timestamptz `json:"ends_at"`
+	CadenceSeconds        int64              `json:"cadence_seconds"`
+	Kind                  string             `json:"kind"`
+	Reason                string             `json:"reason"`
+	RecordedAt            pgtype.Timestamptz `json:"recorded_at"`
+	ReferenceEvaluationID pgtype.UUID        `json:"reference_evaluation_id"`
+	ActorID               pgtype.UUID        `json:"actor_id"`
+	RequestID             string             `json:"request_id"`
+}
+
+type AlmanacAlertTransition struct {
+	ID           pgtype.UUID        `json:"id"`
+	PolicyID     pgtype.UUID        `json:"policy_id"`
+	Revision     int64              `json:"revision"`
+	OccurrenceID pgtype.UUID        `json:"occurrence_id"`
+	Sequence     int64              `json:"sequence"`
+	FromState    pgtype.Text        `json:"from_state"`
+	ToState      string             `json:"to_state"`
+	Cause        string             `json:"cause"`
+	EffectiveAt  pgtype.Timestamptz `json:"effective_at"`
+	DetectedAt   pgtype.Timestamptz `json:"detected_at"`
+	ActorID      pgtype.UUID        `json:"actor_id"`
+	Reason       string             `json:"reason"`
+	EvaluationID pgtype.UUID        `json:"evaluation_id"`
+	RequestID    string             `json:"request_id"`
+}
+
 type AlmanacAuditEvent struct {
 	ID         pgtype.UUID        `json:"id"`
 	Actor      string             `json:"actor"`
