@@ -332,17 +332,14 @@ func beginPooledAgentRead(ctx context.Context, databaseURL string, runtime *Runt
 		closeInitialOwnerConnection(conn)
 		return nil, nil, nil, dbgen.LockSessionUserRow{}, dbgen.LockSessionInstallationRow{}, dbgen.AlmanacSession{}, time.Time{}, operationError(ctx, "storage: agent read transaction failed", err)
 	}
-	if err := setTransactionBounds(ctx, tx); err != nil {
+	boundsContext := ctx
+	if runtime != nil {
+		boundsContext = runtime.Bind(ctx)
+	}
+	if err := setTransactionBounds(boundsContext, tx); err != nil {
 		rollbackTransaction(tx)
 		closeInitialOwnerConnection(conn)
 		return nil, nil, nil, dbgen.LockSessionUserRow{}, dbgen.LockSessionInstallationRow{}, dbgen.AlmanacSession{}, time.Time{}, operationError(ctx, "storage: agent read setup failed", err)
-	}
-	if runtime != nil {
-		if _, err := tx.Exec(ctx, "SET LOCAL jit = off; SET LOCAL lock_timeout = '250ms'; SET LOCAL statement_timeout = '2s'"); err != nil {
-			rollbackTransaction(tx)
-			closeInitialOwnerConnection(conn)
-			return nil, nil, nil, dbgen.LockSessionUserRow{}, dbgen.LockSessionInstallationRow{}, dbgen.AlmanacSession{}, time.Time{}, err
-		}
 	}
 	q := dbgen.New(tx)
 	fail := func(e error) (*readConnection, *dbgen.Queries, pgx.Tx, dbgen.LockSessionUserRow, dbgen.LockSessionInstallationRow, dbgen.AlmanacSession, time.Time, error) {

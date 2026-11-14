@@ -173,6 +173,32 @@ Server overview/admission and ingestion isolation remain failed and cannot be
 waived by the client diagnosis. Another speculative application optimization or
 undifferentiated full load would not resolve that attribution gap.
 
+## Server scheduling and bounded request work
+
+[F4-T22](../../tasks/F4-T22.md) continues independent server investigation while
+separate-client hardware is unavailable. The [one/eight-reader probes](2026-11-14-server-attribution.json)
+return identical ordered results across 108 reads in one snapshot. One-reader
+query medians are 13.466/15.393 ms; eight-reader medians 57.489/60.847 ms, with
+a 197.633-ms maximum. Backend scheduler counters show 13–24 ms of runtime in
+most brackets and runnable wait reaching 174.455 ms. Sampler/network gaps are
+reported; these are bounded query diagnostics, not full API or capacity results.
+
+Prepared EXPLAINs show 11.784–15.236 ms execution including 2.823–3.354 ms text
+serialization. Actual typed 20-row item decoding takes median 5.088 ms process
+CPU and encoding 2.410 ms; writing to HTTP and authority/currentness adjustments
+are outside that codec probe. These findings support contention amplification,
+not speculative removal of required sparkline data. One invalid EXPLAIN wrapper
+argument order is retained as a diagnosed tooling failure before correction.
+
+Trace attribution is explicit: in `ead52e50eecf9541f08835e158818f98`, the first
+110.390-ms acquisition serves bootstrap/readiness preflight, not session inspection.
+The second 250.904-ms acquisition fails before the protected overview read.
+Preflight and completion-time authority checks stay intact. Review also identifies
+duplicate transaction configuration: context-plus-explicit runtime configures twice,
+and explicit-only configures three times. The scoped correction configures once
+with the same bounds; its focused and deployment evidence belongs to F4-T22.
+No major latency improvement is attributed to that small correction.
+
 ## Priorities
 
 Rank reflects observed user impact. Related symptoms are grouped; the suspected
@@ -181,7 +207,7 @@ integrated capacity pass.
 
 | Order | Issue | User impact | Bottleneck evidence | Current status |
 | --- | --- | --- | --- | --- |
-| 1 | Slow SLO overview and interactive admission exhaustion | Lists still exceed one second; latest control has no API errors | Latest cold-list p95 1,742.4 ms; one admission 503; page SQL p95 267.7 ms; OS counters establish substantial browser run-queue wait | Client/server isolation and server admission/read budgets remain open |
+| 1 | Slow SLO overview and interactive admission exhaustion | Lists still exceed one second; latest full control has an overview 503 | Latest cold-list p95 1,742.4 ms; one admission 503; page SQL p95 267.7 ms; OS counters establish substantial browser run-queue wait | Client/server isolation and server admission/read budgets remain open |
 | 2 | Live ingestion slows under competing work | Latency isolation fails | Latest p95 23.4–24.5 → 96.2–101.0 ms; 526 accepted and all 600 due intervals present | Absolute p95 passes; relative limit fails |
 | 3 | Expensive scheduling and repeated pending calculations | Background work consumes capacity without publishing current values | Idle PostgreSQL ~49.5% of one CPU; due queries consume ~25.1 s in 62.6 s. Loaded phase has 8,226 waiting attempts /776 publications | Current waiting calculations skip canonical sums. Historical waiting work falls to 453 calls /5.261 s; more useful work and faster synthetic writes still keep PostgreSQL busy |
 | 4 | Pending aggregate windows and unproven alert capacity | Proposed alert evaluations would retain pending boundaries | Latest 2/800 baseline batches pending (earlier 11/102; publication progress differs); bounded fallback exactness has separate passing fixtures | Calculation-adoption gate remains open |

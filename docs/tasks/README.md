@@ -1,5 +1,8 @@
 # Implementation tasks
 
+[F4-T22](F4-T22.md) attributes overview CPU scheduling/serialization costs and
+removes duplicate protected-read transaction configuration with authority preserved.
+
 [F4-T21](F4-T21.md) prepares independently runnable navigation clients to separate
 client CPU starvation from server latency; remote execution remains pending.
 

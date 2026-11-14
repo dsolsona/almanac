@@ -1,3 +1,11 @@
+Server attribution, 2026-11-14: [F4-T22](tasks/F4-T22.md) finds measured runnable
+CPU wait amplifying concurrent overview queries, with roughly 13–24 ms of bracketed
+CPU work. SQL serialization and typed codec probes do not justify a payload rewrite.
+A separate duplicate transaction-setup correction passes focused PostgreSQL
+authority/expiry/value checks and five normal-container journey steps in 2.3 min.
+Its performance impact is unmeasured; cold-list, admission and ingestion gates
+remain open. The next controlled comparison separates server and client CPUs.
+
 Separate client preparation, 2026-11-14: [F4-T21](tasks/F4-T21.md) extracts the
 ten API readers and browser lane into a bounded stdin-driven runner. Eighteen
 focused checks and TypeScript pass. Real retained-stack verification completes
