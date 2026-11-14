@@ -4,7 +4,7 @@
 - Created: 2026-11-12
 - Accepted: pending
 - Approval: full draft pending; continued implementation and unwired foundations authorized, with initial 100/200-policy verification scope
-- Implementation: in progress; unwired foundations, production activation gated
+- Implementation: in progress
 - Related ADRs: [ADR-0051](../adr/0051-durable-alert-policy-state-machine.md) (proposed)
 - Plan: [0035](../plans/0035-alerting-delivery.md); initial design review in [F4-T01](../tasks/F4-T01.md)
 - Supersedes / superseded by: proposed replacement of SPEC-0011's initial evaluation/lifecycle and release scope; no accepted contract is superseded yet
