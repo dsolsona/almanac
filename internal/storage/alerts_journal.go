@@ -160,6 +160,10 @@ func (r *Runtime) commitAlertEvaluation(ctx context.Context, claim alertClaim, i
 				return err
 			}
 		}
+		now = normalizedAgentNow(clock)
+		if !cursor.ClaimUntil.Time.After(now) {
+			return ErrAlertStale
+		}
 		transition, err := alert.Reduce(stored.Occurrence, evaluation, now)
 		if err != nil {
 			return err

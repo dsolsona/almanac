@@ -213,7 +213,7 @@ func TestIntegrationAlertDeferral(t *testing.T) {
 	}
 	for _, claim := range claims {
 		if claim.PolicyID == first {
-			if err := f.runtime.deferAlertWork(t.Context(), claim, f.at.Add(time.Second), f.at.Add(time.Second), "aggregation_pending"); err != nil {
+			if err := f.runtime.deferAlertWork(t.Context(), claim, func() time.Time { return f.at.Add(time.Second) }, f.at.Add(time.Second), "aggregation_pending"); err != nil {
 				t.Fatal(err)
 			}
 		} else {
@@ -226,7 +226,7 @@ func TestIntegrationAlertDeferral(t *testing.T) {
 	if next.PolicyID != first || !next.ScheduledAt.Equal(f.at) {
 		t.Fatalf("pending cursor advanced: %+v", next)
 	}
-	if err := f.runtime.deferAlertWork(t.Context(), next, f.at.Add(2*time.Second), f.at.Add(2*time.Second), "aggregation_pending"); err != nil {
+	if err := f.runtime.deferAlertWork(t.Context(), next, func() time.Time { return f.at.Add(2 * time.Second) }, f.at.Add(2*time.Second), "aggregation_pending"); err != nil {
 		t.Fatal(err)
 	}
 	reopened, err := OpenRuntime(t.Context(), f.f.databaseURL)

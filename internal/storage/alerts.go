@@ -131,17 +131,28 @@ func validAlertClaim(claim alertClaim) bool {
 	return canonicalUUIDCheck(claim.PolicyID) && claim.Revision > 0 && claim.Epoch > 0 && claim.Version > 0 && claim.Token.Valid && !claim.ScheduledAt.IsZero() && !claim.Deadline.IsZero()
 }
 
-func (r *Runtime) deferAlertWork(ctx context.Context, claim alertClaim, now, available time.Time, reason string) error {
-	if !validAlertClaim(claim) || now.IsZero() || !available.After(claim.ScheduledAt) || available.Before(now) || strings.TrimSpace(reason) == "" {
+func (r *Runtime) deferAlertWork(ctx context.Context, claim alertClaim, clock func() time.Time, available time.Time, reason string) error {
+	if !validAlertClaim(claim) || clock == nil || !available.After(claim.ScheduledAt) || strings.TrimSpace(reason) == "" {
 		return ErrAlertInvalid
 	}
 	id, _ := canonicalUUID(claim.PolicyID)
 	return r.alertTransaction(ctx, func(ctx context.Context, _ pgx.Tx, q *dbgen.Queries) error {
+		cursor, err := q.LockAlertCursor(ctx, dbgen.LockAlertCursorParams{PolicyID: id, Revision: claim.Revision})
+		if err != nil {
+			return err
+		}
+		now := normalizedAgentNow(clock)
+		if now.IsZero() || available.Before(now) {
+			return ErrAlertInvalid
+		}
+		if !cursor.ClaimUntil.Valid || !cursor.ClaimUntil.Time.After(now) {
+			return ErrAlertStale
+		}
 		n, err := q.DeferAlertCursor(ctx, dbgen.DeferAlertCursorParams{PolicyID: id, Revision: claim.Revision, AvailableAt: timestamp(available), WaitingReason: reason, Epoch: claim.Epoch, ClaimToken: claim.Token, Version: claim.Version, NextScheduledAt: timestamp(claim.ScheduledAt), ClaimUntil: timestamp(now)})
 		if err != nil {
 			return err
 		}
-		if n != 1 {
+		if n != 1 || !cursor.ClaimUntil.Time.After(normalizedAgentNow(clock)) {
 			return ErrAlertStale
 		}
 		return nil

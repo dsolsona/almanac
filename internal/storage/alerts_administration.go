@@ -66,6 +66,12 @@ func disableAlertPolicyTx(ctx context.Context, tx pgx.Tx, input alertDisableInpu
 		if err != nil {
 			return alertStoredOccurrence{}, err
 		}
+	}
+	detected = normalizedAgentNow(input.Now)
+	if detected.IsZero() || input.EffectiveAt.After(detected) {
+		return alertStoredOccurrence{}, ErrAlertInvalid
+	}
+	if stored.Occurrence != nil {
 		transition, err := alert.ApplyAdministrativeChange(stored.Occurrence, alert.PolicyDisabled, input.ActorID, input.Reason, input.EffectiveAt, detected)
 		if err != nil {
 			return alertStoredOccurrence{}, err
