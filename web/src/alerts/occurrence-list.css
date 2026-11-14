@@ -17,6 +17,9 @@
 .alert-table a:not(.ui-button):hover { text-decoration: underline; text-underline-offset: 3px; }
 .alert-table .alert-name { font-size: 14px; font-weight: 600; }
 .alert-secondary, .alert-severity { display: block; margin-top: 4px; color: var(--text-3); font-size: 13px; line-height: 1.5; }
+.alert-closure { margin-top: 4px; color: var(--text-3); font-size: 13px; }
+.alert-closure summary { cursor: pointer; white-space: nowrap; }
+.alert-closure time { display: block; margin-top: 4px; font-size: 12px; white-space: nowrap; }
 .alert-match { display: grid; gap: 3px; }
 .alert-match__name { font-weight: 500; }
 .alert-match__windows { display: flex; justify-content: center; gap: 16px; font: 12px var(--mono); color: var(--text-3); white-space: nowrap; }

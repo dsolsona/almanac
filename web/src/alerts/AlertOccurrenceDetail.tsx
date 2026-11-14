@@ -90,15 +90,22 @@ function Calculation({ condition, snapshot }: { condition: AlertConditionEvidenc
 export function AlertOccurrenceDetail({ data, now, backHref, canAcknowledge, onAcknowledge, onRefresh, acknowledgement }: Props) {
   const id = useId(), heading = useRef<HTMLHeadingElement>(null), error = useRef<HTMLDivElement>(null);
   const requested = useRef<HTMLButtonElement | null>(null);
+  const lastError = useRef<string | undefined>(undefined);
   const [selectedId, setSelectedId] = useState(data.latest.primaryConditionId);
   useEffect(() => { setSelectedId(data.latest.primaryConditionId); }, [data.id, data.latest.primaryConditionId]);
   const selected = data.latest.conditions.find(condition => condition.id === selectedId) ?? data.latest.conditions.find(condition => condition.id === data.latest.primaryConditionId);
   useEffect(() => {
-    if (acknowledgement?.error) { error.current?.focus(); requested.current = null; return; }
+    const changedError = acknowledgement?.error !== lastError.current;
+    lastError.current = acknowledgement?.error;
+    if (acknowledgement?.pending) return;
+    if (acknowledgement?.error) {
+      if (requested.current || changedError) error.current?.focus();
+      requested.current = null; return;
+    }
     if (!requested.current || data.state === 'firing' && canAcknowledge) return;
     if (document.activeElement === document.body || document.activeElement === requested.current) heading.current?.focus();
     requested.current = null;
-  }, [data.id, data.state, canAcknowledge, acknowledgement?.error]);
+  }, [data.id, data.state, canAcknowledge, acknowledgement]);
   const tone = data.state === 'firing' ? 'breached' : data.state === 'acknowledged' ? 'stale' : data.state === 'resolved' ? 'healthy' : 'none';
   return <article className="alert-occurrence-detail">
     <a href={backHref} data-app-route className="alert-detail-back">← Alerts</a>

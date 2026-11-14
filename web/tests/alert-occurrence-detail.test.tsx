@@ -19,6 +19,19 @@ const data: AlertOccurrenceDetailData = {
 const props = () => ({ data, now: '2026-11-12T10:42:00Z', backHref: '/alerts', canAcknowledge: true, onAcknowledge: vi.fn(), onRefresh: vi.fn() });
 
 describe('selected alert detail', () => {
+  it('focuses repeated identical acknowledgement failures without stealing focus on an unrelated render', async () => {
+    const user = userEvent.setup(), input = props();
+    const view = render(<AlertOccurrenceDetail {...input} />);
+    const failure = { pending: false, error: 'The alert changed.' };
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await user.click(screen.getByRole('button', { name: 'Acknowledge' }));
+      view.rerender(<AlertOccurrenceDetail {...input} acknowledgement={{ ...failure }} />);
+      expect(screen.getByRole('alert')).toHaveFocus();
+    }
+    const link = screen.getByRole('link', { name: 'Checkout availability' }); link.focus();
+    view.rerender(<AlertOccurrenceDetail {...input} acknowledgement={{ ...failure }} />);
+    expect(link).toHaveFocus();
+  });
   it('uses one title, real SLO link, paired exact values and separate cards', async () => {
     const user = userEvent.setup(); render(<AlertOccurrenceDetail {...props()} />);
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);

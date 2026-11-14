@@ -15,6 +15,8 @@ test('selected alert list evidence, grouping and keyboard filters @matrix', asyn
   await expect(list.getByText('22.8×')).toHaveCount(2);
   await expect(list.getByText('Waiting for calculation')).toBeVisible();
   await expect(list.getByText('Missing observations prevent recovery')).toBeVisible();
+  const unavailable = list.getByRole('row').filter({ hasText: 'Missing observations prevent recovery' });
+  await expect(unavailable.getByText('Last evaluated 10:41 UTC')).toBeVisible();
   const layout = await page.evaluate(() => ({ viewport: innerWidth, width: document.documentElement.scrollWidth, overflow: [...document.querySelectorAll('body *')].filter(element => element.getBoundingClientRect().right > innerWidth && !element.closest('.alert-table-scroll,.catalogue-nav')).slice(-20).map(element => ({ tag: element.tagName, className: element.className, right: element.getBoundingClientRect().right })) }));
   await testInfo.attach('list-layout', { body: JSON.stringify(layout), contentType: 'application/json' });
   expect(layout, 'page width and uncontained overflow').toMatchObject({ width: layout.viewport });
@@ -38,6 +40,16 @@ test('selected alert list evidence, grouping and keyboard filters @matrix', asyn
   await expect(list.getByText('2 alerts · 1 firing')).toBeVisible();
   await expect(list.getByText('1–4 of 4 alerts')).toBeVisible();
   await capture(page, example.locator('.alert-list-example'), `../.local/alert-list-grouped-${testInfo.project.name}.png`);
+  await example.getByRole('button', { name: 'Show history example' }).click();
+  const closure = list.getByText('Closed 08:20 UTC');
+  await closure.scrollIntoViewIfNeeded(); await expect(closure).toBeVisible();
+  await expect(list.getByText('Detected 08:40 UTC')).toBeVisible();
+  await closure.focus(); await closure.press('Enter');
+  await expect(list.getByText('2026-11-12 08:20 UTC')).toBeVisible();
+  await capture(page, example.locator('.alert-list-example'), `../.local/alert-ui-review-fixes/history-expanded-${testInfo.project.name}.png`);
+  await closure.press('Enter');
+  await expect(list.getByText('2026-11-12 08:20 UTC')).toBeHidden();
+  await capture(page, example.locator('.alert-list-example'), `../.local/alert-ui-review-fixes/history-${testInfo.project.name}.png`);
 });
 
 test('acknowledgement conflicts preserve lifecycle and history distinguishes recovered gaps', async ({ page }) => {

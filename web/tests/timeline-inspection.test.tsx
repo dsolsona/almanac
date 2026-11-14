@@ -9,6 +9,17 @@ beforeEach(() => vi.stubGlobal('ResizeObserver', class { observe() {} disconnect
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 const chart: TimelineChart = { title: 'Burn evidence', summary: 'Supplied exact values.', start: '2026-11-12T10:00:00Z', end: '2026-11-12T11:00:00Z', stepMs: 1800000, fillExpectedGaps: false, lanes: [{ id: 'burn', label: 'Burn', unit: '×', series: [{ id: 'short', label: '30 min burn', points: [{ timestamp: '2026-11-12T10:00:00Z', value: '6.0000000000001', coverage: 'complete' }, { timestamp: '2026-11-12T10:30:00Z', value: null, coverage: 'missing', reason: 'No observations received' }] }, { id: 'long', label: '6 h burn', points: [{ timestamp: '2026-11-12T10:00:00Z', value: '5.9999999999999', coverage: 'complete' }, { timestamp: '2026-11-12T10:30:00Z', value: '7.4', coverage: 'complete' }] }] }] };
 
+it('distinguishes same-named series in separate lanes in visible and spoken inspection', async () => {
+  const user = userEvent.setup();
+  const lanes = ['Checkout', 'Payments'].map((label, index) => ({ id: label.toLowerCase(), label, unit: '×', series: [{ id: 'observed', label: 'Observed', points: [{ timestamp: chart.start, value: String(index + 1), coverage: 'complete' as const }] }] }));
+  render(<TimelineChartView chart={{ ...chart, lanes }} inspection />);
+  screen.getByRole('group', { name: /Inspect Burn evidence/ }).focus(); await user.keyboard('{Home}');
+  expect(within(screen.getByRole('tooltip')).getByText('Checkout · Observed')).toBeVisible();
+  expect(within(screen.getByRole('tooltip')).getByText('Payments · Observed')).toBeVisible();
+  expect(document.querySelector('[aria-live="polite"]')).toHaveTextContent('Checkout · Observed: 1 ×');
+  expect(document.querySelector('[aria-live="polite"]')).toHaveTextContent('Payments · Observed: 2 ×');
+});
+
 it('inspects exact multi-series values and gaps by keyboard, without rounded comparisons', async () => {
   const user = userEvent.setup(); render(<TimelineChartView chart={chart} inspection />);
   const plot = screen.getByRole('group', { name: /Inspect Burn evidence/ }); plot.focus();

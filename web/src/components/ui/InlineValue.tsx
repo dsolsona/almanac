@@ -31,7 +31,9 @@ export function InlineValue({ id, label, value, editing, onEditingChange, onComm
   function finish(cancel: boolean, restore: boolean) {
     if (finished.current) return;
     finished.current = true; restoreFocus.current = restore;
-    onCommit(cancel ? original.current : normalize(text) ?? text);
+    const committed = cancel ? original.current : normalize(text) ?? text;
+    setText(committed);
+    onCommit(committed);
     onEditingChange(false);
   }
   const describedBy = error ? `${id}-error` : undefined;

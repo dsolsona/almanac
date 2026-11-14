@@ -28,6 +28,23 @@ function props() {
 }
 
 describe('selected alert occurrence list', () => {
+  it('shows the evidence timestamp when recovery is unavailable but processing is current', () => {
+    render(<AlertOccurrenceList {...props()} page={{ ...page, items: [{ ...occurrence, state: 'acknowledged', evidence: { at: occurrence.evidence.at, matches: [], unavailableReason: 'Missing observations prevent recovery' } }] }} />);
+    expect(screen.getByText('Missing observations prevent recovery')).toBeVisible();
+    expect(screen.getByText('Last evaluated 10:41 UTC')).toBeVisible();
+    expect(screen.queryByText(/Evaluation due/)).not.toBeInTheDocument();
+  });
+  it('exposes effective closure separately from detection without requiring a hover or navigating the row', async () => {
+    const user = userEvent.setup(), input = props();
+    render(<AlertOccurrenceList {...input} view="history" page={{ ...page, items: [{ ...occurrence, state: 'resolved', closedAt: '2026-11-12T10:20:00Z', detectedAt: '2026-11-12T10:25:00Z' }] }} />);
+    expect(screen.getByText('Closed 10:20 UTC')).toBeVisible();
+    expect(screen.getByText('2026-11-12 10:20 UTC')).not.toBeVisible();
+    await user.click(screen.getByText('Closed 10:20 UTC'));
+    expect(screen.getByText('2026-11-12 10:20 UTC')).toBeVisible();
+    expect(input.onOpen).not.toHaveBeenCalled();
+    expect(screen.getByText('Detected 10:25 UTC')).toBeVisible();
+    expect(screen.getByText('8m')).toBeVisible();
+  });
   it('explains paired windows and other matches without changing policy severity', async () => {
     const user = userEvent.setup(); render(<AlertOccurrenceList {...props()} />);
     expect(screen.getByRole('link', { name: 'Checkout burn' })).toHaveAttribute('href', '#checkout-alert');

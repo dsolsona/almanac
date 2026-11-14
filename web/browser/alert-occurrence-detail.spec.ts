@@ -76,6 +76,8 @@ test('detail acknowledgement errors and committed resolution retain usable focus
   await detail.getByRole('button', { name: 'Acknowledge', exact: true }).click();
   await expect(detail.getByRole('alert')).toBeFocused();
   await expect(detail.getByText('Firing', { exact: true })).toBeVisible();
+  await detail.getByRole('button', { name: 'Acknowledge', exact: true }).click();
+  await expect(detail.getByRole('alert')).toBeFocused();
   await detail.getByRole('button', { name: 'Refresh alert', exact: true }).click();
   await example.getByRole('button', { name: 'Resolve on acknowledgement', exact: true }).click();
   await detail.getByRole('button', { name: 'Acknowledge', exact: true }).click();

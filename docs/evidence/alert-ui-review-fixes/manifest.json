@@ -1,0 +1,27 @@
+{
+  "baseRevision": "88c4461335b9489875b1b1779b47ca8d0b9fd382",
+  "sourceHashes": {
+    "docs/design/mocks/alert-options/alerts.css": "9c6122a5c1cc70ca9e2c4a10570ad3f8b25b00d941184e67f376d382051fc909",
+    "web/src/components/ui/InlineValue.tsx": "d3fcd23a7552ce9ccc2f19c45f18c074d50c24d2a3c18debafc32fffd5c82a07",
+    "web/src/alerts/AlertOccurrenceList.tsx": "454a446f155c99e9c9ed6d88e60bcdcb8d83c797413aef762818fc8451c924cf",
+    "web/src/alerts/occurrence-list.css": "04c9eac44a74269b1b1840068edfc6d4202efa6e5cc87f4d16c38d77db134f4b",
+    "web/src/alerts/AlertOccurrenceDetail.tsx": "25846e9677c05d1b088fa11d41e7f84639c279ac4f463ecc2d6b85e11e8bf3a3",
+    "web/src/components/charts/TimelineChartView.tsx": "35d137f77c683708a442cc6d0560d233f13440282a1a50231fe13687ee9a6ba4",
+    "web/tests/alert-occurrence-list.test.tsx": "26b78c927721edc216c549befdc62e17db13588d02f6847ce2e97a2bb4ea0bce",
+    "web/tests/alert-occurrence-detail.test.tsx": "e9311ea1f2e7c6e31809eac1ee826162184ef9cbe0f5cf4c87e79bab0c6d017e",
+    "web/tests/timeline-inspection.test.tsx": "b09926b3f74ab6cf7ed40455573fa84b07be2f7728241c6163049dde5c3ac421",
+    "web/browser/alert-review-fixes.spec.ts": "30b183fac2a98fa9befd92ecd9d5a732d6c975d9d7121ea93fbbd1d6d25e39d2",
+    "web/browser/alert-occurrence-list.spec.ts": "270c95712738ee87610eb6977aa1ec217364d1c17f30e0231d83227e11e20d06",
+    "web/browser/alert-occurrence-detail.spec.ts": "ede818f4c56747829c84cf2e5e2625a8f14388ef5c608301c9b9c43f6af6e2eb"
+  },
+  "captures": {
+    "mock-light-761.png": "2797de978e665b33fcd67840d7d7bbf2665d9f6db9b981b13ba2e9daf786234e",
+    "mock-dark-761.png": "60e43a91acb87a404f37cf54c52f8c57ca9c32abc44d2e3466ff70942e8983ec",
+    "history-desktop-light.png": "ff812ab6ddddea728624d9d2bd458a86ea7e55cfa1dad072231b23027fe75439",
+    "history-desktop-dark.png": "8ae13774f7bfbb32d93076142d069776506e1ea8b08242e88bccab113ce42993",
+    "history-mobile-light.png": "2627db2404cf9bb5fb45fa84adf8c736a1e0ae9ae1fb326860d26e0f7f5ec38e",
+    "history-mobile-dark.png": "26d82d87868e36152822b71c6e3b7f058f7a8a12fac8c5bf4b4efd6b67be8826",
+    "history-expanded-mobile-dark.png": "a7dbaf6c8cdb14c53c6c93a9b41ef82636b407fb5e7913b8dc327a84d608a723",
+    "touch-resize-light.png": "99f28d761dbee928a5a303be26719e77fdef7c162bb31754a6849b7e9d3d14d7"
+  }
+}

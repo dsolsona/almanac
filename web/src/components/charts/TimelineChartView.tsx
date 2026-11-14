@@ -33,6 +33,7 @@ export function TimelineChartView({ chart, showHeader = true, generation, inspec
   const instanceRef = useRef<ECharts | null>(null);
   const latestRef = useRef({ chart, generation, model: null as ReturnType<typeof validateTimeline> | null });
   const applyRef = useRef<() => void>(() => undefined);
+  const positionInspectionRef = useRef<() => void>(() => undefined);
   const result = useMemo(() => {
     try { return { model: validateTimeline(chart), error: null }; }
     catch (cause) { return { model: null, error: cause instanceof Error ? cause.message : 'Timeline data is invalid' }; }
@@ -68,7 +69,7 @@ export function TimelineChartView({ chart, showHeader = true, generation, inspec
       const nextWidth=host.clientWidth,nextHeight=host.clientHeight;
       if(nextWidth===width&&nextHeight===height)return;
       width=nextWidth;height=nextHeight;
-      instance.resize();update();
+      instance.resize();update();positionInspectionRef.current();
     });
     resize.observe(host);
     const theme = new MutationObserver(update);
@@ -94,24 +95,27 @@ export function TimelineChartView({ chart, showHeader = true, generation, inspec
   }, [inspection]);
   const selectedTime = selection === null ? undefined : result.model?.timestamps[selection.index];
   const selectedRows = selectedTime === undefined ? [] : result.model!.series.map(series => ({
-    id: `${series.lane}:${series.id}`, label: series.label, unit: chart.lanes[series.lane]!.unit,
+    id: `${series.lane}:${series.id}`, label: chart.lanes.length > 1 ? `${chart.lanes[series.lane]!.label} · ${series.label}` : series.label, unit: chart.lanes[series.lane]!.unit,
     point: series.tooltipData.find(point => Date.parse(point.timestamp) === selectedTime),
   }));
   const selectedTimestamp = selectedRows.find(row => row.point)?.point?.timestamp ?? (selectedTime === undefined ? undefined : new Date(selectedTime).toISOString());
   useLayoutEffect(() => {
-    const frame = frameRef.current, panel = tooltipRef.current, host = hostRef.current;
-    if (!frame || !panel || !host || selectedTime === undefined) return;
-    const bounds = frame.getBoundingClientRect(), plot = host.getBoundingClientRect();
-    const pixel = instanceRef.current?.convertToPixel?.({ xAxisIndex: 0 }, selectedTime);
-    const pointX = typeof pixel === 'number' && Number.isFinite(pixel) ? plot.left - bounds.left + pixel : bounds.width / 2;
-    if (cursorRef.current) cursorRef.current.style.left = `${pointX}px`;
-    const anchorY = selection?.pointerY === undefined ? plot.top - bounds.top + plot.height / 2 : selection.pointerY - bounds.top;
-    const gap = 16, width = panel.offsetWidth, height = panel.offsetHeight;
-    const right = pointX + gap, left = pointX - width - gap;
-    const x = right + width <= bounds.width - 8 ? right : left >= 8 ? left : Math.max(0, Math.min(pointX - width / 2, bounds.width - width));
-    const y = bounds.top + anchorY + gap + height <= innerHeight - 8 ? anchorY + gap : anchorY - height - gap;
-    panel.style.left = `${Math.max(8 - bounds.left, Math.min(x, innerWidth - bounds.left - width - 8))}px`;
-    panel.style.top = `${Math.max(8 - bounds.top, Math.min(y, innerHeight - bounds.top - height - 8))}px`;
+    positionInspectionRef.current = () => {
+      const frame = frameRef.current, panel = tooltipRef.current, host = hostRef.current;
+      if (!frame || !panel || !host || selectedTime === undefined) return;
+      const bounds = frame.getBoundingClientRect(), plot = host.getBoundingClientRect();
+      const pixel = instanceRef.current?.convertToPixel?.({ xAxisIndex: 0 }, selectedTime);
+      const pointX = typeof pixel === 'number' && Number.isFinite(pixel) ? plot.left - bounds.left + pixel : bounds.width / 2;
+      if (cursorRef.current) cursorRef.current.style.left = `${pointX}px`;
+      const anchorY = selection?.pointerY === undefined ? plot.top - bounds.top + plot.height / 2 : selection.pointerY - bounds.top;
+      const gap = 16, width = panel.offsetWidth, height = panel.offsetHeight;
+      const right = pointX + gap, left = pointX - width - gap;
+      const x = right + width <= bounds.width - 8 ? right : left >= 8 ? left : Math.max(0, Math.min(pointX - width / 2, bounds.width - width));
+      const y = bounds.top + anchorY + gap + height <= innerHeight - 8 ? anchorY + gap : anchorY - height - gap;
+      panel.style.left = `${Math.max(8 - bounds.left, Math.min(x, innerWidth - bounds.left - width - 8))}px`;
+      panel.style.top = `${Math.max(8 - bounds.top, Math.min(y, innerHeight - bounds.top - height - 8))}px`;
+    };
+    positionInspectionRef.current();
   });
   function inspect(event: PointerEvent<HTMLDivElement>) {
     const host = hostRef.current, times = result.model?.timestamps;
