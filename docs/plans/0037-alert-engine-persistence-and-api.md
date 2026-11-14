@@ -27,10 +27,11 @@ to agents, another connection pool, or an external stream dependency.
 `internal/storage/derived_evaluation.go` supplies exact batched window results;
 its current batch limit is 960 inputs. The candidate four-window experiment is
 not a four-window product contract. Its adoption remains gated by F4-T02 and the
-follow-up contention work. No engine migration/runtime implementation starts
-before that gate is resolved under plan 0035.
+follow-up contention work. Plan 0035's unwired foundation sequence permits domain
+and durable journal work first; calculator adoption and production runtime
+integration retain their gates. Supplied-evidence tests do not establish capacity.
 
-After that gate, implement in this order:
+Implement in this order, retaining those integration gates:
 
 1. Pure policy validation and reduction, then schema/query contracts with real
    database tests for uniqueness, receipts, claims and concurrent transitions.
@@ -179,11 +180,12 @@ row must be locked against updates until commit (plain SELECT, or KEY SHARE on a
 unchanged primary key, does not suffice). Keep this interval limited to conditional
 checks and writes, and measure the ingestion impact.
 
-Source-generation rows are currently created lazily by the first ingestion. An
-absent row cannot be locked: take the existing SLI authority lock while creating
-generation zero, then lock/recheck the resulting source row. Respect ingestion's
-SLI-before-generation order. Test the exact first-observation race. Do not treat
-`coalesce(generation,0)` alone as concurrency protection.
+Source-generation rows are created lazily by first ingestion and require positive
+generations. Hold the existing SLI authority SHARE lock through publication;
+first ingestion's SLI UPDATE lock conflicts with it. Lock/recheck the source row
+when present; when absent, that held parent lock fences generation-zero evidence
+without inventing a placeholder row. Preserve SLI-before-generation order and
+test the first-observation race. Bare `coalesce(generation,0)` is not protection.
 
 Validate current evaluation revision, active binding/effective boundary, SLO and
 SLI meanings, exclusion generation, source generation, calculation version, claim
@@ -270,9 +272,9 @@ This avoids mistaking each ordinary cursor/evidence-version advance for an expan
 administrative authorization. It is an interpretation to reconcile in the spec,
 not an independently accepted amendment in this plan.
 
-No persisted maintenance exclusion catalogue/activation transaction exists at this
-base: retained calculations carry exclusion revision fields but readers largely
-use revision zero. Pure excluded-window arithmetic is a prerequisite, not the
+The persisted maintenance authority from plan 0039 slice A is integrated, but
+derived consumers still largely use revision zero. Pure excluded-window arithmetic
+and the authority catalogue are prerequisites, not the
 complete AC-07 implementation. Reuse the shared model from
 [SPEC-0016](../specs/0016-maintenance-exclusions.md); provide a canonical exclusion
 snapshot/generation whose writes atomically invalidate derived work and fence
