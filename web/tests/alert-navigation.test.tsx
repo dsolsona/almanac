@@ -54,6 +54,10 @@ describe('private navigation runner protocol', () => {
     expect(()=>consume([JSON.stringify({...start(),storageState:'/private/auth.json'})+'\n'])).toThrow('invalid_start');
     expect(()=>consume([JSON.stringify({...start(),storageState:{cookies:[],origins:[{origin:'https://other.test',localStorage:[{name:'token',value:'PRIVATE'}]}]}})+'\n'])).toThrow('invalid_start');
   });
+  it('rejects insecure cookies before starting credentialed requests', () => {
+    const input=start(); input.storageState.cookies[0]!.secure=false;
+    expect(()=>consume([JSON.stringify(input)+'\n'])).toThrow('invalid_start');
+  });
   it('explicit stop plus EOF produces one stop and accepts a final line without LF', () => {
     const {protocol,events}=consume([JSON.stringify(start())+'\n',JSON.stringify({type:'stop',runID:'diagnostic-1'})]);
     protocol.end();protocol.end();

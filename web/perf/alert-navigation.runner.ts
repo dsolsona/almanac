@@ -39,7 +39,7 @@ function validStart(value: unknown): value is NavigationStart {
     text(c.name,256) && c.name.length > 0 && text(c.value,65536) &&
     (c.domain === url.hostname || c.domain === `.${url.hostname}`) && text(c.path,2048) && c.path.startsWith('/') &&
     typeof c.expires === 'number' && Number.isFinite(c.expires) && typeof c.httpOnly === 'boolean' &&
-    typeof c.secure === 'boolean' && ['Strict','Lax','None'].includes(String(c.sameSite)))) return false;
+    c.secure === true && ['Strict','Lax','None'].includes(String(c.sameSite)))) return false;
   return state.origins.every(o => object(o) && keys(o, ['origin','localStorage']) && o.origin === url.origin &&
     Array.isArray(o.localStorage) && o.localStorage.length <= 100 && o.localStorage.every(s => object(s) &&
       keys(s,['name','value']) && text(s.name,256) && text(s.value,65536)));
@@ -96,7 +96,7 @@ export class NavigationProtocol {
 export function runnerIdentity() {
   const require = createRequire(import.meta.url);
   return {protocolVersion: 1, node: process.version, playwright: require('@playwright/test/package.json').version as string,
-    sourceHashes: Object.fromEntries(['alert-navigation.client.ts','alert-navigation.runner.ts'].map(file =>
+    sourceHashes: Object.fromEntries(['alert-navigation.client.ts','alert-navigation.runner.ts','alert-navigation.transport.ts'].map(file =>
       [file,createHash('sha256').update(readFileSync(new URL(file, import.meta.url))).digest('hex')]))};
 }
 

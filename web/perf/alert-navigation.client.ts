@@ -1,4 +1,5 @@
 import type { Browser, APIRequestContext, Page } from '@playwright/test';
+import {navigationTransport} from './alert-navigation.transport.ts';
 
 export type NavigationStart = {
   type: 'start'; runID: string; baseURL: string;
@@ -56,20 +57,19 @@ export async function runNavigationClient(start: NavigationStart, state: Navigat
   const {chromium, request, expect: baseExpect, devices} = await import('@playwright/test');
   const expect = baseExpect.configure({timeout: 10_000});
   signal.throwIfAborted();
-  const browser = await chromium.launch({timeout: 30_000});
+  const transport = navigationTransport(start.baseURL);
+  const browser = await chromium.launch(transport.launch);
   state.browserVersion = browser.version();
   const clients = new Set<APIRequestContext>();
   const close = async () => { state.cleanupComplete=(await Promise.allSettled([browser.close(), ...[...clients].map(c => c.dispose())])).every(r=>r.status==='fulfilled'); };
   const abort = () => { void close(); };
   signal.addEventListener('abort', abort, {once: true});
-  const contextOptions = {...devices['Desktop Chrome'], baseURL: start.baseURL,
-    storageState: start.storageState, ignoreHTTPSErrors: true};
+  const contextOptions = {...devices['Desktop Chrome'], ...transport.context, storageState: start.storageState};
   const {timings, apiSamples} = state, {fleet} = start;
   try {
     signal.throwIfAborted();
     const apiWorkers = Array.from({length: 10}, async (_, user) => {
-      const client = await request.newContext({baseURL: start.baseURL, storageState: start.storageState,
-        ignoreHTTPSErrors: true, timeout: 30_000});
+      const client = await request.newContext({...transport.api, storageState: start.storageState});
       clients.add(client);
       try {
         await runAPICycles(async cycle => {

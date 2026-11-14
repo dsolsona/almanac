@@ -8,7 +8,33 @@ import {
   plannedCalculationCalls,
   runBackfill,
   verifyQueryEquivalence,
+  successfulFallbackBatches,
+  captureWithAPIWorkers,
 } from '../perf/alert-calculation.experiment.ts';
+
+it('counts actual prepared dirty-hour substitutions, not dirty refusals', () => {
+  expect(successfulFallbackBatches([{candidate: [{prepared: false, dirty_hours: 3}]}, {candidate: null}])).toBe(0);
+  expect(successfulFallbackBatches([{candidate: [{prepared: true, dirty_hours: 0}]},
+    {candidate: [{prepared: true, dirty_hours: 2}, {prepared: true, dirty_hours: 1}]}])).toBe(1);
+});
+
+it('stops and awaits API cleanup if either final evidence collection throws, preserving the original error', async () => {
+  for (const stage of ['resources', 'ingestion']) {
+    const error = new Error(stage); let running = true, disposed = false;
+    let finish!: () => void;
+    const api = Promise.allSettled([new Promise<void>(resolve => { finish = () => { disposed = true; resolve(); }; })]);
+    const result = captureWithAPIWorkers(() => { throw error; }, () => { running = false; queueMicrotask(finish); }, api);
+    await expect(result).rejects.toBe(error);
+    expect(running).toBe(false); expect(disposed).toBe(true);
+  }
+});
+
+it('captures final evidence while API work is active, then joins its outcomes', async () => {
+  let running = true;
+  const result = await captureWithAPIWorkers(() => ({active: running}), () => {running = false;}, Promise.allSettled([Promise.resolve()]));
+  expect(result).toEqual({captured: {active: true}, apiOutcomes: [{status:'fulfilled',value:undefined}]});
+  expect(running).toBe(false);
+});
 
 describe('explicit write-attribution diagnostic', () => {
   it('keeps full backfill as the default and rejects ambiguous settings', () => {

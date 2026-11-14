@@ -2,6 +2,21 @@ export type CalculationMode = 'paired' | 'baseline-only' | 'candidate-only';
 export const calculationFixtureVersion = 'eligible-published-history-v3';
 export const calculationBackfillDays = 3;
 
+export function successfulFallbackBatches(queries: {candidate: {prepared: boolean; dirty_hours: number}[] | null}[]): number {
+  return queries.filter(query => query.candidate?.some(row => row.prepared && row.dirty_hours > 0)).length;
+}
+
+// Keep clients active through evidence capture, but always stop/join them on a
+// collector failure. allSettled is attached by the caller as workers start.
+export async function captureWithAPIWorkers<T, U>(capture: () => T, stop: () => void,
+  apiResults: Promise<PromiseSettledResult<U>[]>) {
+  let captured: T;
+  let apiOutcomes: PromiseSettledResult<U>[];
+  try { captured = capture(); }
+  finally { stop(); apiOutcomes = await apiResults; }
+  return {captured, apiOutcomes};
+}
+
 export type BackfillMode = 'enabled' | 'omitted-diagnostic';
 
 export function backfillMode(value: string | undefined): BackfillMode {

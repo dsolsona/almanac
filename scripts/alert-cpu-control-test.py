@@ -6,6 +6,10 @@ import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import tempfile
+import os
+import signal
+import sys
+import time
 import unittest
 from unittest.mock import patch
 
@@ -53,6 +57,41 @@ class Commands:
 
 
 class ControlTests(unittest.TestCase):
+    def test_timeout_kills_descendant_after_direct_child_exits_on_term(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); pidfile = root / 'descendant.pid'
+            child = "import os,signal,time,pathlib; signal.signal(signal.SIGTERM,signal.SIG_IGN); pathlib.Path('descendant.pid').write_text(str(os.getpid())); time.sleep(60)"
+            parent = "import subprocess,sys,time; subprocess.Popen([sys.executable,'-c'," + repr(child) + "]); time.sleep(60)"
+            pid = None
+            try:
+                result = cpu.Commands(root, root)([sys.executable, '-c', parent], .5)
+                self.assertEqual(result.code, 124)
+                pid = int(pidfile.read_text())
+                def running():
+                    try: return Path(f'/proc/{pid}/stat').read_text().split()[2] != 'Z'
+                    except FileNotFoundError: return False
+                deadline = time.monotonic() + 1
+                while running() and time.monotonic() < deadline: time.sleep(.01)
+                self.assertFalse(running(), 'timed-out command left a live descendant')
+            finally:
+                if pid is None and pidfile.exists(): pid = int(pidfile.read_text())
+                if pid:
+                    try: os.kill(pid, signal.SIGKILL)
+                    except ProcessLookupError: pass
+
+    def test_missing_measurement_fields_cannot_be_complete_but_failed_values_remain(self):
+        fields = {'ingestionOnly': ['accepted', 'duplicate', 'unsuccessful', 'p95LowerSeconds', 'p95UpperSeconds', 'elapsedSeconds'],
+                  'ingestionUnderLoad': ['accepted', 'duplicate', 'unsuccessful', 'p95LowerSeconds', 'p95UpperSeconds', 'elapsedSeconds'],
+                  'due': ['intervals', 'missing', 'slisWithMissing', 'nonObserved'],
+                  'live': ['slis', 'intervals', 'maxReceiptDelaySeconds']}
+        for section, names in fields.items():
+            for field in names:
+                with self.subTest(section=section, field=field), tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory); target = root / 'safe'; target.mkdir()
+                    calc, raw = self.staged_fixture(root, 'omitted-diagnostic')
+                    del raw[section][field]
+                    cpu.write_json(calc / 'results.json', raw)
+                    self.assertFalse(cpu.stage_evidence(root, target, set(), 'omitted-diagnostic'))
     def test_two_cpu_refusal_precedes_commands_or_affinity_changes(self):
         with tempfile.TemporaryDirectory() as directory:
             commands = Commands(Path(directory))
@@ -108,6 +147,10 @@ class ControlTests(unittest.TestCase):
         observer = root / '.local/runtime-observer/new'; observer.mkdir(parents=True)
         at = '2026-11-14T10:00:00Z'
         raw = {'before': {'at': at}, 'after': {'at': '2026-11-14T10:03:00Z'},
+               'ingestionOnly': {'accepted': 20, 'duplicate': 0, 'unsuccessful': 0, 'p95LowerSeconds': .1, 'p95UpperSeconds': .2, 'elapsedSeconds': 30},
+               'ingestionUnderLoad': {'accepted': 20, 'duplicate': 0, 'unsuccessful': 2, 'p95LowerSeconds': 1, 'p95UpperSeconds': None, 'elapsedSeconds': 180},
+               'due': {'intervals': 200, 'missing': 1, 'slisWithMissing': 1, 'nonObserved': 1},
+               'live': {'slis': 200, 'intervals': 200, 'maxReceiptDelaySeconds': 100},
                'profile': {'backfill': {'mode': mode, 'availableBatches': 1400,
                     'plannedBatches': 1400 if mode == 'enabled' else 0, 'fullWorkload': mode == 'enabled'}},
                'timings': {key: [1200] * 20 for key in ('list-cold', 'list-warm', 'detail-cold', 'detail-warm')},

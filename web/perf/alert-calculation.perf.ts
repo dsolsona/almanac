@@ -6,7 +6,7 @@ import { expect, test, request as apiRequest, type Page } from '@playwright/test
 import { compose, composeArgs, postgresStorage, psql } from '../e2e/support/stack.ts';
 import { resourceSnapshot, ingestionBetween } from './resources.ts';
 import { ingestionMetrics, ingestionDelta } from './alert-calculation.metrics.ts';
-import { assertEligibleBackfill, backfillMode, backfillProfile, calculationBackfillDays, calculationFixtureVersion, calculationMode,
+import { assertEligibleBackfill, backfillMode, backfillProfile, calculationBackfillDays, calculationFixtureVersion, calculationMode, captureWithAPIWorkers, successfulFallbackBatches,
   experimentSQL, plannedCalculationCalls, runBackfill, verifyQueryEquivalence, type BackfillRange, type EligibilityBounds } from './alert-calculation.experiment.ts';
 
 // F4-T02: SQL prototype is installed only in the disposable almanac-e2e database.
@@ -234,10 +234,9 @@ SELECT public.alert_experiment_compare('${fleet.slis[index]!.id}','${cutoff}'::t
   });
   // Collect every lane's outcome before asserting; never discard failed-work evidence.
   const workOutcomes = await Promise.allSettled([...queryWorkers, backfillWork, ...pageWorkers]);
-  const after = resourceSnapshot();
-  const metricsAfter = ingestionMetrics();
-  workloadRunning = false;
-  const apiOutcomes = await apiResults;
+  const {captured: {after, metricsAfter}, apiOutcomes} = await captureWithAPIWorkers(
+    () => ({after: resourceSnapshot(), metricsAfter: ingestionMetrics()}),
+    () => { workloadRunning = false; }, apiResults);
   const settled = [...workOutcomes, ...apiOutcomes];
   const apiTimings: Record<string, number[]> = { overview: [], status: [], history: [] };
   for (const sample of apiSamples) {
@@ -280,7 +279,7 @@ SELECT public.alert_experiment_compare('${fleet.slis[index]!.id}','${cutoff}'::t
     independentReferenceEnabled: mode === 'paired', equivalence: evidence.equivalence,
     pendingBaseline: mode === 'candidate-only' ? null : queries.filter(q => q.baseline?.some(r => !r.prepared)).length,
     pendingCandidate: mode === 'baseline-only' ? null : queries.filter(q => q.candidate?.some(r => !r.prepared)).length,
-    fallbackBatches: mode === 'baseline-only' ? null : queries.filter(q => q.candidate?.some(r => r.dirty_hours > 0)).length,
+    fallbackBatches: mode === 'baseline-only' ? null : successfulFallbackBatches(queries),
     maxRawRows: mode === 'baseline-only' ? null : Math.max(...queries.flatMap(q => q.candidate?.map(r => r.raw_rows) ?? [])),
     baselineMs: queries.flatMap(q => q.baseline_ms === null ? [] : [q.baseline_ms]),
     candidateMs: queries.flatMap(q => q.candidate_ms === null ? [] : [q.candidate_ms]) };
@@ -300,7 +299,9 @@ SELECT public.alert_experiment_compare('${fleet.slis[index]!.id}','${cutoff}'::t
   expect(ingestionUnderLoad.p95UpperSeconds!).toBeLessThanOrEqual(0.250);
   expect(ingestionUnderLoad.p95UpperSeconds!).toBeLessThanOrEqual(1.25 * ingestionOnly.p95LowerSeconds);
   expect(due.intervals, 'measurement must cover due work for the fleet').toBeGreaterThanOrEqual(200);
-  expect(due.missing, 'every due live interval must arrive within the canonical allowance').toBe(0);
+  // This phase-end presence query does not compare each receipt with its own
+  // deadline: delayed arrivals before after.at also pass. Punctuality is unproven.
+  expect(due.missing, 'every interval due during the phase must be present at phase end').toBe(0);
   expect(due.nonObserved).toBe(0);
   if (mode !== 'baseline-only') expect(summary.fallbackBatches, 'contention must actually exercise dirty interiors').toBeGreaterThan(0);
   for (const q of queries) for (const row of q.candidate ?? []) if (row.prepared) {

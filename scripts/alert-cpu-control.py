@@ -90,7 +90,14 @@ class Commands:
                 try:
                     child.wait(timeout=3)
                 except subprocess.TimeoutExpired:
-                    os.killpg(child.pid, signal.SIGKILL)
+                    pass
+                finally:
+                    # A shell/observer can exit before its TERM-ignoring child.
+                    # Reap the whole owned group even if the leader already exited.
+                    try:
+                        os.killpg(child.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
                     child.wait(timeout=2)
                 if not isinstance(error, subprocess.TimeoutExpired):
                     raise
@@ -340,6 +347,20 @@ def stage_evidence(root, target, old_observers, backfill='enabled'):
             safe[key] = numeric_fields(raw.get(key), ('accepted', 'duplicate', 'unsuccessful', 'p95LowerSeconds', 'p95UpperSeconds', 'elapsedSeconds'))
         safe['due'] = numeric_fields(raw.get('due'), ('intervals', 'missing', 'slisWithMissing', 'nonObserved'))
         safe['live'] = numeric_fields(raw.get('live'), ('slis', 'intervals', 'maxReceiptDelaySeconds'))
+        required = {
+            'ingestionOnly': ('accepted', 'duplicate', 'unsuccessful', 'p95LowerSeconds', 'p95UpperSeconds', 'elapsedSeconds'),
+            'ingestionUnderLoad': ('accepted', 'duplicate', 'unsuccessful', 'p95LowerSeconds', 'p95UpperSeconds', 'elapsedSeconds'),
+            'due': ('intervals', 'missing', 'slisWithMissing', 'nonObserved'),
+            'live': ('slis', 'intervals', 'maxReceiptDelaySeconds'),
+        }
+        for section, fields in required.items():
+            # Null histogram bounds / delay explicitly represent unavailable data;
+            # omitted fields and nonnumeric counts never establish completeness.
+            nullable = {'p95LowerSeconds', 'p95UpperSeconds', 'maxReceiptDelaySeconds'}
+            if any(field not in safe[section] or
+                   not number(safe[section][field]) and not (field in nullable and safe[section][field] is None)
+                   for field in fields):
+                errors.append('incomplete_measurements_' + section)
         safe['completedQueryCalls'] = numeric_fields(raw.get('completedQueryCalls'), ('baseline', 'candidate', 'reference'))
         safe['timings'] = safe_timings(raw.get('timings'), ('list-cold', 'list-warm', 'detail-cold', 'detail-warm'))
         safe['apiTimings'] = safe_timings(raw.get('apiTimings'), ('overview', 'status', 'history'))
