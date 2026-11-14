@@ -305,7 +305,8 @@ class ControlTests(unittest.TestCase):
             raw = {'before': {'at': '2026-11-14T10:00:00Z'}, 'after': {'at': '2026-11-14T10:01:00Z'},
                    'timings': {key: [] for key in ('list-cold', 'list-warm', 'detail-cold', 'detail-warm')},
                    'outcomes': [{'status': 'rejected', 'reason': 'PRIVATE_EXCEPTION'}], 'password': 'PRIVATE_PASSWORD',
-                   'apiSamples': [{'name': 'overview', 'status': 503, 'body': 'PRIVATE_BODY', 'headers': {'cookie': 'PRIVATE_COOKIE'}}]}
+                   'apiSamples': [{'name': 'status', 'status': 503, 'currentState': 'stale',
+                                   'evaluatedThrough': '2026-11-14T10:00:00Z', 'calculationLagSeconds': 12, 'body': 'PRIVATE_BODY', 'headers': {'cookie': 'PRIVATE_COOKIE'}}]}
             (calc / 'results.json').write_text(json.dumps(raw))
             (calc / 'ingestion-baseline.json').write_text(json.dumps({'baselineStart': {'at': '2026-11-14T09:59:00Z'},
                 'baselineEnd': {'at': '2026-11-14T10:00:00Z'}, 'secret': 'PRIVATE_BASELINE'}))
@@ -321,6 +322,10 @@ class ControlTests(unittest.TestCase):
             self.assertNotIn('PRIVATE', staged)
             self.assertIn('incomplete_workload_result', staged)
             self.assertIn('503', staged)
+            sample = json.loads((target / 'workload.json').read_text())['apiSamples'][0]
+            self.assertEqual(sample['currentState'], 'stale')
+            self.assertEqual(sample['calculationLagSeconds'], 12)
+            self.assertEqual(sample['evaluatedThrough'], '2026-11-14T10:00:00+00:00')
             self.assertIn('2026-11-14T09:59:00+00:00', staged)
 
     def test_cleanup_failure_and_missing_evidence_prevent_success(self):

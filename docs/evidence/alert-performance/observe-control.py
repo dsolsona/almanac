@@ -10,6 +10,7 @@ import json
 import os
 from pathlib import Path
 import re
+import signal
 import subprocess
 import threading
 import time
@@ -158,11 +159,64 @@ def resource_sampler():
                 child.kill()
                 child.wait(timeout=5)
 
+def workload_group_alive(group):
+    # Linux development image: zombies cannot execute or contaminate later work.
+    # Checking the group, not just its leader, catches orphaned Chromium/workers.
+    for entry in Path('/proc').iterdir():
+        if not entry.name.isdigit():
+            continue
+        try:
+            fields = (entry / 'stat').read_text().rsplit(')', 1)[1].split()
+            if int(fields[2]) == group and fields[0] != 'Z':
+                return True
+        except (FileNotFoundError, ProcessLookupError):
+            continue
+    return False
+
+
+def cleanup_workload(child):
+    result = {'started': child is not None, 'terminated': child is None, 'forced': False}
+    if child is None:
+        return result
+    try:
+        if workload_group_alive(child.pid):
+            result['forced'] = True
+            try:
+                os.killpg(child.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+            until = time.monotonic() + 1
+            while workload_group_alive(child.pid) and time.monotonic() < until:
+                time.sleep(0.01)
+            if workload_group_alive(child.pid):
+                try:
+                    os.killpg(child.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+        child.wait(timeout=1)
+        until = time.monotonic() + 1
+        while workload_group_alive(child.pid) and time.monotonic() < until:
+            time.sleep(0.01)
+        result['terminated'] = not workload_group_alive(child.pid)
+    except Exception:
+        errors.append({'stream': 'workload_cleanup', 'error': 'owned process group cleanup failed'})
+    if not result['terminated']:
+        errors.append({'stream': 'workload_cleanup', 'error': 'owned process group remains active'})
+    elif result['forced']:
+        errors.append({'stream': 'workload_cleanup', 'error': 'forced workload group shutdown'})
+    return result
+
+
+def interrupted(signum, _frame):
+    raise SystemExit(128 + signum)
+
 threads = [threading.Thread(target=guarded_sampler, args=(name, function), daemon=True)
            for name, function in [('database', database_sampler), ('resources', resource_sampler)]]
 for thread in threads:
     thread.start()
 exit_code = None
+workload = None
+previous_term = signal.signal(signal.SIGTERM, interrupted)
 try:
     if args.smoke:
         time.sleep(3)
@@ -170,18 +224,25 @@ try:
     else:
         with (root / 'workload.log').open('w') as log:
             env = os.environ | {'ALERT_CALCULATION_MODE': 'baseline-only', 'E2E_POSTGRES_STORAGE': 'disk'}
-            run = subprocess.run(['./node_modules/.bin/playwright', 'test', '--config', 'playwright.alert-calculation.config.ts',
+            workload = subprocess.Popen(['./node_modules/.bin/playwright', 'test', '--config', 'playwright.alert-calculation.config.ts',
                                   '--project=calculation', '--no-deps'], cwd='web', env=env,
-                                 stdout=log, stderr=subprocess.STDOUT, timeout=370)
-            exit_code = run.returncode
+                                 stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+            exit_code = workload.wait(timeout=370)
 except subprocess.TimeoutExpired:
     exit_code = 124
-    errors.append({'stream': 'workload', 'error': 'wrapper deadline reached; inspect child processes before reusing runtime lane'})
+    errors.append({'stream': 'workload', 'error': 'wrapper deadline reached'})
+except KeyboardInterrupt:
+    exit_code = 130
+    raise
+except SystemExit as exc:
+    exit_code = exc.code if isinstance(exc.code, int) else 1
+    raise
 except BaseException:
     exit_code = 1
     raise
 finally:
     stop.set()
+    workload_cleanup = cleanup_workload(workload)
     for thread in threads:
         thread.join(timeout=0.5)
     # A PostgreSQL statement timeout does not bound Docker's transport. Supervise
@@ -208,10 +269,12 @@ finally:
         if not completed[name] or counts[name] == 0:
             errors.append({'stream': name, 'error': 'sampler did not complete with samples'})
     result = {'finished_at': now(), 'workload_exit_code': exit_code, 'samples': counts,
-              'samplers_completed': completed, 'processes_terminated': all(child.poll() is not None for _, child in owned),
+              'samplers_completed': completed, 'workload_cleanup': workload_cleanup,
+              'processes_terminated': workload_cleanup['terminated'] and all(child.poll() is not None for _, child in owned),
               'errors': errors}
     (root / 'result.json').write_text(json.dumps(result, indent=2) + '\n')
     print(json.dumps({'artifacts': str(root), **result}))
+    signal.signal(signal.SIGTERM, previous_term)
 if args.smoke and (counts['database'] < 2 or counts['resources'] < 1):
     raise SystemExit('observer smoke lacks complete samples')
 raise SystemExit(exit_code or (1 if errors else 0))

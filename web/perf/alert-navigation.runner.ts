@@ -96,13 +96,17 @@ export class NavigationProtocol {
 export function runnerIdentity() {
   const require = createRequire(import.meta.url);
   return {protocolVersion: 1, node: process.version, playwright: require('@playwright/test/package.json').version as string,
-    sourceHashes: Object.fromEntries(['alert-navigation.client.ts','alert-navigation.runner.ts','alert-navigation.transport.ts'].map(file =>
+    sourceHashes: Object.fromEntries(['alert-navigation.client.ts','alert-navigation.runner.ts','alert-navigation.transport.ts','alert-status-evidence.ts'].map(file =>
       [file,createHash('sha256').update(readFileSync(new URL(file, import.meta.url))).digest('hex')]))};
 }
 
-export function navigationDeadline(cancel: () => void, force: () => void) {
-  const deadline=setTimeout(cancel,295_000), hardDeadline=setTimeout(force,300_000);
-  return () => {clearTimeout(deadline);clearTimeout(hardDeadline);};
+export function navigationDeadline(cancel: () => void, force: () => void, flush: () => void = () => {}) {
+  const deadline=setTimeout(cancel,295_000), flushDeadline=setTimeout(flush,299_000), hardDeadline=setTimeout(force,300_000);
+  return () => {clearTimeout(deadline);clearTimeout(flushDeadline);clearTimeout(hardDeadline);};
+}
+
+export function writeNavigationResult(message: object, output: {write: (text: string, callback: (error?: Error | null) => void) => unknown} = process.stdout): Promise<void> {
+  return new Promise((resolve,reject) => output.write(JSON.stringify(message)+'\n', error => error ? reject(error) : resolve()));
 }
 
 // No exception messages/stacks or arbitrary input objects may cross this boundary.
@@ -116,20 +120,23 @@ export async function main() {
   const report = (forced = false) => {
     if (finished) return;
     finished = true;
-    clearDeadline();
     process.stdin.pause();
     const failures = [...(failure ? [failure] : []), ...navigationFailures(state)];
-    emit({type:'result', runID, profile:'client-only-diagnostic', capacityAcceptance:false, identity,
+    void writeNavigationResult({type:'result', runID, profile:'client-only-diagnostic', capacityAcceptance:false, identity,
       beganAt, finishedAt:Date.now(), browserVersion:state.browserVersion, forcedCleanup:forced,
       status:failures.length ? 'failed' : 'complete', failures, timings:state.timings, journeySamples:state.journeySamples,
       clock:'client-wall-clock; not synchronized to backend', cleanupComplete:state.cleanupComplete,
       apiSamples:state.apiSamples, apiCycles:state.apiCycles, outcomes:state.outcomes,
-      counts:{journeys:Object.values(state.timings).reduce((n,v)=>n+v.length,0), apiRequests:state.apiSamples.length}});
+      counts:{journeys:Object.values(state.timings).reduce((n,v)=>n+v.length,0), apiRequests:state.apiSamples.length}}).then(() => {
+        clearDeadline();
+        if (forced) process.exit(1);
+      }, () => { process.exit(1); });
     process.exitCode = failures.length ? 1 : 0;
   };
-  // Reserve five seconds for closing active requests/Chromium within the existing five-minute wrapper.
+  // Cancel at 295s; reserve the final second for terminal stdout before the unchanged 300s exit.
+  // A permanently blocked reader can still lose output: bounded termination takes precedence.
   const clearDeadline = navigationDeadline(() => { failure='deadline'; abort.abort(); if (!work) report(); },
-    () => { failure='deadline'; report(true); process.exit(1); });
+    () => { process.exit(1); }, () => { failure='deadline'; report(true); });
   const browserDone = (outcome: import('./alert-navigation.client.ts').Outcome) => {
     state.browserDone=true;
     emit({type:'browser-done', runID, profile:'client-only-diagnostic', capacityAcceptance:false, identity,

@@ -1,3 +1,4 @@
+import {calculationEvidence} from './alert-status-evidence.ts';
 import type { Browser, APIRequestContext, Page } from '@playwright/test';
 import {navigationTransport} from './alert-navigation.transport.ts';
 
@@ -29,7 +30,7 @@ export function navigationState() {
   return {stop: false, browserDone: false, browserVersion: '', cleanupComplete:false, apiCycles: Array<number>(10).fill(0),
     timings: {'list-cold': [], 'list-warm': [], 'detail-cold': [], 'detail-warm': []} as Record<string, number[]>,
     journeySamples: [] as {name:string;run:number;milliseconds:number;clientCompletedAt:number;traceID:string|null}[],
-    apiSamples: [] as {user: number; cycle: number; name: string; beganAt: number; finishedAt: number; milliseconds: number; status: number | null}[],
+    apiSamples: [] as ({user: number; cycle: number; name: string; beganAt: number; finishedAt: number; milliseconds: number; status: number | null} & Partial<ReturnType<typeof calculationEvidence>>)[],
     outcomes: [] as Outcome[]};
 }
 export type NavigationState = ReturnType<typeof navigationState>;
@@ -84,7 +85,7 @@ export async function runNavigationClient(start: NavigationStart, state: Navigat
             try {
               response = await client.get(path);
               const body = await response.json() as {items?:unknown;current?:unknown};
-              apiSamples.push({user, cycle, name, beganAt, finishedAt: Date.now(), milliseconds: performance.now() - began, status: response.status()});
+              apiSamples.push({user, cycle, name, beganAt, finishedAt: Date.now(), milliseconds: performance.now() - began, status: response.status(), ...(name === 'status' ? calculationEvidence(body) : {})});
               recorded = true;
               expect(response.status()).toBe(200);
               if (name === 'overview') expect(body.items).toHaveLength(20);

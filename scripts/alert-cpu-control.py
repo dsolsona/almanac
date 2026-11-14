@@ -365,6 +365,10 @@ def stage_evidence(root, target, old_observers, backfill='enabled'):
         safe['timings'] = safe_timings(raw.get('timings'), ('list-cold', 'list-warm', 'detail-cold', 'detail-warm'))
         safe['apiTimings'] = safe_timings(raw.get('apiTimings'), ('overview', 'status', 'history'))
         safe['apiSamples'] = [numeric_fields(sample, ('beganAt', 'finishedAt', 'milliseconds', 'status')) | {'name': sample['name']}
+                              | ({'currentState': sample.get('currentState') if sample.get('currentState') in ('ready','stale','failed','unavailable') else None,
+                                  'evaluatedThrough': timestamp(sample.get('evaluatedThrough')),
+                                  'calculationLagSeconds': sample.get('calculationLagSeconds') if number(sample.get('calculationLagSeconds')) and sample['calculationLagSeconds'] >= 0 else None}
+                                 if sample['name'] == 'status' else {})
                               for sample in raw.get('apiSamples', [])[:10000] if sample.get('name') in ('overview', 'status', 'history')]
         safe['outcomes'] = [{'status': entry['status']} if entry.get('status') == 'fulfilled' else {'status': 'rejected', 'code': 'lane_failed'}
                             for entry in raw.get('outcomes', [])[:32]]
@@ -392,6 +396,7 @@ def stage_evidence(root, target, old_observers, backfill='enabled'):
                     'samples': numeric_fields(result.get('samples'), ('database', 'resources')),
                     'samplers_completed': {name: result.get('samplers_completed', {}).get(name) is True for name in ('database', 'resources')},
                     'processes_terminated': result.get('processes_terminated') is True,
+                    'workload_cleanup': {key: result.get('workload_cleanup', {}).get(key) is True for key in ('started','terminated','forced')},
                     'errors': [{'code': 'observer_error'} for _ in result.get('errors', [])[:100]]}
             write_json(target / 'observer-result.json', safe)
             if safe['workload_exit_code'] is None or safe['errors'] or not safe['processes_terminated'] or not all(safe['samplers_completed'].values()):

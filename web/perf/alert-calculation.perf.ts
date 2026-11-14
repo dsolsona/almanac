@@ -1,3 +1,4 @@
+import {calculationEvidence} from './alert-status-evidence.ts';
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -123,7 +124,7 @@ JOIN (VALUES ${goods}) g(sli_id,good) USING(sli_id);`);
     applicationImage: compose('images', '--quiet', 'app').trim(),
     sourceHashes: Object.fromEntries(['../internal/storage/testdata/alert_window_fallback.sql',
       'src/components/charts/useEChart.ts', 'src/components/charts/BudgetSparklinePlot.tsx',
-      'perf/alert-calculation.perf.ts', 'perf/alert-calculation.experiment.ts', 'perf/alert-calculation.metrics.ts', 'perf/alert-calculation.seed.ts', 'playwright.alert-calculation.config.ts', '../compose.e2e.yaml', '../internal/storage/query/agent_access.sql', '../internal/storage/query/slis.sql', '../internal/storage/derived_current.go', '../internal/storage/query/derived_projections.sql', '../api/openapi.yaml', '../web/src/slos/SloDetailPanels.tsx',
+      'perf/alert-calculation.perf.ts', 'perf/alert-status-evidence.ts', 'perf/alert-calculation.experiment.ts', 'perf/alert-calculation.metrics.ts', 'perf/alert-calculation.seed.ts', 'playwright.alert-calculation.config.ts', '../compose.e2e.yaml', '../internal/storage/query/agent_access.sql', '../internal/storage/query/slis.sql', '../internal/storage/derived_current.go', '../internal/storage/query/derived_projections.sql', '../api/openapi.yaml', '../web/src/slos/SloDetailPanels.tsx',
       '../internal/storage/query/derived_overview.sql', '../internal/storage/query/slo_list_references.sql',
       '../internal/storage/dbgen/slo_list_references.sql.go',
       '../internal/storage/query/derived_due.sql', '../internal/storage/query/derived_consistency.sql',
@@ -160,7 +161,7 @@ SELECT public.alert_experiment_compare('${fleet.slis[index]!.id}','${cutoff}'::t
   }
   const backfillWork = runBackfill(historicalWrites, () => asynchronousSQL(backfill.map((batch, index) => `${batch}\nSELECT json_build_object('completedBatch',${index},'at',clock_timestamp());`).join('\n'), 'backfill'));
   const timings: Record<string, number[]> = { 'list-cold': [], 'list-warm': [], 'detail-cold': [], 'detail-warm': [] };
-  const apiSamples: { name: string; beganAt: number; finishedAt: number; milliseconds: number; status: number }[] = [];
+  const apiSamples: ({ name: string; beganAt: number; finishedAt: number; milliseconds: number; status: number } & Partial<ReturnType<typeof calculationEvidence>>)[] = [];
   let workloadRunning = true;
   // Ten concurrent API users exercise server admission independently of browser
   // rendering. SPEC-0019 measures browser journeys separately on a capable client;
@@ -177,7 +178,7 @@ SELECT public.alert_experiment_compare('${fleet.slis[index]!.id}','${cutoff}'::t
           const began = performance.now(), beganAt = Date.now();
           const response = await client.get(path);
           const body = await response.json();
-          apiSamples.push({ name, beganAt, finishedAt: Date.now(), milliseconds: performance.now() - began, status: response.status() });
+          apiSamples.push({ name, beganAt, finishedAt: Date.now(), milliseconds: performance.now() - began, status: response.status(), ...(name === 'status' ? calculationEvidence(body) : {}) });
           expect(response.status(), `${name} HTTP status`).toBe(200);
           if (name === 'overview') expect(body.items).toHaveLength(20);
           else expect(body.current).toBeDefined();

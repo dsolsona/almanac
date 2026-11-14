@@ -9,15 +9,21 @@ assert results['profile']['sourceHashes']['perf/alert-calculation.perf.ts'] == '
 queries = [json.loads(line) for i in range(2) for line in (root / f'queries-{i}.jsonl').read_text().splitlines() if line.startswith('{')]
 assert len(queries) == 800
 fields = ['observed', 'known_empty', 'zero_traffic', 'first_observation', 'last_observation', 'latest_receipt']
+verified_windows = 0
 for q in queries:
+    for side in ('candidate', 'reference'):
+        rows = q[side]
+        assert len(rows) == 4 and {r['ordinal'] for r in rows} == {1, 2, 3, 4}, (q['sli'], side, 'incomplete window coverage')
+    reference = {row['ordinal']: row for row in q['reference']}
     for row in q['candidate']:
         assert row['prepared']
-        raw = q['reference'][row['ordinal'] - 1]
+        raw = reference[row['ordinal']]
         for key in ['good', 'total']:
             assert Decimal(row[key]) == Decimal(raw[key]), (q['sli'], row['ordinal'], key)
         for key in fields:
             assert row[key] == raw[key], (q['sli'], row['ordinal'], key)
         assert row['raw_rows'] <= 7200
+        verified_windows += 1
 
 def stats(values):
     values = sorted(values)
@@ -25,7 +31,7 @@ def stats(values):
 
 elapsed = (datetime.fromisoformat(results['after']['at']) - datetime.fromisoformat(results['before']['at'])).total_seconds()
 report = dict(profile=results['profile'], result='not accepted: contention failed',
-    elapsedSeconds=elapsed, pairedBatches=len(queries), independentlyVerifiedWindows=4*len(queries),
+    elapsedSeconds=elapsed, pairedBatches=len(queries), independentlyVerifiedWindows=verified_windows,
     pendingBaseline=sum(any(not r['prepared'] for r in q['baseline']) for q in queries),
     pendingCandidate=0, fallbackBatches=sum(any(r['dirty_hours'] > 0 for r in q['candidate']) for q in queries),
     maximumEmittedRawRows=max(r['raw_rows'] for q in queries for r in q['candidate']),
