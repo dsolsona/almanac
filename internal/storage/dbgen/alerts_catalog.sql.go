@@ -250,7 +250,7 @@ func (q *Queries) ListAlertCatalog(ctx context.Context, arg ListAlertCatalogPara
 }
 
 const listAlertRangeHistory = `-- name: ListAlertRangeHistory :many
-SELECT id, policy_id, revision, starts_at, ends_at, cadence_seconds, kind, reason, recorded_at, reference_evaluation_id, actor_id, request_id FROM public.almanac_alert_ranges WHERE policy_id=$1 AND revision=$2
+SELECT id, policy_id, revision, starts_at, ends_at, cadence_seconds, kind, reason, recorded_at, reference_evaluation_id, actor_id, request_id, summary FROM public.almanac_alert_ranges WHERE policy_id=$1 AND revision=$2
 AND (NOT $3::boolean OR (starts_at,id)>($4::timestamptz,$5::uuid))
 ORDER BY starts_at,id LIMIT $6
 `
@@ -293,6 +293,7 @@ func (q *Queries) ListAlertRangeHistory(ctx context.Context, arg ListAlertRangeH
 			&i.ReferenceEvaluationID,
 			&i.ActorID,
 			&i.RequestID,
+			&i.Summary,
 		); err != nil {
 			return nil, err
 		}

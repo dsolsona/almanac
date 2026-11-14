@@ -1,5 +1,8 @@
 # Implementation tasks
 
+[F4-T36](F4-T36.md) protects active/last-breaching evidence and adds bounded,
+restartable compaction/retention without production cleanup registration.
+
 [F4-T35](F4-T35.md) prepares concrete public defaults, activation and replay
 contracts for maintainer review before public wiring.
 

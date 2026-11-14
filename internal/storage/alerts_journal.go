@@ -226,6 +226,16 @@ func (r *Runtime) commitAlertEvaluation(ctx context.Context, claim alertClaim, i
 					return err
 				}
 			}
+			if evaluation.Truth == alert.Breaching {
+				occurrenceID, _ := canonicalUUID(stored.Occurrence.ID)
+				n, err := q.UpsertAlertBreachPin(ctx, dbgen.UpsertAlertBreachPinParams{OccurrenceID: occurrenceID, PolicyID: id, Revision: claim.Revision, EvaluationID: evaluationID})
+				if err != nil {
+					return err
+				}
+				if n != 1 {
+					return ErrAlertStale
+				}
+			}
 		}
 		var openID pgtype.UUID
 		if stored.Occurrence != nil && (stored.Occurrence.State == alert.Firing || stored.Occurrence.State == alert.Acknowledged) {

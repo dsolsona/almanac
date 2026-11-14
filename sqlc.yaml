@@ -62,6 +62,7 @@ sql:
       - internal/storage/migrations/0056_alert_journal.sql
       - internal/storage/migrations/0057_alert_processing_failures.sql
       - internal/storage/migrations/0058_alert_catalog.sql
+      - internal/storage/migrations/0059_alert_evidence_retention.sql
     gen:
       go:
         package: dbgen

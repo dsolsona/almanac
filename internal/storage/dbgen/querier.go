@@ -16,6 +16,7 @@ type Querier interface {
 	ActivateDatasourceAgent(ctx context.Context, arg ActivateDatasourceAgentParams) (AlmanacDatasource, error)
 	ActivateSliMeasurement(ctx context.Context, arg ActivateSliMeasurementParams) (int64, error)
 	AdvanceAlertCursor(ctx context.Context, arg AdvanceAlertCursorParams) (int64, error)
+	AdvanceAlertRetentionWork(ctx context.Context, arg AdvanceAlertRetentionWorkParams) (int64, error)
 	AdvanceMaintenanceIdentity(ctx context.Context, arg AdvanceMaintenanceIdentityParams) error
 	AdvanceMaintenanceState(ctx context.Context, arg AdvanceMaintenanceStateParams) (int64, error)
 	AdvanceRetentionCleanup(ctx context.Context, arg AdvanceRetentionCleanupParams) (int64, error)
@@ -32,6 +33,7 @@ type Querier interface {
 	AgentHasUnsettledCurrentLease(ctx context.Context, arg AgentHasUnsettledCurrentLeaseParams) (bool, error)
 	AggregateSloObservations(ctx context.Context, arg AggregateSloObservationsParams) (AggregateSloObservationsRow, error)
 	AlertPolicyRevisionExists(ctx context.Context, arg AlertPolicyRevisionExistsParams) (bool, error)
+	AlertRangesOverlap(ctx context.Context, arg AlertRangesOverlapParams) (bool, error)
 	ArchiveAgent(ctx context.Context, arg ArchiveAgentParams) (AlmanacAgent, error)
 	ArchiveService(ctx context.Context, arg ArchiveServiceParams) (int64, error)
 	CancelAlertCursor(ctx context.Context, arg CancelAlertCursorParams) (int64, error)
@@ -84,6 +86,11 @@ type Querier interface {
 	DeleteExpiredUserReceipts(ctx context.Context, now pgtype.Timestamptz) error
 	DeleteLoginAttempt(ctx context.Context, id pgtype.UUID) error
 	DeleteObjectiveCreateReceipt(ctx context.Context, arg DeleteObjectiveCreateReceiptParams) error
+	DeleteRetainedAlertBreachPins(ctx context.Context, dollar_1 []pgtype.UUID) (int64, error)
+	DeleteRetainedAlertEvaluations(ctx context.Context, dollar_1 []pgtype.UUID) (int64, error)
+	DeleteRetainedAlertOccurrences(ctx context.Context, dollar_1 []pgtype.UUID) (int64, error)
+	DeleteRetainedAlertRanges(ctx context.Context, dollar_1 []pgtype.UUID) (int64, error)
+	DeleteRetainedAlertTransitions(ctx context.Context, dollar_1 []pgtype.UUID) (int64, error)
 	DeleteSession(ctx context.Context, id pgtype.UUID) (int64, error)
 	DeleteUserChallenges(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserSessions(ctx context.Context, userID pgtype.UUID) error
@@ -156,6 +163,7 @@ type Querier interface {
 	InsertAgentLifecycleReceipt(ctx context.Context, arg InsertAgentLifecycleReceiptParams) error
 	InsertAgentOwnership(ctx context.Context, arg InsertAgentOwnershipParams) error
 	InsertAgentReceipt(ctx context.Context, arg InsertAgentReceiptParams) error
+	InsertAlertCompactionRange(ctx context.Context, arg InsertAlertCompactionRangeParams) error
 	InsertAlertCursor(ctx context.Context, arg InsertAlertCursorParams) error
 	InsertAlertEvaluation(ctx context.Context, arg InsertAlertEvaluationParams) error
 	InsertAlertOccurrence(ctx context.Context, arg InsertAlertOccurrenceParams) error
@@ -249,6 +257,7 @@ type Querier interface {
 	LockAlertCursor(ctx context.Context, arg LockAlertCursorParams) (AlmanacAlertCursor, error)
 	LockAlertOccurrence(ctx context.Context, id pgtype.UUID) (AlmanacAlertOccurrence, error)
 	LockAlertPolicy(ctx context.Context, id pgtype.UUID) (AlmanacAlertPolicy, error)
+	LockAlertRetentionWork(ctx context.Context, kind string) (AlmanacAlertRetentionWork, error)
 	LockAlertSli(ctx context.Context, id pgtype.UUID) (int64, error)
 	LockAlertSlo(ctx context.Context, id pgtype.UUID) (int64, error)
 	LockDatasource(ctx context.Context, id pgtype.UUID) (AlmanacDatasource, error)
@@ -345,6 +354,9 @@ type Querier interface {
 	RevokeAgentCredential(ctx context.Context, arg RevokeAgentCredentialParams) (RevokeAgentCredentialRow, error)
 	RevokeAndAuditUnrevokedAgentCredentials(ctx context.Context, arg RevokeAndAuditUnrevokedAgentCredentialsParams) (int64, error)
 	RotateLocalPassword(ctx context.Context, arg RotateLocalPasswordParams) (int64, error)
+	ScanAlertRetainedEvaluations(ctx context.Context, arg ScanAlertRetainedEvaluationsParams) ([]ScanAlertRetainedEvaluationsRow, error)
+	ScanAlertRetentionRanges(ctx context.Context, arg ScanAlertRetentionRangesParams) ([]AlmanacAlertRange, error)
+	ScanAlertTerminalOccurrences(ctx context.Context, arg ScanAlertTerminalOccurrencesParams) ([]AlmanacAlertOccurrence, error)
 	ServiceArchiveBlockers(ctx context.Context, serviceID pgtype.UUID) (ServiceArchiveBlockersRow, error)
 	SessionVerifierExists(ctx context.Context, verifier []byte) (bool, error)
 	SetAgentCurrentExecutionLease(ctx context.Context, arg SetAgentCurrentExecutionLeaseParams) (int64, error)
@@ -372,6 +384,7 @@ type Querier interface {
 	UpdateSourceRemovalRevisions(ctx context.Context, arg UpdateSourceRemovalRevisionsParams) error
 	UpsertAgentIncompatibleAttempt(ctx context.Context, arg UpsertAgentIncompatibleAttemptParams) error
 	UpsertAgentRuntimeHello(ctx context.Context, arg UpsertAgentRuntimeHelloParams) error
+	UpsertAlertBreachPin(ctx context.Context, arg UpsertAlertBreachPinParams) (int64, error)
 	UserEmailInUse(ctx context.Context, arg UserEmailInUseParams) (bool, error)
 }
 

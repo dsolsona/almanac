@@ -93,6 +93,13 @@ type AlmanacAgentRuntimeStatus struct {
 	UpdatedAt                    pgtype.Timestamptz `json:"updated_at"`
 }
 
+type AlmanacAlertBreachPin struct {
+	OccurrenceID pgtype.UUID `json:"occurrence_id"`
+	PolicyID     pgtype.UUID `json:"policy_id"`
+	Revision     int64       `json:"revision"`
+	EvaluationID pgtype.UUID `json:"evaluation_id"`
+}
+
 type AlmanacAlertCatalog struct {
 	ID          pgtype.UUID        `json:"id"`
 	PolicyID    pgtype.UUID        `json:"policy_id"`
@@ -199,6 +206,16 @@ type AlmanacAlertRange struct {
 	ReferenceEvaluationID pgtype.UUID        `json:"reference_evaluation_id"`
 	ActorID               pgtype.UUID        `json:"actor_id"`
 	RequestID             string             `json:"request_id"`
+	Summary               []byte             `json:"summary"`
+}
+
+type AlmanacAlertRetentionWork struct {
+	Kind          string             `json:"kind"`
+	AfterPolicy   pgtype.UUID        `json:"after_policy"`
+	AfterRevision int64              `json:"after_revision"`
+	AfterTime     pgtype.Timestamptz `json:"after_time"`
+	AfterID       pgtype.UUID        `json:"after_id"`
+	Version       int64              `json:"version"`
 }
 
 type AlmanacAlertTransition struct {
