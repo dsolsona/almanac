@@ -1,0 +1,141 @@
+{
+  "baseRevision": "31caccee317d9d243de09edb4d3bc516afaa1d9a",
+  "profile": "client-only-diagnostic",
+  "capacityAcceptance": false,
+  "applicationImage": "0ae944680e195fbd6bd24049f3537b4110d37c11ac7cdba64ce1f16784611c08",
+  "identity": {
+    "protocolVersion": 1,
+    "node": "v26.8.1",
+    "playwright": "1.64.1",
+    "sourceHashes": {
+      "alert-navigation.client.ts": "664fc9248e8d5b303ebcc99b0d1b33ef7f6dc9628d4d845c7c7e87efca4b3537",
+      "alert-navigation.runner.ts": "2199795ba9ffa3d6e3bbda7636cadbf6f7c85ff1b177a4b3e94928b0db78a24d"
+    }
+  },
+  "browserVersion": "156.0.8078.4",
+  "sourceHashes": {
+    "web/perf/alert-navigation.client.ts": "664fc9248e8d5b303ebcc99b0d1b33ef7f6dc9628d4d845c7c7e87efca4b3537",
+    "web/perf/alert-navigation.runner.ts": "2199795ba9ffa3d6e3bbda7636cadbf6f7c85ff1b177a4b3e94928b0db78a24d",
+    "web/tests/alert-navigation.test.tsx": "40427888fc03aeb0fd025e5a0f0d107d967cf7010ca9a6ee9ea1380e3fc28711",
+    "web/package.json": "22bac536b53a171c0c1326d8819a85fdd3acf8ae166860f372b736b4668e187c",
+    "web/package-lock.json": "5f40dd7061f5eb6c685c18840bdc7bdb725a81b0bbe630af3d5f574ab66f2ed3"
+  },
+  "process": {
+    "code": 1,
+    "signal": null,
+    "inputFailure": false,
+    "durationMS": 91270.371417
+  },
+  "failures": [
+    "overview_latency"
+  ],
+  "counts": {
+    "journeys": 80,
+    "apiRequests": 300
+  },
+  "apiCycles": [
+    10,
+    10,
+    10,
+    10,
+    10,
+    10,
+    10,
+    10,
+    10,
+    10
+  ],
+  "outcomes": [
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "fulfilled"
+    }
+  ],
+  "cleanupComplete": true,
+  "forcedCleanup": false,
+  "browser": {
+    "list-cold": {
+      "count": 20,
+      "p50MS": 341.59999999403954,
+      "p95MS": 678.8000000119209,
+      "maxMS": 889
+    },
+    "list-warm": {
+      "count": 20,
+      "p50MS": 129.69999998807907,
+      "p95MS": 196.30000001192093,
+      "maxMS": 239.10000002384186
+    },
+    "detail-cold": {
+      "count": 20,
+      "p50MS": 202.90000000596046,
+      "p95MS": 325.59999999403954,
+      "maxMS": 345.40000000596046
+    },
+    "detail-warm": {
+      "count": 20,
+      "p50MS": 50,
+      "p95MS": 103.7000000178814,
+      "maxMS": 109
+    }
+  },
+  "api": {
+    "overview": {
+      "count": 100,
+      "p50MS": 261.2764410000018,
+      "p95MS": 650.8359139999993,
+      "maxMS": 830.0354630000002
+    },
+    "status": {
+      "count": 100,
+      "p50MS": 64.98866500000008,
+      "p95MS": 138.02340799999365,
+      "maxMS": 206.483524999996
+    },
+    "history": {
+      "count": 100,
+      "p50MS": 187.46320500000002,
+      "p95MS": 390.81973299999663,
+      "maxMS": 443.2930889999989
+    }
+  },
+  "apiNon200": 0,
+  "credentialValuesAbsentFromOutput": true,
+  "stderrBytes": 0,
+  "limitations": [
+    "Cohosted functional run on retained F4-T20 fixture, not a fresh controlled performance comparison.",
+    "Historical repair from previous backfill continues; no new synthetic query/backfill workers started.",
+    "No separate client hardware, controller overlap or synchronized-clock evidence.",
+    "Ordinary EOF and real cleanup exercised. Forced Chromium termination remains untested.",
+    "Full-workload browser/server/ingestion failures remain open."
+  ]
+}

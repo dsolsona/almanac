@@ -203,6 +203,35 @@ type AlmanacLoginAttempt struct {
 	State      string             `json:"state"`
 }
 
+type AlmanacMaintenanceExclusion struct {
+	ID              pgtype.UUID        `json:"id"`
+	CurrentRevision int64              `json:"current_revision"`
+	CreatorID       pgtype.UUID        `json:"creator_id"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
+type AlmanacMaintenanceExclusionRevision struct {
+	ExclusionID pgtype.UUID        `json:"exclusion_id"`
+	Revision    int64              `json:"revision"`
+	Title       string             `json:"title"`
+	Reason      string             `json:"reason"`
+	StartsAt    pgtype.Timestamptz `json:"starts_at"`
+	EndsAt      pgtype.Timestamptz `json:"ends_at"`
+	Operation   string             `json:"operation"`
+	Tombstone   bool               `json:"tombstone"`
+	ActorID     pgtype.UUID        `json:"actor_id"`
+	RecordedAt  pgtype.Timestamptz `json:"recorded_at"`
+	RequestID   string             `json:"request_id"`
+	AuditID     pgtype.UUID        `json:"audit_id"`
+}
+
+type AlmanacMaintenanceExclusionScope struct {
+	ExclusionID pgtype.UUID `json:"exclusion_id"`
+	Revision    int64       `json:"revision"`
+	SloID       pgtype.UUID `json:"slo_id"`
+}
+
 type AlmanacManagementReceipt struct {
 	ActorID        pgtype.UUID        `json:"actor_id"`
 	Operation      string             `json:"operation"`
@@ -426,13 +455,15 @@ type AlmanacSloCurrentFailure struct {
 }
 
 type AlmanacSloCurrentProjection struct {
-	SloID              pgtype.UUID `json:"slo_id"`
-	GenerationID       pgtype.UUID `json:"generation_id"`
-	ServiceID          pgtype.UUID `json:"service_id"`
-	SortName           string      `json:"sort_name"`
-	Urgency            string      `json:"urgency"`
-	Payload            []byte      `json:"payload"`
-	BudgetHistoryState pgtype.Text `json:"budget_history_state"`
+	SloID               pgtype.UUID `json:"slo_id"`
+	GenerationID        pgtype.UUID `json:"generation_id"`
+	ServiceID           pgtype.UUID `json:"service_id"`
+	SortName            string      `json:"sort_name"`
+	Urgency             string      `json:"urgency"`
+	Payload             []byte      `json:"payload"`
+	BudgetHistoryState  pgtype.Text `json:"budget_history_state"`
+	CurrentValidUntil   pgtype.Text `json:"current_valid_until"`
+	PerformanceComplete bool        `json:"performance_complete"`
 }
 
 type AlmanacSloDefinition struct {
@@ -461,6 +492,31 @@ type AlmanacSloDerivedGeneration struct {
 	EvaluatedThrough    pgtype.Timestamptz `json:"evaluated_through"`
 	RetentionStart      pgtype.Timestamptz `json:"retention_start"`
 	PublishedAt         pgtype.Timestamptz `json:"published_at"`
+}
+
+type AlmanacSloExclusionChange struct {
+	SloID             pgtype.UUID        `json:"slo_id"`
+	Revision          int64              `json:"revision"`
+	ExclusionID       pgtype.UUID        `json:"exclusion_id"`
+	ExclusionRevision int64              `json:"exclusion_revision"`
+	Included          bool               `json:"included"`
+	CoverageChanged   bool               `json:"coverage_changed"`
+	RecordedAt        pgtype.Timestamptz `json:"recorded_at"`
+}
+
+type AlmanacSloExclusionState struct {
+	SloID     pgtype.UUID        `json:"slo_id"`
+	Revision  int64              `json:"revision"`
+	ChangedAt pgtype.Timestamptz `json:"changed_at"`
+}
+
+type AlmanacSloExclusionWork struct {
+	SloID           pgtype.UUID        `json:"slo_id"`
+	DesiredRevision int64              `json:"desired_revision"`
+	WorkVersion     int64              `json:"work_version"`
+	AffectedStart   pgtype.Timestamptz `json:"affected_start"`
+	AffectedEnd     pgtype.Timestamptz `json:"affected_end"`
+	NextAttemptAt   pgtype.Timestamptz `json:"next_attempt_at"`
 }
 
 type AlmanacSloExtrema struct {

@@ -95,63 +95,62 @@ func resolveOperationalBounds(input OperationalDetailInput, cadence time.Duratio
 
 func (r *Runtime) RunHistory(ctx context.Context, logger *slog.Logger) {
 	for ctx.Err() == nil {
-		now := time.Now().UTC()
-		conn, err := r.Acquire(ctx, DerivedTraffic)
-		if err != nil {
-			if ctx.Err() == nil {
-				logger.ErrorContext(ctx, "SLO extrema scheduling failed", "error", derivedErrorDetail(err))
-			}
-			if !waitDerived(ctx, now.Add(time.Second)) {
-				return
-			}
-			continue
-		}
-		due, err := dbgen.New(conn).ReadExtremaDue(ctx, dbgen.ReadExtremaDueParams{Now: timestamp(now), CalculationVersion: operationalCalculationVersion})
-		conn.Release()
-		if err != nil {
-			if ctx.Err() == nil {
-				logger.ErrorContext(ctx, "SLO extrema scheduling failed", "error", derivedErrorDetail(err))
-			}
-			if !waitDerived(ctx, now.Add(time.Second)) {
-				return
-			}
-			continue
-		}
-		if due.EnsureCursorsDue {
-			conn, err := r.Acquire(ctx, DerivedTraffic)
-			if err == nil {
-				_, err = dbgen.New(conn).EnsureSloExtremaCursors(ctx, dbgen.EnsureSloExtremaCursorsParams{Now: timestamp(now), CalculationVersion: operationalCalculationVersion})
-				conn.Release()
-			}
-			if err != nil && ctx.Err() == nil {
-				logger.ErrorContext(ctx, "SLO extrema cursor discovery failed", "error", derivedErrorDetail(err))
-				if !waitDerived(ctx, now.Add(time.Second)) {
-					return
-				}
-				continue
-			}
-		}
-		if due.ExtremaDue {
-			worked, err := r.buildSloExtrema(ctx, time.Now)
-			if err != nil && ctx.Err() == nil && !derivedTemporary(ctx, err) {
-				r.metrics.preparationErrors[1].Add(1)
-				logger.ErrorContext(ctx, "SLO extrema preparation failed", "error", derivedErrorDetail(err))
-			}
-			if worked && err == nil {
-				r.metrics.extremaBatches.Add(1)
-				continue
-			}
-			if !worked && err == nil {
-				if !waitDerived(ctx, time.Now().Add(time.Second)) {
-					return
-				}
-				continue
-			}
-		}
-		if !waitDerived(ctx, maxTime(due.NextDue.Time, now.Add(10*time.Millisecond))) {
+		next := r.runHistoryTurn(ctx, logger, time.Now)
+		if !waitDerived(ctx, next) {
 			return
 		}
 	}
+}
+
+// runHistoryTurn releases all database resources before returning its next wakeup.
+func (r *Runtime) runHistoryTurn(ctx context.Context, logger *slog.Logger, clock func() time.Time) time.Time {
+	now := clock().UTC()
+	conn, err := r.Acquire(ctx, DerivedTraffic)
+	if err != nil {
+		if ctx.Err() == nil {
+			logger.ErrorContext(ctx, "SLO extrema scheduling failed", "error", derivedErrorDetail(err))
+		}
+		return now.Add(time.Second)
+	}
+	due, err := dbgen.New(conn).ReadExtremaDue(ctx, dbgen.ReadExtremaDueParams{Now: timestamp(now), CalculationVersion: operationalCalculationVersion})
+	conn.Release()
+	if err != nil {
+		if ctx.Err() == nil {
+			logger.ErrorContext(ctx, "SLO extrema scheduling failed", "error", derivedErrorDetail(err))
+		}
+		return now.Add(time.Second)
+	}
+	if due.EnsureCursorsDue {
+		conn, err := r.Acquire(ctx, DerivedTraffic)
+		if err == nil {
+			_, err = dbgen.New(conn).EnsureSloExtremaCursors(ctx, dbgen.EnsureSloExtremaCursorsParams{Now: timestamp(now), CalculationVersion: operationalCalculationVersion})
+			conn.Release()
+		}
+		if err != nil && ctx.Err() == nil {
+			logger.ErrorContext(ctx, "SLO extrema cursor discovery failed", "error", derivedErrorDetail(err))
+			return now.Add(time.Second)
+		}
+	}
+	if due.ExtremaDue {
+		worked, err := r.buildSloExtrema(ctx, clock)
+		if err != nil && ctx.Err() == nil && !derivedTemporary(ctx, err) {
+			r.metrics.preparationErrors[1].Add(1)
+			logger.ErrorContext(ctx, "SLO extrema preparation failed", "error", derivedErrorDetail(err))
+		}
+		if worked && err == nil {
+			r.metrics.extremaBatches.Add(1)
+			return clock().UTC()
+		}
+		if !worked && err == nil {
+			return clock().UTC().Add(time.Second)
+		}
+		// Per-cursor backoff alone permits continuous unsuccessful work across
+		// a large pending fleet. Pause after completion, with connections released,
+		// to cap unsuccessful turns at ten per second per history worker. Ready
+		// turns above still drain immediately; durable retry deadlines are unchanged.
+		return maxTime(due.NextDue.Time, clock().UTC().Add(100*time.Millisecond))
+	}
+	return maxTime(due.NextDue.Time, now.Add(10*time.Millisecond))
 }
 
 type retainedHistoryPublication struct {

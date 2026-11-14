@@ -169,11 +169,11 @@ func buildExtremaHour(ctx context.Context, q *dbgen.Queries, row dbgen.GetSloRow
 			inputs = append(inputs, input)
 		}
 	}
-	values, err := evaluateDerivedWindows(ctx, q, row.SliID, row.MeasurementRevision, inputs)
+	values, err := evaluateDerivedWindowsUsing(ctx, q, row.SliID, row.MeasurementRevision, inputs, slo.EvaluateOperationalTotalsSummary)
 	if err != nil {
 		return extremaLanes{}, err
 	}
-	var samples [4][]api.SloOperationalSample
+	var samples [4][]slo.WindowResult
 	for index, value := range values {
 		lane := index % len(durations)
 		if lane >= 2 && inputs[index].Duration == 6*time.Hour {
@@ -181,9 +181,20 @@ func buildExtremaHour(ctx context.Context, q *dbgen.Queries, row dbgen.GetSloRow
 		}
 		// Retain the complete receipt watermark; the API attainment projection
 		// deliberately hides it when there are only known-empty intervals.
-		samples[lane] = append(samples[lane], operationalSample(value, start, end, strconv.FormatInt(row.DefinitionRevision, 10)))
+		samples[lane] = append(samples[lane], value)
 	}
-	return makeExtremaLanes(samples, start, end, base.Target, base.Cadence)
+	var lanes [4]*extremaLane
+	for index, samples := range samples {
+		if index == 2 && time.Hour%base.Cadence != 0 || index == 3 && 6*time.Hour%base.Cadence != 0 {
+			continue
+		}
+		lane, err := makeExtremaSummaryLane(samples, start, end, base.Target, [4]string{"budget", "attainment", "burn", "burn"}[index], strconv.FormatInt(row.DefinitionRevision, 10))
+		if err != nil {
+			return extremaLanes{}, err
+		}
+		lanes[index] = &lane
+	}
+	return extremaLanes{Window: lanes[0], Attainment: lanes[1], Burn1h: lanes[2], Burn6h: lanes[3]}, nil
 }
 
 func publishExtrema(ctx context.Context, q *dbgen.Queries, work dbgen.ClaimSloExtremaCursorRow, lanes extremaLanes, start, end time.Time, generation int64, retention, now time.Time) error {

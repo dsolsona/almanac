@@ -121,6 +121,12 @@ func reduceRetainedLane(samples []api.SloOperationalSample, start, end time.Time
 }
 
 func reduceRetainedLaneLimit(samples []api.SloOperationalSample, start, end time.Time, target, metric string, limit int) ([]api.SloOperationalSample, error) {
+	return reduceRetainedLaneWithKey(samples, start, end, target, limit, func(_ int, sample api.SloOperationalSample) (*big.Rat, error) {
+		return retainedExtremumKey(sample, metric)
+	})
+}
+
+func reduceRetainedLaneWithKey(samples []api.SloOperationalSample, start, end time.Time, target string, limit int, key func(int, api.SloOperationalSample) (*big.Rat, error)) ([]api.SloOperationalSample, error) {
 	if !start.Before(end) {
 		return nil, ErrOperationalRange
 	}
@@ -144,7 +150,7 @@ func reduceRetainedLaneLimit(samples []api.SloOperationalSample, start, end time
 				selected[index-1], selected[index] = true, true
 			}
 		}
-		value, err := retainedExtremumKey(sample, metric)
+		value, err := key(index, sample)
 		if err != nil {
 			return nil, err
 		}

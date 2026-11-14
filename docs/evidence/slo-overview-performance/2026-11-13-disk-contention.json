@@ -1,0 +1,231 @@
+{
+  "result": "failed",
+  "profile": {
+    "baseRevision": "e9c8fa0",
+    "postgresStorage": "disk",
+    "applicationImage": "c2fbe4916414f7940a15133b25076cceacddd86fc145045a1219b7628a4714c5",
+    "sourceHashes": {
+      "../internal/storage/testdata/alert_window_fallback.sql": "2d7261617bf37a2c497103fe3f84a79a72365707bb2229f1b40537b909b6fa2e",
+      "perf/alert-calculation.perf.ts": "c5f27ec97d051d4374c1b5c63a19097dd926ed81ed6961c7a06ccbedea99e0bf",
+      "perf/alert-calculation.metrics.ts": "baa17bcd0604ced066e82941c96432d213f8402eaa7b1b15888a76f0f7ef8b41",
+      "perf/alert-calculation.seed.ts": "3f5544a5816cd550ff152f31a4b2bb154422b52bb224b3fcf062895d67f92228",
+      "playwright.alert-calculation.config.ts": "1b1584176d7b468750b1f6cc1a84f4df47486777a03c425097fd834eba42a1a9",
+      "../compose.e2e.yaml": "4796baeef6c7f8195624098f6c58487818db39b68fac6e4811d8267739b9b4a1",
+      "../internal/storage/query/agent_access.sql": "a50453eaf48acc4655b5a683eeb739c3e6fc6a22468bd3fd981622b3030c6332",
+      "../internal/storage/query/slis.sql": "dd520547b3b05f0a41308c3e6405436d1c71586bd2760c52b94c025607d02499",
+      "../internal/storage/derived_current.go": "4a0992a791240024c320027984a78ac7b6e344ff4f9d0dc4274b12238427f92a",
+      "../internal/storage/query/derived_projections.sql": "3bec990efffc6a2d72ca3a6e64796473e7a2b11e13abcfdb8ba06186fd0f6ea7",
+      "../api/openapi.yaml": "8cee7e36a221268d0bb5e05c81f11a28d6e81107b3425b7dabe4f8bbe675b4d8",
+      "../web/src/slos/SloDetailPanels.tsx": "0fa0ff1e854445c99150ec9c7e53bad936826d29f110e37280935a48a58b824b",
+      "../internal/storage/query/derived_overview.sql": "e0fcb6d8ce72bc0ed0c75d4f67cde6d3e0371e62a0b35e651ac64cdca30e0c73",
+      "../internal/storage/query/slo_list_references.sql": "f8f88f270f0666992c1f3e5c5512328594c334d319fd8ba831be29f81f3b84ff",
+      "../internal/storage/query/derived_due.sql": "cfe2a7e1b25c02be497ba3eec2d03e3230a6efb1fd488ae666787bd943dd7aac",
+      "../internal/storage/query/derived_consistency.sql": "7f3a3750d5a6c836ff1c0835def45bce160c3f370357d987b14dd533f7a54da1",
+      "../internal/storage/query/derived_metrics.sql": "0294bc1319786323c8a42e1be514c5d7f8c8919bfd5b667458b5c311fb9d5495",
+      "../internal/storage/query/services.sql": "7b131e6b40c0dff327a18f034f7874cf03cce65074738fd05fb88e46093cc950",
+      "../internal/storage/query/derived_history.sql": "b362ef9a5a1a76a66a0665fdd9eafe9681effebe4e1d078eefe8fd9d8bd5a221",
+      "../internal/storage/migrations/0053_projection_validity_scalar.sql": "1d6a9cc03c682fdde665d94859e0d93693ba8a046bac154787ccbb8a687a76e6",
+      "../compose.e2e.disk.yaml": "695de1b6c5004c7aa2a3b29b9bc91836c5486aee7cf1ad3a6839a2f50a556163",
+      "../scripts/e2e.sh": "31cd79161fe8ab6043044e4f1a9cfd7786682b21cddcf08d0dba6e067135ce9d",
+      "e2e/support/stack.ts": "61b3075ba186b4c4314109d761b6ac786c623e901556c848758403d6f3d4bc22"
+    },
+    "cpu": "AMD EPYC",
+    "logicalCPUs": 2,
+    "memoryBytes": 4130635776,
+    "database": "PostgreSQL 18.6 (Debian 18.6-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+    "slis": 200,
+    "initialDays": 1,
+    "backfillDays": 3,
+    "maxDirtyHours": 8,
+    "maxRawVisits": 7200,
+    "statementTimeoutMs": 1000,
+    "workers": 2,
+    "offeredBatchesPerSecond": 8,
+    "rounds": 4,
+    "cutoff": "2026-11-13T17:00:00Z",
+    "apiUsers": 10,
+    "apiMinimumCyclesPerUser": 10,
+    "apiCycleIntervalMs": 10000,
+    "browserUsers": 1,
+    "browserCycles": 20,
+    "backfillBatchMaxRows": 720,
+    "backfillBatchSLIs": 1,
+    "backfillBatches": 1400,
+    "note": "Controlled historical measurement cutoffs cross a UTC hour; wall-clock engine scheduling is outside this query experiment. Each paired query also runs an independent raw-population reference in the same snapshot; its extra work is part of the contention load."
+  },
+  "phase": {
+    "before": "2026-11-13T19:16:54.937533+00:00",
+    "after": "2026-11-13T19:19:38.250551+00:00"
+  },
+  "pairedBatches": 800,
+  "independentlyComparedWindows": 3200,
+  "mismatches": [],
+  "pendingBaseline": 152,
+  "pendingCandidate": 0,
+  "fallbackBatches": 152,
+  "maximumEmittedRawRows": 455,
+  "baselineMilliseconds": {
+    "samples": 800,
+    "p50": 10.184999999999999,
+    "p95": 28.93,
+    "maximum": 94.801
+  },
+  "candidateMilliseconds": {
+    "samples": 800,
+    "p50": 9.461500000000001,
+    "p95": 31.857,
+    "maximum": 72.334
+  },
+  "browserMilliseconds": {
+    "list-cold": {
+      "samples": 20,
+      "p50": 1289.8500000014901,
+      "p95": 1933.2999999970198,
+      "maximum": 2262.4000000059605
+    },
+    "list-warm": {
+      "samples": 20,
+      "p50": 650.8499999940395,
+      "p95": 855.5,
+      "maximum": 1238.9000000059605
+    },
+    "detail-cold": {
+      "samples": 20,
+      "p50": 741.7500000074506,
+      "p95": 1351.3999999910593,
+      "maximum": 1783.9000000059605
+    },
+    "detail-warm": {
+      "samples": 20,
+      "p50": 277.70000000298023,
+      "p95": 420.90000000596046,
+      "maximum": 568
+    }
+  },
+  "apiMilliseconds": {
+    "overview": {
+      "samples": 138,
+      "p50": 432.7989004999981,
+      "p95": 1254.0689569999959,
+      "maximum": 1742.5655189999961
+    },
+    "status": {
+      "samples": 136,
+      "p50": 102.6587464999975,
+      "p95": 252.50210800001514,
+      "maximum": 314.4659030000039
+    },
+    "history": {
+      "samples": 136,
+      "p50": 275.64725850000104,
+      "p95": 497.5516709999938,
+      "maximum": 620.5947989999986
+    }
+  },
+  "ingestionOnly": {
+    "accepted": 208,
+    "duplicate": 0,
+    "unsuccessful": 0,
+    "p95LowerSeconds": 0.015821071,
+    "p95UpperSeconds": 0.016612124,
+    "elapsedSeconds": 62.28
+  },
+  "ingestionUnderLoad": {
+    "accepted": 557,
+    "duplicate": 0,
+    "unsuccessful": 0,
+    "p95LowerSeconds": 0.087269231,
+    "p95UpperSeconds": 0.091632692,
+    "elapsedSeconds": 163.74
+  },
+  "due": {
+    "intervals": 600,
+    "missing": 0,
+    "slisWithMissing": 0,
+    "nonObserved": 0
+  },
+  "live": {
+    "slis": 200,
+    "intervals": 330,
+    "maxReceiptDelaySeconds": 119.482928
+  },
+  "completedBackfillBatches": 1400,
+  "outcomes": [
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "rejected",
+      "error": "Error: overview HTTP status\n\nexpect(received).toBe(expected) // Object.is equality\n\nExpected: 200\nReceived: 503"
+    },
+    {
+      "status": "rejected",
+      "error": "Error: overview HTTP status\n\nexpect(received).toBe(expected) // Object.is equality\n\nExpected: 200\nReceived: 503"
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "fulfilled"
+    }
+  ],
+  "artifactHashes": {
+    "backfill.jsonl": "1920dff362b04c064cdf968032afd097adf75363cb160fbc4921f1f3e33d4c85",
+    "backfill.process.json": "3aedced6648b5588579ceb8d293e827653346cf196acebb9107aed37f91ee6a1",
+    "backfill.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "ingestion-baseline.json": "4d654863605c0079a6153fcbfa1b1e9f0e952c3075a0f5f958d47f6d3cda70bd",
+    "profile.json": "d4577b59329ce509d7c2e1bda41b7ab19e087e8dd9a2fda8f8078f9a0b627028",
+    "queries-0.jsonl": "29a294c7b9f2402d4fbe9926b7825679780671ea362e24e1af702fdc932e811b",
+    "queries-0.process.json": "b24e681713913365a571c4350103e52a3c4edbc1b08da600806bd0cd45a196e0",
+    "queries-0.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "queries-1.jsonl": "34755ddb7b02f0434a4c8d52263c46213a86924472cdbd56555710b71aeb44b1",
+    "queries-1.process.json": "d7c1d1bda2540aaf275bea959f53d60006344c6574aef3557cd3943472316197",
+    "queries-1.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "results.json": "d1c000d2fda0f188fc291dc1a6757849c99e2498d4785da839796014dc7bac5e",
+    "summary.json": "5e73d8fd611d64d1a8bb8ed5905e7f5aa07e2956bb453d4b086ce70194130f36"
+  },
+  "caveats": [
+    "Source data remained live between SQL diagnostics and this full workload.",
+    "One browser renderer runs on the same two-vCPU host; remote capable-client acceptance remains outstanding.",
+    "Baseline, candidate and independent raw-reference queries all contribute to contention.",
+    "External query workers do not share the backend DerivedTraffic pool.",
+    "Controlled historical cutoffs cross an hour; this is not wall-clock alert-engine rollover acceptance.",
+    "Emitted raw contributions are not universal physical-read bounds."
+  ],
+  "failedChecks": [
+    "worker outcomes",
+    "ingestion relative p95",
+    "overview API p95",
+    "status API p95",
+    "list-cold browser maximum",
+    "list-warm browser maximum",
+    "detail-cold browser maximum"
+  ]
+}

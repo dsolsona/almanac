@@ -56,6 +56,58 @@ and report the window as pending while a dirty hour intersects its interior or a
 failed when that hour's work is exhausted. `slo.EvaluateOperationalTotals` turns
 totals into quality, freshness and performance.
 
+### Proposed amendment: bounded raw calculation for dirty interiors
+
+This section is **not accepted or implemented**. The maintainer approved an
+experiment under [ADR-0051](../adr/0051-durable-alert-policy-state-machine.md)
+and [SPEC-0021](0021-alert-policy-engine.md), not replacement of the accepted
+Window totals contract above. Adoption requires experiment evidence and explicit
+acceptance of the amendment and its resource limits.
+
+The candidate adds a bounded option to the shared canonical window calculator.
+Use clean hourly aggregates, replace each selected dirty interior portion with
+exact totals from canonical observations, and include the usual raw edges. Do
+not add dirty aggregate values to their replacements or count overlapping ranges
+twice. Reuse identical source ranges within a batch where possible. This is a
+read-only calculation, not synchronous repair: do not publish aggregates, clear
+dirty ranges or acknowledge their jobs as a side effect.
+
+Read aggregate readiness, aggregates, observations and effective configuration in
+one consistent database snapshot. Preserve measurement/SLO/exclusion revisions,
+source generation, calculation version, half-open bounds, cadence alignment,
+retention and validity rules. Combine exact good/total counts and all coverage,
+empty/zero-traffic, observation-bound and receipt-time inputs used by the existing
+evaluator. Display rounding and chart extrema cannot supply missing inputs.
+The resulting values and quality must equal a direct canonical-observation
+calculation at that same snapshot. Consumers share the calculation rules; enabling
+this option for other callers requires their own admission and performance evidence.
+
+Eligibility is limited to pending aggregate preparation when the canonical
+observations can be read and validated. Missing, stale, partial, expired,
+zero-traffic or fully excluded observations retain their normal quality outcomes;
+fallback does not manufacture coverage. Terminal aggregate exhaustion, corrupt
+inputs and unrelated calculation/storage errors retain their explicit failure
+outcomes; they are not silently converted into successful fallback reads.
+
+Bound distinct dirty hours, raw rows examined (including edges and replacements),
+statement/operation time and admitted concurrency. Enforce limits before or during
+database work, not merely by limiting returned rows. Release resources on timeout,
+cancellation or admission refusal. Unfinished work yields no partial numeric result:
+return pending with a budget/admission reason for temporary deferral, or the
+existing explicit failure outcome for a terminal error. Never scan progressively
+larger windows or retry without bounds to evade a limit. Catch-up and shared-SLO
+fan-out consume the same aggregate resource budget; they cannot multiply it by
+claiming individual per-policy allowances. Existing SPEC-0019 limits remain ceilings.
+
+The experiment must pin numerical budgets before each run and record actual rows,
+dirty hours, duration, fallback frequency, deferrals and database contention.
+Independent reference checks cover clean/mixed/dirty windows, exact thresholds,
+hour/cadence edges, quality states, concurrent publication/ingestion and revision
+changes. SPEC-0021 defines the query-equivalence and 200-SLI contention gate,
+separate from later 100/200-policy engine acceptance.
+This proposal does not change the retained extrema worker or its five-minute
+closed-hour target; source aggregates can be rebuilt before their hour closes.
+
 ### Extrema rows
 
 Table `almanac_slo_extrema`, key `(slo_id, definition_revision, measurement_revision,

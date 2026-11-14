@@ -1,5 +1,62 @@
 # Implementation tasks
 
+[F4-T28](F4-T28.md) closes valid alerting-stack review findings, diagnoses required
+check failures and integrates the authorized checkpoint before engine delivery resumes.
+
+[F4-T26](F4-T26.md) isolates synthetic historical write pressure using the existing
+explicit omission mode, preserving all remaining workload counts and budgets.
+
+[F4-T25](F4-T25.md) corrects a proved positional-locator race in the resource-table
+keyboard journey, preserving focus and exact navigation assertions.
+
+[F4-T24](F4-T24.md) profiles historical rebuild CPU and defers decimal formatting
+until exact extrema selection, with canonical equality and workload validation.
+
+[F4-T23](F4-T23.md) prepares a controlled CI comparison with server/client CPUs
+shared or separated, retaining the complete existing baseline workload.
+
+[F4-T22](F4-T22.md) attributes overview CPU scheduling/serialization costs and
+removes duplicate protected-read transaction configuration with authority preserved.
+
+[F4-T21](F4-T21.md) prepares independently runnable navigation clients to separate
+client CPU starvation from server latency; remote execution remains pending.
+
+[F4-T18](F4-T18.md) bounds unsuccessful historical turns without skipping window
+validation, changing durable retry rules or slowing successful draining.
+
+[F4-T17](F4-T17.md) investigates and corrects overview startup/query work while
+preserving exact pages and avoiding maximum-page payload sorts.
+
+[F4-T16](F4-T16.md) avoids canonical sums for a known-pending first window while
+preserving snapshot and error-order semantics; combined workload verification follows.
+
+[F4-T15](F4-T15.md) removes repeated projection-metadata extraction from current
+scheduler scans while preserving selection and retry semantics.
+
+[F4-T14](F4-T14.md) owns the ranked performance investigation and causal
+reproductions before further alert-calculation adoption or capacity claims.
+
+[F4-T13](F4-T13.md) verifies calculation-fixture eligibility and isolated query
+modes. Its baseline-only control fails latency/browser gates without candidate or
+oracle queries; the harness is in review and calculation adoption remains open.
+
+[F4-T11](F4-T11.md) prepares one bounded source batch before due current work,
+preserving current fairness and repair wakeups; its combined run retained exact
+calculation and due ingestion but failed performance, which remains open.
+
+[F4-T01](F4-T01.md) tracks the draft alert engine/UI contracts and selected mocks.
+It is design review, not authorization for engine implementation.
+[F4-T02](F4-T02.md) runs the authorized bounded-calculation experiment before
+architecture adoption; production alert engine implementation remains separate.
+[F4-T03](F4-T03.md) fixes measured agent-access lock contention during historical
+writes; the remaining load failures stay in the calculation gate.
+[F4-T07](F4-T07.md) diagnoses prepared overview-query latency and implements a
+measured correction while preserving live pagination and currentness.
+[F4-T04](F4-T04.md) preserves explicitly labelled SLO status during preparation and
+separates API concurrency from rendered-browser measurements.
+[F4-T06](F4-T06.md) maps the proposed alert engine to concrete persistence and
+API/CLI contracts, including unresolved prerequisites; it does not bypass that gate.
+
 Use `FN-TNN.md` for a bounded task within a delivery slice, for example `F1-T01.md`.
 Copy [TEMPLATE.md](TEMPLATE.md). These identifiers are independent of spec/ADR numbers.
 The primary agent owns readiness, implementation, dependencies, review and completion.
@@ -207,3 +264,19 @@ under [ADR-0046](../adr/0046-sli-measurements-and-collection-detail.md) and
 [F6-T11](F6-T11.md) implements approved SLO detail B, with integrated budget context,
 point inspection, completed-day blocks and structured disclosures under
 [ADR-0049](../adr/0049-slo-budget-in-context-detail.md).
+
+[F4-T05](F4-T05.md) adds the pure maintenance-exclusion calculation foundation;
+production storage and maintenance management remain separate work.
+
+[F4-T09](F4-T09.md) builds the approved policy form's reusable presentation controls
+and catalogue example; production alert operations remain gated separately.
+
+- [F4-T08](F4-T08.md): Internal maintenance authority, immutable revisions,
+  per-SLO exclusion fences and atomic invalidation work; production adoption pending.
+
+[F4-T10](F4-T10.md) builds the selected occurrence list/history presentation with
+supplied evidence, global group totals and acknowledgement callbacks.
+
+[F4-T12](F4-T12.md) builds selected occurrence detail cards with supplied original/latest
+evidence, exact shared-chart inspection and controlled acknowledgement; production
+routes, global synchronization and engine acceptance remain separate.

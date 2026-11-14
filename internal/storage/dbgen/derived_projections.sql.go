@@ -79,20 +79,25 @@ func (q *Queries) DeferCurrentPreparation(ctx context.Context, arg DeferCurrentP
 }
 
 const getPublishedCurrentProjection = `-- name: GetPublishedCurrentProjection :one
-SELECT ((p.payload-'budget_sparkline'-'budget_history_generation'-'budget_history_state') ||
+SELECT s.id AS slo_id, ((p.payload-'budget_sparkline'-'budget_history_generation'-'budget_history_state') ||
        jsonb_build_object('slo',(p.payload->'slo')||jsonb_build_object(
            'display_name',s.display_name,'version',s.version::text,'updated_at',s.updated_at,
            'service_display_name',service.display_name,'sli_display_name',measurement.display_name)))::jsonb AS payload,
        g.id AS generation_id, g.source_generation,
        g.definition_revision, g.measurement_revision, g.exclusion_revision,
        g.calculation_version, g.evaluated_through, g.published_at,g.retention_start,
+       coalesce(g.definition_revision=s.definition_revision
+         AND g.measurement_revision=d.measurement_revision
+         AND g.exclusion_revision=0 AND g.calculation_version=$1
+         AND g.source_generation<=coalesce(source.generation,0)
+         AND g.evaluated_through>=$2::timestamptz-interval '365 days',false)::boolean AS usable,
        coalesce((g.definition_revision=s.definition_revision
          AND g.measurement_revision=d.measurement_revision
          AND g.calculation_version=$1
          AND g.retention_start=to_timestamp(ceil(extract(epoch FROM ($2::timestamptz-interval '365 days'))/d.cadence_seconds)*d.cadence_seconds)
          AND g.source_generation=coalesce(source.generation,0)
          AND g.evaluated_through>=to_timestamp(floor(extract(epoch FROM $2::timestamptz)/d.cadence_seconds)*d.cadence_seconds)
-             AND coalesce((p.payload->>'_current_valid_until')::timestamptz,'-infinity'::timestamptz)>$2::timestamptz),false)::boolean AS current
+             AND coalesce(public.almanac_projection_deadline(p.current_valid_until),'-infinity'::timestamptz)>$2::timestamptz),false)::boolean AS current
 FROM public.almanac_slos s
 JOIN public.almanac_slo_definitions d ON d.slo_id=s.id AND d.revision=s.definition_revision
 JOIN public.almanac_services service ON service.id=d.service_id
@@ -111,6 +116,7 @@ type GetPublishedCurrentProjectionParams struct {
 }
 
 type GetPublishedCurrentProjectionRow struct {
+	SloID               pgtype.UUID        `json:"slo_id"`
 	Payload             []byte             `json:"payload"`
 	GenerationID        pgtype.UUID        `json:"generation_id"`
 	SourceGeneration    pgtype.Int8        `json:"source_generation"`
@@ -121,6 +127,7 @@ type GetPublishedCurrentProjectionRow struct {
 	EvaluatedThrough    pgtype.Timestamptz `json:"evaluated_through"`
 	PublishedAt         pgtype.Timestamptz `json:"published_at"`
 	RetentionStart      pgtype.Timestamptz `json:"retention_start"`
+	Usable              bool               `json:"usable"`
 	Current             bool               `json:"current"`
 }
 
@@ -128,6 +135,7 @@ func (q *Queries) GetPublishedCurrentProjection(ctx context.Context, arg GetPubl
 	row := q.db.QueryRow(ctx, getPublishedCurrentProjection, arg.CalculationVersion, arg.Now, arg.SloID)
 	var i GetPublishedCurrentProjectionRow
 	err := row.Scan(
+		&i.SloID,
 		&i.Payload,
 		&i.GenerationID,
 		&i.SourceGeneration,
@@ -138,6 +146,7 @@ func (q *Queries) GetPublishedCurrentProjection(ctx context.Context, arg GetPubl
 		&i.EvaluatedThrough,
 		&i.PublishedAt,
 		&i.RetentionStart,
+		&i.Usable,
 		&i.Current,
 	)
 	return i, err
@@ -179,9 +188,14 @@ func (q *Queries) InsertDerivedGeneration(ctx context.Context, arg InsertDerived
 }
 
 const listDueDerivedObjectives = `-- name: ListDueDerivedObjectives :many
+WITH projection_metadata AS MATERIALIZED (
+    SELECT slo_id,generation_id,current_valid_until,performance_complete,
+           payload#>>'{_budget_cache,published_at}' AS budget_published_at
+    FROM public.almanac_slo_current_projections
+)
 SELECT s.id FROM public.almanac_slos s
 JOIN public.almanac_slo_definitions d ON d.slo_id=s.id AND d.revision=s.definition_revision
-LEFT JOIN public.almanac_slo_current_projections p ON p.slo_id=s.id
+LEFT JOIN projection_metadata p ON p.slo_id=s.id
 LEFT JOIN public.almanac_slo_derived_generations g ON g.id=p.generation_id
 LEFT JOIN public.almanac_sli_source_generations source
     ON source.sli_id=d.sli_id AND source.measurement_revision=d.measurement_revision
@@ -191,17 +205,18 @@ LEFT JOIN public.almanac_slo_current_failures f
 WHERE (f.slo_id IS NULL OR ((f.attempts<5 OR f.failing_since IS NULL OR f.failing_since>$2::timestamptz-interval '7 days') AND f.next_attempt_at<=$2::timestamptz))
   AND (g.id IS NULL OR g.definition_revision<>d.revision
    OR g.measurement_revision<>d.measurement_revision
+   OR p.performance_complete IS NOT TRUE
    OR g.calculation_version<>$1
    OR g.retention_start<>to_timestamp(ceil(extract(epoch FROM ($2::timestamptz-interval '365 days'))/d.cadence_seconds)*d.cadence_seconds)
    OR g.source_generation<>coalesce(source.generation,0)
    OR g.evaluated_through<to_timestamp(floor(extract(epoch FROM $2::timestamptz)/d.cadence_seconds)*d.cadence_seconds)
-          OR coalesce((p.payload->>'_current_valid_until')::timestamptz,'-infinity'::timestamptz)<=$2::timestamptz
+          OR coalesce(public.almanac_projection_deadline(p.current_valid_until),'-infinity'::timestamptz)<=$2::timestamptz
    OR EXISTS (SELECT 1 FROM public.almanac_slo_extrema e
       WHERE e.slo_id=s.id AND e.definition_revision=d.revision AND e.measurement_revision=d.measurement_revision
         AND e.calculation_version=$1 AND e.exclusion_revision=0 AND e.resolution_seconds=3600
         AND e.range_start>=date_trunc('hour',(g.evaluated_through-interval '7 days') AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
         AND e.range_end<=date_trunc('hour',g.evaluated_through AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
-        AND e.published_at>coalesce((p.payload#>>'{_budget_cache,published_at}')::timestamptz,'-infinity'::timestamptz)))
+        AND e.published_at>coalesce(p.budget_published_at::timestamptz,'-infinity'::timestamptz)))
 ORDER BY f.next_attempt_at NULLS FIRST, g.evaluated_through NULLS FIRST, s.id LIMIT $3
 `
 
@@ -211,6 +226,9 @@ type ListDueDerivedObjectivesParams struct {
 	BatchLimit         int32              `json:"batch_limit"`
 }
 
+// Read publication text once per projection, not once per retained hour.
+// Keep timestamp parsing in its conditional predicate so unrelated due/backoff
+// branches retain their existing behavior for malformed cache metadata.
 func (q *Queries) ListDueDerivedObjectives(ctx context.Context, arg ListDueDerivedObjectivesParams) ([]pgtype.UUID, error) {
 	rows, err := q.db.Query(ctx, listDueDerivedObjectives, arg.CalculationVersion, arg.Now, arg.BatchLimit)
 	if err != nil {

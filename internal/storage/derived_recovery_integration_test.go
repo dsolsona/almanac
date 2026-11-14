@@ -266,16 +266,39 @@ func verifyDetachedRetainedSnapshot(t *testing.T, databaseURL string, input Oper
 
 func verifyConcurrentRetainedPublication(t *testing.T, databaseURL string, input OperationalDetailInput, oracle api.SloOperationalDetail) {
 	t.Helper()
+	conn := integrationConnect(t, databaseURL)
+	defer closeIntegrationConn(conn)
+	// Keep each publication inside the two-second statement budget, but longer
+	// than pool admission. Correctness cannot require ten simultaneous callers
+	// to fit an eight-connection pool before its 250ms admission deadline.
+	if _, err := conn.Exec(t.Context(), `CREATE FUNCTION public.almanac_test_slow_history_publication() RETURNS trigger
+LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_sleep(0.35); RETURN NEW; END $$;
+CREATE TRIGGER almanac_test_slow_history_publication BEFORE INSERT ON public.almanac_slo_history_blocks
+FOR EACH ROW EXECUTE FUNCTION public.almanac_test_slow_history_publication()`); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if _, err := conn.Exec(t.Context(), `DROP TRIGGER almanac_test_slow_history_publication ON public.almanac_slo_history_blocks;
+DROP FUNCTION public.almanac_test_slow_history_publication()`); err != nil {
+			t.Error(err)
+		}
+	}()
 	type outcome struct {
 		value api.SloOperationalDetail
 		err   error
 	}
 	results := make(chan outcome, 10)
 	start := make(chan struct{})
+	// Exercise the pool's full possible concurrency and all ten distinct writes,
+	// without making this accounting test an assertion of overload acceptance.
+	// Runtime admission/refusal and ten-user latency have their own checks.
+	inFlight := make(chan struct{}, input.Runtime.pools[InteractiveTraffic].Config().MaxConns)
 	var pending sync.WaitGroup
 	for index := range 10 {
 		pending.Go(func() {
 			<-start
+			inFlight <- struct{}{}
+			defer func() { <-inFlight }()
 			end := oracle.EffectiveAt
 			from := end.Add(-time.Duration(38+index) * time.Duration(oracle.Objective.CadenceSeconds) * time.Second)
 			request := input
@@ -294,8 +317,6 @@ func verifyConcurrentRetainedPublication(t *testing.T, databaseURL string, input
 		}
 		published = append(published, result.value.Generation.GenerationId.String())
 	}
-	conn := integrationConnect(t, databaseURL)
-	defer closeIntegrationConn(conn)
 	var accounted, actual int64
 	if err := conn.QueryRow(t.Context(), `SELECT payload_bytes,(SELECT coalesce(sum(octet_length(payload::text)),0) FROM public.almanac_slo_history_blocks ) FROM public.almanac_derived_cache_usage WHERE singleton`).Scan(&accounted, &actual); err != nil || accounted != actual {
 		t.Fatalf("concurrent response cache accounting is not exact: accounted=%d actual=%d error=%v", accounted, actual, err)

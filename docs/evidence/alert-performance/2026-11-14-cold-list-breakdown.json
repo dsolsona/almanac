@@ -1,0 +1,1681 @@
+{
+  "sourceRevision": "5b2c1a4b79c37ff99be52f3a104a45633cc40874",
+  "sourceRun": "2026-11-14-history-retry-control.json",
+  "matchedColdLoads": 20,
+  "aboveOneSecond": 14,
+  "matchedArtifactSHA256": "27dacca1530d75d7e3f95e4394702965039f7f99bb033b861cb538fc76e20ac6",
+  "meaning": "Document navigation time zero through content, every nonempty sparkline, fonts and two animation frames. Fresh authenticated browser context, not browser process/backend restart.",
+  "findings": [
+    "Every cold-load trace has authentication, services and overview requests; no ui.chart.render span.",
+    "P95 overview JSON ends at 935.3 ms, content/charts ready at 1511.5 ms; 576.2 ms remains unseparated.",
+    "Maximum overview JSON ends at 886.3 ms, content/charts ready at 1705.9 ms; 819.6 ms remains unseparated."
+  ],
+  "limitations": [
+    "Intervals are browser-clock elapsed time, not CPU.",
+    "Post-parse intervals include validation, module/React scheduling and chart work; charts are a hypothesis, not established cause.",
+    "Browser shares the two-vCPU server; remote-client acceptance remains open.",
+    "Server inclusive request durations cannot be added to overlapping browser spans."
+  ],
+  "journeys": [
+    {
+      "traceID": "8e184fff7a489de55b846e7a026504a6",
+      "durationMS": 1713,
+      "spans": [
+        {
+          "name": "ui.slo.list",
+          "startMS": 0.0,
+          "endMS": 1713.0,
+          "spanID": "3ea66d28efd6aef3",
+          "parentSpanID": null
+        },
+        {
+          "name": "http.POST /api/v1/auth/context",
+          "startMS": 518.9,
+          "endMS": 611.5,
+          "spanID": "a2cc0668ce9eadac",
+          "parentSpanID": "3ea66d28efd6aef3"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 611.4,
+          "endMS": 629.9,
+          "spanID": "d138030b593deea2",
+          "parentSpanID": "a2cc0668ce9eadac"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 629.9,
+          "endMS": 629.9,
+          "spanID": "b627b05502ee8428",
+          "parentSpanID": "a2cc0668ce9eadac"
+        },
+        {
+          "name": "http.GET /api/v1/services",
+          "startMS": 705.4,
+          "endMS": 770.3,
+          "spanID": "b1db0a79a10b05ef",
+          "parentSpanID": "3ea66d28efd6aef3"
+        },
+        {
+          "name": "http.GET /api/v1/slos/overview",
+          "startMS": 712.8,
+          "endMS": 848.2,
+          "spanID": "a5206e1d9122c698",
+          "parentSpanID": "3ea66d28efd6aef3"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 770.2,
+          "endMS": 770.6,
+          "spanID": "bec8ad5d13ca4a32",
+          "parentSpanID": "b1db0a79a10b05ef"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 770.6,
+          "endMS": 770.6,
+          "spanID": "ed5bec90d815fd86",
+          "parentSpanID": "b1db0a79a10b05ef"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 848.1,
+          "endMS": 863.0,
+          "spanID": "d7d7780e21b6098b",
+          "parentSpanID": "a5206e1d9122c698"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 863.0,
+          "endMS": 886.3,
+          "spanID": "49d7669c5ae446f9",
+          "parentSpanID": "a5206e1d9122c698"
+        },
+        {
+          "name": "ui.fonts.wait",
+          "startMS": 1705.9,
+          "endMS": 1706.1,
+          "spanID": "e1c3a0ec1c33b236",
+          "parentSpanID": "3ea66d28efd6aef3"
+        }
+      ]
+    },
+    {
+      "traceID": "0649fbb589ab7b6891d7e7d808406595",
+      "durationMS": 871.9000000059605,
+      "spans": [
+        {
+          "name": "ui.slo.list",
+          "startMS": 0.0,
+          "endMS": 871.9,
+          "spanID": "679c194fd5f18991",
+          "parentSpanID": null
+        },
+        {
+          "name": "http.POST /api/v1/auth/context",
+          "startMS": 252.0,
+          "endMS": 270.7,
+          "spanID": "420f39d3fc7e4a75",
+          "parentSpanID": "679c194fd5f18991"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 270.7,
+          "endMS": 271.4,
+          "spanID": "0b6213dc69af06a7",
+          "parentSpanID": "420f39d3fc7e4a75"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 271.4,
+          "endMS": 271.5,
+          "spanID": "b6d74bbee2c22cad",
+          "parentSpanID": "420f39d3fc7e4a75"
+        },
+        {
+          "name": "http.GET /api/v1/services",
+          "startMS": 344.3,
+          "endMS": 392.4,
+          "spanID": "c48f9f9b2e08ea6d",
+          "parentSpanID": "679c194fd5f18991"
+        },
+        {
+          "name": "http.GET /api/v1/slos/overview",
+          "startMS": 345.1,
+          "endMS": 448.0,
+          "spanID": "6cb7183e2459e4fe",
+          "parentSpanID": "679c194fd5f18991"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 392.3,
+          "endMS": 409.1,
+          "spanID": "f5ceccf90172992d",
+          "parentSpanID": "c48f9f9b2e08ea6d"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 409.2,
+          "endMS": 409.3,
+          "spanID": "1b57e14a40f6357a",
+          "parentSpanID": "c48f9f9b2e08ea6d"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 447.9,
+          "endMS": 480.2,
+          "spanID": "77abf580754e8016",
+          "parentSpanID": "6cb7183e2459e4fe"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 480.3,
+          "endMS": 487.2,
+          "spanID": "f8cdece00c92b478",
+          "parentSpanID": "6cb7183e2459e4fe"
+        },
+        {
+          "name": "ui.fonts.wait",
+          "startMS": 854.6,
+          "endMS": 855.6,
+          "spanID": "64bb99b26150bdf7",
+          "parentSpanID": "679c194fd5f18991"
+        }
+      ]
+    },
+    {
+      "traceID": "1c4dcaa64950de777ca363d169b9f7d3",
+      "durationMS": 1306.5999999940395,
+      "spans": [
+        {
+          "name": "ui.slo.list",
+          "startMS": 0.0,
+          "endMS": 1306.6,
+          "spanID": "96f7ffaf2b355fe5",
+          "parentSpanID": null
+        },
+        {
+          "name": "http.POST /api/v1/auth/context",
+          "startMS": 279.0,
+          "endMS": 344.6,
+          "spanID": "4360d25d4665c617",
+          "parentSpanID": "96f7ffaf2b355fe5"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 344.6,
+          "endMS": 345.2,
+          "spanID": "05373b7058983aa5",
+          "parentSpanID": "4360d25d4665c617"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 345.3,
+          "endMS": 345.3,
+          "spanID": "e0bc1a9d3eab21a3",
+          "parentSpanID": "4360d25d4665c617"
+        },
+        {
+          "name": "http.GET /api/v1/services",
+          "startMS": 375.1,
+          "endMS": 444.1,
+          "spanID": "223c570cdf1ce85d",
+          "parentSpanID": "96f7ffaf2b355fe5"
+        },
+        {
+          "name": "http.GET /api/v1/slos/overview",
+          "startMS": 376.7,
+          "endMS": 469.7,
+          "spanID": "b9003d1c16e6f878",
+          "parentSpanID": "96f7ffaf2b355fe5"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 444.0,
+          "endMS": 444.5,
+          "spanID": "25165418194d47be",
+          "parentSpanID": "223c570cdf1ce85d"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 444.6,
+          "endMS": 444.6,
+          "spanID": "f84e4ff4117ce91b",
+          "parentSpanID": "223c570cdf1ce85d"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 469.6,
+          "endMS": 500.4,
+          "spanID": "ef1070013c946c7a",
+          "parentSpanID": "b9003d1c16e6f878"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 500.4,
+          "endMS": 505.5,
+          "spanID": "feed39662b2934e8",
+          "parentSpanID": "b9003d1c16e6f878"
+        },
+        {
+          "name": "ui.fonts.wait",
+          "startMS": 1294.1,
+          "endMS": 1294.3,
+          "spanID": "2156ea22d08df962",
+          "parentSpanID": "96f7ffaf2b355fe5"
+        }
+      ]
+    },
+    {
+      "traceID": "56d6cc991696ed5086cc5ac0474fecc9",
+      "durationMS": 1088.300000011921,
+      "spans": [
+        {
+          "name": "ui.slo.list",
+          "startMS": 0.0,
+          "endMS": 1088.3,
+          "spanID": "724bd1b24116d17f",
+          "parentSpanID": null
+        },
+        {
+          "name": "http.POST /api/v1/auth/context",
+          "startMS": 306.9,
+          "endMS": 346.9,
+          "spanID": "5bb1c5d50476397a",
+          "parentSpanID": "724bd1b24116d17f"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 346.8,
+          "endMS": 347.6,
+          "spanID": "afc4fbada54df8db",
+          "parentSpanID": "5bb1c5d50476397a"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 347.6,
+          "endMS": 347.6,
+          "spanID": "a7e81af92a8a8862",
+          "parentSpanID": "5bb1c5d50476397a"
+        },
+        {
+          "name": "http.GET /api/v1/services",
+          "startMS": 422.0,
+          "endMS": 458.7,
+          "spanID": "453b5194bb1ea0d6",
+          "parentSpanID": "724bd1b24116d17f"
+        },
+        {
+          "name": "http.GET /api/v1/slos/overview",
+          "startMS": 424.2,
+          "endMS": 533.5,
+          "spanID": "6f803026647f6cb4",
+          "parentSpanID": "724bd1b24116d17f"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 458.7,
+          "endMS": 459.3,
+          "spanID": "bb3490145ce5b9d6",
+          "parentSpanID": "453b5194bb1ea0d6"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 459.3,
+          "endMS": 459.5,
+          "spanID": "7774a3fa9cd54c04",
+          "parentSpanID": "453b5194bb1ea0d6"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 533.4,
+          "endMS": 559.6,
+          "spanID": "9472f0707252593b",
+          "parentSpanID": "6f803026647f6cb4"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 559.7,
+          "endMS": 565.5,
+          "spanID": "360d08dc714263b2",
+          "parentSpanID": "6f803026647f6cb4"
+        },
+        {
+          "name": "ui.fonts.wait",
+          "startMS": 1086.7,
+          "endMS": 1087.4,
+          "spanID": "57d6cd30abad8943",
+          "parentSpanID": "724bd1b24116d17f"
+        }
+      ]
+    },
+    {
+      "traceID": "32302e0fe25aa9bb1e7af833d1bb3555",
+      "durationMS": 1051.2000000178814,
+      "spans": [
+        {
+          "name": "ui.slo.list",
+          "startMS": 0.0,
+          "endMS": 1051.2,
+          "spanID": "b81dab3c1bc81485",
+          "parentSpanID": null
+        },
+        {
+          "name": "http.POST /api/v1/auth/context",
+          "startMS": 297.6,
+          "endMS": 343.2,
+          "spanID": "dd7b20343d03d267",
+          "parentSpanID": "b81dab3c1bc81485"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 343.1,
+          "endMS": 343.9,
+          "spanID": "925b6321cb7a1800",
+          "parentSpanID": "dd7b20343d03d267"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 343.9,
+          "endMS": 344.0,
+          "spanID": "a99e847fa31b120d",
+          "parentSpanID": "dd7b20343d03d267"
+        },
+        {
+          "name": "http.GET /api/v1/services",
+          "startMS": 462.0,
+          "endMS": 509.0,
+          "spanID": "3660b5b09dd08009",
+          "parentSpanID": "b81dab3c1bc81485"
+        },
+        {
+          "name": "http.GET /api/v1/slos/overview",
+          "startMS": 462.8,
+          "endMS": 586.7,
+          "spanID": "bd3e7d77c07a758c",
+          "parentSpanID": "b81dab3c1bc81485"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 508.9,
+          "endMS": 510.3,
+          "spanID": "dc7dc3132e5f31ba",
+          "parentSpanID": "3660b5b09dd08009"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 510.3,
+          "endMS": 510.4,
+          "spanID": "359eef3475a066f0",
+          "parentSpanID": "3660b5b09dd08009"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 585.2,
+          "endMS": 601.6,
+          "spanID": "7b8096c1512b7d5e",
+          "parentSpanID": "bd3e7d77c07a758c"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 601.6,
+          "endMS": 604.0,
+          "spanID": "70d7ee50823ce14c",
+          "parentSpanID": "bd3e7d77c07a758c"
+        },
+        {
+          "name": "ui.fonts.wait",
+          "startMS": 1041.1,
+          "endMS": 1041.9,
+          "spanID": "317a479ab8395cf0",
+          "parentSpanID": "b81dab3c1bc81485"
+        }
+      ]
+    },
+    {
+      "traceID": "44e9004358a225355e3fbc504c145a2f",
+      "durationMS": 1115.5,
+      "spans": [
+        {
+          "name": "ui.slo.list",
+          "startMS": 0.0,
+          "endMS": 1115.5,
+          "spanID": "f6e6111c4cecd44f",
+          "parentSpanID": null
+        },
+        {
+          "name": "http.POST /api/v1/auth/context",
+          "startMS": 462.8,
+          "endMS": 492.3,
+          "spanID": "5c94881b4f9f8d7c",
+          "parentSpanID": "f6e6111c4cecd44f"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 492.2,
+          "endMS": 500.0,
+          "spanID": "9639b7141f166ba0",
+          "parentSpanID": "5c94881b4f9f8d7c"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 500.1,
+          "endMS": 500.2,
+          "spanID": "e365d3f3272844ee",
+          "parentSpanID": "5c94881b4f9f8d7c"
+        },
+        {
+          "name": "http.GET /api/v1/services",
+          "startMS": 565.8,
+          "endMS": 627.6,
+          "spanID": "dc492c9f455b2e14",
+          "parentSpanID": "f6e6111c4cecd44f"
+        },
+        {
+          "name": "http.GET /api/v1/slos/overview",
+          "startMS": 569.6,
+          "endMS": 710.9,
+          "spanID": "4f1680f5a22744ed",
+          "parentSpanID": "f6e6111c4cecd44f"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 627.5,
+          "endMS": 630.8,
+          "spanID": "4ca84ab83cafe12d",
+          "parentSpanID": "dc492c9f455b2e14"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 630.9,
+          "endMS": 631.2,
+          "spanID": "d0989fd17a274268",
+          "parentSpanID": "dc492c9f455b2e14"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 710.8,
+          "endMS": 731.7,
+          "spanID": "89f6b9f45772236a",
+          "parentSpanID": "4f1680f5a22744ed"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 731.9,
+          "endMS": 749.9,
+          "spanID": "af35c25690abaa4f",
+          "parentSpanID": "4f1680f5a22744ed"
+        },
+        {
+          "name": "ui.fonts.wait",
+          "startMS": 1110.3,
+          "endMS": 1110.5,
+          "spanID": "66c07090962ce8d3",
+          "parentSpanID": "f6e6111c4cecd44f"
+        }
+      ]
+    },
+    {
+      "traceID": "d4ffed2b8a0640058b4400be1ec827d5",
+      "durationMS": 969,
+      "spans": [
+        {
+          "name": "ui.slo.list",
+          "startMS": 0.0,
+          "endMS": 969.0,
+          "spanID": "448cdb194e7c89f1",
+          "parentSpanID": null
+        },
+        {
+          "name": "http.POST /api/v1/auth/context",
+          "startMS": 317.4,
+          "endMS": 345.7,
+          "spanID": "bde79f1e0577bf04",
+          "parentSpanID": "448cdb194e7c89f1"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 345.6,
+          "endMS": 360.2,
+          "spanID": "d45f366213869abd",
+          "parentSpanID": "bde79f1e0577bf04"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 362.1,
+          "endMS": 362.1,
+          "spanID": "2157b0c2836068a9",
+          "parentSpanID": "bde79f1e0577bf04"
+        },
+        {
+          "name": "http.GET /api/v1/services",
+          "startMS": 389.4,
+          "endMS": 428.9,
+          "spanID": "b11de2bd91e2bb5f",
+          "parentSpanID": "448cdb194e7c89f1"
+        },
+        {
+          "name": "http.GET /api/v1/slos/overview",
+          "startMS": 391.2,
+          "endMS": 466.5,
+          "spanID": "9705c0c3ce5b0f03",
+          "parentSpanID": "448cdb194e7c89f1"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 428.8,
+          "endMS": 429.3,
+          "spanID": "e4b5e8489f3ab800",
+          "parentSpanID": "b11de2bd91e2bb5f"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 429.6,
+          "endMS": 429.7,
+          "spanID": "e0a6de4b165c44e0",
+          "parentSpanID": "b11de2bd91e2bb5f"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 466.2,
+          "endMS": 477.4,
+          "spanID": "7e90f1c9b61cc3d9",
+          "parentSpanID": "9705c0c3ce5b0f03"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 477.4,
+          "endMS": 483.9,
+          "spanID": "aba7982636f4bb3b",
+          "parentSpanID": "9705c0c3ce5b0f03"
+        },
+        {
+          "name": "ui.fonts.wait",
+          "startMS": 965.4,
+          "endMS": 965.5,
+          "spanID": "030da0ea050049f0",
+          "parentSpanID": "448cdb194e7c89f1"
+        }
+      ]
+    },
+    {
+      "traceID": "f810fdce4e93bd145d939f04cd01372b",
+      "durationMS": 935.3000000119209,
+      "spans": [
+        {
+          "name": "ui.slo.list",
+          "startMS": 0.0,
+          "endMS": 935.3,
+          "spanID": "7fc42b9220e1b237",
+          "parentSpanID": null
+        },
+        {
+          "name": "http.POST /api/v1/auth/context",
+          "startMS": 323.0,
+          "endMS": 351.4,
+          "spanID": "350d1cb2ca3b5431",
+          "parentSpanID": "7fc42b9220e1b237"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 351.2,
+          "endMS": 377.9,
+          "spanID": "520114c2f6c85052",
+          "parentSpanID": "350d1cb2ca3b5431"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 377.9,
+          "endMS": 378.1,
+          "spanID": "bc3a0b6198a5175a",
+          "parentSpanID": "350d1cb2ca3b5431"
+        },
+        {
+          "name": "http.GET /api/v1/services",
+          "startMS": 415.2,
+          "endMS": 479.5,
+          "spanID": "751016f946be5c02",
+          "parentSpanID": "7fc42b9220e1b237"
+        },
+        {
+          "name": "http.GET /api/v1/slos/overview",
+          "startMS": 419.8,
+          "endMS": 536.6,
+          "spanID": "9fa121f2fbc99433",
+          "parentSpanID": "7fc42b9220e1b237"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 479.5,
+          "endMS": 483.9,
+          "spanID": "4f5f7b17f6b28032",
+          "parentSpanID": "751016f946be5c02"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 483.9,
+          "endMS": 483.9,
+          "spanID": "1650e2d0105136cc",
+          "parentSpanID": "751016f946be5c02"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 535.9,
+          "endMS": 545.7,
+          "spanID": "d6ae7aa436bf4d56",
+          "parentSpanID": "9fa121f2fbc99433"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 545.8,
+          "endMS": 551.7,
+          "spanID": "eddc5880b442d96b",
+          "parentSpanID": "9fa121f2fbc99433"
+        },
+        {
+          "name": "ui.fonts.wait",
+          "startMS": 932.2,
+          "endMS": 932.3,
+          "spanID": "e51d6052d071f62a",
+          "parentSpanID": "7fc42b9220e1b237"
+        }
+      ]
+    },
+    {
+      "traceID": "9264729f858bbdfc028b15004710552b",
+      "durationMS": 938.9000000059605,
+      "spans": [
+        {
+          "name": "ui.slo.list",
+          "startMS": 0.0,
+          "endMS": 938.9,
+          "spanID": "fb00ffda60f483ab",
+          "parentSpanID": null
+        },
+        {
+          "name": "http.POST /api/v1/auth/context",
+          "startMS": 307.5,
+          "endMS": 339.3,
+          "spanID": "1569e4a16e476a73",
+          "parentSpanID": "fb00ffda60f483ab"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 339.2,
+          "endMS": 340.9,
+          "spanID": "42a54c470f17559f",
+          "parentSpanID": "1569e4a16e476a73"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 340.9,
+          "endMS": 340.9,
+          "spanID": "480ca808cd73db04",
+          "parentSpanID": "1569e4a16e476a73"
+        },
+        {
+          "name": "http.GET /api/v1/services",
+          "startMS": 423.1,
+          "endMS": 483.4,
+          "spanID": "423fe77cb01343cf",
+          "parentSpanID": "fb00ffda60f483ab"
+        },
+        {
+          "name": "http.GET /api/v1/slos/overview",
+          "startMS": 434.9,
+          "endMS": 504.6,
+          "spanID": "ec3ac666ae666879",
+          "parentSpanID": "fb00ffda60f483ab"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 483.4,
+          "endMS": 490.8,
+          "spanID": "7b92e7012385f55d",
+          "parentSpanID": "423fe77cb01343cf"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 490.8,
+          "endMS": 490.9,
+          "spanID": "c4918332cfecc67c",
+          "parentSpanID": "423fe77cb01343cf"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 503.3,
+          "endMS": 527.7,
+          "spanID": "86e5cbe353ce7136",
+          "parentSpanID": "ec3ac666ae666879"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 527.7,
+          "endMS": 536.3,
+          "spanID": "d0c6788f2c13c847",
+          "parentSpanID": "ec3ac666ae666879"
+        },
+        {
+          "name": "ui.fonts.wait",
+          "startMS": 925.7,
+          "endMS": 928.2,
+          "spanID": "c2cafd78de2e8a38",
+          "parentSpanID": "fb00ffda60f483ab"
+        }
+      ]
+    },
+    {
+      "traceID": "a8c5d845cf4029b56180ec46fb0ee9a0",
+      "durationMS": 995.0999999940395,
+      "spans": [
+        {
+          "name": "ui.slo.list",
+          "startMS": 0.0,
+          "endMS": 995.1,
+          "spanID": "0a175cd9cf23483a",
+          "parentSpanID": null
+        },
+        {
+          "name": "http.POST /api/v1/auth/context",
+          "startMS": 291.0,
+          "endMS": 319.4,
+          "spanID": "1f61b0eb82c8658a",
+          "parentSpanID": "0a175cd9cf23483a"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 319.4,
+          "endMS": 320.1,
+          "spanID": "d20e3cafd9f39778",
+          "parentSpanID": "1f61b0eb82c8658a"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 320.1,
+          "endMS": 320.2,
+          "spanID": "eed47925b533d8cd",
+          "parentSpanID": "1f61b0eb82c8658a"
+        },
+        {
+          "name": "http.GET /api/v1/services",
+          "startMS": 366.6,
+          "endMS": 428.5,
+          "spanID": "f877420e2f669cfc",
+          "parentSpanID": "0a175cd9cf23483a"
+        },
+        {
+          "name": "http.GET /api/v1/slos/overview",
+          "startMS": 372.0,
+          "endMS": 472.7,
+          "spanID": "3a9336e5ec578b62",
+          "parentSpanID": "0a175cd9cf23483a"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 428.5,
+          "endMS": 429.0,
+          "spanID": "2e9240f4c744426b",
+          "parentSpanID": "f877420e2f669cfc"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 429.0,
+          "endMS": 429.0,
+          "spanID": "5a8a958e8a54e260",
+          "parentSpanID": "f877420e2f669cfc"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 472.6,
+          "endMS": 493.3,
+          "spanID": "219bf4d4f486f1df",
+          "parentSpanID": "3a9336e5ec578b62"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 493.4,
+          "endMS": 502.0,
+          "spanID": "7e6ac77342167f7e",
+          "parentSpanID": "3a9336e5ec578b62"
+        },
+        {
+          "name": "ui.fonts.wait",
+          "startMS": 984.0,
+          "endMS": 984.1,
+          "spanID": "5327554d1f7aa1bf",
+          "parentSpanID": "0a175cd9cf23483a"
+        }
+      ]
+    },
+    {
+      "traceID": "377b1be8de9fec8d116df61fba8b1104",
+      "durationMS": 1050.5,
+      "spans": [
+        {
+          "name": "ui.slo.list",
+          "startMS": 0.0,
+          "endMS": 1050.5,
+          "spanID": "2cfc7b70200b2e46",
+          "parentSpanID": null
+        },
+        {
+          "name": "http.POST /api/v1/auth/context",
+          "startMS": 333.7,
+          "endMS": 367.0,
+          "spanID": "f0d73d9960e4668f",
+          "parentSpanID": "2cfc7b70200b2e46"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 366.9,
+          "endMS": 371.3,
+          "spanID": "591d082f470d8d44",
+          "parentSpanID": "f0d73d9960e4668f"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 371.3,
+          "endMS": 371.6,
+          "spanID": "052e0f3b33dfe408",
+          "parentSpanID": "f0d73d9960e4668f"
+        },
+        {
+          "name": "http.GET /api/v1/services",
+          "startMS": 430.8,
+          "endMS": 495.5,
+          "spanID": "0b79a7a21694058b",
+          "parentSpanID": "2cfc7b70200b2e46"
+        },
+        {
+          "name": "http.GET /api/v1/slos/overview",
+          "startMS": 441.3,
+          "endMS": 516.6,
+          "spanID": "5b49308f67fb3bb0",
+          "parentSpanID": "2cfc7b70200b2e46"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 495.4,
+          "endMS": 496.2,
+          "spanID": "e48a4d553a6b77bf",
+          "parentSpanID": "0b79a7a21694058b"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 496.2,
+          "endMS": 496.2,
+          "spanID": "b2c6f81200d512bf",
+          "parentSpanID": "0b79a7a21694058b"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 516.5,
+          "endMS": 537.2,
+          "spanID": "7f14897aa00712a9",
+          "parentSpanID": "5b49308f67fb3bb0"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 537.3,
+          "endMS": 541.3,
+          "spanID": "8067e16f64a5f157",
+          "parentSpanID": "5b49308f67fb3bb0"
+        },
+        {
+          "name": "ui.fonts.wait",
+          "startMS": 1042.7,
+          "endMS": 1043.4,
+          "spanID": "207ae829d0033380",
+          "parentSpanID": "2cfc7b70200b2e46"
+        }
+      ]
+    },
+    {
+      "traceID": "329c2857ea785db63e6423dfa69143c0",
+      "durationMS": 1283.300000011921,
+      "spans": [
+        {
+          "name": "ui.slo.list",
+          "startMS": 0.0,
+          "endMS": 1283.3,
+          "spanID": "728cccb92a84025b",
+          "parentSpanID": null
+        },
+        {
+          "name": "http.POST /api/v1/auth/context",
+          "startMS": 476.3,
+          "endMS": 546.6,
+          "spanID": "a17f7250d560ac7d",
+          "parentSpanID": "728cccb92a84025b"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 546.3,
+          "endMS": 553.1,
+          "spanID": "358bb40e14a7134e",
+          "parentSpanID": "a17f7250d560ac7d"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 553.4,
+          "endMS": 553.4,
+          "spanID": "90488e786e0c20b3",
+          "parentSpanID": "a17f7250d560ac7d"
+        },
+        {
+          "name": "http.GET /api/v1/services",
+          "startMS": 648.0,
+          "endMS": 679.8,
+          "spanID": "87a6c7004683e215",
+          "parentSpanID": "728cccb92a84025b"
+        },
+        {
+          "name": "http.GET /api/v1/slos/overview",
+          "startMS": 650.1,
+          "endMS": 762.3,
+          "spanID": "3e39ae5cbff78a84",
+          "parentSpanID": "728cccb92a84025b"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 678.7,
+          "endMS": 682.6,
+          "spanID": "48686d15b83124c6",
+          "parentSpanID": "87a6c7004683e215"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 682.8,
+          "endMS": 682.8,
+          "spanID": "ed35856150acb1ec",
+          "parentSpanID": "87a6c7004683e215"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 762.2,
+          "endMS": 777.6,
+          "spanID": "53a5e4dfa4614881",
+          "parentSpanID": "3e39ae5cbff78a84"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 777.7,
+          "endMS": 788.0,
+          "spanID": "9e1fb527283a9cc6",
+          "parentSpanID": "3e39ae5cbff78a84"
+        },
+        {
+          "name": "ui.fonts.wait",
+          "startMS": 1262.0,
+          "endMS": 1262.1,
+          "spanID": "468f16a06e9433a0",
+          "parentSpanID": "728cccb92a84025b"
+        }
+      ]
+    },
+    {
+      "traceID": "f62caee61f4c5f4615ed7c19a81d1d2d",
+      "durationMS": 1033.199999988079,
+      "spans": [
+        {
+          "name": "ui.slo.list",
+          "startMS": 0.0,
+          "endMS": 1033.2,
+          "spanID": "cf9bd78bc9e523df",
+          "parentSpanID": null
+        },
+        {
+          "name": "http.POST /api/v1/auth/context",
+          "startMS": 286.7,
+          "endMS": 303.8,
+          "spanID": "b5502f9827c92af1",
+          "parentSpanID": "cf9bd78bc9e523df"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 303.8,
+          "endMS": 311.1,
+          "spanID": "17a47bf482ace5ae",
+          "parentSpanID": "b5502f9827c92af1"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 311.2,
+          "endMS": 311.3,
+          "spanID": "0e40222427155756",
+          "parentSpanID": "b5502f9827c92af1"
+        },
+        {
+          "name": "http.GET /api/v1/services",
+          "startMS": 401.2,
+          "endMS": 456.6,
+          "spanID": "8d7e85d22e2df737",
+          "parentSpanID": "cf9bd78bc9e523df"
+        },
+        {
+          "name": "http.GET /api/v1/slos/overview",
+          "startMS": 406.3,
+          "endMS": 522.2,
+          "spanID": "dc4ecc1597587b1c",
+          "parentSpanID": "cf9bd78bc9e523df"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 456.5,
+          "endMS": 458.3,
+          "spanID": "0dca724e76db5a5c",
+          "parentSpanID": "8d7e85d22e2df737"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 458.4,
+          "endMS": 458.5,
+          "spanID": "6c7cef2b1377eda8",
+          "parentSpanID": "8d7e85d22e2df737"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 521.7,
+          "endMS": 531.2,
+          "spanID": "629a41f12b5ee29c",
+          "parentSpanID": "dc4ecc1597587b1c"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 531.2,
+          "endMS": 541.7,
+          "spanID": "988a999cb282e819",
+          "parentSpanID": "dc4ecc1597587b1c"
+        },
+        {
+          "name": "ui.fonts.wait",
+          "startMS": 1020.9,
+          "endMS": 1021.1,
+          "spanID": "c9ed7af886889cd7",
+          "parentSpanID": "cf9bd78bc9e523df"
+        }
+      ]
+    },
+    {
+      "traceID": "cc29155be6e20457f82466bc38604a3a",
+      "durationMS": 1530.800000011921,
+      "spans": [
+        {
+          "name": "ui.slo.list",
+          "startMS": 0.0,
+          "endMS": 1530.8,
+          "spanID": "a999420c4d66f96d",
+          "parentSpanID": null
+        },
+        {
+          "name": "http.POST /api/v1/auth/context",
+          "startMS": 365.2,
+          "endMS": 607.7,
+          "spanID": "7efd307ae1e81f98",
+          "parentSpanID": "a999420c4d66f96d"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 607.6,
+          "endMS": 611.6,
+          "spanID": "a1b253e2ff1c0f12",
+          "parentSpanID": "7efd307ae1e81f98"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 612.8,
+          "endMS": 613.3,
+          "spanID": "c5aa88bb67dc695b",
+          "parentSpanID": "7efd307ae1e81f98"
+        },
+        {
+          "name": "http.GET /api/v1/services",
+          "startMS": 711.7,
+          "endMS": 799.9,
+          "spanID": "4e03fa2f695ef4ad",
+          "parentSpanID": "a999420c4d66f96d"
+        },
+        {
+          "name": "http.GET /api/v1/slos/overview",
+          "startMS": 727.6,
+          "endMS": 898.5,
+          "spanID": "b0950f9e42445dd9",
+          "parentSpanID": "a999420c4d66f96d"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 799.9,
+          "endMS": 800.2,
+          "spanID": "a70d28f09bf24156",
+          "parentSpanID": "4e03fa2f695ef4ad"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 800.3,
+          "endMS": 800.3,
+          "spanID": "14cc4337f2ae41c3",
+          "parentSpanID": "4e03fa2f695ef4ad"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 898.3,
+          "endMS": 921.5,
+          "spanID": "6bcfe7f7969399f0",
+          "parentSpanID": "b0950f9e42445dd9"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 921.6,
+          "endMS": 935.3,
+          "spanID": "2ceb33cc889e0c48",
+          "parentSpanID": "b0950f9e42445dd9"
+        },
+        {
+          "name": "ui.fonts.wait",
+          "startMS": 1511.5,
+          "endMS": 1514.8,
+          "spanID": "64a8a6640aa7ac6f",
+          "parentSpanID": "a999420c4d66f96d"
+        }
+      ]
+    },
+    {
+      "traceID": "0d6508a5916437bb4a2d917067f53b9e",
+      "durationMS": 1052,
+      "spans": [
+        {
+          "name": "ui.slo.list",
+          "startMS": 0.0,
+          "endMS": 1052.0,
+          "spanID": "79d4183824acefa2",
+          "parentSpanID": null
+        },
+        {
+          "name": "http.POST /api/v1/auth/context",
+          "startMS": 336.2,
+          "endMS": 391.7,
+          "spanID": "cf1303ba16d014c4",
+          "parentSpanID": "79d4183824acefa2"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 391.5,
+          "endMS": 394.5,
+          "spanID": "9e9ecf77b38c6b11",
+          "parentSpanID": "cf1303ba16d014c4"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 394.6,
+          "endMS": 394.8,
+          "spanID": "206d4bcc46e30ab9",
+          "parentSpanID": "cf1303ba16d014c4"
+        },
+        {
+          "name": "http.GET /api/v1/services",
+          "startMS": 442.9,
+          "endMS": 491.9,
+          "spanID": "5a46b8085120cfbf",
+          "parentSpanID": "79d4183824acefa2"
+        },
+        {
+          "name": "http.GET /api/v1/slos/overview",
+          "startMS": 452.9,
+          "endMS": 593.2,
+          "spanID": "b5a8e09ff001a2b2",
+          "parentSpanID": "79d4183824acefa2"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 489.7,
+          "endMS": 494.9,
+          "spanID": "f94361fd42f3a822",
+          "parentSpanID": "5a46b8085120cfbf"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 494.9,
+          "endMS": 495.0,
+          "spanID": "a110b9e5b91ba1bd",
+          "parentSpanID": "5a46b8085120cfbf"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 592.9,
+          "endMS": 608.1,
+          "spanID": "f63e9c42d53e7b18",
+          "parentSpanID": "b5a8e09ff001a2b2"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 608.2,
+          "endMS": 617.0,
+          "spanID": "395bffb40311b129",
+          "parentSpanID": "b5a8e09ff001a2b2"
+        },
+        {
+          "name": "ui.fonts.wait",
+          "startMS": 1047.6,
+          "endMS": 1050.0,
+          "spanID": "f46d3f1afd5469f7",
+          "parentSpanID": "79d4183824acefa2"
+        }
+      ]
+    },
+    {
+      "traceID": "73a47d850ddacad4ed8923a24fdf9445",
+      "durationMS": 920.0999999940395,
+      "spans": [
+        {
+          "name": "ui.slo.list",
+          "startMS": 0.0,
+          "endMS": 920.1,
+          "spanID": "d8707b4ad6309c31",
+          "parentSpanID": null
+        },
+        {
+          "name": "http.POST /api/v1/auth/context",
+          "startMS": 296.6,
+          "endMS": 337.7,
+          "spanID": "1f46bff97a18dee8",
+          "parentSpanID": "d8707b4ad6309c31"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 337.5,
+          "endMS": 352.9,
+          "spanID": "368a8588a4b12be9",
+          "parentSpanID": "1f46bff97a18dee8"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 352.9,
+          "endMS": 352.9,
+          "spanID": "18675a80a1d5ae30",
+          "parentSpanID": "1f46bff97a18dee8"
+        },
+        {
+          "name": "http.GET /api/v1/services",
+          "startMS": 406.0,
+          "endMS": 441.6,
+          "spanID": "477962350c90f66e",
+          "parentSpanID": "d8707b4ad6309c31"
+        },
+        {
+          "name": "http.GET /api/v1/slos/overview",
+          "startMS": 410.7,
+          "endMS": 489.5,
+          "spanID": "db0a693a4807257f",
+          "parentSpanID": "d8707b4ad6309c31"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 441.4,
+          "endMS": 447.6,
+          "spanID": "371370d6e8e0a970",
+          "parentSpanID": "477962350c90f66e"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 447.7,
+          "endMS": 447.7,
+          "spanID": "bce8bef0dd658a45",
+          "parentSpanID": "477962350c90f66e"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 489.4,
+          "endMS": 494.9,
+          "spanID": "ca528eba7d1926f0",
+          "parentSpanID": "db0a693a4807257f"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 494.9,
+          "endMS": 498.9,
+          "spanID": "28fa31218989dd87",
+          "parentSpanID": "db0a693a4807257f"
+        },
+        {
+          "name": "ui.fonts.wait",
+          "startMS": 891.4,
+          "endMS": 891.6,
+          "spanID": "e7b6cab58a563a37",
+          "parentSpanID": "d8707b4ad6309c31"
+        }
+      ]
+    },
+    {
+      "traceID": "17a48234a29b8de327d20c53147ed052",
+      "durationMS": 1014.8000000119209,
+      "spans": [
+        {
+          "name": "ui.slo.list",
+          "startMS": 0.0,
+          "endMS": 1014.8,
+          "spanID": "735cd4221b67194e",
+          "parentSpanID": null
+        },
+        {
+          "name": "http.POST /api/v1/auth/context",
+          "startMS": 280.9,
+          "endMS": 314.9,
+          "spanID": "2913e2ac8d3df439",
+          "parentSpanID": "735cd4221b67194e"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 314.9,
+          "endMS": 330.9,
+          "spanID": "dbcbc25db938053f",
+          "parentSpanID": "2913e2ac8d3df439"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 331.0,
+          "endMS": 331.0,
+          "spanID": "f8dcfe846e87545a",
+          "parentSpanID": "2913e2ac8d3df439"
+        },
+        {
+          "name": "http.GET /api/v1/services",
+          "startMS": 365.3,
+          "endMS": 408.9,
+          "spanID": "4c59528cee6c1e6e",
+          "parentSpanID": "735cd4221b67194e"
+        },
+        {
+          "name": "http.GET /api/v1/slos/overview",
+          "startMS": 374.7,
+          "endMS": 475.0,
+          "spanID": "20cd45711a444476",
+          "parentSpanID": "735cd4221b67194e"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 408.8,
+          "endMS": 410.8,
+          "spanID": "aac936d91af6c352",
+          "parentSpanID": "4c59528cee6c1e6e"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 410.8,
+          "endMS": 410.8,
+          "spanID": "842a4df5ae0cbc3d",
+          "parentSpanID": "4c59528cee6c1e6e"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 474.8,
+          "endMS": 503.7,
+          "spanID": "1deb2478aca9dd7e",
+          "parentSpanID": "20cd45711a444476"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 503.8,
+          "endMS": 516.0,
+          "spanID": "6e668771822a2240",
+          "parentSpanID": "20cd45711a444476"
+        },
+        {
+          "name": "ui.fonts.wait",
+          "startMS": 998.2,
+          "endMS": 998.3,
+          "spanID": "7f9d110836e8ed0c",
+          "parentSpanID": "735cd4221b67194e"
+        }
+      ]
+    },
+    {
+      "traceID": "c4fc9b01bb48ca94ce7909387f1b6168",
+      "durationMS": 1092.800000011921,
+      "spans": [
+        {
+          "name": "ui.slo.list",
+          "startMS": 0.0,
+          "endMS": 1092.8,
+          "spanID": "ac7eb6897d75cc47",
+          "parentSpanID": null
+        },
+        {
+          "name": "http.POST /api/v1/auth/context",
+          "startMS": 283.9,
+          "endMS": 315.4,
+          "spanID": "06c09c8b6ee6603a",
+          "parentSpanID": "ac7eb6897d75cc47"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 314.1,
+          "endMS": 318.6,
+          "spanID": "d6ee670f4f1f0985",
+          "parentSpanID": "06c09c8b6ee6603a"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 318.6,
+          "endMS": 318.7,
+          "spanID": "29b1db0673b745c9",
+          "parentSpanID": "06c09c8b6ee6603a"
+        },
+        {
+          "name": "http.GET /api/v1/services",
+          "startMS": 386.3,
+          "endMS": 422.0,
+          "spanID": "5b3d1fac3d16e9b5",
+          "parentSpanID": "ac7eb6897d75cc47"
+        },
+        {
+          "name": "http.GET /api/v1/slos/overview",
+          "startMS": 391.8,
+          "endMS": 483.4,
+          "spanID": "bb95376d7456e4c3",
+          "parentSpanID": "ac7eb6897d75cc47"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 421.9,
+          "endMS": 426.8,
+          "spanID": "c091235744082a47",
+          "parentSpanID": "5b3d1fac3d16e9b5"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 426.8,
+          "endMS": 427.0,
+          "spanID": "a2968dcee7836641",
+          "parentSpanID": "5b3d1fac3d16e9b5"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 483.2,
+          "endMS": 503.9,
+          "spanID": "d908e104606d5cfe",
+          "parentSpanID": "bb95376d7456e4c3"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 504.0,
+          "endMS": 517.6,
+          "spanID": "328e07628a579738",
+          "parentSpanID": "bb95376d7456e4c3"
+        },
+        {
+          "name": "ui.fonts.wait",
+          "startMS": 1073.8,
+          "endMS": 1073.9,
+          "spanID": "107eb00343421d02",
+          "parentSpanID": "ac7eb6897d75cc47"
+        }
+      ]
+    },
+    {
+      "traceID": "02a03074f411c95deb74efd09dc3062d",
+      "durationMS": 1093.4000000059605,
+      "spans": [
+        {
+          "name": "ui.slo.list",
+          "startMS": 0.0,
+          "endMS": 1093.4,
+          "spanID": "c701e8d3786b4b84",
+          "parentSpanID": null
+        },
+        {
+          "name": "http.POST /api/v1/auth/context",
+          "startMS": 285.2,
+          "endMS": 323.2,
+          "spanID": "5d9275881abbdf26",
+          "parentSpanID": "c701e8d3786b4b84"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 323.1,
+          "endMS": 360.5,
+          "spanID": "c220220f45b31515",
+          "parentSpanID": "5d9275881abbdf26"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 364.4,
+          "endMS": 364.5,
+          "spanID": "0e53d483b627cb0e",
+          "parentSpanID": "5d9275881abbdf26"
+        },
+        {
+          "name": "http.GET /api/v1/services",
+          "startMS": 455.3,
+          "endMS": 507.5,
+          "spanID": "78edcce8f7b66a7e",
+          "parentSpanID": "c701e8d3786b4b84"
+        },
+        {
+          "name": "http.GET /api/v1/slos/overview",
+          "startMS": 466.1,
+          "endMS": 576.4,
+          "spanID": "e20fb3c002136d40",
+          "parentSpanID": "c701e8d3786b4b84"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 507.4,
+          "endMS": 509.7,
+          "spanID": "0f36fd55f16cdee7",
+          "parentSpanID": "78edcce8f7b66a7e"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 509.7,
+          "endMS": 509.9,
+          "spanID": "2b238b44d0098ade",
+          "parentSpanID": "78edcce8f7b66a7e"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 576.3,
+          "endMS": 605.1,
+          "spanID": "62f9030192a37393",
+          "parentSpanID": "e20fb3c002136d40"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 605.2,
+          "endMS": 629.8,
+          "spanID": "312fb01f28072711",
+          "parentSpanID": "e20fb3c002136d40"
+        },
+        {
+          "name": "ui.fonts.wait",
+          "startMS": 1087.6,
+          "endMS": 1087.9,
+          "spanID": "f3dceafbeea8d9cb",
+          "parentSpanID": "c701e8d3786b4b84"
+        }
+      ]
+    },
+    {
+      "traceID": "386ec3d21df4858293d72fe62fcc56f1",
+      "durationMS": 1144.300000011921,
+      "spans": [
+        {
+          "name": "ui.slo.list",
+          "startMS": 0.0,
+          "endMS": 1144.3,
+          "spanID": "1a7bba680b37ba61",
+          "parentSpanID": null
+        },
+        {
+          "name": "http.POST /api/v1/auth/context",
+          "startMS": 312.4,
+          "endMS": 352.4,
+          "spanID": "e118ef140c690d19",
+          "parentSpanID": "1a7bba680b37ba61"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 352.2,
+          "endMS": 353.1,
+          "spanID": "f5bec5d84759ae46",
+          "parentSpanID": "e118ef140c690d19"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 353.1,
+          "endMS": 353.2,
+          "spanID": "9a9ff58900d2b557",
+          "parentSpanID": "e118ef140c690d19"
+        },
+        {
+          "name": "http.GET /api/v1/services",
+          "startMS": 440.1,
+          "endMS": 479.6,
+          "spanID": "f77c0ec18231833f",
+          "parentSpanID": "1a7bba680b37ba61"
+        },
+        {
+          "name": "http.GET /api/v1/slos/overview",
+          "startMS": 443.8,
+          "endMS": 517.8,
+          "spanID": "e8e28d9da6fb2819",
+          "parentSpanID": "1a7bba680b37ba61"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 479.5,
+          "endMS": 481.4,
+          "spanID": "39bc06810736ac30",
+          "parentSpanID": "f77c0ec18231833f"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 481.4,
+          "endMS": 482.4,
+          "spanID": "21064b19a22c9366",
+          "parentSpanID": "f77c0ec18231833f"
+        },
+        {
+          "name": "http.response.read",
+          "startMS": 517.2,
+          "endMS": 544.6,
+          "spanID": "689791383b92ae97",
+          "parentSpanID": "e8e28d9da6fb2819"
+        },
+        {
+          "name": "ui.json.parse",
+          "startMS": 544.7,
+          "endMS": 559.8,
+          "spanID": "219febf59241db32",
+          "parentSpanID": "e8e28d9da6fb2819"
+        },
+        {
+          "name": "ui.fonts.wait",
+          "startMS": 1122.7,
+          "endMS": 1123.7,
+          "spanID": "5f21418f728a880f",
+          "parentSpanID": "1a7bba680b37ba61"
+        }
+      ]
+    }
+  ]
+}

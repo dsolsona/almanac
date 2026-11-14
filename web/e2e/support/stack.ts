@@ -4,6 +4,8 @@ import { randomBytes } from 'node:crypto';
 // Access to the Compose stack under test (scripts/e2e.sh). Tests run from web/, inside the
 // dev container with the Docker socket; the stack's ports come from the environment.
 const project = process.env.COMPOSE_PROJECT_NAME ?? 'almanac-e2e';
+export const postgresStorage = process.env.E2E_POSTGRES_STORAGE ?? 'memory';
+if (postgresStorage !== 'memory' && postgresStorage !== 'disk') throw new Error('E2E_POSTGRES_STORAGE must be memory or disk');
 
 export const metricsURL = process.env.E2E_METRICS_URL ?? 'http://localhost:18528';
 
@@ -11,8 +13,13 @@ function docker(args: string[], input?: string): string {
   return execFileSync('docker', args, { encoding: 'utf8', input, stdio: ['pipe', 'pipe', 'pipe'], timeout: 120_000 });
 }
 
+export function composeArgs(...args: string[]): string[] {
+  return ['compose', '-p', project, '-f', '../compose.yaml', '-f', '../compose.e2e.yaml',
+    ...(postgresStorage === 'disk' ? ['-f', '../compose.e2e.disk.yaml'] : []), ...args];
+}
+
 export function compose(...args: string[]): string {
-  return docker(['compose', '-p', project, '-f', '../compose.yaml', '-f', '../compose.e2e.yaml', ...args]);
+  return docker(composeArgs(...args));
 }
 
 export function initialPassword(): string {
@@ -24,8 +31,8 @@ export function initialPassword(): string {
 // Runs SQL in the stack's PostgreSQL as its owner (local socket inside the container). Only the
 // performance fixture uses this, to write retained history that would take weeks to collect.
 export function psql(sql: string): string {
-  return docker(['compose', '-p', project, '-f', '../compose.yaml', '-f', '../compose.e2e.yaml', 'exec', '-T', 'postgres', 'psql', '--no-psqlrc', '--quiet',
-    '--tuples-only', '--no-align', '-v', 'ON_ERROR_STOP=1', '-U', 'almanac', '-d', 'almanac', '-f', '-'], sql).trim();
+  return docker(composeArgs('exec', '-T', 'postgres', 'psql', '--no-psqlrc', '--quiet',
+    '--tuples-only', '--no-align', '-v', 'ON_ERROR_STOP=1', '-U', 'almanac', '-d', 'almanac', '-f', '-'), sql).trim();
 }
 
 export function restartApp(): void {

@@ -1,0 +1,1618 @@
+{
+  "result": "failed",
+  "profile": {
+    "baseRevision": "0dfbca5",
+    "diagnosticCandidate": "F4-T15 scheduler metadata and F4-T16 first-window readiness",
+    "postgresStorage": "disk",
+    "mode": "baseline-only",
+    "fixtureVersion": "eligible-published-history-v3",
+    "initialHistoryStart": "2026-11-12T23:05:00Z",
+    "eligibleFrom": "2026-11-09T23:05:00Z",
+    "historyClosedThrough": "2026-11-13T23:00:00Z",
+    "backfillRanges": [
+      {
+        "from": "2026-11-12T23:05:00.000Z",
+        "to": "2026-11-13T22:09:00Z",
+        "holes": true
+      },
+      {
+        "from": "2026-11-09T23:05:00.000Z",
+        "to": "2026-11-10T11:05:00.000Z",
+        "holes": false
+      },
+      {
+        "from": "2026-11-10T11:05:00.000Z",
+        "to": "2026-11-10T23:05:00.000Z",
+        "holes": false
+      },
+      {
+        "from": "2026-11-10T23:05:00.000Z",
+        "to": "2026-11-11T11:05:00.000Z",
+        "holes": false
+      },
+      {
+        "from": "2026-11-11T11:05:00.000Z",
+        "to": "2026-11-11T23:05:00.000Z",
+        "holes": false
+      },
+      {
+        "from": "2026-11-11T23:05:00.000Z",
+        "to": "2026-11-12T11:05:00.000Z",
+        "holes": false
+      },
+      {
+        "from": "2026-11-12T11:05:00.000Z",
+        "to": "2026-11-12T23:05:00.000Z",
+        "holes": false
+      }
+    ],
+    "eligibilityCheckedSlis": 200,
+    "plannedQueryCalls": {
+      "baseline": 800,
+      "candidate": 0,
+      "reference": 0
+    },
+    "independentReferenceEnabled": false,
+    "applicationImage": "14ebdd5f1f06dabd191c5eed51412233cd8020d9125c83db07712e09b6a3b6da",
+    "sourceHashes": {
+      "../internal/storage/testdata/alert_window_fallback.sql": "2d7261617bf37a2c497103fe3f84a79a72365707bb2229f1b40537b909b6fa2e",
+      "perf/alert-calculation.perf.ts": "2800618bf1caeb0b747d3e6fc35bbb995859dd7a91831ba3c61dc2a8f1350e32",
+      "perf/alert-calculation.experiment.ts": "acc33d8b2175da42e10f978c17fc6f77f78c244aa1505ff57e9eca39f8332eaf",
+      "perf/alert-calculation.metrics.ts": "baa17bcd0604ced066e82941c96432d213f8402eaa7b1b15888a76f0f7ef8b41",
+      "perf/alert-calculation.seed.ts": "7b5b9612ea225c0b6145a845f242cc104f610cc27794b6aac300be38addf6ea4",
+      "playwright.alert-calculation.config.ts": "1b1584176d7b468750b1f6cc1a84f4df47486777a03c425097fd834eba42a1a9",
+      "../compose.e2e.yaml": "4796baeef6c7f8195624098f6c58487818db39b68fac6e4811d8267739b9b4a1",
+      "../internal/storage/query/agent_access.sql": "a50453eaf48acc4655b5a683eeb739c3e6fc6a22468bd3fd981622b3030c6332",
+      "../internal/storage/query/slis.sql": "dd520547b3b05f0a41308c3e6405436d1c71586bd2760c52b94c025607d02499",
+      "../internal/storage/derived_current.go": "f046707657bfc6636cb25e2b5c319daf70f786cd747fda65597a52efd8ef9c4f",
+      "../internal/storage/query/derived_projections.sql": "c1bc896cf748a98eb2aee93fb828f9b3d610a3c200c301119b3bee1a3a61f6ec",
+      "../api/openapi.yaml": "8cee7e36a221268d0bb5e05c81f11a28d6e81107b3425b7dabe4f8bbe675b4d8",
+      "../web/src/slos/SloDetailPanels.tsx": "0fa0ff1e854445c99150ec9c7e53bad936826d29f110e37280935a48a58b824b",
+      "../internal/storage/query/derived_overview.sql": "e0fcb6d8ce72bc0ed0c75d4f67cde6d3e0371e62a0b35e651ac64cdca30e0c73",
+      "../internal/storage/query/slo_list_references.sql": "f8f88f270f0666992c1f3e5c5512328594c334d319fd8ba831be29f81f3b84ff",
+      "../internal/storage/query/derived_due.sql": "50bb7c88858223f5a5d1ab04fdd4dd79fa7459f2cb06f6a245e4fa03b4da4500",
+      "../internal/storage/query/derived_consistency.sql": "7f3a3750d5a6c836ff1c0835def45bce160c3f370357d987b14dd533f7a54da1",
+      "../internal/storage/derived_evaluation.go": "32088029567dcb0459908f04dd3cd29a7ac7821e2cfada534b23183e9d4271fb",
+      "../internal/storage/query/derived_readiness.sql": "d0c527fef21e4ef51fa64d3b1d312500108fb3b2832dff74f6153c5fff62a723",
+      "../internal/storage/query/retained_window_batch.sql": "b3a693ca016b0740b29d5ed9b563aa84d7215f2f4082d661c16377175f960700",
+      "../internal/storage/dbgen/derived_readiness.sql.go": "563fa35da55ff82e157ac796fd73e49e91b036545aed570351e4c92357a99295",
+      "../internal/storage/query/derived_metrics.sql": "0294bc1319786323c8a42e1be514c5d7f8c8919bfd5b667458b5c311fb9d5495",
+      "../internal/storage/query/services.sql": "7b131e6b40c0dff327a18f034f7874cf03cce65074738fd05fb88e46093cc950",
+      "../internal/storage/query/derived_history.sql": "b362ef9a5a1a76a66a0665fdd9eafe9681effebe4e1d078eefe8fd9d8bd5a221",
+      "../internal/storage/migrations/0053_projection_validity_scalar.sql": "1d6a9cc03c682fdde665d94859e0d93693ba8a046bac154787ccbb8a687a76e6",
+      "../internal/storage/derived_worker.go": "5f9c5aeab1ff041914465e8044dcc5751e4d16a21dc5f88e6b8b2bc50dfe7194",
+      "../internal/storage/migrations/0054_maintenance_authority.sql": "38da4705c530300e16bbd461afee82d864516e0d67c696bdb215ee9cde29e5da",
+      "../internal/storage/sessions.go": "d82b2c42f9ae82aad82f896c04b5441eed2d07bb8ce3861f74093c087a088ee3",
+      "../internal/storage/runtime_metrics.go": "e940af367af78dbba1e9ad7aec495f08ebd54049698d2697f54cefeaca215fbd",
+      "../internal/storage/derived_trace.go": "e2f8e802c34361f0dfbd35f9eb425bb7b866f03bef697f2e210cfa5553d9ac87",
+      "../docs/evidence/alert-performance/observe-control.py": "c213b39c89181154f10717eda6c44cdf019e737438acd9aed52a296a9b1a2936",
+      "perf/alert-calculation.readiness.ts": "959592f6eab3a460b1250150dcb45127f59fb7a9e1f54d661917ab691fd3f6fe",
+      "perf/alert-calculation.readiness.sql": "a1c186bf8a16985b3db5aeb36b397471dc5426072fa9b927e7410043239f0d37",
+      "../compose.e2e.disk.yaml": "695de1b6c5004c7aa2a3b29b9bc91836c5486aee7cf1ad3a6839a2f50a556163",
+      "../scripts/e2e.sh": "31cd79161fe8ab6043044e4f1a9cfd7786682b21cddcf08d0dba6e067135ce9d",
+      "e2e/support/stack.ts": "61b3075ba186b4c4314109d761b6ac786c623e901556c848758403d6f3d4bc22"
+    },
+    "cpu": "AMD EPYC",
+    "logicalCPUs": 2,
+    "memoryBytes": 4130635776,
+    "database": "PostgreSQL 18.6 (Debian 18.6-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+    "slis": 200,
+    "initialDays": 1,
+    "backfillDays": 3,
+    "maxDirtyHours": 8,
+    "maxRawVisits": 7200,
+    "statementTimeoutMs": 1000,
+    "workers": 2,
+    "offeredBatchesPerSecond": 8,
+    "rounds": 4,
+    "cutoff": "2026-11-13T21:00:00Z",
+    "apiUsers": 10,
+    "apiMinimumCyclesPerUser": 10,
+    "apiCycleIntervalMs": 10000,
+    "browserUsers": 1,
+    "browserCycles": 20,
+    "backfillBatchMaxRows": 720,
+    "backfillBatchSLIs": 1,
+    "backfillBatches": 1400,
+    "note": "Controlled historical measurement cutoffs cross a UTC hour; wall-clock engine scheduling is outside this query experiment. Single-query diagnostic control; no independent raw oracle or equivalence claim. Eligibility covers all backfill before initial seeding; initially missing older coverage differs from legacy fixtures."
+  },
+  "phase": {
+    "before": "2026-11-13T23:10:11.051238+00:00",
+    "after": "2026-11-13T23:12:54.183288+00:00"
+  },
+  "reportDurationMS": 249850.554,
+  "queryLanes": [
+    {
+      "worker": 0,
+      "batches": 400,
+      "baselineCalls": 400,
+      "candidateCalls": 0,
+      "oracleCalls": 0,
+      "baselineTotalMS": 5638.622,
+      "process": {
+        "startedAt": "2026-11-13T23:10:11.579Z",
+        "finishedAt": "2026-11-13T23:12:01.121Z"
+      },
+      "wallSeconds": 109.542
+    },
+    {
+      "worker": 1,
+      "batches": 400,
+      "baselineCalls": 400,
+      "candidateCalls": 0,
+      "oracleCalls": 0,
+      "baselineTotalMS": 5763.217,
+      "process": {
+        "startedAt": "2026-11-13T23:10:11.583Z",
+        "finishedAt": "2026-11-13T23:12:01.286Z"
+      },
+      "wallSeconds": 109.703
+    }
+  ],
+  "completedQueryCalls": {
+    "baseline": 800,
+    "candidate": 0,
+    "reference": 0
+  },
+  "actualArrayContractSatisfied": true,
+  "equivalence": {
+    "state": "not_checked",
+    "windows": 0,
+    "expectedWindows": 0,
+    "missingWindows": 0,
+    "mismatches": []
+  },
+  "pendingBaseline": 6,
+  "baselineMS": {
+    "samples": 800,
+    "p50": 12.9755,
+    "p95": 27.964,
+    "maximum": 83.665
+  },
+  "backfill": {
+    "startedAt": "2026-11-13T23:10:11.599Z",
+    "finishedAt": "2026-11-13T23:12:53.567Z",
+    "wallSeconds": 161.968
+  },
+  "completedBackfillBatches": 1400,
+  "ingestionOnly": {
+    "accepted": 208,
+    "duplicate": 0,
+    "unsuccessful": 0,
+    "p95LowerSeconds": 0.018314866,
+    "p95UpperSeconds": 0.019230609,
+    "elapsedSeconds": 62.63
+  },
+  "ingestionUnderLoad": {
+    "accepted": 541,
+    "duplicate": 0,
+    "unsuccessful": 0,
+    "p95LowerSeconds": 0.075386444,
+    "p95UpperSeconds": 0.079155766,
+    "elapsedSeconds": 163.596
+  },
+  "due": {
+    "intervals": 400,
+    "missing": 0,
+    "slisWithMissing": 0,
+    "nonObserved": 0
+  },
+  "apiMS": {
+    "overview": {
+      "samples": 138,
+      "p50": 489.6340715000042,
+      "p95": 1379.654079999993,
+      "maximum": 1829.4130660000083
+    },
+    "status": {
+      "samples": 136,
+      "p50": 98.76122099999338,
+      "p95": 214.390539,
+      "maximum": 357.6419279999973
+    },
+    "history": {
+      "samples": 136,
+      "p50": 207.87136650001048,
+      "p95": 473.5922089999949,
+      "maximum": 672.3609410000063
+    }
+  },
+  "browserMS": {
+    "list-cold": {
+      "samples": 20,
+      "p50": 1230.2999999970198,
+      "p95": 1993.6000000089407,
+      "maximum": 2055.3999999910593
+    },
+    "list-warm": {
+      "samples": 20,
+      "p50": 617.5499999895692,
+      "p95": 992.6000000089407,
+      "maximum": 1106.300000011921
+    },
+    "detail-cold": {
+      "samples": 20,
+      "p50": 695.5500000044703,
+      "p95": 826,
+      "maximum": 888
+    },
+    "detail-warm": {
+      "samples": 20,
+      "p50": 238.0,
+      "p95": 334.59999999403954,
+      "maximum": 353.79999999701977
+    }
+  },
+  "apiErrors": [
+    {
+      "name": "overview",
+      "milliseconds": 753.1531770000001,
+      "status": 503,
+      "beganAt": 1794611411793
+    },
+    {
+      "name": "overview",
+      "milliseconds": 758.9214909999864,
+      "status": 503,
+      "beganAt": 1794611411792
+    }
+  ],
+  "outcomes": [
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "rejected",
+      "error": "Error: overview HTTP status\n\nexpect(received).toBe(expected) // Object.is equality\n\nExpected: 200\nReceived: 503"
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "rejected",
+      "error": "Error: overview HTTP status\n\nexpect(received).toBe(expected) // Object.is equality\n\nExpected: 200\nReceived: 503"
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "fulfilled"
+    }
+  ],
+  "caveats": [
+    "Baseline-only diagnostic: candidate and raw oracle are absent; no independent equality claim.",
+    "Corrected eligibility changes initial missing coverage; legacy fixture timing is not an unchanged baseline.",
+    "Historical backfill still uses direct SQL with fixture provenance, bypassing historical agent grants/buffer/admission; live collection and ingestion are real.",
+    "Controlled historical cutoffs cross an hour, not actual wall-clock engine rollover.",
+    "Browser renderer shares the server VM; remote capable-client acceptance remains outstanding."
+  ],
+  "artifactHashes": {
+    "queries-0.process.json": "7b8591c262ff6616f1200dd1d69185c09680d1d3fb1b9354122c6c2cc2bab44e",
+    "queries-0.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "summary.json": "473d91f819a220cafabed5f6c82b578928517f29d75c8e5ada753bb986450128",
+    "queries-1.jsonl": "2af7fe44b94f4980199181349f7ee87ceb6b3f360eb132270d2e7abab121a85b",
+    "queries-1.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "queries-0.jsonl": "e28bb67d01d4d127245104730017bbe3de15315b455632b697a352c8ee7d379a",
+    "ingestion-baseline.json": "d007de99c089cb9e28a31885c0583e48c8db95eaee5703c8bae5e3d98f2e2c13",
+    "queries-1.process.json": "9ee48577cc998db85ff7ade2ae1786c88022b26a743a93a9128fd1148ea0bda1",
+    "backfill.process.json": "891f31e8b8c8aa4089869756401d488fd937d0e5b4b1f04dc4949355da8fe11a",
+    "profile.json": "99555821405fd257949b1f6d52955637269f0c51525decb9b340099596df61c9",
+    "backfill.jsonl": "b4837dfcdb987a936d9cbb4b75bcaa01051a0944a620e30ce079174c4da18e4b",
+    "backfill.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "results.json": "706ed13d9e258557c8905bcdebc53088b33f4ddccb6e4d93818763c9f73f5931"
+  },
+  "seed": {
+    "stats": {
+      "total": 2,
+      "expected": 2,
+      "unexpected": 0,
+      "flaky": 0,
+      "skipped": 0,
+      "ok": true
+    },
+    "startTime": 1794611074925,
+    "duration": 254994.81600000002
+  },
+  "observer": {
+    "finished_at": "2026-11-13T23:13:15.722435+00:00",
+    "workload_exit_code": 1,
+    "samples": {
+      "database": 2490,
+      "resources": 8982
+    },
+    "samplers_completed": {
+      "database": true,
+      "resources": true
+    },
+    "processes_terminated": true,
+    "errors": []
+  },
+  "measuredPhases": {
+    "ingestion_only": {
+      "seconds": 62.63000011444092,
+      "databaseSamples": 625,
+      "cpuPercentOneCore": {
+        "application": {
+          "samples": 252,
+          "mean": 7.721269841269842,
+          "p95": 14.24,
+          "max": 32.6
+        },
+        "loadClientAndObserver": {
+          "samples": 252,
+          "mean": 4.313015873015873,
+          "p95": 12.55,
+          "max": 57.98
+        },
+        "postgres": {
+          "samples": 252,
+          "mean": 49.48452380952381,
+          "p95": 74.77,
+          "max": 77.82
+        },
+        "traces": {
+          "samples": 252,
+          "mean": 1.1748412698412698,
+          "p95": 2.16,
+          "max": 17.44
+        }
+      },
+      "sampledWaits": {
+        "active/None/None": 293,
+        "idle in transaction/None/None": 16,
+        "idle in transaction/Client/ClientRead": 11,
+        "active/IO/WalSync": 2,
+        "active/Lock/transactionid": 1
+      },
+      "sampledOperationWaits": {
+        "ReadDerivedDue/active/None/None": 174,
+        "ListDueDerivedObjectives/active/None/None": 70,
+        "ReadRetainedWindowBatch/active/None/None": 20,
+        "ReadSloBudgetExtremaState/active/None/None": 5,
+        "ReadDerivedMaintenanceDue/active/None/None": 5,
+        "PublishDerivedCurrentProjection/active/None/None": 4,
+        "ReadRetainedWindowBatch/idle in transaction/None/None": 3,
+        "LockSessionInstallation/idle in transaction/None/None": 3,
+        "ReadSloReadyTailEnd/active/None/None": 3,
+        "AcknowledgeDerivedBatch/active/None/None": 2,
+        "other/active/None/None": 2,
+        "other/idle in transaction/Client/ClientRead": 2,
+        "InsertSliObservation/idle in transaction/None/None": 2,
+        "other/idle in transaction/None/None": 2,
+        "InsertSliDeliveryReceipt/idle in transaction/Client/ClientRead": 1,
+        "GetSliCoverageByCanonicalInterval/idle in transaction/Client/ClientRead": 1,
+        "GetSlo/active/None/None": 1,
+        "other/active/IO/WalSync": 1,
+        "LockLatestAgentOwnership/idle in transaction/None/None": 1,
+        "InsertSliDeliveryReceipt/idle in transaction/None/None": 1,
+        "ReadExtremaDue/active/None/None": 1,
+        "MarkSliObservation/active/None/None": 1,
+        "ReadSloReadyTailEnd/idle in transaction/Client/ClientRead": 1,
+        "InsertDerivedGeneration/active/None/None": 1,
+        "InsertSliObservation/active/None/None": 1,
+        "InsertSliObservation/idle in transaction/Client/ClientRead": 1,
+        "LockAgentAccessAgent/active/Lock/transactionid": 1,
+        "AdvanceSliSourceGeneration/idle in transaction/Client/ClientRead": 1,
+        "AcknowledgeDerivedBatch/active/IO/WalSync": 1,
+        "AdvanceSliLastAttemptedInterval/active/None/None": 1,
+        "InsertDerivedGeneration/idle in transaction/Client/ClientRead": 1,
+        "ReadSloBudgetExtremaState/idle in transaction/None/None": 1,
+        "PublishDerivedCurrentProjection/idle in transaction/Client/ClientRead": 1,
+        "AdvanceSliLastAttemptedInterval/idle in transaction/None/None": 1,
+        "GetDerivedSourceGeneration/idle in transaction/Client/ClientRead": 1,
+        "FindAgentAccessCredentialAgent/active/None/None": 1,
+        "ClearCurrentPreparationFailure/idle in transaction/Client/ClientRead": 1,
+        "GetDerivedSourceGeneration/idle in transaction/None/None": 1,
+        "ClaimDerivedDirtyBatch/active/None/None": 1,
+        "MarkSliObservation/idle in transaction/None/None": 1
+      },
+      "trackIOTiming": [
+        "off"
+      ],
+      "databaseCounterDelta": {
+        "blks_hit": 5773434,
+        "blks_read": 513,
+        "deadlocks": 0,
+        "temp_bytes": 0,
+        "temp_files": 0,
+        "tup_deleted": 1420,
+        "tup_fetched": 15808013,
+        "tup_updated": 1519,
+        "xact_commit": 3395,
+        "tup_inserted": 2291,
+        "tup_returned": 20154061,
+        "blk_read_time": 0,
+        "xact_rollback": 0,
+        "blk_write_time": 0
+      },
+      "traces": {
+        "http": {
+          "GET /readyz": {
+            "duration": {
+              "samples": 20,
+              "unit": "ms",
+              "sum": 31.653164,
+              "mean": 1.5826582,
+              "p95": 3.441117,
+              "max": 8.845726
+            },
+            "statuses": {
+              "200": 20
+            }
+          },
+          "POST /api/agent/v1/observations": {
+            "duration": {
+              "samples": 207,
+              "unit": "ms",
+              "sum": 2246.150613,
+              "mean": 10.850969144927536,
+              "p95": 18.862581,
+              "max": 61.266581
+            },
+            "statuses": {
+              "200": 207
+            }
+          }
+        },
+        "sqlstates": {},
+        "current": {
+          "waiting": {
+            "duration": {
+              "samples": 0
+            },
+            "keys": 0,
+            "missing_keys": 0,
+            "attempts_per_key": {
+              "samples": 0
+            },
+            "same_outcome_start_intervals": {
+              "samples": 0
+            },
+            "sqlstates": {},
+            "cleanup_error_spans": 0,
+            "operations": {}
+          },
+          "published": {
+            "duration": {
+              "samples": 405,
+              "unit": "ms",
+              "sum": 4510.450396,
+              "mean": 11.136914558024692,
+              "p95": 17.452717,
+              "max": 31.510655
+            },
+            "keys": 200,
+            "missing_keys": 0,
+            "attempts_per_key": {
+              "samples": 200,
+              "unit": "attempts",
+              "sum": 405,
+              "mean": 2.025,
+              "p95": 2,
+              "max": 3
+            },
+            "same_outcome_start_intervals": {
+              "samples": 205,
+              "unit": "ms",
+              "sum": 4684921.409130096,
+              "mean": 22853.275166488274,
+              "p95": 49803.04288864136,
+              "max": 52479.11214828491
+            },
+            "sqlstates": {},
+            "cleanup_error_spans": 0,
+            "operations": {
+              "db.pool.acquire": {
+                "samples": 405,
+                "unit": "ms",
+                "sum": 3.48726,
+                "mean": 0.008610518518518519,
+                "p95": 0.013886,
+                "max": 0.271648
+              },
+              "db.statement": {
+                "samples": 1215,
+                "unit": "ms",
+                "sum": 328.948225,
+                "mean": 0.2707392798353909,
+                "p95": 0.648022,
+                "max": 5.053939
+              },
+              "db.GetSlo": {
+                "samples": 405,
+                "unit": "ms",
+                "sum": 116.391849,
+                "mean": 0.28738728148148146,
+                "p95": 0.485044,
+                "max": 1.938528
+              },
+              "db.GetSloOperationalContext": {
+                "samples": 405,
+                "unit": "ms",
+                "sum": 77.015463,
+                "mean": 0.19016163703703703,
+                "p95": 0.336771,
+                "max": 2.309774
+              },
+              "db.ReadSloReadyTailEnd": {
+                "samples": 405,
+                "unit": "ms",
+                "sum": 198.612646,
+                "mean": 0.49040159506172837,
+                "p95": 0.852265,
+                "max": 3.82029
+              },
+              "db.ReadDerivedWindowReadiness": {
+                "samples": 810,
+                "unit": "ms",
+                "sum": 171.579343,
+                "mean": 0.21182634938271605,
+                "p95": 0.497341,
+                "max": 3.481679
+              },
+              "db.ReadRetainedWindowBatch": {
+                "samples": 810,
+                "unit": "ms",
+                "sum": 1769.306569,
+                "mean": 2.1843290975308642,
+                "p95": 3.527864,
+                "max": 10.85276
+              },
+              "db.GetDerivedSourceGeneration": {
+                "samples": 405,
+                "unit": "ms",
+                "sum": 104.792632,
+                "mean": 0.25874723950617284,
+                "p95": 0.568701,
+                "max": 2.052447
+              },
+              "db.InsertDerivedGeneration": {
+                "samples": 405,
+                "unit": "ms",
+                "sum": 122.134653,
+                "mean": 0.30156704444444443,
+                "p95": 0.505387,
+                "max": 4.885338
+              },
+              "db.ReadSloBudgetExtremaState": {
+                "samples": 405,
+                "unit": "ms",
+                "sum": 309.18798,
+                "mean": 0.7634271111111112,
+                "p95": 1.309222,
+                "max": 4.438325
+              },
+              "db.PublishDerivedCurrentProjection": {
+                "samples": 405,
+                "unit": "ms",
+                "sum": 725.473597,
+                "mean": 1.7912928320987653,
+                "p95": 3.13617,
+                "max": 7.031917
+              },
+              "db.ClearCurrentPreparationFailure": {
+                "samples": 405,
+                "unit": "ms",
+                "sum": 89.574722,
+                "mean": 0.22117215308641974,
+                "p95": 0.690487,
+                "max": 3.474022
+              }
+            }
+          },
+          "failed": {
+            "duration": {
+              "samples": 0
+            },
+            "keys": 0,
+            "missing_keys": 0,
+            "attempts_per_key": {
+              "samples": 0
+            },
+            "same_outcome_start_intervals": {
+              "samples": 0
+            },
+            "sqlstates": {},
+            "cleanup_error_spans": 0,
+            "operations": {}
+          },
+          "cancelled": {
+            "duration": {
+              "samples": 0
+            },
+            "keys": 0,
+            "missing_keys": 0,
+            "attempts_per_key": {
+              "samples": 0
+            },
+            "same_outcome_start_intervals": {
+              "samples": 0
+            },
+            "sqlstates": {},
+            "cleanup_error_spans": 0,
+            "operations": {}
+          }
+        },
+        "selectedQueries": {
+          "db.pool.acquire": {
+            "duration": {
+              "samples": 1883,
+              "unit": "ms",
+              "sum": 53.862706,
+              "mean": 0.028604729686670206,
+              "p95": 0.074068,
+              "max": 1.882043
+            },
+            "sampled_queries": 0,
+            "sampled_waits": {}
+          },
+          "db.ReadDerivedDue": {
+            "duration": {
+              "samples": 474,
+              "unit": "ms",
+              "sum": 18744.081182,
+              "mean": 39.54447506751055,
+              "p95": 55.72029,
+              "max": 90.566297
+            },
+            "sampled_queries": 174,
+            "sampled_waits": {
+              "active/None/None": 174
+            }
+          },
+          "db.ReadRetainedWindowBatch": {
+            "duration": {
+              "samples": 810,
+              "unit": "ms",
+              "sum": 1769.306569,
+              "mean": 2.1843290975308642,
+              "p95": 3.527864,
+              "max": 10.85276
+            },
+            "sampled_queries": 20,
+            "sampled_waits": {
+              "active/None/None": 20
+            }
+          },
+          "db.ReadDerivedWindowReadiness": {
+            "duration": {
+              "samples": 810,
+              "unit": "ms",
+              "sum": 171.579343,
+              "mean": 0.21182634938271605,
+              "p95": 0.497341,
+              "max": 3.481679
+            },
+            "sampled_queries": 0,
+            "sampled_waits": {}
+          },
+          "db.ListDueDerivedObjectives": {
+            "duration": {
+              "samples": 178,
+              "unit": "ms",
+              "sum": 6338.752185,
+              "mean": 35.61096733146067,
+              "p95": 50.111024,
+              "max": 61.594797
+            },
+            "sampled_queries": 70,
+            "sampled_waits": {
+              "active/None/None": 70
+            }
+          },
+          "db.ReadDerivedMaintenanceDue": {
+            "duration": {
+              "samples": 65,
+              "unit": "ms",
+              "sum": 212.561195,
+              "mean": 3.270172230769231,
+              "p95": 6.782956,
+              "max": 12.214939
+            },
+            "sampled_queries": 5,
+            "sampled_waits": {
+              "active/None/None": 5
+            }
+          }
+        }
+      }
+    },
+    "loaded": {
+      "seconds": 163.13205003738403,
+      "databaseSamples": 1614,
+      "cpuPercentOneCore": {
+        "application": {
+          "samples": 652,
+          "mean": 35.90570552147239,
+          "p95": 53.71,
+          "max": 55.18
+        },
+        "loadClientAndObserver": {
+          "samples": 652,
+          "mean": 45.29558282208589,
+          "p95": 72.68,
+          "max": 80.17
+        },
+        "postgres": {
+          "samples": 652,
+          "mean": 91.95493865030674,
+          "p95": 129.1,
+          "max": 133.43
+        },
+        "traces": {
+          "samples": 652,
+          "mean": 2.1941717791411044,
+          "p95": 4.24,
+          "max": 26.63
+        }
+      },
+      "sampledWaits": {
+        "active/None/None": 3497,
+        "active/Timeout/PgSleep": 2001,
+        "idle in transaction/Client/ClientRead": 1115,
+        "idle in transaction/None/None": 352,
+        "active/Timeout/VacuumDelay": 324,
+        "active/IO/AioIoCompletion": 230,
+        "active/IO/WalSync": 220,
+        "active/LWLock/WALWrite": 63,
+        "active/IO/DataFileRead": 60,
+        "active/IO/DataFileExtend": 22,
+        "active/IO/DataFileWrite": 16,
+        "active/IO/WalWrite": 13,
+        "active/Client/ClientRead": 13,
+        "active/Lock/transactionid": 9,
+        "active/IO/WalInitWrite": 6,
+        "active/LWLock/WALInsert": 5,
+        "active/LWLock/BufferMapping": 5,
+        "active/Client/ClientWrite": 3,
+        "active/IO/WalInitSync": 2,
+        "idle in transaction/IO/WalSync": 1,
+        "active/LWLock/LockManager": 1,
+        "idle in transaction/IO/DataFileRead": 1,
+        "idle in transaction/IO/WalWrite": 1,
+        "active/Timeout/SpinDelay": 1
+      },
+      "sampledOperationWaits": {
+        "other/active/Timeout/PgSleep": 2001,
+        "other/active/None/None": 1572,
+        "ReadRetainedWindowBatch/active/None/None": 772,
+        "ListSloOverviewPage/active/None/None": 406,
+        "ReadRetainedWindowBatch/idle in transaction/Client/ClientRead": 329,
+        "other/active/Timeout/VacuumDelay": 324,
+        "other/idle in transaction/Client/ClientRead": 184,
+        "ReadDerivedDue/active/None/None": 119,
+        "ReadRetainedWindowBatch/active/IO/AioIoCompletion": 110,
+        "ReadDerivedWindowReadiness/idle in transaction/Client/ClientRead": 101,
+        "other/idle in transaction/None/None": 94,
+        "other/active/IO/AioIoCompletion": 70,
+        "DeferCurrentPreparation/active/IO/WalSync": 70,
+        "ReadDerivedMaintenanceDue/active/None/None": 68,
+        "ReadSloExtremaParts/idle in transaction/Client/ClientRead": 67,
+        "DeleteExpiredDerivedGenerations/active/None/None": 65,
+        "DeleteExpiredDerivedGenerations/active/IO/WalSync": 58,
+        "other/active/IO/WalSync": 49,
+        "GetSlo/idle in transaction/Client/ClientRead": 49,
+        "ReadSloReadyTailEnd/idle in transaction/Client/ClientRead": 48,
+        "ReadRetainedWindowBatch/idle in transaction/None/None": 45,
+        "ListSloOverviewPage/idle in transaction/Client/ClientRead": 43,
+        "ReadSloReadyTailEnd/idle in transaction/None/None": 43,
+        "GetSloOperationalContext/idle in transaction/Client/ClientRead": 42,
+        "ReadDerivedWindowReadiness/idle in transaction/None/None": 42,
+        "GetSlo/idle in transaction/None/None": 41,
+        "ListDueDerivedObjectives/active/None/None": 40,
+        "ReadSloReadyTailEnd/active/None/None": 40,
+        "other/active/IO/DataFileRead": 35,
+        "other/active/LWLock/WALWrite": 35,
+        "ReadDerivedWindowReadiness/active/None/None": 35,
+        "GetSlo/active/None/None": 34,
+        "ReadSloExtremaParts/active/None/None": 33,
+        "PublishSloExtrema/idle in transaction/Client/ClientRead": 33,
+        "ReadExtremaDue/active/None/None": 32,
+        "RebuildDerivedBatch/active/None/None": 32,
+        "InsertPreparedSloHistory/active/None/None": 31,
+        "RebuildDerivedBatch/active/IO/AioIoCompletion": 29,
+        "PublishSloExtrema/active/None/None": 27,
+        "ReadSloExtremaHours/idle in transaction/Client/ClientRead": 25,
+        "PublishDerivedCurrentProjection/active/None/None": 24,
+        "ClaimSloExtremaCursor/active/IO/WalSync": 23,
+        "GetDerivedSourceGeneration/idle in transaction/Client/ClientRead": 22,
+        "other/active/IO/DataFileExtend": 22,
+        "GetSloOperationalContext/active/None/None": 19,
+        "DeleteExpiredSloExtrema/active/None/None": 19,
+        "LockSessionInstallation/idle in transaction/Client/ClientRead": 17,
+        "GetSloOperationalContext/idle in transaction/None/None": 16,
+        "ReadSloExtremaHours/active/None/None": 16,
+        "GetDerivedSourceGeneration/idle in transaction/None/None": 14,
+        "DeferCurrentPreparation/active/None/None": 13,
+        "ClaimDerivedDirtyBatch/active/None/None": 13,
+        "ReadSloBudgetExtremaState/active/None/None": 13,
+        "DeferSloExtremaCursor/active/IO/WalSync": 12,
+        "other/active/IO/DataFileWrite": 12,
+        "PublishSloExtrema/idle in transaction/None/None": 11,
+        "InsertSliObservation/idle in transaction/Client/ClientRead": 11,
+        "InsertDerivedGeneration/idle in transaction/Client/ClientRead": 10,
+        "ReadSloExtremaParts/active/IO/AioIoCompletion": 10,
+        "AdvanceSliSourceGeneration/idle in transaction/Client/ClientRead": 9,
+        "GetAgentExecutionGrantByLease/idle in transaction/Client/ClientRead": 9,
+        "DeferCurrentPreparation/active/LWLock/WALWrite": 9,
+        "ClaimSloExtremaCursor/active/None/None": 9,
+        "MarkSliObservation/idle in transaction/Client/ClientRead": 9,
+        "PublishDerivedCurrentProjection/idle in transaction/Client/ClientRead": 9,
+        "LockSessionUserRead/idle in transaction/Client/ClientRead": 8,
+        "CountSloOverviewGroups/idle in transaction/Client/ClientRead": 7,
+        "DeferSloExtremaCursor/active/LWLock/WALWrite": 7,
+        "other/active/IO/WalWrite": 7,
+        "DeferSloExtremaCursor/active/None/None": 7,
+        "ReadSloBudgetExtremaState/idle in transaction/Client/ClientRead": 7,
+        "LockAgentAccessAgent/active/Lock/transactionid": 7,
+        "LockAgentAccessCredential/idle in transaction/Client/ClientRead": 7,
+        "LockAgentAccessAgent/idle in transaction/Client/ClientRead": 7,
+        "CountSloOverviewGroups/active/None/None": 6,
+        "AcknowledgeDerivedBatch/active/IO/WalSync": 6,
+        "CountSloOverviewGroups/idle in transaction/None/None": 6,
+        "FindPreparedSloHistory/idle in transaction/Client/ClientRead": 6,
+        "GetPublishedCurrentProjection/active/None/None": 6,
+        "InsertSliDeliveryReceipt/idle in transaction/Client/ClientRead": 6,
+        "ClearCurrentPreparationFailure/idle in transaction/Client/ClientRead": 6,
+        "DeleteExpiredDerivedGenerations/active/LWLock/WALWrite": 6,
+        "AcknowledgeDerivedBatch/active/None/None": 5,
+        "InsertPreparedSloHistory/idle in transaction/Client/ClientRead": 5,
+        "ReadSloExtremaHours/active/IO/AioIoCompletion": 5,
+        "GetSliCoverageByCanonicalInterval/idle in transaction/Client/ClientRead": 5,
+        "GetPublishedCurrentProjection/idle in transaction/Client/ClientRead": 5,
+        "ReadSloBudgetExtremaState/active/IO/AioIoCompletion": 5,
+        "other/active/IO/WalInitWrite": 5,
+        "ReadRetainedWindowBatch/active/IO/DataFileRead": 5,
+        "AdvanceSliLastAttemptedInterval/idle in transaction/Client/ClientRead": 4,
+        "FindSliDeliveryReceipt/idle in transaction/Client/ClientRead": 4,
+        "LockAgentAccessAgent/idle in transaction/None/None": 4,
+        "MarkSliObservation/idle in transaction/None/None": 4,
+        "PublishDerivedCurrentProjection/active/IO/DataFileRead": 4,
+        "AdvanceSloExtremaCursor/idle in transaction/Client/ClientRead": 4,
+        "other/active/LWLock/BufferMapping": 4,
+        "ListSloOverviewPage/active/Client/ClientWrite": 3,
+        "ListServiceSloStates/active/None/None": 3,
+        "LockSliMeasurementForObservation/active/None/None": 3,
+        "GetDerivedSourceGeneration/active/None/None": 3,
+        "AdvanceSliLastAttemptedInterval/active/None/None": 3,
+        "InsertSliObservation/active/None/None": 3,
+        "other/active/Client/ClientRead": 3,
+        "DeferCurrentPreparation/active/LWLock/WALInsert": 3,
+        "AdvanceSliSourceGeneration/idle in transaction/None/None": 3,
+        "DeferCurrentPreparation/active/IO/WalWrite": 3,
+        "RebuildDerivedBatch/active/IO/DataFileRead": 3,
+        "InsertDerivedGeneration/active/None/None": 3,
+        "LockSessionInstallation/idle in transaction/None/None": 3,
+        "ReadSloExtremaParts/active/IO/DataFileRead": 3,
+        "GetAgentExecutionGrantByLease/active/None/None": 3,
+        "ReadSloExtremaParts/idle in transaction/None/None": 3,
+        "MarkSliObservation/active/None/None": 3,
+        "ClaimDerivedDirtyBatch/active/LWLock/WALWrite": 3,
+        "LockAgentSessionRead/idle in transaction/Client/ClientRead": 3,
+        "ReadSloBudgetExtremaState/idle in transaction/None/None": 3,
+        "LockSessionUserRead/active/None/None": 2,
+        "CurrentPreparationExhausted/idle in transaction/Client/ClientRead": 2,
+        "LockLatestAgentOwnership/idle in transaction/Client/ClientRead": 2,
+        "FindAgentAccessCredentialAgent/active/None/None": 2,
+        "InsertPreparedSloHistory/idle in transaction/None/None": 2,
+        "ListServiceSloStates/idle in transaction/Client/ClientRead": 2,
+        "LockSessionInstallation/active/None/None": 2,
+        "ClaimSloExtremaCursor/active/LWLock/WALWrite": 2,
+        "ReadSloExtremaHours/active/IO/DataFileRead": 2,
+        "AdvanceSloExtremaCursor/idle in transaction/None/None": 2,
+        "DeleteExpiredDerivedGenerations/active/IO/WalWrite": 2,
+        "PublishSloExtrema/active/IO/DataFileRead": 2,
+        "GetSloOperationalContext/active/Client/ClientRead": 2,
+        "LockSessionUserRead/idle in transaction/None/None": 2,
+        "GetSliCoverageByCanonicalInterval/idle in transaction/None/None": 2,
+        "PublishDerivedCurrentProjection/idle in transaction/None/None": 2,
+        "ReadSloExtremaHours/idle in transaction/None/None": 2,
+        "RebuildDerivedBatch/idle in transaction/Client/ClientRead": 2,
+        "FindPreparedSloHistory/active/None/None": 2,
+        "GetSliCoverageByCanonicalInterval/active/None/None": 2,
+        "ReadRetainedWindowBatch/active/IO/DataFileWrite": 2,
+        "ReadSloBudgetExtremaState/active/IO/DataFileRead": 2,
+        "ClaimDerivedDirtyBatch/active/IO/WalSync": 2,
+        "LockAgentAccessCredential/idle in transaction/None/None": 1,
+        "ListSloOverviewPage/active/IO/AioIoCompletion": 1,
+        "ListSloOverviewPage/active/IO/DataFileRead": 1,
+        "ReadSloReadyTailEnd/active/Client/ClientRead": 1,
+        "InsertSliObservation/idle in transaction/None/None": 1,
+        "RebuildDerivedBatch/active/IO/DataFileWrite": 1,
+        "ReadRetainedWindowBatch/idle in transaction/IO/WalSync": 1,
+        "DeferCurrentPreparation/active/LWLock/LockManager": 1,
+        "AdvanceSliSourceGeneration/active/Lock/transactionid": 1,
+        "CatalogFilteredServiceCount/idle in transaction/Client/ClientRead": 1,
+        "CountSloOverviewGroups/active/LWLock/BufferMapping": 1,
+        "LockAgentSessionRead/idle in transaction/IO/DataFileRead": 1,
+        "InsertSliDeliveryReceipt/idle in transaction/None/None": 1,
+        "DeferSloExtremaCursor/active/LWLock/WALInsert": 1,
+        "AcknowledgeDerivedBatch/active/LWLock/WALWrite": 1,
+        "LockAgentSessionRead/idle in transaction/None/None": 1,
+        "LockSliMeasurementForObservation/idle in transaction/Client/ClientRead": 1,
+        "HasExhaustedDerivedSource/idle in transaction/Client/ClientRead": 1,
+        "InsertPreparedSloHistory/active/IO/DataFileRead": 1,
+        "LockSliMeasurementForObservation/idle in transaction/None/None": 1,
+        "FindSessionUserID/active/None/None": 1,
+        "InsertPreparedSloHistory/active/Lock/transactionid": 1,
+        "LockAgentAccessCredential/active/None/None": 1,
+        "EnsureAgentConfiguration/idle in transaction/Client/ClientRead": 1,
+        "GetInitialOwnerState/active/None/None": 1,
+        "DeferSloExtremaCursor/active/IO/WalInitSync": 1,
+        "LockAgentSessionRead/active/Client/ClientRead": 1,
+        "CatalogServiceCounts/idle in transaction/Client/ClientRead": 1,
+        "SetAgentCurrentExecutionLease/idle in transaction/Client/ClientRead": 1,
+        "ClaimSloExtremaCursor/active/IO/WalWrite": 1,
+        "PublishSloExtrema/active/Client/ClientRead": 1,
+        "DeleteExpiredDerivedGenerations/active/Client/ClientRead": 1,
+        "ReadRetainedWindowBatch/active/Client/ClientRead": 1,
+        "AdvanceSloExtremaCursor/idle in transaction/IO/WalWrite": 1,
+        "InsertDerivedGeneration/active/IO/DataFileRead": 1,
+        "DeleteExpiredDerivedGenerations/active/IO/DataFileRead": 1,
+        "ListServiceSloStates/idle in transaction/None/None": 1,
+        "ReadServiceCatalogFields/active/None/None": 1,
+        "DeferCurrentPreparation/active/Client/ClientRead": 1,
+        "ClearCurrentPreparationFailure/idle in transaction/None/None": 1,
+        "ClaimDerivedDirtyBatch/active/IO/WalInitWrite": 1,
+        "CurrentPreparationExhausted/active/Client/ClientRead": 1,
+        "AdvanceSliSourceGeneration/active/None/None": 1,
+        "AdvanceSloExtremaCursor/active/None/None": 1,
+        "ClearCurrentPreparationFailure/active/Timeout/SpinDelay": 1,
+        "other/active/LWLock/WALInsert": 1,
+        "HasExhaustedDerivedSource/active/None/None": 1,
+        "InsertDerivedGeneration/idle in transaction/None/None": 1,
+        "LockSliMeasurementForObservation/active/Client/ClientRead": 1,
+        "other/active/IO/WalInitSync": 1,
+        "PublishSloExtrema/active/IO/DataFileWrite": 1
+      },
+      "trackIOTiming": [
+        "off"
+      ],
+      "databaseCounterDelta": {
+        "blks_hit": 72633858,
+        "blks_read": 519938,
+        "deadlocks": 0,
+        "temp_bytes": 0,
+        "temp_files": 0,
+        "tup_deleted": 26356,
+        "tup_fetched": 16971489,
+        "tup_updated": 917170,
+        "xact_commit": 41466,
+        "tup_inserted": 908831,
+        "tup_returned": 104924950,
+        "blk_read_time": 0,
+        "xact_rollback": 10216,
+        "blk_write_time": 0
+      },
+      "traces": {
+        "http": {
+          "GET /api/v1/slos/overview": {
+            "duration": {
+              "samples": 178,
+              "unit": "ms",
+              "sum": 57153.247679,
+              "mean": 321.0856611179775,
+              "p95": 779.789903,
+              "max": 944.268505
+            },
+            "statuses": {
+              "200": 176,
+              "503": 2
+            }
+          },
+          "GET /api/v1/services": {
+            "duration": {
+              "samples": 40,
+              "unit": "ms",
+              "sum": 1650.244757,
+              "mean": 41.256118925,
+              "p95": 80.781035,
+              "max": 110.148005
+            },
+            "statuses": {
+              "200": 40
+            }
+          },
+          "POST /api/agent/v1/observations": {
+            "duration": {
+              "samples": 539,
+              "unit": "ms",
+              "sum": 18021.229479,
+              "mean": 33.43456304081633,
+              "p95": 79.404792,
+              "max": 149.421666
+            },
+            "statuses": {
+              "200": 539
+            }
+          },
+          "GET /api/v1/slos/{id}": {
+            "duration": {
+              "samples": 40,
+              "unit": "ms",
+              "sum": 641.923626,
+              "mean": 16.04809065,
+              "p95": 35.444363,
+              "max": 41.188259
+            },
+            "statuses": {
+              "200": 40
+            }
+          },
+          "GET /api/v1/slos/{id}/operational": {
+            "duration": {
+              "samples": 176,
+              "unit": "ms",
+              "sum": 26575.755183,
+              "mean": 150.99860899431818,
+              "p95": 311.344173,
+              "max": 325.549971
+            },
+            "statuses": {
+              "200": 176
+            }
+          },
+          "GET /api/v1/slos/{id}/status": {
+            "duration": {
+              "samples": 176,
+              "unit": "ms",
+              "sum": 8684.700984,
+              "mean": 49.34489195454545,
+              "p95": 135.828775,
+              "max": 281.053007
+            },
+            "statuses": {
+              "200": 176
+            }
+          },
+          "GET /readyz": {
+            "duration": {
+              "samples": 52,
+              "unit": "ms",
+              "sum": 358.088093,
+              "mean": 6.88630948076923,
+              "p95": 16.906707,
+              "max": 27.140252
+            },
+            "statuses": {
+              "200": 52
+            }
+          },
+          "POST /api/v1/auth/context": {
+            "duration": {
+              "samples": 40,
+              "unit": "ms",
+              "sum": 436.76212699999996,
+              "mean": 10.919053175,
+              "p95": 22.581773,
+              "max": 101.831156
+            },
+            "statuses": {
+              "200": 40
+            }
+          },
+          "GET unmatched": {
+            "duration": {
+              "samples": 420,
+              "unit": "ms",
+              "sum": 276.24827799999997,
+              "mean": 0.6577339952380953,
+              "p95": 3.334901,
+              "max": 12.116426
+            },
+            "statuses": {
+              "200": 420
+            }
+          },
+          "GET /slos": {
+            "duration": {
+              "samples": 20,
+              "unit": "ms",
+              "sum": 1.835516,
+              "mean": 0.0917758,
+              "p95": 0.209381,
+              "max": 0.893695
+            },
+            "statuses": {
+              "200": 20
+            }
+          },
+          "GET /slos/{id}": {
+            "duration": {
+              "samples": 20,
+              "unit": "ms",
+              "sum": 1.676727,
+              "mean": 0.08383635,
+              "p95": 0.208651,
+              "max": 0.636431
+            },
+            "statuses": {
+              "200": 20
+            }
+          }
+        },
+        "sqlstates": {
+          "40001": 1
+        },
+        "current": {
+          "waiting": {
+            "duration": {
+              "samples": 8226,
+              "unit": "ms",
+              "sum": 80318.073104,
+              "mean": 9.763928167274495,
+              "p95": 25.172889,
+              "max": 127.786416
+            },
+            "keys": 200,
+            "missing_keys": 0,
+            "attempts_per_key": {
+              "samples": 200,
+              "unit": "attempts",
+              "sum": 8226,
+              "mean": 41.13,
+              "p95": 44,
+              "max": 44
+            },
+            "same_outcome_start_intervals": {
+              "samples": 8026,
+              "unit": "ms",
+              "sum": 30472078.727722168,
+              "mean": 3796.670661315994,
+              "p95": 7105.695962905884,
+              "max": 84622.29013442993
+            },
+            "sqlstates": {},
+            "cleanup_error_spans": 0,
+            "operations": {
+              "db.pool.acquire": {
+                "samples": 8226,
+                "unit": "ms",
+                "sum": 16473.467357,
+                "mean": 2.002609695720885,
+                "p95": 8.602689,
+                "max": 38.474185
+              },
+              "db.statement": {
+                "samples": 24678,
+                "unit": "ms",
+                "sum": 18238.701686,
+                "mean": 0.739067253667234,
+                "p95": 3.583456,
+                "max": 50.157165
+              },
+              "db.GetSlo": {
+                "samples": 8226,
+                "unit": "ms",
+                "sum": 5765.741422,
+                "mean": 0.7009167787503039,
+                "p95": 2.859601,
+                "max": 27.833857
+              },
+              "db.GetSloOperationalContext": {
+                "samples": 8226,
+                "unit": "ms",
+                "sum": 6013.593291,
+                "mean": 0.7310470813274982,
+                "p95": 3.128837,
+                "max": 28.997136
+              },
+              "db.ReadSloReadyTailEnd": {
+                "samples": 8226,
+                "unit": "ms",
+                "sum": 8613.648083,
+                "mean": 1.0471247365669827,
+                "p95": 3.758674,
+                "max": 24.389798
+              },
+              "db.ReadDerivedWindowReadiness": {
+                "samples": 8226,
+                "unit": "ms",
+                "sum": 9236.77346,
+                "mean": 1.1228754510089958,
+                "p95": 4.245594,
+                "max": 20.964903
+              },
+              "db.DeferCurrentPreparation": {
+                "samples": 8226,
+                "unit": "ms",
+                "sum": 13443.900736,
+                "mean": 1.6343181055190859,
+                "p95": 5.795793,
+                "max": 56.014602
+              }
+            }
+          },
+          "published": {
+            "duration": {
+              "samples": 776,
+              "unit": "ms",
+              "sum": 52042.205966,
+              "mean": 67.06469840979382,
+              "p95": 141.839378,
+              "max": 274.368692
+            },
+            "keys": 200,
+            "missing_keys": 0,
+            "attempts_per_key": {
+              "samples": 200,
+              "unit": "attempts",
+              "sum": 776,
+              "mean": 3.88,
+              "p95": 12,
+              "max": 14
+            },
+            "same_outcome_start_intervals": {
+              "samples": 576,
+              "unit": "ms",
+              "sum": 9500490.221500397,
+              "mean": 16493.9066345493,
+              "p95": 82550.64916610718,
+              "max": 144242.04516410828
+            },
+            "sqlstates": {},
+            "cleanup_error_spans": 0,
+            "operations": {
+              "db.pool.acquire": {
+                "samples": 776,
+                "unit": "ms",
+                "sum": 2489.595189,
+                "mean": 3.2082412229381445,
+                "p95": 11.13401,
+                "max": 61.022937
+              },
+              "db.statement": {
+                "samples": 2328,
+                "unit": "ms",
+                "sum": 2867.293251,
+                "mean": 1.2316551765463917,
+                "p95": 4.842065,
+                "max": 93.569287
+              },
+              "db.GetSlo": {
+                "samples": 776,
+                "unit": "ms",
+                "sum": 479.883212,
+                "mean": 0.6184062010309278,
+                "p95": 2.326353,
+                "max": 17.265109
+              },
+              "db.GetSloOperationalContext": {
+                "samples": 776,
+                "unit": "ms",
+                "sum": 459.274582,
+                "mean": 0.5918486881443299,
+                "p95": 2.401915,
+                "max": 17.156837
+              },
+              "db.ReadSloReadyTailEnd": {
+                "samples": 776,
+                "unit": "ms",
+                "sum": 740.736723,
+                "mean": 0.9545576327319588,
+                "p95": 3.355566,
+                "max": 28.05912
+              },
+              "db.ReadDerivedWindowReadiness": {
+                "samples": 2114,
+                "unit": "ms",
+                "sum": 2997.132247,
+                "mean": 1.417754137653737,
+                "p95": 5.451833,
+                "max": 26.262281
+              },
+              "db.ReadRetainedWindowBatch": {
+                "samples": 2676,
+                "unit": "ms",
+                "sum": 19522.866024,
+                "mean": 7.295540367713005,
+                "p95": 21.580356,
+                "max": 71.790857
+              },
+              "db.GetDerivedSourceGeneration": {
+                "samples": 776,
+                "unit": "ms",
+                "sum": 1230.781587,
+                "mean": 1.5860587461340205,
+                "p95": 5.597384,
+                "max": 40.722324
+              },
+              "db.InsertDerivedGeneration": {
+                "samples": 776,
+                "unit": "ms",
+                "sum": 739.549635,
+                "mean": 0.9530278801546391,
+                "p95": 3.6812,
+                "max": 29.320636
+              },
+              "db.ReadSloBudgetExtremaState": {
+                "samples": 776,
+                "unit": "ms",
+                "sum": 2286.3713,
+                "mean": 2.946354768041237,
+                "p95": 8.822611,
+                "max": 35.788537
+              },
+              "db.PublishDerivedCurrentProjection": {
+                "samples": 776,
+                "unit": "ms",
+                "sum": 3360.09056,
+                "mean": 4.330013608247422,
+                "p95": 10.773305,
+                "max": 41.022734
+              },
+              "db.ClearCurrentPreparationFailure": {
+                "samples": 776,
+                "unit": "ms",
+                "sum": 1203.488345,
+                "mean": 1.5508870425257733,
+                "p95": 5.843159,
+                "max": 36.242724
+              },
+              "db.ReadSloExtremaParts": {
+                "samples": 562,
+                "unit": "ms",
+                "sum": 2954.605984,
+                "mean": 5.2573060213523135,
+                "p95": 16.447934,
+                "max": 56.751031
+              }
+            }
+          },
+          "failed": {
+            "duration": {
+              "samples": 0
+            },
+            "keys": 0,
+            "missing_keys": 0,
+            "attempts_per_key": {
+              "samples": 0
+            },
+            "same_outcome_start_intervals": {
+              "samples": 0
+            },
+            "sqlstates": {},
+            "cleanup_error_spans": 0,
+            "operations": {}
+          },
+          "cancelled": {
+            "duration": {
+              "samples": 0
+            },
+            "keys": 0,
+            "missing_keys": 0,
+            "attempts_per_key": {
+              "samples": 0
+            },
+            "same_outcome_start_intervals": {
+              "samples": 0
+            },
+            "sqlstates": {},
+            "cleanup_error_spans": 0,
+            "operations": {}
+          }
+        },
+        "selectedQueries": {
+          "db.pool.acquire": {
+            "duration": {
+              "samples": 26493,
+              "unit": "ms",
+              "sum": 129085.502962,
+              "mean": 4.872438114294342,
+              "p95": 20.307008,
+              "max": 251.304995
+            },
+            "sampled_queries": 0,
+            "sampled_waits": {}
+          },
+          "db.ReadRetainedWindowBatch": {
+            "duration": {
+              "samples": 7735,
+              "unit": "ms",
+              "sum": 96729.630523,
+              "mean": 12.505446738590821,
+              "p95": 29.180919,
+              "max": 124.79317
+            },
+            "sampled_queries": 987,
+            "sampled_waits": {
+              "active/None/None": 770,
+              "idle in transaction/Client/ClientRead": 77,
+              "active/IO/AioIoCompletion": 110,
+              "idle in transaction/None/None": 22,
+              "active/IO/DataFileRead": 5,
+              "active/Client/ClientRead": 1,
+              "active/IO/DataFileWrite": 2
+            }
+          },
+          "db.ReadDerivedWindowReadiness": {
+            "duration": {
+              "samples": 13928,
+              "unit": "ms",
+              "sum": 17949.384654,
+              "mean": 1.2887266408673177,
+              "p95": 5.024724,
+              "max": 39.670569
+            },
+            "sampled_queries": 186,
+            "sampled_waits": {
+              "idle in transaction/None/None": 49,
+              "active/None/None": 35,
+              "idle in transaction/Client/ClientRead": 102
+            }
+          },
+          "db.ListSloOverviewPage": {
+            "duration": {
+              "samples": 176,
+              "unit": "ms",
+              "sum": 43355.789924,
+              "mean": 246.33971547727273,
+              "p95": 665.576475,
+              "max": 758.250115
+            },
+            "sampled_queries": 158,
+            "sampled_waits": {
+              "active/None/None": 406,
+              "idle in transaction/None/None": 6,
+              "idle in transaction/Client/ClientRead": 12,
+              "active/IO/AioIoCompletion": 1,
+              "active/IO/DataFileRead": 1,
+              "active/Client/ClientWrite": 3
+            }
+          },
+          "db.ReadDerivedDue": {
+            "duration": {
+              "samples": 401,
+              "unit": "ms",
+              "sum": 11857.254327999999,
+              "mean": 29.569212788029926,
+              "p95": 66.240248,
+              "max": 297.05794
+            },
+            "sampled_queries": 112,
+            "sampled_waits": {
+              "active/None/None": 119
+            }
+          },
+          "db.DeferCurrentPreparation": {
+            "duration": {
+              "samples": 8226,
+              "unit": "ms",
+              "sum": 13443.900736,
+              "mean": 1.6343181055190859,
+              "p95": 5.795793,
+              "max": 56.014602
+            },
+            "sampled_queries": 100,
+            "sampled_waits": {
+              "active/IO/WalSync": 69,
+              "active/LWLock/WALWrite": 9,
+              "active/None/None": 14,
+              "active/LWLock/WALInsert": 3,
+              "active/LWLock/LockManager": 1,
+              "active/IO/WalWrite": 3,
+              "active/Client/ClientRead": 1
+            }
+          },
+          "db.ListDueDerivedObjectives": {
+            "duration": {
+              "samples": 200,
+              "unit": "ms",
+              "sum": 4576.414857,
+              "mean": 22.882074285,
+              "p95": 58.675095,
+              "max": 217.426786
+            },
+            "sampled_queries": 39,
+            "sampled_waits": {
+              "active/None/None": 40
+            }
+          },
+          "db.ReadDerivedMaintenanceDue": {
+            "duration": {
+              "samples": 4958,
+              "unit": "ms",
+              "sum": 11734.215197,
+              "mean": 2.3667235169423155,
+              "p95": 7.162446,
+              "max": 53.639825
+            },
+            "sampled_queries": 69,
+            "sampled_waits": {
+              "active/None/None": 69
+            }
+          },
+          "db.DeleteExpiredDerivedGenerations": {
+            "duration": {
+              "samples": 3188,
+              "unit": "ms",
+              "sum": 17673.013486,
+              "mean": 5.543605234002509,
+              "p95": 14.346519,
+              "max": 60.209104
+            },
+            "sampled_queries": 133,
+            "sampled_waits": {
+              "active/IO/WalSync": 58,
+              "active/IO/WalWrite": 2,
+              "active/None/None": 65,
+              "active/LWLock/WALWrite": 6,
+              "active/Client/ClientRead": 1,
+              "active/IO/DataFileRead": 1
+            }
+          }
+        }
+      }
+    }
+  },
+  "persistedValidityBounds": {
+    "slis": 200,
+    "earliest_observation": "2026-11-09T23:05:00+00:00",
+    "latest_observation": "2026-11-13T23:12:00+00:00",
+    "minimum_measurement_effective_from": "2026-11-09T23:05:00+00:00",
+    "maximum_measurement_effective_from": "2026-11-09T23:05:00+00:00",
+    "minimum_slo_evaluation_valid_from": "2026-11-09T23:05:00+00:00",
+    "maximum_slo_evaluation_valid_from": "2026-11-09T23:05:00+00:00",
+    "observations_before_measurement_effective_from": 0,
+    "observations_before_slo_evaluation_valid_from": 0,
+    "total_observations": 1153233,
+    "diagnosticSeconds": 2.936666405003052
+  },
+  "export": {
+    "rows": 275849,
+    "seconds": 14.132760490989313
+  },
+  "limitations": [
+    "Sampled occupancy is not a query duration distribution.",
+    "No wait event includes runnable CPU and scheduler delay, not necessarily CPU execution.",
+    "Cumulative database counters can lag; Docker CPU windows can straddle phase boundaries.",
+    "Block I/O and CPU percentages do not prove I/O latency or throttling.",
+    "PostgreSQL track_io_timing was off; no per-query I/O duration is established.",
+    "Prior run had no measured-phase database samples. Fresh fixture identities/dispatch phases and changing publication rates prevent attributing every timing difference solely to one correction.",
+    "Trace cohorts use request starts; ingestion acceptance histograms use completions.",
+    "Both scheduler and first-window readiness corrections are present; focused probes and canonical-read counts distinguish their local effects, not all end-to-end effects.",
+    "The repaired database observer ran throughout this control; in the earlier control it stopped before both measured phases, so diagnostic overhead is not identical across runs."
+  ],
+  "admissionFailures": [
+    {
+      "at": "2026-11-13T23:10:12.063956022Z",
+      "requestMS": 340.115492,
+      "failedInteractiveAcquireMS": [
+        250.106208
+      ],
+      "pageQueryStarted": false
+    },
+    {
+      "at": "2026-11-13T23:10:12.055781739Z",
+      "requestMS": 338.193282,
+      "failedInteractiveAcquireMS": [
+        251.304995
+      ],
+      "pageQueryStarted": false
+    }
+  ]
+}

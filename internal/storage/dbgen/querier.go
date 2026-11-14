@@ -12,8 +12,11 @@ import (
 
 type Querier interface {
 	AcknowledgeDerivedBatch(ctx context.Context, arg AcknowledgeDerivedBatchParams) error
+	AcknowledgeMaintenanceWork(ctx context.Context, arg AcknowledgeMaintenanceWorkParams) (int64, error)
 	ActivateDatasourceAgent(ctx context.Context, arg ActivateDatasourceAgentParams) (AlmanacDatasource, error)
 	ActivateSliMeasurement(ctx context.Context, arg ActivateSliMeasurementParams) (int64, error)
+	AdvanceMaintenanceIdentity(ctx context.Context, arg AdvanceMaintenanceIdentityParams) error
+	AdvanceMaintenanceState(ctx context.Context, arg AdvanceMaintenanceStateParams) (int64, error)
 	AdvanceRetentionCleanup(ctx context.Context, arg AdvanceRetentionCleanupParams) (int64, error)
 	AdvanceSliLastAttemptedInterval(ctx context.Context, arg AdvanceSliLastAttemptedIntervalParams) error
 	// The measurement lock serializes acceptance. All three writes share that
@@ -42,6 +45,7 @@ type Querier interface {
 	CountAccountLoginAttempts(ctx context.Context, arg CountAccountLoginAttemptsParams) (CountAccountLoginAttemptsRow, error)
 	CountActiveServiceIDs(ctx context.Context, dollar_1 []pgtype.UUID) (int64, error)
 	CountManagedUsers(ctx context.Context, arg CountManagedUsersParams) (int64, error)
+	// Evaluate classification once per SLO, rather than once per count bucket.
 	CountSloOverviewGroups(ctx context.Context, arg CountSloOverviewGroupsParams) (CountSloOverviewGroupsRow, error)
 	CountSourceLoginAttempts(ctx context.Context, arg CountSourceLoginAttemptsParams) (CountSourceLoginAttemptsRow, error)
 	CountUsableAdmins(ctx context.Context) (int64, error)
@@ -77,6 +81,7 @@ type Querier interface {
 	DeleteUserChallenges(ctx context.Context, userID pgtype.UUID) error
 	DeleteUserSessions(ctx context.Context, userID pgtype.UUID) error
 	DisableAgent(ctx context.Context, arg DisableAgentParams) (AlmanacAgent, error)
+	EnqueueMaintenanceWork(ctx context.Context, arg EnqueueMaintenanceWorkParams) error
 	EnsureAgentConfiguration(ctx context.Context, arg EnsureAgentConfigurationParams) error
 	EnsureSloExtremaCursors(ctx context.Context, arg EnsureSloExtremaCursorsParams) (int64, error)
 	ExhaustRetentionWork(ctx context.Context, nextAttemptAt pgtype.Timestamptz) error
@@ -85,6 +90,7 @@ type Querier interface {
 	FailLoginAttempt(ctx context.Context, arg FailLoginAttemptParams) error
 	FailRetentionWork(ctx context.Context, arg FailRetentionWorkParams) error
 	FailSloExtremaCursor(ctx context.Context, arg FailSloExtremaCursorParams) error
+	FenceMaintenanceState(ctx context.Context, sloID pgtype.UUID) (int64, error)
 	FindAgentAccessCredentialAgent(ctx context.Context, credentialID pgtype.UUID) (pgtype.UUID, error)
 	FindAgentLifecycleReceipt(ctx context.Context, arg FindAgentLifecycleReceiptParams) (FindAgentLifecycleReceiptRow, error)
 	FindAgentReceipt(ctx context.Context, arg FindAgentReceiptParams) (FindAgentReceiptRow, error)
@@ -102,6 +108,7 @@ type Querier interface {
 	GetAgent(ctx context.Context, agentID pgtype.UUID) (AlmanacAgent, error)
 	GetAgentConfiguration(ctx context.Context, agentID pgtype.UUID) (GetAgentConfigurationRow, error)
 	GetAgentExecutionGrant(ctx context.Context, arg GetAgentExecutionGrantParams) (GetAgentExecutionGrantRow, error)
+	// The lease key is immutable; updates to its authority must still serialize.
 	GetAgentExecutionGrantByLease(ctx context.Context, leaseID string) (GetAgentExecutionGrantByLeaseRow, error)
 	GetAgentExecutionGrantBySequence(ctx context.Context, arg GetAgentExecutionGrantBySequenceParams) (GetAgentExecutionGrantBySequenceRow, error)
 	GetAgentHandoffConfiguration(ctx context.Context, agentID pgtype.UUID) (int64, error)
@@ -146,6 +153,11 @@ type Querier interface {
 	InsertInitialOwnerAudit(ctx context.Context, arg InsertInitialOwnerAuditParams) error
 	InsertLifecycleAudit(ctx context.Context, arg InsertLifecycleAuditParams) error
 	InsertLoginAttempt(ctx context.Context, arg InsertLoginAttemptParams) (pgtype.UUID, error)
+	InsertMaintenanceAudit(ctx context.Context, arg InsertMaintenanceAuditParams) (pgtype.UUID, error)
+	InsertMaintenanceChange(ctx context.Context, arg InsertMaintenanceChangeParams) error
+	InsertMaintenanceIdentity(ctx context.Context, arg InsertMaintenanceIdentityParams) error
+	InsertMaintenanceRevision(ctx context.Context, arg InsertMaintenanceRevisionParams) error
+	InsertMaintenanceScope(ctx context.Context, arg InsertMaintenanceScopeParams) error
 	InsertManagedUser(ctx context.Context, arg InsertManagedUserParams) (AlmanacUser, error)
 	InsertObjectiveCreateReceipt(ctx context.Context, arg InsertObjectiveCreateReceiptParams) error
 	InsertPasswordRotationAudit(ctx context.Context, arg InsertPasswordRotationAuditParams) error
@@ -176,7 +188,13 @@ type Querier interface {
 	ListCatalogServices(ctx context.Context, arg ListCatalogServicesParams) ([]AlmanacService, error)
 	ListDatasourceSliMeasurements(ctx context.Context, datasourceID pgtype.UUID) ([]ListDatasourceSliMeasurementsRow, error)
 	ListDatasources(ctx context.Context, arg ListDatasourcesParams) ([]AlmanacDatasource, error)
+	// Read publication text once per projection, not once per retained hour.
+	// Keep timestamp parsing in its conditional predicate so unrelated due/backoff
+	// branches retain their existing behavior for malformed cache metadata.
 	ListDueDerivedObjectives(ctx context.Context, arg ListDueDerivedObjectivesParams) ([]pgtype.UUID, error)
+	ListMaintenanceGrids(ctx context.Context, sloID pgtype.UUID) ([]ListMaintenanceGridsRow, error)
+	ListMaintenanceIdentities(ctx context.Context, arg ListMaintenanceIdentitiesParams) ([]ListMaintenanceIdentitiesRow, error)
+	ListMaintenanceScopes(ctx context.Context, arg ListMaintenanceScopesParams) ([]pgtype.UUID, error)
 	ListManagedUsers(ctx context.Context, arg ListManagedUsersParams) ([]AlmanacUser, error)
 	ListPendingSlisForAgent(ctx context.Context, agentID pgtype.UUID) ([]ListPendingSlisForAgentRow, error)
 	ListReadyDatasourceReassignments(ctx context.Context, retryAt pgtype.Timestamptz) ([]ListReadyDatasourceReassignmentsRow, error)
@@ -187,6 +205,10 @@ type Querier interface {
 	// Enrich only a bounded canonical page; missing receipt IDs use the caller's natural-key fallback.
 	ListSliObservations(ctx context.Context, arg ListSliObservationsParams) ([]ListSliObservationsRow, error)
 	ListSlis(ctx context.Context, arg ListSlisParams) ([]ListSlisRow, error)
+	// Reuse classification scalars without expanding them through every presentation
+	// expression. Fetch chart payloads and construct metadata only for the chosen page.
+	// Keep assembly above the scalar/reference sort, including maximum API pages.
+	// Expose order keys through the subquery so the outer order needs no payload sort.
 	ListSloOverviewPage(ctx context.Context, arg ListSloOverviewPageParams) ([]ListSloOverviewPageRow, error)
 	ListSloPreparationJobs(ctx context.Context, arg ListSloPreparationJobsParams) ([]ListSloPreparationJobsRow, error)
 	ListSloTimelineFacts(ctx context.Context, arg ListSloTimelineFactsParams) ([]ListSloTimelineFactsRow, error)
@@ -195,6 +217,7 @@ type Querier interface {
 	// Select the current set before ordering locks: a LIMIT-driven primary-key scan
 	// would otherwise walk inactive history. Recheck base rows after any lock wait.
 	LockActiveRotationCredentials(ctx context.Context, arg LockActiveRotationCredentialsParams) ([]LockActiveRotationCredentialsRow, error)
+	// Serialize authority changes without blocking retained observations' ID references.
 	LockAgentAccessAgent(ctx context.Context, agentID pgtype.UUID) (LockAgentAccessAgentRow, error)
 	LockAgentAccessCredential(ctx context.Context, arg LockAgentAccessCredentialParams) (AlmanacAgentCredential, error)
 	LockAgentSession(ctx context.Context, verifier []byte) (AlmanacSession, error)
@@ -207,6 +230,9 @@ type Querier interface {
 	LockLifecycleAgent(ctx context.Context, agentID pgtype.UUID) (AlmanacAgent, error)
 	LockLifecycleCredential(ctx context.Context, arg LockLifecycleCredentialParams) (LockLifecycleCredentialRow, error)
 	LockLoginAttemptForFinish(ctx context.Context, id pgtype.UUID) (AlmanacLoginAttempt, error)
+	LockMaintenanceIdentity(ctx context.Context, id pgtype.UUID) (AlmanacMaintenanceExclusion, error)
+	LockMaintenanceSlo(ctx context.Context, id pgtype.UUID) (pgtype.UUID, error)
+	LockMaintenanceState(ctx context.Context, sloID pgtype.UUID) (int64, error)
 	LockManagedUser(ctx context.Context, id pgtype.UUID) (AlmanacUser, error)
 	LockPasswordRotationInstallation(ctx context.Context) (LockPasswordRotationInstallationRow, error)
 	LockRetentionWork(ctx context.Context, arg LockRetentionWorkParams) (pgtype.UUID, error)
@@ -230,12 +256,21 @@ type Querier interface {
 	PruneExpiredLoginAttempts(ctx context.Context, nowAt pgtype.Timestamptz) error
 	PublishDerivedCurrentProjection(ctx context.Context, arg PublishDerivedCurrentProjectionParams) (int64, error)
 	PublishSloExtrema(ctx context.Context, arg PublishSloExtremaParams) (int64, error)
+	// Read publication text once per projection, not once per retained hour.
+	// Keep timestamp parsing in its conditional predicate so unrelated due/backoff
+	// branches retain their existing behavior for malformed cache metadata.
 	ReadDerivedDue(ctx context.Context, arg ReadDerivedDueParams) (ReadDerivedDueRow, error)
 	ReadDerivedMaintenanceDue(ctx context.Context, arg ReadDerivedMaintenanceDueParams) (ReadDerivedMaintenanceDueRow, error)
 	ReadDerivedMetrics(ctx context.Context, arg ReadDerivedMetricsParams) (ReadDerivedMetricsRow, error)
+	// Same interior and lease semantics as ReadRetainedWindowBatch. A ready result is
+	// advisory: the caller must still execute that authoritative batch in its snapshot.
+	ReadDerivedWindowReadiness(ctx context.Context, arg ReadDerivedWindowReadinessParams) (ReadDerivedWindowReadinessRow, error)
 	ReadDerivedWindowTotals(ctx context.Context, arg ReadDerivedWindowTotalsParams) (ReadDerivedWindowTotalsRow, error)
 	ReadExtremaDue(ctx context.Context, arg ReadExtremaDueParams) (ReadExtremaDueRow, error)
 	ReadLocalIdentity(ctx context.Context, login string) (ReadLocalIdentityRow, error)
+	ReadMaintenanceRevision(ctx context.Context, arg ReadMaintenanceRevisionParams) (ReadMaintenanceRevisionRow, error)
+	ReadMaintenanceSnapshot(ctx context.Context, arg ReadMaintenanceSnapshotParams) ([]AlmanacMaintenanceExclusionRevision, error)
+	ReadMaintenanceState(ctx context.Context, sloID pgtype.UUID) (int64, error)
 	// Exact table pages read only one bounded, immutable prepared generation.
 	ReadPreparedSloValuePage(ctx context.Context, arg ReadPreparedSloValuePageParams) (ReadPreparedSloValuePageRow, error)
 	// Adjacent evaluation endpoints share whole-hour interiors. Aggregate each distinct

@@ -63,12 +63,15 @@ test('register an agent in the UI and see it connect', async ({ page }) => {
 
 test('connect a datasource through the agent, test it and preview real metrics', async ({ page }) => {
   // A real series in the stack's VictoriaMetrics, so the preview proves the agent queried it.
-  // Stamped a minute ago: VictoriaMetrics hides the newest 30 s from queries (search.latencyOffset).
-  const series = `e2e_requests_total{journey="${datasourceName}"} 4242 ${Date.now() - 60_000}\n`;
+  // Preview evaluates at a 15 s boundary after 60 s settling, not at the current time.
+  // Put the sample one cadence earlier so it is visible at that same settled cutoff.
+  const cadenceMS = 15_000;
+  const settledEnd = Math.floor((Date.now() - 60_000) / cadenceMS) * cadenceMS;
+  const series = `e2e_requests_total{journey="${datasourceName}"} 4242 ${settledEnd - cadenceMS}\n`;
   const pushed = await fetch(`${metricsURL}/api/v1/import/prometheus`, { method: 'POST', body: series });
   expect(pushed.ok).toBe(true);
   // VictoriaMetrics makes imported samples searchable after a short flush; wait for that, not a fixed delay.
-  await expect.poll(async () => (await (await fetch(`${metricsURL}/api/v1/query?query=${encodeURIComponent(`e2e_requests_total{journey="${datasourceName}"}`)}`)).json()).data.result.length, { timeout: 30_000 }).toBe(1);
+  await expect.poll(async () => (await (await fetch(`${metricsURL}/api/v1/query?query=${encodeURIComponent(`e2e_requests_total{journey="${datasourceName}"}`)}&time=${settledEnd / 1000}`)).json()).data.result.length, { timeout: 30_000 }).toBe(1);
 
   await page.goto('/datasources');
   await page.getByRole('button', { name: 'New datasource', exact: true }).click();
@@ -261,7 +264,13 @@ test('a new 98% SLO becomes Healthy from collected eligible data without a full 
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'SLOs' }).click();
   const row = page.locator('.app-slo-row').filter({ hasText: name });
-  await expect(row.getByText('Healthy', { exact: true })).toBeVisible();
+  // Navigation can cross a cadence boundary while its next projection is pending.
+  // Lists intentionally do not poll: exercise the operator's explicit Refresh
+  // action rather than waiting for a frozen response to change by itself.
+  await expect(async () => {
+    await page.getByRole('button', { name: 'Refresh SLOs', exact: true }).click();
+    await expect(row.getByText('Healthy', { exact: true })).toBeVisible({ timeout: 500 });
+  }).toPass({ timeout: 10_000, intervals: [200, 500, 1_000] });
   await expect(row.locator('.app-slo-budget b')).toHaveText('50%');
   await expect(row.locator('.app-slo-burn b')).toHaveText('0.5×');
 });

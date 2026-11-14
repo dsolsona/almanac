@@ -150,7 +150,7 @@ SELECT lease_id, agent_id, generation, configuration_revision, allowed_measureme
        valid_from, valid_until, retain_until
 FROM public.almanac_agent_execution_grants
 WHERE lease_id = $1
-FOR UPDATE
+FOR NO KEY UPDATE
 `
 
 type GetAgentExecutionGrantByLeaseRow struct {
@@ -164,6 +164,7 @@ type GetAgentExecutionGrantByLeaseRow struct {
 	RetainUntil           pgtype.Timestamptz `json:"retain_until"`
 }
 
+// The lease key is immutable; updates to its authority must still serialize.
 func (q *Queries) GetAgentExecutionGrantByLease(ctx context.Context, leaseID string) (GetAgentExecutionGrantByLeaseRow, error) {
 	row := q.db.QueryRow(ctx, getAgentExecutionGrantByLease, leaseID)
 	var i GetAgentExecutionGrantByLeaseRow
@@ -1126,7 +1127,8 @@ FROM public.almanac_sli_measurements AS measurement
 JOIN public.almanac_slis AS sli ON sli.id = measurement.sli_id
 JOIN public.almanac_datasources AS datasource ON datasource.id = measurement.datasource_id
 WHERE measurement.sli_id = $1 AND measurement.revision = $2
-FOR UPDATE OF measurement, sli, datasource
+FOR NO KEY UPDATE OF measurement
+FOR UPDATE OF sli, datasource
 `
 
 type LockSliMeasurementForObservationParams struct {

@@ -7,12 +7,13 @@ import { vocabulary, reasonLabel } from './statusVocabulary.ts';
 import type { OperationalDetail } from './client.ts';
 
 type Slo=components['schemas']['Slo'];
-export type SloStatusSource=Pick<OperationalDetail,'current'|'burn_1h'|'burn_6h'|'exhaustion'|'urgency'|'leading_reason'|'reasons'>;
+export type SloStatusSource=Pick<OperationalDetail,'current'|'burn_1h'|'burn_6h'|'exhaustion'|'urgency'|'leading_reason'|'reasons'>&{current_state?:components['schemas']['SloCurrentStatus']['current_state']};
 export function SloVerdict({value,warning}:{value:SloStatusSource;warning:string}) {
- const words=vocabulary(value.urgency,value.leading_reason,false),p=value.current.performance;
- const explanation=warning||(p.state==='met'?'The objective is met.':p.state==='violated'?'The objective is below target.':'The objective cannot be evaluated yet.');
- const inspectData=p.provisional||p.attainment===null||value.current.quality.freshness!=='fresh';
- const reasons=value.reasons.filter(r=>r.code!=='on_track');
+ const lastKnown=value.current_state==='stale'||value.current_state==='failed';
+ const words=vocabulary(value.urgency,value.leading_reason,lastKnown,value.current_state),p=value.current.performance;
+ const explanation=lastKnown?`Last known values from ${pointTime(value.current.evaluation_at)}. ${value.current_state==='failed'?'The current calculation failed.':'Current results are updating.'}`:warning||(p.state==='met'?'The objective is met.':p.state==='violated'?'The objective is below target.':'The objective cannot be evaluated yet.');
+ const inspectData=lastKnown||p.provisional||p.attainment===null||value.current.quality.freshness!=='fresh';
+ const reasons=(lastKnown?[]:value.reasons).filter(r=>r.code!=='on_track');
  return <section className={`slo-verdict tone-${words.tone}`} aria-label="Current SLO status"><div><StatusMark tone={words.tone} label={words.label}/><p>{explanation}{reasons.length>0&&` ${reasons.map(r=>reasonLabel(r.code)+(r.provisional?' · observed only':'')).join(' · ')}.`}</p></div><a className="slo-detail-action" href={inspectData?'#definition':'#burn'} onClick={event=>{event.preventDefault();const target=document.getElementById(inspectData?'definition':'burn');if(target instanceof HTMLDetailsElement)target.open=true;target?.scrollIntoView?.({block:'start'});const focus=target?.querySelector<HTMLElement>('summary,button')??target;if(focus instanceof HTMLElement)focus.focus({preventScroll:true});}}>{inspectData?'Inspect data ↓':'Inspect burn ↓'}</a></section>;
 }
 export function SloSummary({value,definition}:{value:SloStatusSource;definition:Slo}) {

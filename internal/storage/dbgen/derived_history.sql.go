@@ -57,7 +57,7 @@ WHERE g.slo_id=$1 AND g.definition_revision=$2 AND g.measurement_revision=$3
 SELECT payload,generation_id,published_at FROM candidates
 WHERE payload->'history_preparation' IS NULL
   AND coalesce(payload->'_live','false'::jsonb)=to_jsonb($9::boolean)
-  AND (NOT $9::boolean OR coalesce((payload->>'_current_valid_until')::timestamptz,'-infinity'::timestamptz)>$10::timestamptz)
+  AND (NOT $9::boolean OR coalesce(public.almanac_projection_deadline(payload->>'_current_valid_until'),'-infinity'::timestamptz)>$10::timestamptz)
   AND payload_digest=sha256(convert_to(payload::text,'UTF8'))
 ORDER BY published_at DESC LIMIT 1
 `

@@ -12,6 +12,7 @@ export type TimelinePalette = {
   text: string;
   healthy?:string;
   breached?:string;
+  critical?:string;
   sli?: string;
   muted?: string;
 };
@@ -90,7 +91,8 @@ export function buildTimelineOption(chart: TimelineChart, model: ValidatedTimeli
   };});
   const series = model.series.flatMap((item, index) => {
     const lane = chart.lanes[item.lane]!;
-    const color = referenceLayout?(lane.id==='attainment'?palette.sli??colors[0]:colors[0]):colors[index % colors.length]!;
+    const suppliedColor = lane.series[item.seriesIndex]?.color;
+    const color = suppliedColor ? suppliedColor === 'critical' ? palette.critical ?? palette.breached ?? colors[1] : colors[0] : referenceLayout?(lane.id==='attainment'?palette.sli??colors[0]:colors[0]):colors[index % colors.length]!;
     const seriesId = `lane-${item.lane}-series-${item.seriesIndex}`;
     const isolated = item.data.filter((point, pointIndex) => point.value !== null &&
       (pointIndex === 0 || item.data[pointIndex - 1]?.value === null) &&

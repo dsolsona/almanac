@@ -19,6 +19,7 @@ type WindowInput struct {
 	Duration, Cadence, FreshnessGrace                time.Duration
 	Target                                           string
 	Observations                                     []Observation
+	Exclusions                                       []ExclusionInterval
 }
 
 // WindowTotals carries exact sufficient statistics over the retained eligible
@@ -27,18 +28,29 @@ type WindowTotals struct {
 	Good, Total                                      *big.Rat
 	Observed, KnownEmpty, ZeroTraffic                int64
 	FirstObservation, LastObservation, LatestReceipt *time.Time
+	Excluded                                         ExclusionTotals
+}
+
+// ExclusionTotals describes retained, eligible facts inside this SLO's mask.
+// Known-empty intervals have unknown event populations, not observed zero counts.
+type ExclusionTotals struct {
+	Good, Total          *big.Rat
+	Observed, KnownEmpty int64
 }
 
 type WindowResult struct {
 	RequestedStart, EffectiveStart, EligibleStart, RetentionStart, End time.Time
 	State, Freshness, Performance, ObservedPerformance, Reason         string
 	Expected, Observed, KnownEmpty, Missing, Expired, ZeroTraffic      int64
+	Excluded                                                           int64
+	ExcludedGood, ExcludedTotal                                        *string
 	Coverage, Good, Total, Bad, Attainment, Allowed, Remaining         *string
 	Consumed, RemainingFraction, Burn                                  *string
 	ExactBad, ExactRemaining, ExactRemainingFraction, ExactBurn        *big.Rat
 	Provisional                                                        bool
 	FirstObservation, LastObservation, LatestReceipt                   *time.Time
 	values                                                             *windowValues
+	excludedValues                                                     *windowValues
 }
 
 type windowValues struct{ good, total, target *big.Rat }
@@ -46,6 +58,11 @@ type windowValues struct{ good, total, target *big.Rat }
 // WithValues projects an exact window summary to the public decimal strings.
 // Reducers call this only for retained points, after selecting their extrema.
 func (result WindowResult) WithValues() WindowResult {
+	if result.excludedValues != nil {
+		result.ExcludedGood = new(rationalDecimal(result.excludedValues.good))
+		result.ExcludedTotal = new(rationalDecimal(result.excludedValues.total))
+		result.excludedValues = nil
+	}
 	if result.Expected > 0 {
 		value := FormatFraction(result.Observed+result.KnownEmpty, result.Expected)
 		result.Coverage = &value
@@ -83,6 +100,9 @@ type WindowSweep struct {
 	target                                 *big.Rat
 	observedCount, emptyCount, zeroTraffic int64
 	lastAt                                 time.Time
+	exclusions                             exclusionMask
+	excludedGood, excludedTotal            big.Rat
+	excludedObserved, excludedEmpty        int64
 }
 
 func NewWindowSweep(input WindowInput) (*WindowSweep, error) {
@@ -93,6 +113,10 @@ func NewWindowSweepContext(ctx context.Context, input WindowInput) (*WindowSweep
 	if input.Cadence <= 0 || input.Duration <= 0 || input.Duration%input.Cadence != 0 || input.Target == "" || input.Now.IsZero() {
 		return nil, ErrInvalidCalculation
 	}
+	mask, err := newExclusionMask(ctx, input.Exclusions, input.Cadence)
+	if err != nil {
+		return nil, err
+	}
 	for index, fact := range input.Observations {
 		if index&1023 == 0 {
 			if err := ctx.Err(); err != nil {
@@ -101,6 +125,9 @@ func NewWindowSweepContext(ctx context.Context, input WindowInput) (*WindowSweep
 		}
 		if fact.Start.IsZero() || fact.End.Sub(fact.Start) != input.Cadence || index > 0 && !input.Observations[index-1].Start.Before(fact.Start) {
 			return nil, fmt.Errorf("%w: observation intervals are not ordered whole cadence intervals", ErrOperationalFacts)
+		}
+		if len(mask.intervals) > 0 && (!alignedExclusionInstant(fact.Start, input.Cadence) || !alignedExclusionInstant(fact.End, input.Cadence)) {
+			return nil, fmt.Errorf("%w: observation is not aligned with the exclusion grid", ErrOperationalFacts)
 		}
 		if fact.Outcome == "observed" {
 			g, ok := decimal(fact.Good, false)
@@ -119,7 +146,7 @@ func NewWindowSweepContext(ctx context.Context, input WindowInput) (*WindowSweep
 	if !ok || target.Cmp(big.NewRat(1, 1)) >= 0 {
 		target = nil
 	}
-	return &WindowSweep{input: input, target: target}, nil
+	return &WindowSweep{input: input, target: target, exclusions: mask}, nil
 }
 
 // At advances the exact rolling-window aggregation to an aligned evaluation time.
@@ -193,6 +220,10 @@ func (s *WindowSweep) AtSummaryContext(ctx context.Context, at time.Time) (Windo
 
 func (s *WindowSweep) add(ctx context.Context, index int) error {
 	fact := s.input.Observations[index]
+	if s.exclusions.contains(fact.Start) {
+		s.adjustExcluded(fact, true)
+		return nil
+	}
 	switch fact.Outcome {
 	case "observed":
 		g, _ := decimal(fact.Good, false)
@@ -223,6 +254,10 @@ func (s *WindowSweep) add(ctx context.Context, index int) error {
 
 func (s *WindowSweep) remove(index int) error {
 	fact := s.input.Observations[index]
+	if s.exclusions.contains(fact.Start) {
+		s.adjustExcluded(fact, false)
+		return nil
+	}
 	switch fact.Outcome {
 	case "observed":
 		g, _ := decimal(fact.Good, false)
@@ -243,14 +278,25 @@ func (s *WindowSweep) remove(index int) error {
 }
 
 func (s *WindowSweep) result(ctx context.Context, at, windowStart, eligible, retention time.Time) (WindowResult, error) {
-	expected := int64(at.Sub(eligible) / s.input.Cadence)
-	expired := int64(retention.Sub(eligible) / s.input.Cadence)
+	excluded := s.exclusions.count(eligible, at)
+	expected := int64(at.Sub(eligible)/s.input.Cadence) - excluded
+	expired := int64(retention.Sub(eligible)/s.input.Cadence) - s.exclusions.count(eligible, retention)
+	freshnessAt := s.exclusions.latestEligibleEnd(at)
+	retainedExcluded := s.exclusions.count(retention, at)
+	if s.excludedObserved > retainedExcluded || s.excludedEmpty > retainedExcluded-s.excludedObserved {
+		return WindowResult{}, fmt.Errorf("%w: excluded facts exceed retained excluded intervals", ErrOperationalFacts)
+	}
+	if s.observedCount > expected-expired || s.emptyCount > expected-expired-s.observedCount {
+		return WindowResult{}, fmt.Errorf("%w: eligible facts exceed retained eligible intervals", ErrOperationalFacts)
+	}
 	missing := expected - expired - s.observedCount - s.emptyCount
 	if missing < 0 {
 		return WindowResult{}, fmt.Errorf("%w: %d observed and %d empty intervals exceed the %d expected in the window", ErrOperationalFacts, s.observedCount, s.emptyCount, expected-expired)
 	}
 	quality := "complete"
 	switch {
+	case expected == 0 && excluded > 0:
+		quality = "excluded"
 	case expected == 0:
 		quality = "not_applicable"
 	case expired > 0:
@@ -278,7 +324,7 @@ func (s *WindowSweep) result(ctx context.Context, at, windowStart, eligible, ret
 		latest := s.input.Observations[s.observed[len(s.observed)-1]].End.UTC()
 		last = &latest
 		freshness = "fresh"
-		if at.After(latest.Add(s.input.FreshnessGrace)) {
+		if freshnessAt.After(latest.Add(s.input.FreshnessGrace)) {
 			freshness = "stale"
 		}
 	}
@@ -298,7 +344,7 @@ func (s *WindowSweep) result(ctx context.Context, at, windowStart, eligible, ret
 		first, last, receipt = s.totals.FirstObservation, s.totals.LastObservation, s.totals.LatestReceipt
 		if last != nil {
 			freshness = "fresh"
-			if at.After(last.Add(s.input.FreshnessGrace)) {
+			if freshnessAt.After(last.Add(s.input.FreshnessGrace)) {
 				freshness = "stale"
 			}
 		}
@@ -306,9 +352,17 @@ func (s *WindowSweep) result(ctx context.Context, at, windowStart, eligible, ret
 	result := WindowResult{RequestedStart: windowStart, EffectiveStart: windowStart, EligibleStart: eligible,
 		RetentionStart: retention, End: at, State: quality, Freshness: freshness, Expected: expected,
 		Observed: s.observedCount, KnownEmpty: s.emptyCount, Missing: missing, Expired: expired,
+		Excluded:    excluded,
 		ZeroTraffic: s.zeroTraffic, FirstObservation: first, LastObservation: last,
 		LatestReceipt: receipt, Provisional: missing > 0 || expired > 0 || s.emptyCount > 0}
+	if excluded > 0 && s.excludedObserved == excluded {
+		result.excludedValues = &windowValues{good: new(big.Rat).Set(&s.excludedGood), total: new(big.Rat).Set(&s.excludedTotal)}
+	}
 	if expected == 0 {
+		if excluded > 0 {
+			result.Performance, result.Reason = "unknown", "excluded"
+			return result, nil
+		}
 		result.Performance, result.Reason = "not_applicable", "not_applicable"
 		return result, nil
 	}

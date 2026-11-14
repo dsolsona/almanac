@@ -30,6 +30,19 @@ focused local pass does not waive a required CI gate.
 CI uses built-in path filters to skip application jobs
 when all changes are Markdown, `docs/`, `.agents/`, `.codex/` or the CI workflow itself.
 Mixed changes run the existing four application suites; nightly/manual performance runs remain.
+An explicit manual `alert-cpu-control` profile instead runs two independent
+200-SLO diagnostics, with server/client CPUs shared or split. Both require at
+least four available CPUs and keep the server and client at two CPUs each. This
+isolates CPU placement, while memory, storage and kernel resources remain shared;
+it does not replace remote-client or full acceptance evidence. Only allowlisted
+diagnostic artifacts are uploaded, never authentication files or browser traces.
+The default manual `standard` profile retains the ordinary suites and performance run.
+For attribution, the alert diagnostic additionally accepts `backfill=omitted-diagnostic`
+to omit its synthetic historical SQL writer while retaining live ingestion, all
+800 baseline calls, ten API clients and eighty browser journeys. This reduced
+workload cannot establish capacity acceptance. `backfill=enabled` remains the
+default complete control. The staged profile records the mode and planned work;
+writer timestamps, when enabled, disclose the elapsed offered-write pressure.
 In one checkout, run `make check` and `make test-e2e` sequentially: the catalogue
 runner clears `web/test-results`, which contains the E2E runner's output directory.
 CI jobs have separate workspaces and do not share these artifacts.
@@ -71,6 +84,15 @@ data. `E2E_KEEP=1` keeps the stack for inspection; `sh scripts/e2e.sh down` (ins
 `make shell SOCKET=1`) removes it. The HTML report, with screenshots and traces of failures, is
 `.local/e2e/report/index.html`; raw results stay in the dev container's test-results volume, because
 trace recording on the macOS bind mount fails.
+
+Normal suites use an in-memory PostgreSQL fixture. For a long retained-history
+experiment whose database and WAL would crowd the host's RAM, explicitly set
+`E2E_POSTGRES_STORAGE=disk` on setup, subsequent direct Playwright commands and
+cleanup. This selects [the disk overlay](../compose.e2e.disk.yaml) and a
+project-owned volume removed by the existing `down --volumes` cleanup. Record the
+storage mode in performance evidence; a storage change requires a fresh baseline,
+not comparison as though the environment were unchanged. Preserve any retained
+fixture before replacing its mounts. No latency budget or workload limit changes.
 
 The performance suite uses the same stack with `playwright.perf.config.ts`. It seeds 20 SLIs and
 20 SLOs with `PERF_DAYS` of history (35 by default), checks the exact budgets, then times each page

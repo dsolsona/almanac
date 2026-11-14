@@ -310,11 +310,12 @@ WHERE sli_id = $1 AND revision = $2 AND effective_from = $3
   AND activated_at IS NULL AND (revision = 1 OR effective_from > $4);
 
 -- name: GetAgentExecutionGrantByLease :one
+-- The lease key is immutable; updates to its authority must still serialize.
 SELECT lease_id, agent_id, generation, configuration_revision, allowed_measurements,
        valid_from, valid_until, retain_until
 FROM public.almanac_agent_execution_grants
 WHERE lease_id = $1
-FOR UPDATE;
+FOR NO KEY UPDATE;
 
 -- name: LockSliMeasurementForObservation :one
 SELECT measurement.sli_id, measurement.revision, measurement.datasource_id,
@@ -334,7 +335,8 @@ FROM public.almanac_sli_measurements AS measurement
 JOIN public.almanac_slis AS sli ON sli.id = measurement.sli_id
 JOIN public.almanac_datasources AS datasource ON datasource.id = measurement.datasource_id
 WHERE measurement.sli_id = $1 AND measurement.revision = $2
-FOR UPDATE OF measurement, sli, datasource;
+FOR NO KEY UPDATE OF measurement
+FOR UPDATE OF sli, datasource;
 
 -- name: AdvanceSliLastAttemptedInterval :exec
 UPDATE public.almanac_sli_measurements

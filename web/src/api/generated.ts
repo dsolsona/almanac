@@ -751,7 +751,7 @@ export interface paths {
         };
         /**
          * Read the published current SLO result independently of history
-         * @description Reads an exact prepared projection with source and definition generation evidence. No historical computation runs in this handler. Unprepared or invalidated data returns 503 derived_data_pending and Retry-After 2. Source-observation freshness remains separate from calculation lag.
+         * @description Reads an exact prepared projection with source and definition generation evidence. No historical computation runs in this handler. Successful reads return 200 with current_state describing calculation readiness. Pending or failed updates retain compatible last-known values as stale or failed, including their original evaluation and generation. Without compatible values, the response is unavailable and contains no performance numbers. Clients must inspect current_state before treating values as current. Source-observation freshness remains separate from calculation lag.
          */
         get: operations["getSloCurrentStatus"];
         put?: never;
@@ -1180,6 +1180,11 @@ export interface components {
             retention_start?: string;
         };
         SloCurrentStatus: {
+            /**
+             * @description Calculation readiness. Stale/failed values retain the original evaluation and generation; unavailable values contain no performance numbers. Observation freshness is separate.
+             * @enum {string}
+             */
+            current_state?: "ready" | "stale" | "failed" | "unavailable";
             generation: components["schemas"]["DerivedGeneration"];
             slo: components["schemas"]["Slo"];
             /** @enum {string} */
@@ -4385,7 +4390,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Published current SLO status */
+            /** @description SLO status with ready, stale, failed or unavailable calculation state */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4430,7 +4435,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Preparation pending or storage unavailable */
+            /** @description Request admission or storage unavailable */
             503: {
                 headers: {
                     [name: string]: unknown;

@@ -1,0 +1,452 @@
+{
+  "result": "failed",
+  "profile": {
+    "baseRevision": "a6f47ca",
+    "postgresStorage": "disk",
+    "applicationImage": "e9cc52ef832787b9b3fcb94fd69640e0ef7056d98840579345ae9ba5e3b1e744",
+    "sourceHashes": {
+      "../internal/storage/testdata/alert_window_fallback.sql": "2d7261617bf37a2c497103fe3f84a79a72365707bb2229f1b40537b909b6fa2e",
+      "perf/alert-calculation.perf.ts": "e78053923db81af3889ddfedf81bf793aca190089b471be085970d249ab05968",
+      "perf/alert-calculation.metrics.ts": "baa17bcd0604ced066e82941c96432d213f8402eaa7b1b15888a76f0f7ef8b41",
+      "perf/alert-calculation.seed.ts": "3f5544a5816cd550ff152f31a4b2bb154422b52bb224b3fcf062895d67f92228",
+      "playwright.alert-calculation.config.ts": "1b1584176d7b468750b1f6cc1a84f4df47486777a03c425097fd834eba42a1a9",
+      "../compose.e2e.yaml": "4796baeef6c7f8195624098f6c58487818db39b68fac6e4811d8267739b9b4a1",
+      "../internal/storage/query/agent_access.sql": "a50453eaf48acc4655b5a683eeb739c3e6fc6a22468bd3fd981622b3030c6332",
+      "../internal/storage/query/slis.sql": "dd520547b3b05f0a41308c3e6405436d1c71586bd2760c52b94c025607d02499",
+      "../internal/storage/derived_current.go": "4a0992a791240024c320027984a78ac7b6e344ff4f9d0dc4274b12238427f92a",
+      "../internal/storage/query/derived_projections.sql": "3bec990efffc6a2d72ca3a6e64796473e7a2b11e13abcfdb8ba06186fd0f6ea7",
+      "../api/openapi.yaml": "8cee7e36a221268d0bb5e05c81f11a28d6e81107b3425b7dabe4f8bbe675b4d8",
+      "../web/src/slos/SloDetailPanels.tsx": "0fa0ff1e854445c99150ec9c7e53bad936826d29f110e37280935a48a58b824b",
+      "../internal/storage/query/derived_overview.sql": "e0fcb6d8ce72bc0ed0c75d4f67cde6d3e0371e62a0b35e651ac64cdca30e0c73",
+      "../internal/storage/query/slo_list_references.sql": "f8f88f270f0666992c1f3e5c5512328594c334d319fd8ba831be29f81f3b84ff",
+      "../internal/storage/query/derived_due.sql": "cfe2a7e1b25c02be497ba3eec2d03e3230a6efb1fd488ae666787bd943dd7aac",
+      "../internal/storage/query/derived_consistency.sql": "7f3a3750d5a6c836ff1c0835def45bce160c3f370357d987b14dd533f7a54da1",
+      "../internal/storage/query/derived_metrics.sql": "0294bc1319786323c8a42e1be514c5d7f8c8919bfd5b667458b5c311fb9d5495",
+      "../internal/storage/query/services.sql": "7b131e6b40c0dff327a18f034f7874cf03cce65074738fd05fb88e46093cc950",
+      "../internal/storage/query/derived_history.sql": "b362ef9a5a1a76a66a0665fdd9eafe9681effebe4e1d078eefe8fd9d8bd5a221",
+      "../internal/storage/migrations/0053_projection_validity_scalar.sql": "1d6a9cc03c682fdde665d94859e0d93693ba8a046bac154787ccbb8a687a76e6",
+      "../internal/storage/derived_worker.go": "5f9c5aeab1ff041914465e8044dcc5751e4d16a21dc5f88e6b8b2bc50dfe7194",
+      "../internal/storage/migrations/0054_maintenance_authority.sql": "38da4705c530300e16bbd461afee82d864516e0d67c696bdb215ee9cde29e5da",
+      "../compose.e2e.disk.yaml": "695de1b6c5004c7aa2a3b29b9bc91836c5486aee7cf1ad3a6839a2f50a556163",
+      "../scripts/e2e.sh": "31cd79161fe8ab6043044e4f1a9cfd7786682b21cddcf08d0dba6e067135ce9d",
+      "e2e/support/stack.ts": "61b3075ba186b4c4314109d761b6ac786c623e901556c848758403d6f3d4bc22"
+    },
+    "cpu": "AMD EPYC",
+    "logicalCPUs": 2,
+    "memoryBytes": 4130635776,
+    "database": "PostgreSQL 18.6 (Debian 18.6-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+    "slis": 200,
+    "initialDays": 1,
+    "backfillDays": 3,
+    "maxDirtyHours": 8,
+    "maxRawVisits": 7200,
+    "statementTimeoutMs": 1000,
+    "workers": 2,
+    "offeredBatchesPerSecond": 8,
+    "rounds": 4,
+    "cutoff": "2026-11-13T18:00:00Z",
+    "apiUsers": 10,
+    "apiMinimumCyclesPerUser": 10,
+    "apiCycleIntervalMs": 10000,
+    "browserUsers": 1,
+    "browserCycles": 20,
+    "backfillBatchMaxRows": 720,
+    "backfillBatchSLIs": 1,
+    "backfillBatches": 1400,
+    "note": "Controlled historical measurement cutoffs cross a UTC hour; wall-clock engine scheduling is outside this query experiment. Each paired query also runs an independent raw-population reference in the same snapshot; its extra work is part of the contention load."
+  },
+  "phase": {
+    "before": "2026-11-13T20:16:48.455506+00:00",
+    "after": "2026-11-13T20:18:57.501024+00:00"
+  },
+  "pairedBatches": 800,
+  "independentlyComparedWindows": 3200,
+  "mismatches": [],
+  "pendingBaseline": 171,
+  "pendingCandidate": 0,
+  "fallbackBatches": 171,
+  "maximumEmittedRawRows": 455,
+  "baselineMilliseconds": {
+    "samples": 800,
+    "p50": 7.445,
+    "p95": 23.797,
+    "maximum": 126.083
+  },
+  "candidateMilliseconds": {
+    "samples": 800,
+    "p50": 9.8955,
+    "p95": 31.61,
+    "maximum": 82.388
+  },
+  "browserMilliseconds": {
+    "list-cold": {
+      "samples": 7,
+      "p50": 1380.0999999940395,
+      "p95": 1942.300000011921,
+      "maximum": 1942.300000011921
+    },
+    "list-warm": {
+      "samples": 7,
+      "p50": 720.6000000089407,
+      "p95": 821.6000000089407,
+      "maximum": 821.6000000089407
+    },
+    "detail-cold": {
+      "samples": 7,
+      "p50": 705.2999999970198,
+      "p95": 1023.7000000029802,
+      "maximum": 1023.7000000029802
+    },
+    "detail-warm": {
+      "samples": 7,
+      "p50": 323,
+      "p95": 606.3000000119209,
+      "maximum": 606.3000000119209
+    }
+  },
+  "apiMilliseconds": {
+    "overview": {
+      "samples": 108,
+      "p50": 458.0504115000076,
+      "p95": 1265.2882800000007,
+      "maximum": 1415.7712300000057
+    },
+    "status": {
+      "samples": 106,
+      "p50": 90.5816399999967,
+      "p95": 210.5973180000001,
+      "maximum": 289.9402620000037
+    },
+    "history": {
+      "samples": 106,
+      "p50": 239.42181649999839,
+      "p95": 342.3464110000059,
+      "maximum": 571.2078990000009
+    }
+  },
+  "ingestionOnly": {
+    "accepted": 208,
+    "duplicate": 0,
+    "unsuccessful": 0,
+    "p95LowerSeconds": 0.015067687,
+    "p95UpperSeconds": 0.015821071,
+    "elapsedSeconds": 62.253
+  },
+  "ingestionUnderLoad": {
+    "accepted": 427,
+    "duplicate": 0,
+    "unsuccessful": 0,
+    "p95LowerSeconds": 0.059067254,
+    "p95UpperSeconds": 0.062020616,
+    "elapsedSeconds": 129.455
+  },
+  "due": {
+    "intervals": 400,
+    "missing": 0,
+    "slisWithMissing": 0,
+    "nonObserved": 0
+  },
+  "live": {
+    "slis": 184,
+    "intervals": 184,
+    "maxReceiptDelaySeconds": 116.809364
+  },
+  "completedBackfillBatches": 1400,
+  "outcomes": [
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "rejected",
+      "error": "Error: expect(received).toBe(expected) // Object.is equality\n\nExpected: \"ready\"\nReceived: \"error\""
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "rejected",
+      "error": "Error: overview HTTP status\n\nexpect(received).toBe(expected) // Object.is equality\n\nExpected: 200\nReceived: 503"
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "fulfilled"
+    },
+    {
+      "status": "rejected",
+      "error": "Error: overview HTTP status\n\nexpect(received).toBe(expected) // Object.is equality\n\nExpected: 200\nReceived: 503"
+    }
+  ],
+  "artifactHashes": {
+    "backfill.jsonl": "da0507af19ace6c81d367206167a112f9e157fd1cd27addf00da957531e72cfa",
+    "backfill.process.json": "43c5731330d660fe70e477264c66e8a094c9b3aba2639a1c6485343da451c567",
+    "backfill.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "ingestion-baseline.json": "05376c4778c073b4ea05a8d4819092d01bb72353f909ed60ecf8b73acfaefeaa",
+    "profile.json": "887c47e2ca04d68315d8f43ad6158edaf0b780da00df37ab00a5f0cd8cd0cbf8",
+    "queries-0.jsonl": "3ed7dbf15995a413836424bc50661bc750d977579def80fe5084e545480bebf8",
+    "queries-0.process.json": "ae8bd5224b4048a3bcca72b6aebbe13d0697efaa8af1271448c78745844f8458",
+    "queries-0.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "queries-1.jsonl": "ee3cb2c161116d54a5197bbfa14d985edcab74578a31f47af571d55e354907fc",
+    "queries-1.process.json": "17b4414d9bc5f732fa46fa914f04e95d989014805122db0657812391a6be96c8",
+    "queries-1.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "results.json": "c8254ca62c28acf92a8f8629fc46f80bcc138f59672614b65964933e8bbfa5f9",
+    "summary.json": "7819adaf2d068140d6beb355bbcd63c693929418703d0c54239be4ed3a5f733f"
+  },
+  "caveats": [
+    "Source data remained live between SQL diagnostics and this full workload.",
+    "One browser renderer runs on the same two-vCPU host; remote capable-client acceptance remains outstanding.",
+    "Baseline, candidate and independent raw-reference queries all contribute to contention.",
+    "External query workers do not share the backend DerivedTraffic pool.",
+    "Controlled historical cutoffs cross an hour; this is not wall-clock alert-engine rollover acceptance.",
+    "Emitted raw contributions are not universal physical-read bounds.",
+    "The seed sets measurement effective_from and SLO evaluation_valid_from to the start of the single initially populated day. The subsequent 1,200 older SQL backfill batches inject observations before both validity bounds, which real ingestion rejects. This is a synthetic stress result, not acceptance evidence for valid historical ingestion. A corrected fixture requires declared earlier validity, fresh seeding and a distinct profile; its missing coverage differs."
+  ],
+  "failedChecks": [
+    "worker outcomes",
+    "ingestion relative p95",
+    "overview API p95",
+    "status API p95",
+    "list-cold browser sample count",
+    "list-cold browser maximum",
+    "list-warm browser sample count",
+    "detail-cold browser sample count",
+    "detail-cold browser maximum",
+    "detail-warm browser sample count"
+  ],
+  "persistedValidityBounds": {
+    "slis": 200,
+    "earliest_observation": "2026-11-09T20:13:00+00:00",
+    "latest_observation": "2026-11-13T20:19:00+00:00",
+    "minimum_measurement_effective_from": "2026-11-12T20:13:00+00:00",
+    "maximum_measurement_effective_from": "2026-11-12T20:13:00+00:00",
+    "minimum_slo_evaluation_valid_from": "2026-11-12T20:13:00+00:00",
+    "maximum_slo_evaluation_valid_from": "2026-11-12T20:13:00+00:00",
+    "observations_before_measurement_effective_from": 864000,
+    "observations_before_slo_evaluation_valid_from": 864000,
+    "total_observations": 1153012,
+    "diagnosticSeconds": 1.2958130449987948
+  },
+  "controlDesign": {
+    "standaloneControl": "ingestion-only baseline",
+    "sameOtherLoadWithoutCandidateAndOracle": false,
+    "rawOracleElapsedTimeRecorded": false,
+    "perPair": "One baseline call, one candidate call and one raw-reference query covering four windows in the same snapshot; alternating baseline/candidate order."
+  },
+  "queryLanes": [
+    {
+      "worker": 0,
+      "pairedBatches": 400,
+      "baselineCalls": 400,
+      "candidateCalls": 400,
+      "rawOracleQueries": 400,
+      "windowsPerCall": 4,
+      "baselineTotalMilliseconds": 3987.4210000000057,
+      "candidateTotalMilliseconds": 4961.711000000006,
+      "wallSeconds": 119.124,
+      "process": {
+        "startedAt": "2026-11-13T20:16:48.898Z",
+        "finishedAt": "2026-11-13T20:18:48.022Z"
+      }
+    },
+    {
+      "worker": 1,
+      "pairedBatches": 400,
+      "baselineCalls": 400,
+      "candidateCalls": 400,
+      "rawOracleQueries": 400,
+      "windowsPerCall": 4,
+      "baselineTotalMilliseconds": 3619.9869999999983,
+      "candidateTotalMilliseconds": 5121.397999999999,
+      "wallSeconds": 118.699,
+      "process": {
+        "startedAt": "2026-11-13T20:16:48.902Z",
+        "finishedAt": "2026-11-13T20:18:47.601Z"
+      }
+    }
+  ],
+  "backfillProcess": {
+    "startedAt": "2026-11-13T20:16:48.920Z",
+    "finishedAt": "2026-11-13T20:18:57.082Z",
+    "wallSeconds": 128.162
+  },
+  "testReport": {
+    "seed": {
+      "stats": {
+        "total": 2,
+        "expected": 2,
+        "unexpected": 0,
+        "flaky": 0,
+        "skipped": 0,
+        "ok": true
+      },
+      "startTime": 1794600767177,
+      "duration": 154622.342
+    },
+    "contention": {
+      "stats": {
+        "total": 1,
+        "expected": 0,
+        "unexpected": 1,
+        "flaky": 0,
+        "skipped": 0,
+        "ok": false
+      },
+      "startTime": 1794600943374,
+      "duration": 206329.26299999998
+    }
+  },
+  "hostMemorySnapshots": {
+    "host-baseline-end.txt": {
+      "MemTotal": 4130635776,
+      "MemAvailable": 1809960960,
+      "SwapTotal": 0,
+      "Shmem": 307560448
+    },
+    "host-during-seed.txt": {
+      "MemTotal": 4130635776,
+      "MemAvailable": 2460958720,
+      "SwapTotal": 0,
+      "Shmem": 162783232
+    },
+    "host-before-workload.txt": {
+      "MemTotal": 4130635776,
+      "MemAvailable": 2547265536,
+      "SwapTotal": 0,
+      "Shmem": 293281792
+    },
+    "host-after-workload.txt": {
+      "MemTotal": 4130635776,
+      "MemAvailable": 2352398336,
+      "SwapTotal": 0,
+      "Shmem": 304742400
+    },
+    "host-during-workload.txt": {
+      "MemTotal": 4130635776,
+      "MemAvailable": 1942155264,
+      "SwapTotal": 0,
+      "Shmem": 300064768
+    },
+    "host-before-seed.txt": {
+      "MemTotal": 4130635776,
+      "MemAvailable": 2767392768,
+      "SwapTotal": 0,
+      "Shmem": 163274752
+    }
+  },
+  "browserNetworkErrors": [
+    {
+      "at": "2026-11-13T20:17:29.555Z",
+      "url": "https://localhost:18188/api/v1/auth/context",
+      "status": 503
+    },
+    {
+      "at": "2026-11-13T20:16:59.205Z",
+      "url": "https://localhost:18188/api/v1/slos/overview?limit=20",
+      "status": 503,
+      "body": "{\"code\":\"unavailable\",\"field_errors\":[],\"message\":\"Service or SLO request failed\",\"request_id\":\"50f00495-cef8-4581-8513-d3f39d0d4402\"}"
+    },
+    {
+      "at": "2026-11-13T20:16:59.193Z",
+      "url": "https://localhost:18188/api/v1/slos/overview?limit=20",
+      "status": 503,
+      "body": "{\"code\":\"unavailable\",\"field_errors\":[],\"message\":\"Service or SLO request failed\",\"request_id\":\"32e15544-01e8-4fd3-bcbb-789a512af982\"}"
+    }
+  ],
+  "overviewTraceSummary": {
+    "db.ListSloOverviewPage": {
+      "samples": 120,
+      "p50Ms": 254.487717,
+      "p95Ms": 679.379673,
+      "maximumMs": 765.498605
+    },
+    "db.CountSloOverviewGroups": {
+      "samples": 120,
+      "p50Ms": 2.372569,
+      "p95Ms": 36.143782,
+      "maximumMs": 91.664801
+    },
+    "slo.overview.read": {
+      "samples": 122,
+      "p50Ms": 306.4496955,
+      "p95Ms": 771.799338,
+      "maximumMs": 904.452117
+    },
+    "GET /api/v1/slos/overview": {
+      "samples": 122,
+      "p50Ms": 333.9246495,
+      "p95Ms": 780.688388,
+      "maximumMs": 950.089846
+    }
+  },
+  "derivedCurrentTraceResults": {
+    "waiting": {
+      "count": 3385,
+      "totalMilliseconds": 48137.38506200011
+    },
+    "published": {
+      "count": 959,
+      "totalMilliseconds": 58517.22843199997
+    }
+  },
+  "requestErrorTraceEvidence": [
+    {
+      "name": "db.pool.acquire",
+      "milliseconds": 250.101059,
+      "at": "2026-11-13T20:16:59.212300989Z",
+      "traceID": "79f98ca0039fa024f340c4bdb6e43e0d",
+      "status": "database admission failed",
+      "trafficClass": "interactive"
+    },
+    {
+      "name": "db.pool.acquire",
+      "milliseconds": 250.13853,
+      "at": "2026-11-13T20:16:59.212134607Z",
+      "traceID": "33574e610f7882f9fe80727b22ee8895",
+      "status": "database admission failed",
+      "trafficClass": "interactive"
+    },
+    {
+      "name": "GET /api/v1/slos/overview",
+      "milliseconds": 253.685751,
+      "at": "2026-11-13T20:16:59.209041046Z",
+      "traceID": "79f98ca0039fa024f340c4bdb6e43e0d",
+      "status": "server error",
+      "trafficClass": null
+    },
+    {
+      "name": "GET /api/v1/slos/overview",
+      "milliseconds": 260.134972,
+      "at": "2026-11-13T20:16:59.202774086Z",
+      "traceID": "33574e610f7882f9fe80727b22ee8895",
+      "status": "server error",
+      "trafficClass": null
+    }
+  ],
+  "traceExport": {
+    "rows": 262723,
+    "seconds": 13.701133253998705
+  },
+  "preservedTraceSHA256": "1c27159698a4b3ec282787e0e9670270192cea685536e78da4ed606010a17e0d"
+}

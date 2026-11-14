@@ -11,10 +11,27 @@ import (
 
 	"github.com/dsolsona/almanac/internal/storage/dbgen"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )
+
+// Unlike a publication key, this identity exists before acquisition or calculation
+// and remains stable across retries and revisions of the same objective.
+func recordCurrentWork(span trace.Span, id pgtype.UUID) {
+	if !span.IsRecording() {
+		return
+	}
+	key := sha256.Sum256(append([]byte("almanac.current.work:"), id.Bytes[:]...))
+	span.SetAttributes(attribute.String("almanac.current.work.key", hex.EncodeToString(key[:])))
+}
+
+func currentPreparationCleanupContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	// Preserve only trace parentage, not cancellation, deadlines or other values.
+	parent := trace.ContextWithSpanContext(context.Background(), trace.SpanContextFromContext(ctx))
+	return context.WithTimeout(parent, 2*time.Second)
+}
 
 // Correlate admission and durable execution using the existing immutable job
 // identity. No query values are exported, no extra SQL is issued, and neither

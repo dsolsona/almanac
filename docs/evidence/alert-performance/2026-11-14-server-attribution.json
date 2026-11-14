@@ -1,0 +1,580 @@
+{
+  "baseRevision": "ae1be3e21b7547c9a5b0b55f4c4b05f8800c21b7",
+  "applicationImage": "0ae944680e195fbd6bd24049f3537b4110d37c11ac7cdba64ce1f16784611c08",
+  "logicalCPUs": 2,
+  "capacityAcceptance": false,
+  "profile": "Retained F4-T20 fixture; current generated query before transaction-setup correction; ongoing background repair; no synthetic writer/browser.",
+  "scheduler": {
+    "completed": true,
+    "elapsedSeconds": 1.7456178599999999,
+    "launch": {
+      "exitCode": 0,
+      "elapsedSeconds": 3.7889006409968715
+    },
+    "readCount": 108,
+    "exactOrderedOutputEquality": true,
+    "rolledBack": true,
+    "queryMode": "cache statement",
+    "cohorts": [
+      {
+        "cohort": 0,
+        "readers": 1,
+        "samples": 6,
+        "milliseconds": {
+          "queryMS": {
+            "samples": 6,
+            "median": 13.465571,
+            "p95": 23.970488,
+            "max": 23.970488
+          },
+          "bracketMS": {
+            "samples": 6,
+            "median": 13.882738,
+            "p95": 27.151636,
+            "max": 27.151636
+          },
+          "cpuMS": {
+            "samples": 6,
+            "median": 12.617263,
+            "p95": 20.789352,
+            "max": 20.789352
+          },
+          "runqueueMS": {
+            "samples": 6,
+            "median": 1.441896,
+            "p95": 3.796057,
+            "max": 3.796057
+          },
+          "beforeMS": {
+            "samples": 6,
+            "median": 0.244968,
+            "p95": 2.922065,
+            "max": 2.922065
+          },
+          "afterMS": {
+            "samples": 6,
+            "median": 0.174597,
+            "p95": 0.258242,
+            "max": 0.258242
+          }
+        },
+        "slowestMatchedSample": {
+          "cohort": 0,
+          "readers": 1,
+          "reader": 0,
+          "round": 0,
+          "queryMS": 23.970488,
+          "bracketMS": 27.151636,
+          "beforeMS": 2.922065,
+          "afterMS": 0.258242,
+          "before": {
+            "runtimeNS": 2465038,
+            "runqueueNS": 749237,
+            "slices": 16
+          },
+          "after": {
+            "runtimeNS": 23254390,
+            "runqueueNS": 3783554,
+            "slices": 95
+          },
+          "cpuMS": 20.789352,
+          "runqueueMS": 3.034317,
+          "genericPlans": 0,
+          "customPlans": 1,
+          "rows": 21,
+          "payloadBytes": 1274231,
+          "hash": "b50597423c8b32f8c339e8e09842fd5e93f21e664835ee9a25f15d821fdbdec8"
+        },
+        "planCountsReader0": [
+          {
+            "round": 0,
+            "generic": 0,
+            "custom": 1
+          },
+          {
+            "round": 1,
+            "generic": 0,
+            "custom": 2
+          },
+          {
+            "round": 2,
+            "generic": 0,
+            "custom": 3
+          },
+          {
+            "round": 3,
+            "generic": 0,
+            "custom": 4
+          },
+          {
+            "round": 4,
+            "generic": 0,
+            "custom": 5
+          },
+          {
+            "round": 5,
+            "generic": 1,
+            "custom": 5
+          }
+        ]
+      },
+      {
+        "cohort": 1,
+        "readers": 8,
+        "samples": 48,
+        "milliseconds": {
+          "queryMS": {
+            "samples": 48,
+            "median": 57.48945,
+            "p95": 111.468762,
+            "max": 115.407047
+          },
+          "bracketMS": {
+            "samples": 48,
+            "median": 61.801091,
+            "p95": 122.018957,
+            "max": 122.579568
+          },
+          "cpuMS": {
+            "samples": 48,
+            "median": 13.09831,
+            "p95": 20.432366,
+            "max": 21.637264
+          },
+          "runqueueMS": {
+            "samples": 48,
+            "median": 45.12665,
+            "p95": 93.187876,
+            "max": 96.185147
+          },
+          "beforeMS": {
+            "samples": 48,
+            "median": 0.719178,
+            "p95": 10.476687,
+            "max": 17.27209
+          },
+          "afterMS": {
+            "samples": 48,
+            "median": 0.240511,
+            "p95": 7.217748,
+            "max": 7.458609
+          }
+        },
+        "slowestMatchedSample": {
+          "cohort": 1,
+          "readers": 8,
+          "reader": 1,
+          "round": 0,
+          "queryMS": 115.407047,
+          "bracketMS": 122.579568,
+          "beforeMS": 6.231326,
+          "afterMS": 0.940884,
+          "before": {
+            "runtimeNS": 1947363,
+            "runqueueNS": 9961217,
+            "slices": 12
+          },
+          "after": {
+            "runtimeNS": 22753917,
+            "runqueueNS": 105442623,
+            "slices": 60
+          },
+          "cpuMS": 20.806554,
+          "runqueueMS": 95.481406,
+          "genericPlans": 0,
+          "customPlans": 1,
+          "rows": 21,
+          "payloadBytes": 1274231,
+          "hash": "b50597423c8b32f8c339e8e09842fd5e93f21e664835ee9a25f15d821fdbdec8"
+        },
+        "planCountsReader0": [
+          {
+            "round": 0,
+            "generic": 0,
+            "custom": 1
+          },
+          {
+            "round": 1,
+            "generic": 0,
+            "custom": 2
+          },
+          {
+            "round": 2,
+            "generic": 0,
+            "custom": 3
+          },
+          {
+            "round": 3,
+            "generic": 0,
+            "custom": 4
+          },
+          {
+            "round": 4,
+            "generic": 0,
+            "custom": 5
+          },
+          {
+            "round": 5,
+            "generic": 1,
+            "custom": 5
+          }
+        ]
+      },
+      {
+        "cohort": 2,
+        "readers": 8,
+        "samples": 48,
+        "milliseconds": {
+          "queryMS": {
+            "samples": 48,
+            "median": 60.846943,
+            "p95": 177.927827,
+            "max": 197.633199
+          },
+          "bracketMS": {
+            "samples": 48,
+            "median": 68.55196,
+            "p95": 185.136876,
+            "max": 203.773726
+          },
+          "cpuMS": {
+            "samples": 48,
+            "median": 14.11602,
+            "p95": 23.269697,
+            "max": 24.505652
+          },
+          "runqueueMS": {
+            "samples": 48,
+            "median": 47.703963,
+            "p95": 156.340663,
+            "max": 174.454988
+          },
+          "beforeMS": {
+            "samples": 48,
+            "median": 3.205829,
+            "p95": 19.158672,
+            "max": 28.446551
+          },
+          "afterMS": {
+            "samples": 48,
+            "median": 0.204504,
+            "p95": 2.482763,
+            "max": 2.819874
+          }
+        },
+        "slowestMatchedSample": {
+          "cohort": 2,
+          "readers": 8,
+          "reader": 5,
+          "round": 0,
+          "queryMS": 197.633199,
+          "bracketMS": 203.773726,
+          "beforeMS": 5.904364,
+          "afterMS": 0.235671,
+          "before": {
+            "runtimeNS": 2586286,
+            "runqueueNS": 21395313,
+            "slices": 12
+          },
+          "after": {
+            "runtimeNS": 25855983,
+            "runqueueNS": 195850301,
+            "slices": 130
+          },
+          "cpuMS": 23.269697,
+          "runqueueMS": 174.454988,
+          "genericPlans": 0,
+          "customPlans": 1,
+          "rows": 21,
+          "payloadBytes": 1274231,
+          "hash": "b50597423c8b32f8c339e8e09842fd5e93f21e664835ee9a25f15d821fdbdec8"
+        },
+        "planCountsReader0": [
+          {
+            "round": 0,
+            "generic": 0,
+            "custom": 1
+          },
+          {
+            "round": 1,
+            "generic": 0,
+            "custom": 2
+          },
+          {
+            "round": 2,
+            "generic": 0,
+            "custom": 3
+          },
+          {
+            "round": 3,
+            "generic": 0,
+            "custom": 4
+          },
+          {
+            "round": 4,
+            "generic": 0,
+            "custom": 5
+          },
+          {
+            "round": 5,
+            "generic": 1,
+            "custom": 5
+          }
+        ]
+      },
+      {
+        "cohort": 3,
+        "readers": 1,
+        "samples": 6,
+        "milliseconds": {
+          "queryMS": {
+            "samples": 6,
+            "median": 15.393159,
+            "p95": 25.091843,
+            "max": 25.091843
+          },
+          "bracketMS": {
+            "samples": 6,
+            "median": 15.999194,
+            "p95": 25.942366,
+            "max": 25.942366
+          },
+          "cpuMS": {
+            "samples": 6,
+            "median": 13.175842,
+            "p95": 21.143969,
+            "max": 21.143969
+          },
+          "runqueueMS": {
+            "samples": 6,
+            "median": 2.332018,
+            "p95": 4.125984,
+            "max": 4.125984
+          },
+          "beforeMS": {
+            "samples": 6,
+            "median": 0.252945,
+            "p95": 5.809817,
+            "max": 5.809817
+          },
+          "afterMS": {
+            "samples": 6,
+            "median": 0.167763,
+            "p95": 0.225963,
+            "max": 0.225963
+          }
+        },
+        "slowestMatchedSample": {
+          "cohort": 3,
+          "readers": 1,
+          "reader": 0,
+          "round": 0,
+          "queryMS": 25.091843,
+          "bracketMS": 25.942366,
+          "beforeMS": 0.682188,
+          "afterMS": 0.167763,
+          "before": {
+            "runtimeNS": 2775214,
+            "runqueueNS": 6208733,
+            "slices": 37
+          },
+          "after": {
+            "runtimeNS": 23919183,
+            "runqueueNS": 9020215,
+            "slices": 109
+          },
+          "cpuMS": 21.143969,
+          "runqueueMS": 2.811482,
+          "genericPlans": 0,
+          "customPlans": 1,
+          "rows": 21,
+          "payloadBytes": 1274231,
+          "hash": "b50597423c8b32f8c339e8e09842fd5e93f21e664835ee9a25f15d821fdbdec8"
+        },
+        "planCountsReader0": [
+          {
+            "round": 0,
+            "generic": 0,
+            "custom": 1
+          },
+          {
+            "round": 1,
+            "generic": 0,
+            "custom": 2
+          },
+          {
+            "round": 2,
+            "generic": 0,
+            "custom": 3
+          },
+          {
+            "round": 3,
+            "generic": 0,
+            "custom": 4
+          },
+          {
+            "round": 4,
+            "generic": 0,
+            "custom": 5
+          },
+          {
+            "round": 5,
+            "generic": 1,
+            "custom": 5
+          }
+        ]
+      }
+    ],
+    "sourceHashes": {
+      ".local/server-attribution/probe.go": "e57710cb6713a488fe4b755777c4140fac2e038f451a091825158380ffb9a92a",
+      ".local/server-attribution/run.py": "926c6d3ffb1f309a1dc3941c0c288c826d631ef28365c6d121f0188c98ac3660",
+      "internal/storage/dbgen/slo_list_references.sql.go": "1e3c5ad46ae8c9164112549f2072afa0e8de04ba5150ef5969abea743d816871"
+    },
+    "rawResultSHA256": "4d0b85c3620f8cc8ee1b5231f144e08b247e4ea1437f80ad96832b55c174ee0c"
+  },
+  "breakdown": {
+    "completed": true,
+    "elapsedSeconds": 0.502509431,
+    "launch": {
+      "exitCode": 0,
+      "elapsedSeconds": 1.0719962299917825
+    },
+    "queryMS": {
+      "samples": 12,
+      "median": 12.752662,
+      "p95": 26.078938,
+      "max": 26.078938
+    },
+    "plans": [
+      {
+        "planningMS": 0.068,
+        "executionMS": 13.61,
+        "serialization": {
+          "Local Hit Blocks": 0,
+          "Local Read Blocks": 0,
+          "Local Dirtied Blocks": 0,
+          "Temp Read Blocks": 0,
+          "Temp Written Blocks": 0,
+          "Time": 3.354,
+          "Output Volume": 1247,
+          "Shared Read Blocks": 0,
+          "Shared Dirtied Blocks": 0,
+          "Local Written Blocks": 0,
+          "Format": "text",
+          "Shared Hit Blocks": 0,
+          "Shared Written Blocks": 0
+        }
+      },
+      {
+        "planningMS": 0.048,
+        "executionMS": 11.784,
+        "serialization": {
+          "Local Read Blocks": 0,
+          "Local Written Blocks": 0,
+          "Temp Written Blocks": 0,
+          "Time": 2.823,
+          "Output Volume": 1247,
+          "Format": "text",
+          "Shared Written Blocks": 0,
+          "Local Hit Blocks": 0,
+          "Local Dirtied Blocks": 0,
+          "Temp Read Blocks": 0,
+          "Shared Hit Blocks": 0,
+          "Shared Read Blocks": 0,
+          "Shared Dirtied Blocks": 0
+        }
+      },
+      {
+        "planningMS": 0.032,
+        "executionMS": 15.236,
+        "serialization": {
+          "Shared Written Blocks": 0,
+          "Local Hit Blocks": 0,
+          "Local Read Blocks": 0,
+          "Local Written Blocks": 0,
+          "Format": "text",
+          "Shared Read Blocks": 0,
+          "Local Dirtied Blocks": 0,
+          "Temp Read Blocks": 0,
+          "Temp Written Blocks": 0,
+          "Time": 3.057,
+          "Output Volume": 1247,
+          "Shared Hit Blocks": 0,
+          "Shared Dirtied Blocks": 0
+        }
+      }
+    ],
+    "plansBeforeExplain": {
+      "generic": 7,
+      "custom": 5
+    },
+    "itemInputBytes": 1213715,
+    "codec": {
+      "decodeMS": {
+        "samples": 20,
+        "median": 5.346939,
+        "p95": 7.044655,
+        "max": 7.54159
+      },
+      "decodeCPUms": {
+        "samples": 20,
+        "median": 5.088,
+        "p95": 6.323,
+        "max": 6.905
+      },
+      "encodeMS": {
+        "samples": 20,
+        "median": 2.463805,
+        "p95": 5.42341,
+        "max": 6.578506
+      },
+      "encodeCPUms": {
+        "samples": 20,
+        "median": 2.41,
+        "p95": 4.22,
+        "max": 6.856
+      },
+      "wireBytes": {
+        "samples": 20,
+        "median": 1060677,
+        "p95": 1060677,
+        "max": 1060677
+      }
+    },
+    "sourceHashes": {
+      "internal/storage/dbgen/slo_list_references.sql.go": "1e3c5ad46ae8c9164112549f2072afa0e8de04ba5150ef5969abea743d816871",
+      ".local/server-attribution/breakdown-v2/probe.go": "1c6d820f44930720e8cb697122bd781279242490b126772ff7d7b1dbc3b7ab0e",
+      ".local/server-attribution/breakdown-v2/run.py": "7dcd3d52e496e37e28202b661e2d7c9a90f5ac639c9b410cf4529bf1ed4cc993"
+    },
+    "codecLimitations": [
+      "Actual typed item decoding/normalization and JSON encoding, excluding authority/currentness adjustments and HTTP writing.",
+      "Process CPU includes runtime/GC threads; it may exceed wall time.",
+      "Reused output buffer: first sample allocation differs and is retained."
+    ],
+    "rawResultSHA256": "187c46a28457d18ef37433f32d776b5e57929d8169fcd506909a618faf1c879c"
+  },
+  "preservedDiagnosticFailure": {
+    "elapsedSeconds": 0.269036004,
+    "sqlstate": "42804",
+    "cause": "EXPLAIN wrapper used pre-reshape positional argument order; corrected against current dbgen call, retained old output."
+  },
+  "admissionTraceCorrection": {
+    "traceID": "ead52e50eecf9541f08835e158818f98",
+    "firstAcquireMS": 110.39,
+    "firstPurpose": "bootstrap/readiness preflight; not session inspection",
+    "secondAcquireMS": 250.904,
+    "secondPurpose": "protected overview read; failed before authority lookup/page SQL",
+    "preflightRemoved": false
+  },
+  "interpretation": "Eight readers amplify query wall time mainly through measured runnable CPU wait while bracket CPU remains roughly 13\u201324 ms. Small codec/serialization CPU costs do not by themselves explain loaded API tails. No global performance pass or cause assigned to individual competing processes.",
+  "limitations": [
+    "Retained fixture with ongoing background repair; no controlled writer or browser load.",
+    "Read-only query primitive omits auth/admission/HTTP and browser.",
+    "Counter brackets include sampling/network gaps; measured runtime is not exact SQL CPU.",
+    "Output hashing happens after all readers finish each round, outside query/counter intervals.",
+    "Probe scheduler brackets include sampler/network overhead; do not treat bracket runtime as exact SQL CPU.",
+    "Separate-machine comparison and full-load server/ingestion budgets remain unresolved.",
+    "Docker app/PostgreSQL have no explicit CPU quota or cpuset restriction; microVM has two CPUs.",
+    "Transaction-setup correction has separate focused functional evidence; its performance impact is unmeasured."
+  ]
+}

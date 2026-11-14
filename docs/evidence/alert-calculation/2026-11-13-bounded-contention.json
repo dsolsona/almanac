@@ -1,0 +1,115 @@
+{
+  "result": "failed; not fallback adoption evidence",
+  "profile": {
+    "baseRevision": "c276c553fab3a3854a84e42196aa98dcaa7e6d9e",
+    "applicationImage": "e504b2e498bd7e7ada4eac016a52a0db40957faccadf56224ddca82e5c9352e8",
+    "sourceHashes": {
+      "../internal/storage/testdata/alert_window_fallback.sql": "2d7261617bf37a2c497103fe3f84a79a72365707bb2229f1b40537b909b6fa2e",
+      "perf/alert-calculation.perf.ts": "974028ccfcb91386f2e58abd3eeaefcb5d8c61d58851340bfca1547c584453f9",
+      "perf/alert-calculation.metrics.ts": "baa17bcd0604ced066e82941c96432d213f8402eaa7b1b15888a76f0f7ef8b41",
+      "perf/alert-calculation.seed.ts": "3f5544a5816cd550ff152f31a4b2bb154422b52bb224b3fcf062895d67f92228",
+      "playwright.alert-calculation.config.ts": "1b1584176d7b468750b1f6cc1a84f4df47486777a03c425097fd834eba42a1a9",
+      "../compose.e2e.yaml": "4796baeef6c7f8195624098f6c58487818db39b68fac6e4811d8267739b9b4a1",
+      "../internal/storage/query/agent_access.sql": "a50453eaf48acc4655b5a683eeb739c3e6fc6a22468bd3fd981622b3030c6332",
+      "../internal/storage/query/slis.sql": "dd520547b3b05f0a41308c3e6405436d1c71586bd2760c52b94c025607d02499"
+    },
+    "cpu": "AMD EPYC",
+    "logicalCPUs": 2,
+    "memoryBytes": 4130635776,
+    "database": "PostgreSQL 18.6 (Debian 18.6-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+    "slis": 200,
+    "initialDays": 1,
+    "backfillDays": 3,
+    "maxDirtyHours": 8,
+    "maxRawVisits": 7200,
+    "statementTimeoutMs": 1000,
+    "workers": 2,
+    "offeredBatchesPerSecond": 8,
+    "rounds": 4,
+    "cutoff": "2026-11-13T15:00:00Z",
+    "browserUsers": 10,
+    "backfillBatchMaxRows": 720,
+    "backfillBatchSLIs": 1,
+    "backfillBatches": 1400,
+    "note": "Controlled historical measurement cutoffs cross a UTC hour; wall-clock engine scheduling is outside this query experiment. Each paired query also runs an independent raw-population reference in the same snapshot; its extra work is part of the contention load."
+  },
+  "start": "2026-11-13T17:27:32.594036+00:00",
+  "end": "2026-11-13T17:29:38.854049+00:00",
+  "pairedBatches": 149,
+  "independentlyVerifiedWindows": 596,
+  "pendingBaseline": 147,
+  "pendingCandidate": 0,
+  "candidateMilliseconds": {
+    "samples": 149,
+    "p95": 121.504,
+    "maximum": 459.103
+  },
+  "baselineMilliseconds": {
+    "samples": 149,
+    "p95": 121.482,
+    "maximum": 458.3
+  },
+  "browserMilliseconds": {
+    "list-cold": {
+      "samples": 9,
+      "p95": 9671,
+      "maximum": 9671
+    },
+    "list-warm": {
+      "samples": 0
+    },
+    "detail-cold": {
+      "samples": 0
+    },
+    "detail-warm": {
+      "samples": 0
+    }
+  },
+  "ingestionOnly": {
+    "accepted": 206,
+    "duplicate": 0,
+    "unsuccessful": 0,
+    "p95LowerSeconds": 0.016612124,
+    "p95UpperSeconds": 0.01744273,
+    "elapsedSeconds": 62.36
+  },
+  "ingestionUnderLoad": {
+    "accepted": 371,
+    "duplicate": 0,
+    "unsuccessful": 4,
+    "p95LowerSeconds": 0.106076294,
+    "p95UpperSeconds": 0.111380108,
+    "elapsedSeconds": 127.633
+  },
+  "due": {
+    "intervals": 400,
+    "missing": 9,
+    "slisWithMissing": 9,
+    "nonObserved": 0
+  },
+  "backfillBatchesCompleted": 1400,
+  "failureSummary": [
+    "Both query workers hit the unchanged one-second statement deadline during the independent reference calculation.",
+    "All ten browser workers failed opening details; status returned 503 while calculations were pending.",
+    "All nine completed list renders exceeded one second.",
+    "Nine of 400 due intervals were absent at measurement end; this establishes lateness, not permanent data loss."
+  ],
+  "artifactHashes": {
+    "queries-0.process.json": "3f429e0e23051d290f554ba75b42dfe663832fead7814b71cdc70241107c7819",
+    "queries-0.stderr": "7bd14ba15aede6da05a92f0693c975efd6beced4ab6a58c610f1969794e9dd61",
+    "slow-list-trace.jsonl": "a674d324db2e0369d9bde1782b62a1b3dce070387ec06146b17a0329c6485def",
+    "summary.json": "fb201fbde0ff7239fa62365411eb14cd20059c81220ee5b00301c8ab0ed5acd4",
+    "queries-1.jsonl": "bb1337acabcad2c9411bb7e0c91e80e6ff89c3598d97ecd8f6a96865f144bae3",
+    "queries-1.stderr": "a97d301f965dff854e034aac8974ca1caf72e5637a3307c54f4f7689f23a8359",
+    "queries-0.jsonl": "6559eef0c82593fd4f8bf81b723dab1a7be8384d9be93636205716f2a780e19b",
+    "slow-ingestion-trace.jsonl": "05a8b8b4de643b2df749a16f979a69f96c0918ebe05ccdc0b7a450591621104f",
+    "ingestion-baseline.json": "1fe3b9caf575000d02b173ad3b622adbb3cb6b7e9f61430d54611891edc611c8",
+    "queries-1.process.json": "cf634ca82babc70f96a6b31985967354fd4abc170dc8d9ad67d9a40e1c4e1240",
+    "span-summary.jsonl": "f973c05d2368c1b1fdf20c3fd0606366e3bb3335f2badc310771f1bbe6b94219",
+    "backfill.process.json": "54c32d455b5f466f9050e3d6222d0e5afd3a7254beb5cdcba6b2d42d9a1a0381",
+    "profile.json": "2b1063425b20c69929d17b17d81a5b0cbbba2411e04be4f991726e720493715f",
+    "backfill.jsonl": "c2a95a7b41493607fe648c8524b387199b36168b6c4ffea61671425f5eca368d",
+    "backfill.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "results.json": "3b2db64e46c2a6812a878ca0bbb6094764d330f657d745dfb9ef5758b05c4eeb"
+  }
+}

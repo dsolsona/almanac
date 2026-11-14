@@ -11,6 +11,11 @@
 
 ## Accepted amendment
 
+Proposed replacement of initial alerting scope and lifecycle:
+[SPEC-0021](0021-alert-policy-engine.md), with UI behavior in
+[SPEC-0022](0022-alert-management-ui.md). These drafts do not supersede this
+accepted contract until review and acceptance.
+
 [SPEC-0016](0016-maintenance-exclusions.md), approved in Crit review
 `0de0c0e42db6`, governs maintenance-adjusted evaluation and revision fencing.
 Delivery-only silences remain a separate operation.

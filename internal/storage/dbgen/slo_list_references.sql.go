@@ -12,36 +12,24 @@ import (
 )
 
 const listSloOverviewPage = `-- name: ListSloOverviewPage :many
-WITH scope AS (
-    SELECT s.id,lower(s.name) AS sort_name,p.payload AS projection_payload,p.urgency AS published_urgency,
+WITH scalar_scope AS MATERIALIZED (
+    SELECT s.id,lower(s.name) AS sort_name,p.urgency AS published_urgency,
            coalesce(g.definition_revision=d.revision AND g.measurement_revision=d.measurement_revision
-             AND g.calculation_version=$7 AND p.slo_id IS NOT NULL
+             AND g.calculation_version=$1 AND p.slo_id IS NOT NULL AND p.performance_complete
              AND g.source_generation<=coalesce(source.generation,0)
-             AND g.evaluated_through>=$8::timestamptz-interval '365 days',false)::boolean AS usable,
+             AND g.evaluated_through>=$2::timestamptz-interval '365 days',false)::boolean AS usable,
            coalesce(g.definition_revision=d.revision AND g.measurement_revision=d.measurement_revision
-             AND g.calculation_version=$7 AND p.slo_id IS NOT NULL
+             AND g.calculation_version=$1 AND p.slo_id IS NOT NULL AND p.performance_complete
              AND g.source_generation=coalesce(source.generation,0)
-             AND g.retention_start=to_timestamp(ceil(extract(epoch FROM ($8::timestamptz-interval '365 days'))/d.cadence_seconds)*d.cadence_seconds)
-             AND g.evaluated_through>=to_timestamp(floor(extract(epoch FROM $8::timestamptz)/d.cadence_seconds)*d.cadence_seconds)
-             AND coalesce((p.payload->>'_current_valid_until')::timestamptz,'-infinity'::timestamptz)>$8::timestamptz,false)::boolean AS current,
-           jsonb_build_object('slo',jsonb_build_object(
-               'id',s.id,'name',s.name,'display_name',s.display_name,'version',s.version::text,'definition_revision',d.revision::text,
-               'service_id',d.service_id,'service_display_name',service.display_name,'sli_id',d.sli_id,'sli_display_name',measurement.display_name,
-               'target',d.target::text,'rolling_window_seconds',d.rolling_window_seconds,'cadence_seconds',d.cadence_seconds,
-               'activated_at',to_char(d.activated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
-               'evaluation_valid_from',to_char(d.evaluation_valid_from AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
-               'historical_requested_by',d.historical_requested_by,
-               'historical_requested_at',to_char(d.historical_requested_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
-               'created_at',to_char(s.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
-               'updated_at',to_char(s.updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"')),
-               '_preparation_failed',coalesce(f.attempts>=5,false),
-               '_source_failed',EXISTS (
-                   SELECT 1 FROM public.almanac_derived_dirty_ranges dirty
-                   WHERE dirty.sli_id=d.sli_id AND dirty.measurement_revision=d.measurement_revision AND dirty.attempts>=5
-                     AND (dirty.lease_until IS NULL OR dirty.lease_until<=$8::timestamptz)
-                     AND dependency.full_start<dependency.full_end
-                     AND dirty.range_start<dependency.full_end AND dirty.range_end>dependency.full_start
-               ))::jsonb AS metadata
+             AND g.retention_start=to_timestamp(ceil(extract(epoch FROM ($2::timestamptz-interval '365 days'))/d.cadence_seconds)*d.cadence_seconds)
+             AND g.evaluated_through>=to_timestamp(floor(extract(epoch FROM $2::timestamptz)/d.cadence_seconds)*d.cadence_seconds)
+             AND coalesce(public.almanac_projection_deadline(p.current_valid_until),'-infinity'::timestamptz)>$2::timestamptz,false)::boolean AS current,
+           s.name,s.display_name,s.version::text AS version,d.revision::text AS definition_revision,
+           d.service_id,service.display_name AS service_display_name,d.sli_id,measurement.display_name AS sli_display_name,
+           d.target::text AS target,d.rolling_window_seconds,d.cadence_seconds,d.activated_at,d.evaluation_valid_from,
+           d.historical_requested_by,d.historical_requested_at,s.created_at,s.updated_at,
+           d.measurement_revision,dependency.full_start,dependency.full_end,
+           coalesce(f.attempts>=5,false) AS preparation_failed
     FROM public.almanac_slos s
     JOIN public.almanac_slo_definitions d ON d.slo_id=s.id AND d.revision=s.definition_revision
     JOIN public.almanac_services service ON service.id=d.service_id
@@ -49,61 +37,94 @@ WITH scope AS (
     JOIN public.almanac_sli_measurements m ON m.sli_id=d.sli_id AND m.revision=d.measurement_revision
     CROSS JOIN LATERAL (
         SELECT 3600::bigint/gcd(3600::bigint,d.cadence_seconds::bigint)*d.cadence_seconds AS grid,
-               to_timestamp(floor(extract(epoch FROM $8::timestamptz)/d.cadence_seconds)*d.cadence_seconds) AS at
+               to_timestamp(floor(extract(epoch FROM $2::timestamptz)/d.cadence_seconds)*d.cadence_seconds) AS at
     ) boundary
     CROSS JOIN LATERAL (
         SELECT to_timestamp(ceil(extract(epoch FROM greatest(
                    boundary.at-greatest(d.rolling_window_seconds,CASE WHEN 21600%d.cadence_seconds=0 THEN 21600 ELSE 0 END)*interval '1 second',
-                   d.evaluation_valid_from,m.effective_from,$8::timestamptz-interval '365 days'))/boundary.grid)*boundary.grid) AS full_start,
+                   d.evaluation_valid_from,m.effective_from,$2::timestamptz-interval '365 days'))/boundary.grid)*boundary.grid) AS full_start,
                to_timestamp(floor(extract(epoch FROM boundary.at)/boundary.grid)*boundary.grid) AS full_end
     ) dependency
     LEFT JOIN public.almanac_slo_current_projections p ON p.slo_id=s.id
     LEFT JOIN public.almanac_slo_derived_generations g ON g.id=p.generation_id
     LEFT JOIN public.almanac_sli_source_generations source ON source.sli_id=d.sli_id AND source.measurement_revision=d.measurement_revision
     LEFT JOIN public.almanac_slo_current_failures f ON f.slo_id=s.id AND f.definition_revision=d.revision
-      AND f.measurement_revision=d.measurement_revision AND f.calculation_version=$7
-    WHERE ($9::text IS NULL OR strpos(lower(s.name||' '||s.display_name),lower($9::text))>0)
-      AND ($10::uuid IS NULL OR d.service_id=$10::uuid)
+      AND f.measurement_revision=d.measurement_revision AND f.calculation_version=$1
+    WHERE ($3::text IS NULL OR strpos(lower(s.name||' '||s.display_name),lower($3::text))>0)
+      AND ($4::uuid IS NULL OR d.service_id=$4::uuid)
 ), classified AS (
-    SELECT id, sort_name, projection_payload, published_urgency, usable, current, metadata,CASE WHEN current OR (usable AND published_urgency='needs_attention') THEN published_urgency ELSE 'watch' END::text AS urgency,
+    SELECT id, sort_name, published_urgency, usable, current, name, display_name, version, definition_revision, service_id, service_display_name, sli_id, sli_display_name, target, rolling_window_seconds, cadence_seconds, activated_at, evaluation_valid_from, historical_requested_by, historical_requested_at, created_at, updated_at, measurement_revision, full_start, full_end, preparation_failed,CASE WHEN current OR (usable AND published_urgency='needs_attention') THEN published_urgency ELSE 'watch' END::text AS urgency
+    FROM scalar_scope
+), ranked AS (
+    SELECT id, sort_name, published_urgency, usable, current, name, display_name, version, definition_revision, service_id, service_display_name, sli_id, sli_display_name, target, rolling_window_seconds, cadence_seconds, activated_at, evaluation_valid_from, historical_requested_by, historical_requested_at, created_at, updated_at, measurement_revision, full_start, full_end, preparation_failed, urgency,CASE urgency WHEN 'needs_attention' THEN 0 WHEN 'watch' THEN 1 ELSE 2 END::integer AS rank
+    FROM classified
+), selected AS MATERIALIZED (
+    SELECT id, sort_name, published_urgency, usable, current, name, display_name, version, definition_revision, service_id, service_display_name, sli_id, sli_display_name, target, rolling_window_seconds, cadence_seconds, activated_at, evaluation_valid_from, historical_requested_by, historical_requested_at, created_at, updated_at, measurement_revision, full_start, full_end, preparation_failed, urgency, rank FROM ranked
+WHERE ($5::text IS NULL OR urgency=$5::text)
+  AND ($6::uuid IS NULL OR CASE WHEN $7::boolean
+       THEN (rank,sort_name,id)<($8::integer,$9::text,$6::uuid)
+       ELSE (rank,sort_name,id)>($8::integer,$9::text,$6::uuid) END)
+ORDER BY CASE WHEN $7::boolean THEN rank END DESC,
+         CASE WHEN $7::boolean THEN sort_name END DESC,
+         CASE WHEN $7::boolean THEN id END DESC,
+         rank,sort_name,id
+LIMIT $10
+), page_metadata AS MATERIALIZED (
+    SELECT page.id, page.sort_name, page.published_urgency, page.usable, page.current, page.name, page.display_name, page.version, page.definition_revision, page.service_id, page.service_display_name, page.sli_id, page.sli_display_name, page.target, page.rolling_window_seconds, page.cadence_seconds, page.activated_at, page.evaluation_valid_from, page.historical_requested_by, page.historical_requested_at, page.created_at, page.updated_at, page.measurement_revision, page.full_start, page.full_end, page.preparation_failed, page.urgency, page.rank,CASE WHEN p.performance_complete THEN p.payload END AS projection_payload,
+           jsonb_build_object('slo',jsonb_build_object(
+               'id',page.id,'name',page.name,'display_name',page.display_name,'version',page.version,'definition_revision',page.definition_revision,
+               'service_id',page.service_id,'service_display_name',page.service_display_name,'sli_id',page.sli_id,'sli_display_name',page.sli_display_name,
+               'target',page.target,'rolling_window_seconds',page.rolling_window_seconds,'cadence_seconds',page.cadence_seconds,
+               'activated_at',to_char(page.activated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+               'evaluation_valid_from',to_char(page.evaluation_valid_from AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+               'historical_requested_by',page.historical_requested_by,
+               'historical_requested_at',to_char(page.historical_requested_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+               'created_at',to_char(page.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"'),
+               'updated_at',to_char(page.updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"')),
+               '_preparation_failed',page.preparation_failed,
+               '_source_failed',EXISTS (
+                   SELECT 1 FROM public.almanac_derived_dirty_ranges dirty
+                   WHERE dirty.sli_id=page.sli_id AND dirty.measurement_revision=page.measurement_revision AND dirty.attempts>=5
+                     AND (dirty.lease_until IS NULL OR dirty.lease_until<=$2::timestamptz)
+                     AND page.full_start<page.full_end
+                     AND dirty.range_start<page.full_end AND dirty.range_end>page.full_start
+               ))::jsonb AS metadata
+    FROM selected page
+    LEFT JOIN public.almanac_slo_current_projections p ON p.slo_id=page.id
+), presented AS (
+    SELECT id, sort_name, published_urgency, usable, current, name, display_name, version, definition_revision, service_id, service_display_name, sli_id, sli_display_name, target, rolling_window_seconds, cadence_seconds, activated_at, evaluation_valid_from, historical_requested_by, historical_requested_at, created_at, updated_at, measurement_revision, full_start, full_end, preparation_failed, urgency, rank, projection_payload, metadata,CASE WHEN $7::boolean THEN rank END AS reverse_rank,
+           CASE WHEN $7::boolean THEN sort_name END AS reverse_name,
+           CASE WHEN $7::boolean THEN id END AS reverse_id,
            CASE WHEN current THEN 'ready'
                 WHEN NOT usable THEN 'unavailable'
-                WHEN (metadata->>'_preparation_failed')::boolean OR (metadata->>'_source_failed')::boolean THEN 'failed'
+                WHEN preparation_failed OR (metadata->>'_source_failed')::boolean THEN 'failed'
                 ELSE 'stale' END::text AS current_state
-    FROM scope
-
-), ranked AS (
-    SELECT id, sort_name, projection_payload, published_urgency, usable, current, metadata, urgency, current_state,CASE urgency WHEN 'needs_attention' THEN 0 WHEN 'watch' THEN 1 ELSE 2 END::integer AS rank
-    FROM classified
+    FROM page_metadata
 )
 SELECT id,sort_name,rank,
        (coalesce(projection_payload,'{}'::jsonb)||metadata||jsonb_build_object('urgency',urgency,'current_state',current_state))::jsonb AS payload,
        usable::boolean AS projection_valid,current::boolean AS projection_current,
-       coalesce((metadata->>'_preparation_failed')::boolean,false)::boolean AS preparation_failed,
+       preparation_failed::boolean AS preparation_failed,
        coalesce((metadata->>'_source_failed')::boolean,false)::boolean AS source_failed
-FROM ranked
-WHERE ($1::text IS NULL OR urgency=$1::text)
-  AND ($2::uuid IS NULL OR CASE WHEN $3::boolean
-       THEN (rank,sort_name,id)<($4::integer,$5::text,$2::uuid)
-       ELSE (rank,sort_name,id)>($4::integer,$5::text,$2::uuid) END)
-ORDER BY CASE WHEN $3::boolean THEN rank END DESC,
-         CASE WHEN $3::boolean THEN sort_name END DESC,
-         CASE WHEN $3::boolean THEN id END DESC,
-         rank,sort_name,id
-LIMIT $6
+FROM (
+    SELECT id, sort_name, published_urgency, usable, current, name, display_name, version, definition_revision, service_id, service_display_name, sli_id, sli_display_name, target, rolling_window_seconds, cadence_seconds, activated_at, evaluation_valid_from, historical_requested_by, historical_requested_at, created_at, updated_at, measurement_revision, full_start, full_end, preparation_failed, urgency, rank, projection_payload, metadata, reverse_rank, reverse_name, reverse_id, current_state FROM presented
+    ORDER BY reverse_rank DESC,reverse_name DESC,reverse_id DESC,rank,sort_name,id
+    OFFSET 0
+) ordered
+ORDER BY reverse_rank DESC,reverse_name DESC,reverse_id DESC,rank,sort_name,id
 `
 
 type ListSloOverviewPageParams struct {
+	CalculationVersion string             `json:"calculation_version"`
+	Now                pgtype.Timestamptz `json:"now"`
+	QueryText          pgtype.Text        `json:"query_text"`
+	ServiceID          pgtype.UUID        `json:"service_id"`
 	Urgency            pgtype.Text        `json:"urgency"`
 	AfterID            pgtype.UUID        `json:"after_id"`
 	Reverse            bool               `json:"reverse"`
 	AfterRank          int32              `json:"after_rank"`
 	AfterSortName      string             `json:"after_sort_name"`
 	PageLimit          int32              `json:"page_limit"`
-	CalculationVersion string             `json:"calculation_version"`
-	Now                pgtype.Timestamptz `json:"now"`
-	QueryText          pgtype.Text        `json:"query_text"`
-	ServiceID          pgtype.UUID        `json:"service_id"`
 }
 
 type ListSloOverviewPageRow struct {
@@ -117,18 +138,22 @@ type ListSloOverviewPageRow struct {
 	SourceFailed      bool        `json:"source_failed"`
 }
 
+// Reuse classification scalars without expanding them through every presentation
+// expression. Fetch chart payloads and construct metadata only for the chosen page.
+// Keep assembly above the scalar/reference sort, including maximum API pages.
+// Expose order keys through the subquery so the outer order needs no payload sort.
 func (q *Queries) ListSloOverviewPage(ctx context.Context, arg ListSloOverviewPageParams) ([]ListSloOverviewPageRow, error) {
 	rows, err := q.db.Query(ctx, listSloOverviewPage,
+		arg.CalculationVersion,
+		arg.Now,
+		arg.QueryText,
+		arg.ServiceID,
 		arg.Urgency,
 		arg.AfterID,
 		arg.Reverse,
 		arg.AfterRank,
 		arg.AfterSortName,
 		arg.PageLimit,
-		arg.CalculationVersion,
-		arg.Now,
-		arg.QueryText,
-		arg.ServiceID,
 	)
 	if err != nil {
 		return nil, err

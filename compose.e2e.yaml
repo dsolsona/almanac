@@ -2,6 +2,10 @@
 # memory, like the dev fixtures, so a run never grows the Docker disk (on macOS, Colima's disk file
 # only shrinks after a trim) and removing the stack frees everything it wrote.
 services:
+  app:
+    # Test-only internal listener; no host port or public API route is exposed.
+    environment:
+      ALMANAC_METRICS_LISTEN: 127.0.0.1:9092
   postgres:
     volumes: !override
       - postgres-secret:/run/postgres-secret:ro

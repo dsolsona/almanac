@@ -25,7 +25,7 @@ func (q *Queries) FindAgentAccessCredentialAgent(ctx context.Context, credential
 
 const lockAgentAccessAgent = `-- name: LockAgentAccessAgent :one
 SELECT id, enabled FROM public.almanac_agents
-WHERE id = $1 AND deleted_at IS NULL FOR UPDATE
+WHERE id = $1 AND deleted_at IS NULL FOR NO KEY UPDATE
 `
 
 type LockAgentAccessAgentRow struct {
@@ -33,6 +33,7 @@ type LockAgentAccessAgentRow struct {
 	Enabled bool        `json:"enabled"`
 }
 
+// Serialize authority changes without blocking retained observations' ID references.
 func (q *Queries) LockAgentAccessAgent(ctx context.Context, agentID pgtype.UUID) (LockAgentAccessAgentRow, error) {
 	row := q.db.QueryRow(ctx, lockAgentAccessAgent, agentID)
 	var i LockAgentAccessAgentRow

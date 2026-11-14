@@ -70,12 +70,35 @@ func derivedWindowBatchParams(sliID pgtype.UUID, revision int64, inputs []slo.Wi
 }
 
 func evaluateDerivedWindows(ctx context.Context, q *dbgen.Queries, sliID pgtype.UUID, revision int64, inputs []slo.WindowInput) ([]slo.WindowResult, error) {
+	return evaluateDerivedWindowsUsing(ctx, q, sliID, revision, inputs, slo.EvaluateOperationalTotals)
+}
+
+type derivedTotalsEvaluator func(context.Context, slo.WindowInput, slo.WindowTotals) (slo.WindowResult, error)
+
+func evaluateDerivedWindowsUsing(ctx context.Context, q *dbgen.Queries, sliID pgtype.UUID, revision int64, inputs []slo.WindowInput, evaluate derivedTotalsEvaluator) ([]slo.WindowResult, error) {
 	if len(inputs) == 0 {
 		return []slo.WindowResult{}, nil
 	}
 	params, err := derivedWindowBatchParams(sliID, revision, inputs)
 	if err != nil {
 		return nil, err
+	}
+	// Callers keep this check and the authoritative batch in their existing
+	// repeatable-read snapshot. Only the first window may short-circuit: a later
+	// pending window must not hide an earlier window's inconsistent facts.
+	if params.FullStarts[0].Time.Before(params.FullEnds[0].Time) {
+		readiness, err := q.ReadDerivedWindowReadiness(ctx, dbgen.ReadDerivedWindowReadinessParams{
+			SliID: sliID, MeasurementRevision: revision, FullStart: params.FullStarts[0], FullEnd: params.FullEnds[0], Now: params.Now,
+		})
+		if err != nil {
+			return nil, operationError(ctx, "storage: exact aggregate window batch read failed", err)
+		}
+		if readiness.Exhausted {
+			return nil, ErrDerivedSourceFailed
+		}
+		if !readiness.Prepared {
+			return nil, ErrDerivedPending
+		}
 	}
 	counts, err := q.ReadRetainedWindowBatch(ctx, params)
 	if err != nil {
@@ -89,9 +112,9 @@ func evaluateDerivedWindows(ctx context.Context, q *dbgen.Queries, sliID pgtype.
 		if count.Ordinal != int32(index+1) {
 			return nil, slo.ErrOperationalFacts
 		}
-		results[index], err = evaluateDerivedCounts(ctx, inputs[index], dbgen.ReadDerivedWindowTotalsRow{Good: count.Good, Total: count.Total, Observed: count.Observed,
+		results[index], err = evaluateDerivedCountsUsing(ctx, inputs[index], dbgen.ReadDerivedWindowTotalsRow{Good: count.Good, Total: count.Total, Observed: count.Observed,
 			KnownEmpty: count.KnownEmpty, ZeroTraffic: count.ZeroTraffic, FirstObservation: count.FirstObservation,
-			LastObservation: count.LastObservation, LatestReceipt: count.LatestReceipt, Prepared: count.Prepared, Exhausted: count.Exhausted})
+			LastObservation: count.LastObservation, LatestReceipt: count.LatestReceipt, Prepared: count.Prepared, Exhausted: count.Exhausted}, evaluate)
 		if err != nil {
 			return nil, err
 		}
@@ -100,6 +123,10 @@ func evaluateDerivedWindows(ctx context.Context, q *dbgen.Queries, sliID pgtype.
 }
 
 func evaluateDerivedCounts(ctx context.Context, input slo.WindowInput, counts dbgen.ReadDerivedWindowTotalsRow) (slo.WindowResult, error) {
+	return evaluateDerivedCountsUsing(ctx, input, counts, slo.EvaluateOperationalTotals)
+}
+
+func evaluateDerivedCountsUsing(ctx context.Context, input slo.WindowInput, counts dbgen.ReadDerivedWindowTotalsRow, evaluate derivedTotalsEvaluator) (slo.WindowResult, error) {
 	if counts.Exhausted {
 		return slo.WindowResult{}, ErrDerivedSourceFailed
 	}
@@ -118,7 +145,7 @@ func evaluateDerivedCounts(ctx context.Context, input slo.WindowInput, counts db
 		return new(value.Time.UTC())
 	}
 	input.Observations = nil
-	return slo.EvaluateOperationalTotals(ctx, input, slo.WindowTotals{
+	return evaluate(ctx, input, slo.WindowTotals{
 		Good: good, Total: total, Observed: counts.Observed, KnownEmpty: counts.KnownEmpty, ZeroTraffic: counts.ZeroTraffic,
 		FirstObservation: optionalTime(counts.FirstObservation), LastObservation: optionalTime(counts.LastObservation), LatestReceipt: optionalTime(counts.LatestReceipt),
 	})

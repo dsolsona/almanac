@@ -47,7 +47,7 @@ test('catalogue foundations and shared controls work at this viewport and theme'
   expect(errorId).toContain('catalogue-invalid-error');
   await expect(page.locator(`#${errorId}`)).toContainText('Enter a duration');
   await expect(page.getByRole('button', { name: 'Disabled' })).toBeDisabled();
-  await expect(page.getByRole('button', { name: 'Pending' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Pending', exact: true })).toBeDisabled();
 });
 
 test('application shell preview keeps navigation available at each viewport and theme', { tag: '@matrix' }, async ({ page }, testInfo) => {

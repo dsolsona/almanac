@@ -1,0 +1,668 @@
+{
+  "singleReader": {
+    "postgresVersion": "PostgreSQL 18.6 (Debian 18.6-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+    "querySHA256": "13eb15b04c21f3dfea7961337f5e60e2930e44840d287b33ca17a9be1a2124b9",
+    "statementCacheCapacity": 512,
+    "connectMS": 13.682001,
+    "autoBeforeAnyExplain": {
+      "name": "stmtcache_13eb15b04c21f3dfea7961337f5e60e2930e44840d287b33",
+      "generic": 7,
+      "custom": 5,
+      "types": "{text,uuid,boolean,integer,text,bigint,text,\"timestamp with time zone\",text,uuid}"
+    },
+    "finalPrepared": {
+      "name": "stmtcache_13eb15b04c21f3dfea7961337f5e60e2930e44840d287b33",
+      "generic": 22,
+      "custom": 17,
+      "types": "{text,uuid,boolean,integer,text,bigint,text,\"timestamp with time zone\",text,uuid}"
+    },
+    "concurrency": 1,
+    "pgxQueryExecMode": "cache statement",
+    "fixedTime": "2026-11-13T23:19:14.053105Z",
+    "bounds": {
+      "timezone": "UTC",
+      "pageLimit": 21,
+      "filters": "none",
+      "reverse": false,
+      "calculationVersion": "occurrences-operational-v1",
+      "statementTimeout": "2s",
+      "lockTimeout": "250ms",
+      "jit": "off"
+    },
+    "exactOrderedOutputEquality": true,
+    "completed": true,
+    "rolledBack": true,
+    "elapsedSeconds": 1.429615172,
+    "startedAt": "2026-11-13T23:19:14.036093268Z",
+    "deadlineSeconds": 90,
+    "sourceHashes": {
+      ".local/overview-planning/probe.go": "24b3506b12163142a4a0e1589bb743337772aade86ba7af70d922ab5a2ef0ca5",
+      "internal/storage/query/slo_list_references.sql": "f8f88f270f0666992c1f3e5c5512328594c334d319fd8ba831be29f81f3b84ff",
+      "internal/storage/dbgen/slo_list_references.sql.go": "cecf91c8b2f2651310b8563ed083804d11b7fe9ce8640270fe0b69b7749e5993",
+      "internal/storage/slo_operational.go": "c2a70a3b42f21437836a2c7fce1b03216595db60636df840f96f41cfe5e95fdf",
+      "internal/storage/runtime.go": "88ac2670f495ae92c2b3366485fe417dea88daf0bcb4a3c27e8789386e368855"
+    },
+    "diagnosticSourceRevision": "0dfbca5715f6f988da2a20d095ab73d340c07d65",
+    "runtimeSourceRevision": "25acf2d",
+    "runtimeApplicationImage": "14ebdd5f1f06dabd191c5eed51412233cd8020d9125c83db07712e09b6a3b6da",
+    "runtimeFixture": {
+      "fixtureVersion": "eligible-published-history-v3",
+      "postgresStorage": "disk",
+      "initialHistoryStart": "2026-11-12T23:05:00Z",
+      "eligibleFrom": "2026-11-09T23:05:00Z",
+      "historyClosedThrough": "2026-11-13T23:00:00Z"
+    },
+    "initialCompileFailure": {
+      "result": "json/v2 has no MarshalIndent; no connection/query occurred",
+      "elapsedSeconds": 1.2905662289995234,
+      "correction": "Use json.Marshal; private failure retained in compile-failure/"
+    },
+    "summary": {
+      "auto-observation/auto": {
+        "samples": 12,
+        "roundtripMedianMs": 27.677806,
+        "roundtripMinMs": 15.502315,
+        "roundtripMaxMs": 102.192613,
+        "planningMedianMs": null,
+        "executionMedianMs": null
+      },
+      "forced-comparison/force_generic_plan": {
+        "samples": 6,
+        "roundtripMedianMs": 17.51397,
+        "roundtripMinMs": 15.166737,
+        "roundtripMaxMs": 36.901152,
+        "planningMedianMs": null,
+        "executionMedianMs": null
+      },
+      "forced-comparison/force_custom_plan": {
+        "samples": 6,
+        "roundtripMedianMs": 41.5568525,
+        "roundtripMinMs": 38.044331,
+        "roundtripMaxMs": 50.771735,
+        "planningMedianMs": null,
+        "executionMedianMs": null
+      },
+      "actual-prepared-explain/auto": {
+        "samples": 3,
+        "roundtripMedianMs": 16.37633,
+        "roundtripMinMs": 14.356232,
+        "roundtripMaxMs": 17.563859,
+        "planningMedianMs": 0.04,
+        "executionMedianMs": 13.798
+      },
+      "actual-prepared-explain/force_generic_plan": {
+        "samples": 6,
+        "roundtripMedianMs": 16.0463635,
+        "roundtripMinMs": 14.672686,
+        "roundtripMaxMs": 18.649733,
+        "planningMedianMs": 0.0435,
+        "executionMedianMs": 13.991
+      },
+      "actual-prepared-explain/force_custom_plan": {
+        "samples": 6,
+        "roundtripMedianMs": 41.683997000000005,
+        "roundtripMinMs": 36.84835,
+        "roundtripMaxMs": 87.676548,
+        "planningMedianMs": 21.6665,
+        "executionMedianMs": 16.092
+      }
+    },
+    "startupSamples": [
+      {
+        "phase": "auto-observation",
+        "index": 0,
+        "mode": "auto",
+        "roundtripMs": 102.192613,
+        "rows": 21,
+        "payloadBytes": 1276953,
+        "outputHash": "8ec3bea10a3f992784360db1b3ff633d9661d8af8f41e69727b993c15ff08449",
+        "prepared": {
+          "name": "stmtcache_13eb15b04c21f3dfea7961337f5e60e2930e44840d287b33",
+          "generic": 0,
+          "custom": 1,
+          "types": "{text,uuid,boolean,integer,text,bigint,text,\"timestamp with time zone\",text,uuid}"
+        },
+        "planningMs": 0,
+        "executionMs": 0
+      },
+      {
+        "phase": "auto-observation",
+        "index": 1,
+        "mode": "auto",
+        "roundtripMs": 48.935065,
+        "rows": 21,
+        "payloadBytes": 1276953,
+        "outputHash": "8ec3bea10a3f992784360db1b3ff633d9661d8af8f41e69727b993c15ff08449",
+        "prepared": {
+          "name": "stmtcache_13eb15b04c21f3dfea7961337f5e60e2930e44840d287b33",
+          "generic": 0,
+          "custom": 2,
+          "types": "{text,uuid,boolean,integer,text,bigint,text,\"timestamp with time zone\",text,uuid}"
+        },
+        "planningMs": 0,
+        "executionMs": 0
+      },
+      {
+        "phase": "auto-observation",
+        "index": 2,
+        "mode": "auto",
+        "roundtripMs": 42.538688,
+        "rows": 21,
+        "payloadBytes": 1276953,
+        "outputHash": "8ec3bea10a3f992784360db1b3ff633d9661d8af8f41e69727b993c15ff08449",
+        "prepared": {
+          "name": "stmtcache_13eb15b04c21f3dfea7961337f5e60e2930e44840d287b33",
+          "generic": 0,
+          "custom": 3,
+          "types": "{text,uuid,boolean,integer,text,bigint,text,\"timestamp with time zone\",text,uuid}"
+        },
+        "planningMs": 0,
+        "executionMs": 0
+      },
+      {
+        "phase": "auto-observation",
+        "index": 3,
+        "mode": "auto",
+        "roundtripMs": 39.15094,
+        "rows": 21,
+        "payloadBytes": 1276953,
+        "outputHash": "8ec3bea10a3f992784360db1b3ff633d9661d8af8f41e69727b993c15ff08449",
+        "prepared": {
+          "name": "stmtcache_13eb15b04c21f3dfea7961337f5e60e2930e44840d287b33",
+          "generic": 0,
+          "custom": 4,
+          "types": "{text,uuid,boolean,integer,text,bigint,text,\"timestamp with time zone\",text,uuid}"
+        },
+        "planningMs": 0,
+        "executionMs": 0
+      },
+      {
+        "phase": "auto-observation",
+        "index": 4,
+        "mode": "auto",
+        "roundtripMs": 38.491185,
+        "rows": 21,
+        "payloadBytes": 1276953,
+        "outputHash": "8ec3bea10a3f992784360db1b3ff633d9661d8af8f41e69727b993c15ff08449",
+        "prepared": {
+          "name": "stmtcache_13eb15b04c21f3dfea7961337f5e60e2930e44840d287b33",
+          "generic": 0,
+          "custom": 5,
+          "types": "{text,uuid,boolean,integer,text,bigint,text,\"timestamp with time zone\",text,uuid}"
+        },
+        "planningMs": 0,
+        "executionMs": 0
+      },
+      {
+        "phase": "auto-observation",
+        "index": 5,
+        "mode": "auto",
+        "roundtripMs": 36.357537,
+        "rows": 21,
+        "payloadBytes": 1276953,
+        "outputHash": "8ec3bea10a3f992784360db1b3ff633d9661d8af8f41e69727b993c15ff08449",
+        "prepared": {
+          "name": "stmtcache_13eb15b04c21f3dfea7961337f5e60e2930e44840d287b33",
+          "generic": 1,
+          "custom": 5,
+          "types": "{text,uuid,boolean,integer,text,bigint,text,\"timestamp with time zone\",text,uuid}"
+        },
+        "planningMs": 0,
+        "executionMs": 0
+      },
+      {
+        "phase": "auto-observation",
+        "index": 6,
+        "mode": "auto",
+        "roundtripMs": 15.58057,
+        "rows": 21,
+        "payloadBytes": 1276953,
+        "outputHash": "8ec3bea10a3f992784360db1b3ff633d9661d8af8f41e69727b993c15ff08449",
+        "prepared": {
+          "name": "stmtcache_13eb15b04c21f3dfea7961337f5e60e2930e44840d287b33",
+          "generic": 2,
+          "custom": 5,
+          "types": "{text,uuid,boolean,integer,text,bigint,text,\"timestamp with time zone\",text,uuid}"
+        },
+        "planningMs": 0,
+        "executionMs": 0
+      },
+      {
+        "phase": "auto-observation",
+        "index": 7,
+        "mode": "auto",
+        "roundtripMs": 17.024181,
+        "rows": 21,
+        "payloadBytes": 1276953,
+        "outputHash": "8ec3bea10a3f992784360db1b3ff633d9661d8af8f41e69727b993c15ff08449",
+        "prepared": {
+          "name": "stmtcache_13eb15b04c21f3dfea7961337f5e60e2930e44840d287b33",
+          "generic": 3,
+          "custom": 5,
+          "types": "{text,uuid,boolean,integer,text,bigint,text,\"timestamp with time zone\",text,uuid}"
+        },
+        "planningMs": 0,
+        "executionMs": 0
+      },
+      {
+        "phase": "auto-observation",
+        "index": 8,
+        "mode": "auto",
+        "roundtripMs": 16.305116,
+        "rows": 21,
+        "payloadBytes": 1276953,
+        "outputHash": "8ec3bea10a3f992784360db1b3ff633d9661d8af8f41e69727b993c15ff08449",
+        "prepared": {
+          "name": "stmtcache_13eb15b04c21f3dfea7961337f5e60e2930e44840d287b33",
+          "generic": 4,
+          "custom": 5,
+          "types": "{text,uuid,boolean,integer,text,bigint,text,\"timestamp with time zone\",text,uuid}"
+        },
+        "planningMs": 0,
+        "executionMs": 0
+      },
+      {
+        "phase": "auto-observation",
+        "index": 9,
+        "mode": "auto",
+        "roundtripMs": 15.662873,
+        "rows": 21,
+        "payloadBytes": 1276953,
+        "outputHash": "8ec3bea10a3f992784360db1b3ff633d9661d8af8f41e69727b993c15ff08449",
+        "prepared": {
+          "name": "stmtcache_13eb15b04c21f3dfea7961337f5e60e2930e44840d287b33",
+          "generic": 5,
+          "custom": 5,
+          "types": "{text,uuid,boolean,integer,text,bigint,text,\"timestamp with time zone\",text,uuid}"
+        },
+        "planningMs": 0,
+        "executionMs": 0
+      },
+      {
+        "phase": "auto-observation",
+        "index": 10,
+        "mode": "auto",
+        "roundtripMs": 18.998075,
+        "rows": 21,
+        "payloadBytes": 1276953,
+        "outputHash": "8ec3bea10a3f992784360db1b3ff633d9661d8af8f41e69727b993c15ff08449",
+        "prepared": {
+          "name": "stmtcache_13eb15b04c21f3dfea7961337f5e60e2930e44840d287b33",
+          "generic": 6,
+          "custom": 5,
+          "types": "{text,uuid,boolean,integer,text,bigint,text,\"timestamp with time zone\",text,uuid}"
+        },
+        "planningMs": 0,
+        "executionMs": 0
+      },
+      {
+        "phase": "auto-observation",
+        "index": 11,
+        "mode": "auto",
+        "roundtripMs": 15.502315,
+        "rows": 21,
+        "payloadBytes": 1276953,
+        "outputHash": "8ec3bea10a3f992784360db1b3ff633d9661d8af8f41e69727b993c15ff08449",
+        "prepared": {
+          "name": "stmtcache_13eb15b04c21f3dfea7961337f5e60e2930e44840d287b33",
+          "generic": 7,
+          "custom": 5,
+          "types": "{text,uuid,boolean,integer,text,bigint,text,\"timestamp with time zone\",text,uuid}"
+        },
+        "planningMs": 0,
+        "executionMs": 0
+      }
+    ]
+  },
+  "burst": {
+    "activeReaders": 8,
+    "roundsPerReader": 6,
+    "deadlineSeconds": 90,
+    "bounds": {
+      "pageLimit": 21,
+      "filters": "none",
+      "setupOutsideQueryTiming": true,
+      "snapshotOwnerIdleOnly": true,
+      "statementTimeout": "2s",
+      "lockTimeout": "250ms",
+      "jit": "off",
+      "timezone": "UTC"
+    },
+    "exactOrderedOutputEquality": true,
+    "completed": true,
+    "rolledBack": true,
+    "startedAt": "2026-11-13T23:23:23.047589034Z",
+    "cohortOrder": [
+      "auto",
+      "force_generic_plan",
+      "force_generic_plan",
+      "auto"
+    ],
+    "querySHA256": "13eb15b04c21f3dfea7961337f5e60e2930e44840d287b33ca17a9be1a2124b9",
+    "pgxQueryExecMode": "cache statement",
+    "fixedTime": "2026-11-13T23:23:23.053023Z",
+    "elapsedSeconds": 5.077263775,
+    "connectionsIncludingSnapshotOwner": 9,
+    "sourceHashes": {
+      "internal/storage/dbgen/slo_list_references.sql.go": "cecf91c8b2f2651310b8563ed083804d11b7fe9ce8640270fe0b69b7749e5993",
+      ".local/overview-planning/burst.go": "adc176167bf569527315a5eb4d936761cfaac099464aadf17c60f97379d95ede",
+      "internal/storage/query/slo_list_references.sql": "f8f88f270f0666992c1f3e5c5512328594c334d319fd8ba831be29f81f3b84ff"
+    },
+    "statementCacheCapacity": 512,
+    "runtimeApplicationImage": "14ebdd5f1f06dabd191c5eed51412233cd8020d9125c83db07712e09b6a3b6da",
+    "runtimeSourceRevision": "25acf2d",
+    "diagnosticSourceRevision": "0dfbca5",
+    "summary": {
+      "auto": {
+        "first": {
+          "n": 16,
+          "meanMs": 279.1092120625,
+          "medianMs": 296.8061055,
+          "sampleP95Ms": 344.443908,
+          "minMs": 167.958924,
+          "maxMs": 344.443908
+        },
+        "first5": {
+          "n": 80,
+          "meanMs": 218.8140405,
+          "medianMs": 211.01239700000002,
+          "sampleP95Ms": 321.772664,
+          "minMs": 99.213457,
+          "maxMs": 344.443908
+        },
+        "sixth": {
+          "n": 16,
+          "meanMs": 216.7394619375,
+          "medianMs": 225.06661200000002,
+          "sampleP95Ms": 266.089274,
+          "minMs": 142.414326,
+          "maxMs": 266.089274
+        }
+      },
+      "force_generic_plan": {
+        "first": {
+          "n": 16,
+          "meanMs": 227.6218179375,
+          "medianMs": 240.429307,
+          "sampleP95Ms": 286.631916,
+          "minMs": 167.179749,
+          "maxMs": 286.631916
+        },
+        "first5": {
+          "n": 80,
+          "meanMs": 109.051967275,
+          "medianMs": 88.0409225,
+          "sampleP95Ms": 256.274152,
+          "minMs": 35.416697,
+          "maxMs": 286.631916
+        },
+        "sixth": {
+          "n": 16,
+          "meanMs": 106.175269125,
+          "medianMs": 108.761724,
+          "sampleP95Ms": 141.260262,
+          "minMs": 36.351216,
+          "maxMs": 141.260262
+        },
+        "cached_generic_rounds2to6": {
+          "n": 80,
+          "meanMs": 84.7626575125,
+          "medianMs": 83.129948,
+          "sampleP95Ms": 130.691726,
+          "minMs": 35.416697,
+          "maxMs": 141.260262
+        }
+      }
+    },
+    "limitations": [
+      "No auth, HTTP, pool admission, group counts or replayed backfill/query workload; current background app remained running.",
+      "One retained snapshot and fixedtime; this does not reproduce mutable loaded workload.",
+      "SET LOCAL, connection startup and snapshot import occur before query-phase timing; setup times retained separately.",
+      "ABBA order exposes rather than eliminates cache warming and scheduling variation.",
+      "Forced plan mode is a session-local diagnostic, not an adopted global or production policy.",
+      "QueryMs includes planning/execution/result-transfer/pgxscan; this burst does not separately time server planning. Prior same-statement EXPLAIN isolates planning in the single-reader comparison."
+    ],
+    "cohorts": [
+      {
+        "index": 0,
+        "mode": "auto",
+        "queryPhaseWallMs": 1601.426031,
+        "setupWallMs": 29.615538,
+        "closed": true,
+        "readers": [
+          {
+            "matchingStatementsBefore": 0,
+            "reader": 0,
+            "setupMs": 28.186064
+          },
+          {
+            "reader": 1,
+            "setupMs": 28.472259,
+            "matchingStatementsBefore": 0
+          },
+          {
+            "matchingStatementsBefore": 0,
+            "reader": 2,
+            "setupMs": 24.594144
+          },
+          {
+            "reader": 3,
+            "setupMs": 29.296301,
+            "matchingStatementsBefore": 0
+          },
+          {
+            "setupMs": 28.527823,
+            "matchingStatementsBefore": 0,
+            "reader": 4
+          },
+          {
+            "reader": 5,
+            "setupMs": 28.997071,
+            "matchingStatementsBefore": 0
+          },
+          {
+            "reader": 6,
+            "setupMs": 8.06763,
+            "matchingStatementsBefore": 0
+          },
+          {
+            "matchingStatementsBefore": 0,
+            "reader": 7,
+            "setupMs": 18.671764
+          }
+        ]
+      },
+      {
+        "index": 1,
+        "mode": "force_generic_plan",
+        "queryPhaseWallMs": 831.455006,
+        "setupWallMs": 35.176281,
+        "closed": true,
+        "readers": [
+          {
+            "reader": 0,
+            "setupMs": 34.732154,
+            "matchingStatementsBefore": 0
+          },
+          {
+            "setupMs": 29.206401,
+            "matchingStatementsBefore": 0,
+            "reader": 1
+          },
+          {
+            "reader": 2,
+            "setupMs": 33.914207,
+            "matchingStatementsBefore": 0
+          },
+          {
+            "matchingStatementsBefore": 0,
+            "reader": 3,
+            "setupMs": 28.641389
+          },
+          {
+            "reader": 4,
+            "setupMs": 34.789617,
+            "matchingStatementsBefore": 0
+          },
+          {
+            "reader": 5,
+            "setupMs": 34.295712,
+            "matchingStatementsBefore": 0
+          },
+          {
+            "reader": 6,
+            "setupMs": 34.057061,
+            "matchingStatementsBefore": 0
+          },
+          {
+            "reader": 7,
+            "setupMs": 29.205154,
+            "matchingStatementsBefore": 0
+          }
+        ]
+      },
+      {
+        "index": 2,
+        "mode": "force_generic_plan",
+        "queryPhaseWallMs": 857.505007,
+        "setupWallMs": 26.078901,
+        "closed": true,
+        "readers": [
+          {
+            "setupMs": 23.35737,
+            "matchingStatementsBefore": 0,
+            "reader": 0
+          },
+          {
+            "reader": 1,
+            "setupMs": 23.833762,
+            "matchingStatementsBefore": 0
+          },
+          {
+            "setupMs": 22.324158,
+            "matchingStatementsBefore": 0,
+            "reader": 2
+          },
+          {
+            "reader": 3,
+            "setupMs": 23.194516,
+            "matchingStatementsBefore": 0
+          },
+          {
+            "reader": 4,
+            "setupMs": 22.762668,
+            "matchingStatementsBefore": 0
+          },
+          {
+            "reader": 5,
+            "setupMs": 24.889227,
+            "matchingStatementsBefore": 0
+          },
+          {
+            "reader": 6,
+            "setupMs": 22.465492,
+            "matchingStatementsBefore": 0
+          },
+          {
+            "reader": 7,
+            "setupMs": 26.015475,
+            "matchingStatementsBefore": 0
+          }
+        ]
+      },
+      {
+        "index": 3,
+        "mode": "auto",
+        "queryPhaseWallMs": 1580.112056,
+        "setupWallMs": 26.043589,
+        "closed": true,
+        "readers": [
+          {
+            "reader": 0,
+            "setupMs": 17.773763,
+            "matchingStatementsBefore": 0
+          },
+          {
+            "reader": 1,
+            "setupMs": 25.159968,
+            "matchingStatementsBefore": 0
+          },
+          {
+            "reader": 2,
+            "setupMs": 22.185062,
+            "matchingStatementsBefore": 0
+          },
+          {
+            "reader": 3,
+            "setupMs": 23.910278,
+            "matchingStatementsBefore": 0
+          },
+          {
+            "reader": 4,
+            "setupMs": 25.472722,
+            "matchingStatementsBefore": 0
+          },
+          {
+            "reader": 5,
+            "setupMs": 18.181726,
+            "matchingStatementsBefore": 0
+          },
+          {
+            "reader": 6,
+            "setupMs": 25.588019,
+            "matchingStatementsBefore": 0
+          },
+          {
+            "reader": 7,
+            "setupMs": 25.480105,
+            "matchingStatementsBefore": 0
+          }
+        ]
+      }
+    ]
+  },
+  "privateRawArtifactSHA256": {
+    "result.json": "47a341eddf5960afceadf4ec9fb953b156f5a868b7d40b66f72905feee6b739b",
+    "burst/result.json": "1105da85b883ad681ad95681257f9f30b54c7b741e1cc4287e13fdacc25e6d36",
+    "handoff.md": "68209a8c9f31e00dda300c7cc67ceef18c228d9030544696f84f0fbbbb6f4baa",
+    "burst/handoff.md": "f676d2de4c02a313129e481fa1af9d580b7f84c6f7c978be1ea5211db6462548"
+  },
+  "loadedPhaseObservedQueryCohorts": {
+    "first_five_per_pid": {
+      "n": 40,
+      "median": 560.8208155,
+      "mean": 492.279611375,
+      "p95": 721.431167,
+      "max": 758.250115
+    },
+    "first_30_seconds": {
+      "n": 34,
+      "median": 432.493995,
+      "mean": 430.43528879411764,
+      "p95": 729.581181,
+      "max": 758.250115
+    },
+    "after_five_per_pid": {
+      "n": 136,
+      "median": 130.1191065,
+      "mean": 174.0044519779412,
+      "p95": 477.857116,
+      "max": 564.725327
+    },
+    "after_30_seconds": {
+      "n": 142,
+      "median": 145.963616,
+      "mean": 202.2604936971831,
+      "p95": 560.248515,
+      "max": 700.460247
+    }
+  },
+  "limitations": [
+    "Query-only probes exclude group counts, authentication, pool admission, HTTP, browser and concurrent backfill.",
+    "Single-reader startup and warm samples are retained separately; no warmup omitted.",
+    "Exported repeatable-read snapshot makes all burst outputs identical; setup, plan-mode setting and snapshot import occur outside query timing.",
+    "Observed loaded per-PID ordinals are not server prepared-plan counters.",
+    "The runtime remains the failed 25acf2d combined control; no production plan-mode change or SQL reshape is adopted.",
+    "All raw samples and plans remain in the isolated diagnostic worktree; published hashes identify them."
+  ]
+}

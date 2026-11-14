@@ -158,6 +158,14 @@ Operational controls (ADR-0028), demonstrated in the catalogue's Operational sec
   the input. Supplying `onSearch` delegates filtering to the caller; returned
   options are not filtered again by display text. This preserves API matches on
   UUIDs, labels and other metadata. Local pickers keep their normal text filter.
+  The opt-in compact selected presentation keeps the control height unchanged for
+  aligned form rows, with the selected title and a labelled Change action. Context
+  stays below the control; existing summary-card consumers keep their layout.
+- `InlineValue` presents an editable value as text until activated. Its owner holds
+  the active editor and raw draft; typing updates that draft, Enter/blur normalizes,
+  and Escape restores the original text. Input and display use matching geometry,
+  padded suffixes and associated errors. Invalid values remain visible and cannot
+  silently submit the previous value. The alert-policy catalogue demonstrates it.
 - `SelectionSummary` shows status, title, badge, detail, optional message and
   action; the warning variant uses the warning wash.
 - `FormSection` and `FormActions` compose create and edit forms as numbered
@@ -224,13 +232,21 @@ share either UTC or local display time. Keep their controls and exact-value acti
 available when chart loading, validation or rendering fails. Budget sparklines also
 break at partial coverage; they must not connect across an unknown interval.
 
-Pair every chart with `ExactValuesTable`, backed by the same sample objects. It
+By default, pair every chart with `ExactValuesTable`, backed by the same sample objects. It
 shows exact decimal strings and coverage in a keyboard-focusable scroll region,
 with controlled pages of at most 50 rows. Keep missing, partial, zero-traffic,
 known-empty, expired and not-applicable labels distinct in charts, tooltips and
 tables. Known-empty, expired and not-applicable samples remain gaps, never numeric
 zero. Synthetic catalogue fixtures must be explicitly labelled and
 must never look like live service data.
+
+The selected alert-detail cards under [SPEC-0022](../docs/specs/0022-alert-management-ui.md)
+use opt-in `TimelineChartView` point inspection instead of a separate exact-values
+table. Hover, persistent touch and arrows/Home/End expose the supplied exact values,
+timestamps and gap reasons; Escape, blur and outside taps dismiss inspection. The
+ordinary chart renderer and table pairing remain unchanged for existing consumers.
+An optional series palette choice preserves the selected recent/sustained colors
+without changing default chart colors.
 
 
 Resource lists for agents, datasources and SLIs opt into `ResourceTableHead`,
@@ -259,3 +275,12 @@ controls stay visible when sorting is cleared. Long secondary names wrap within
 200 px, with keyboard-accessible horizontal overflow as a fallback.
 
 SLO detail uses the approved B composition under [ADR-0049](../docs/adr/0049-slo-budget-in-context-detail.md). Exact point inspection replaces its table actions; other chart/table pairing rules remain.
+
+The selected alert occurrence list demonstrates its own supplied-page composition
+in the catalogue. Keep alert identity and linked SLO separate, paired burn evidence
+visible, acknowledgement in the row, and filters behind compact column/toolbar
+controls. The selected A reference keeps the SLO identity left aligned alongside
+the alert identity; state, evidence, duration and actions stay centred. At narrow
+widths the table scrolls within its labelled region. Server group totals and
+lifecycle remain authoritative; the presentation never downloads all pages to
+filter or group them, computes alert truth, or optimistically acknowledges a row.

@@ -55,6 +55,10 @@ sql:
       - internal/storage/migrations/0049_drop_overview_snapshots.sql
       - internal/storage/migrations/0050_sli_observation_history_order.sql
       - internal/storage/migrations/0051_session_inactivity_policy.sql
+      - internal/storage/migrations/0052_trace_log_datasources.sql
+      - internal/storage/migrations/0053_projection_validity_scalar.sql
+      - internal/storage/migrations/0054_maintenance_authority.sql
+      - internal/storage/migrations/0055_projection_performance_integrity.sql
     gen:
       go:
         package: dbgen

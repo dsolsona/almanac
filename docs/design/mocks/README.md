@@ -1,5 +1,11 @@
 # UI mocks: unified SLI, SLO, datasource and agent screens
 
+Alerting exploration, 2026-11-12: [five interactive directions](alert-options/README.md)
+cover active alerts, evidence, global acknowledgement, history and new-alert-policy
+flows. Refined A and the current single-page creation flow are the selected visual
+baseline. [SPEC-0022](../../specs/0022-alert-management-ui.md) records the draft
+production contract; the static mocks do not implement the alert engine.
+
 SLO detail exploration, 2026-11-12: [six interactive proposals](slo-detail-options/README.md)
 compare three evolutions and three radical compositions. Refined B is accepted
 for SLO detail under [ADR-0049](../../adr/0049-slo-budget-in-context-detail.md);

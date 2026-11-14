@@ -1,6 +1,6 @@
 export type Coverage = 'complete' | 'partial' | 'missing' | 'zero-traffic' | 'known-empty' | 'expired' | 'not-applicable' | 'stale';
-export type TimelinePoint = { timestamp: string; value: string | null; coverage: Coverage; displayCoverage?: {start:string;end:string;states:Coverage[]} };
-export type TimelineSeries = { id: string; label: string; points: TimelinePoint[] };
+export type TimelinePoint = { timestamp: string; value: string | null; coverage: Coverage; reason?: string; displayCoverage?: {start:string;end:string;states:Coverage[]} };
+export type TimelineSeries = { id: string; label: string; color?: 'primary' | 'critical'; points: TimelinePoint[] };
 export type TimelineLane = { id: string; label: string; unit: string; series: TimelineSeries[]; extra?: number; height?:number; bars?:boolean; range?:[number,number]; decimals?:number; colors?:('healthy'|'breached')[] };
 export type TimelineChart = { title: string; summary: string; start: string; end: string; stepMs: number; lanes: TimelineLane[]; fillExpectedGaps?: boolean; timeZone?: 'UTC'|'local'; showLaneNames?:boolean; referenceLines?: {lane:string;value:string;label:string}[] };
 export type PlotPoint = { timestamp: number; value: number | null; exact: string | null; coverage: Coverage; displayCoverage?: {start:number;end:number;states:Coverage[]} };

@@ -165,3 +165,15 @@ it('restarts invalid overview cursors without retrying them',async()=>{
  await expect(sloClient.overview({q:'demo',cursor:'invalid'})).rejects.toThrow('The SLO list changed. Refresh to restart from the first page.');
  expect(fetcher).toHaveBeenCalledOnce();
 });
+
+it('accepts disclosed stale current values but rejects stale Healthy and unknown readiness',async()=>{
+ const detail=operationalDetail();
+ const generation={generation_id:id,source_generation:'1',definition_revision:'1',measurement_revision:'1',exclusion_revision:'0',calculation_version:'v1',evaluated_through:instant,published_at:instant,calculation_lag_seconds:30};
+ const status={slo:detail.objective,current:detail.current,burn_1h:detail.burn_1h,burn_6h:detail.burn_6h,urgency:'watch',current_state:'stale',leading_reason:detail.leading_reason,reasons:detail.reasons,exhaustion:detail.exhaustion,generation};
+ vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify(status),{status:200})));
+ await expect(sloClient.current(id)).resolves.toMatchObject({current_state:'stale',generation:{evaluated_through:instant}});
+ clearQueryCache();status.urgency='healthy';
+ await expect(sloClient.current(id)).rejects.toThrow('invalid response');
+ clearQueryCache();status.urgency='watch';status.current_state='maybe';
+ await expect(sloClient.current(id)).rejects.toThrow('invalid response');
+});

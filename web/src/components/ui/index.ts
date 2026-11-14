@@ -33,3 +33,5 @@ export { LabelChips } from './LabelChips.tsx';
 
 export {useResourceTable, ResourceTableHead, ResourceTableMobileSort, resourceRowClick} from './ResourceTable.tsx';
 export type {ResourceColumn} from './ResourceTable.tsx';
+
+export { InlineValue } from './InlineValue.tsx';

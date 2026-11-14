@@ -21,7 +21,13 @@ export function useEChart(build: () => EChartsCoreOption, deps: DependencyList, 
     element.dataset.chartReady = 'false'
     instance.on('finished', () => { element.dataset.chartReady = 'true'; ready.current?.() })
     instance.setOption(builder.current(), { notMerge: true, lazyUpdate: true })
-    const resize = new ResizeObserver(() => instance.resize()); resize.observe(element)
+    const resize = new ResizeObserver(entries => {
+      // The initial observer delivery often repeats the size already rendered by
+      // init. Avoid another layout/read/redraw cycle for every list sparkline.
+      const bounds = entries[0]?.contentRect
+      if (bounds?.width === instance.getWidth() && bounds.height === instance.getHeight()) return
+      instance.resize()
+    }); resize.observe(element)
     const theme = new MutationObserver(() => { element.dataset.chartReady = 'false'; instance.setOption(builder.current(), { notMerge: true, lazyUpdate: true }) })
     theme.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'data-theme'] })
     return () => { resize.disconnect(); theme.disconnect(); instance.dispose(); chart.current = undefined }

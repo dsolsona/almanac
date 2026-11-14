@@ -185,3 +185,8 @@
 .ui-input-token button { display:grid; place-items:center; border:0; border-radius:2px; background:transparent; color:var(--text-3); width:26px; height:28px; padding:0; cursor:pointer; flex:none; }
 .ui-input-token button:hover { color:var(--accent-ink); background:var(--accent-wash); }
 @media(pointer:coarse){.ui-input-token button{min-width:44px;min-height:44px;}}
+
+/* Opt-in selected picker for aligned form rows. Summary cards remain the default. */
+.ui-combobox__selection { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
+.ui-combobox__selected-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-combobox__selection .ui-summary__action { margin-left: auto; flex: none; }

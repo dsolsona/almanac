@@ -1,5 +1,12 @@
 -- name: ReadDerivedDue :one
-WITH aggregate_due AS (
+-- Read publication text once per projection, not once per retained hour.
+-- Keep timestamp parsing in its conditional predicate so unrelated due/backoff
+-- branches retain their existing behavior for malformed cache metadata.
+WITH projection_metadata AS MATERIALIZED (
+    SELECT slo_id,generation_id,current_valid_until,performance_complete,
+           payload#>>'{_budget_cache,published_at}' AS budget_published_at
+    FROM public.almanac_slo_current_projections
+), aggregate_due AS (
     SELECT min(GREATEST(w.next_attempt_at,w.lease_until,sqlc.arg(now)::timestamptz)) AS at
     FROM public.almanac_derived_dirty_ranges w
     WHERE (w.attempts<5 OR w.failing_since IS NULL OR w.failing_since>sqlc.arg(now)::timestamptz-interval '7 days')
@@ -8,23 +15,24 @@ WITH aggregate_due AS (
     SELECT min(CASE
         WHEN f.slo_id IS NOT NULL AND f.attempts>=5 AND f.failing_since<=sqlc.arg(now)::timestamptz-interval '7 days' THEN NULL
         WHEN g.id IS NULL OR g.definition_revision<>d.revision OR g.measurement_revision<>d.measurement_revision
+          OR p.performance_complete IS NOT TRUE
           OR g.calculation_version<>sqlc.arg(calculation_version)
           OR g.source_generation<>coalesce(source.generation,0)
           OR g.retention_start<>to_timestamp(ceil(extract(epoch FROM (sqlc.arg(now)::timestamptz-interval '365 days'))/d.cadence_seconds)*d.cadence_seconds)
           OR g.evaluated_through<to_timestamp(floor(extract(epoch FROM sqlc.arg(now)::timestamptz)/d.cadence_seconds)*d.cadence_seconds)
-          OR coalesce((p.payload->>'_current_valid_until')::timestamptz,'-infinity'::timestamptz)<=sqlc.arg(now)::timestamptz
+          OR coalesce(public.almanac_projection_deadline(p.current_valid_until),'-infinity'::timestamptz)<=sqlc.arg(now)::timestamptz
           OR EXISTS (SELECT 1 FROM public.almanac_slo_extrema e
              WHERE e.slo_id=s.id AND e.definition_revision=d.revision AND e.measurement_revision=d.measurement_revision
                AND e.calculation_version=sqlc.arg(calculation_version) AND e.exclusion_revision=0 AND e.resolution_seconds=3600
                AND e.range_start>=date_trunc('hour',(g.evaluated_through-interval '7 days') AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
                AND e.range_end<=date_trunc('hour',g.evaluated_through AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
-               AND e.published_at>coalesce((p.payload#>>'{_budget_cache,published_at}')::timestamptz,'-infinity'::timestamptz))
+               AND e.published_at>coalesce(p.budget_published_at::timestamptz,'-infinity'::timestamptz))
         THEN GREATEST(sqlc.arg(now)::timestamptz,f.next_attempt_at)
-        ELSE GREATEST(LEAST(to_timestamp((floor(extract(epoch FROM sqlc.arg(now)::timestamptz)/d.cadence_seconds)+1)*d.cadence_seconds),coalesce((p.payload->>'_current_valid_until')::timestamptz,'-infinity'::timestamptz)),f.next_attempt_at)
+        ELSE GREATEST(LEAST(to_timestamp((floor(extract(epoch FROM sqlc.arg(now)::timestamptz)/d.cadence_seconds)+1)*d.cadence_seconds),coalesce(public.almanac_projection_deadline(p.current_valid_until),'-infinity'::timestamptz)),f.next_attempt_at)
         END) AS at
     FROM public.almanac_slos s
     JOIN public.almanac_slo_definitions d ON d.slo_id=s.id AND d.revision=s.definition_revision
-    LEFT JOIN public.almanac_slo_current_projections p ON p.slo_id=s.id
+    LEFT JOIN projection_metadata p ON p.slo_id=s.id
     LEFT JOIN public.almanac_slo_derived_generations g ON g.id=p.generation_id
     LEFT JOIN public.almanac_sli_source_generations source ON source.sli_id=d.sli_id AND source.measurement_revision=d.measurement_revision
     LEFT JOIN public.almanac_slo_current_failures f ON f.slo_id=s.id AND f.definition_revision=d.revision

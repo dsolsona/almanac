@@ -790,19 +790,23 @@ paths:
       summary: Read the published current SLO result independently of history
       description: >-
         Reads an exact prepared projection with source and definition generation
-        evidence. No historical computation runs in this handler. Unprepared or
-        invalidated data returns 503 derived_data_pending and Retry-After 2.
+        evidence. No historical computation runs in this handler. Successful reads
+        return 200 with current_state describing calculation readiness. Pending or
+        failed updates retain compatible last-known values as stale or failed,
+        including their original evaluation and generation. Without compatible
+        values, the response is unavailable and contains no performance numbers.
+        Clients must inspect current_state before treating values as current.
         Source-observation freshness remains separate from calculation lag.
       security: [{SessionCookie: []}]
       parameters:
         - {$ref: '#/components/parameters/SloId'}
       responses:
-        '200': {description: Published current SLO status, content: {application/json: {schema: {$ref: '#/components/schemas/SloCurrentStatus'}}}}
+        '200': {description: 'SLO status with ready, stale, failed or unavailable calculation state', content: {application/json: {schema: {$ref: '#/components/schemas/SloCurrentStatus'}}}}
         '400': {description: Invalid request, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
         '401': {description: Session missing or expired, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
         '403': {description: Current role cannot read SLO operations, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
         '404': {description: SLO not found, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
-        '503': {description: Preparation pending or storage unavailable, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+        '503': {description: Request admission or storage unavailable, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
   /api/v1/slos/{slo_id}/history/{generation_id}/values:
     get:
       operationId: getSloHistoryValues
@@ -1359,6 +1363,7 @@ components:
       type: object
       required: [generation, slo, urgency, leading_reason, reasons, current, burn_1h, burn_6h, exhaustion]
       properties:
+        current_state: {type: string, enum: [ready, stale, failed, unavailable], description: Calculation readiness. Stale/failed values retain the original evaluation and generation; unavailable values contain no performance numbers. Observation freshness is separate.}
         generation: {$ref: '#/components/schemas/DerivedGeneration'}
         slo: {$ref: '#/components/schemas/Slo'}
         urgency: {type: string, enum: [needs_attention, watch, healthy]}

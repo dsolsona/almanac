@@ -1,3 +1,265 @@
+Review consolidation, 2026-11-14: [F4-T28](tasks/F4-T28.md) closes validated
+review findings and the failed integration/collection checks before integrating
+the existing alerting stack. All 26 stack PRs are ready and their initial reviews
+have completed. New optimization work is paused. The maintainer authorized fixing
+valid feedback, refreshing reviews, merging the stack and resuming alerting delivery.
+This authorization does not itself adopt the experimental calculator or complete
+the production alert lifecycle. All four application CI gates pass on cumulative
+head `29035f2`. Its fresh CodeRabbit review identified additional maintenance,
+focus, documentation and diagnostic-evidence corrections; those are integrated
+and receive focused verification plus current-head CI before merge. The proposed
+extra migration lock is already supplied by its foreign keys; readiness evidence
+is recorded without imposing an incompatible ready-only HTTP gate.
+
+Writer attribution, 2026-11-14: [F4-T26](tasks/F4-T26.md) exposes the existing
+explicit omission mode in the CPU-control workflow. Default complete controls
+retain all historical batches. Reduced controls record their mode and zero
+planned/actual writes; neither can silently substitute for capacity acceptance.
+The [completed diagnostic](evidence/alert-performance/2026-11-14-writer-omission.json)
+proves zero writer activity: split ingestion p95 is 12.40–13.02 ms loaded versus
+9.71–10.20 ms alone, cold-list p95 418.9 ms, but overview and relative ingestion
+limits still fail. Shared cohosting on one physical core remains much slower and
+records API/ingestion failures. All calculation/browser/due work completes.
+All four ordinary PR #120 CI gates passed on `a060c19`; the subsequent `88c4461`
+integration failure is tracked in F4-T28. Reduced work is not capacity acceptance.
+
+Resource-table verification, 2026-11-14: [F4-T25](tasks/F4-T25.md) traces the CI
+failure to a positional locator retargeted when sorting finishes after Back.
+The test waits for sorting and binds keyboard/source-link actions to captured
+resource hrefs. The actual onboarding/resource-table journey passes in 22.9 s;
+independent review finds no actionable defects. All four ordinary CI gates pass
+on `2692060` (fast 4m13s, browser 5m46s, integration 9m41s, end-to-end 9m36s);
+original failed evidence is retained.
+
+Historical CPU correction, 2026-11-14: [F4-T24](tasks/F4-T24.md) identifies eager
+decimal formatting before extrema selection. The scoped change keeps exact
+summaries until selection; focused canonical/oracle/odd-cadence/retention checks
+pass. A fixed-hour profile retains identical output and reduces sampled Go CPU
+per build by about 29%. All five normal-container journey steps pass in 2.2 min.
+The [full control](evidence/alert-performance/2026-11-14-deferred-extrema-control.json)
+still fails overview/ingestion latency while completing all 800/1,400/80 work
+items and all 400 due intervals in each run. Split hardware/topology changed,
+preventing a direct timing attribution. Three ordinary CI gates pass; resource-table
+keyboard navigation fails end-to-end verification and is being investigated.
+
+CPU-placement comparison, 2026-11-14: [F4-T23](tasks/F4-T23.md) completes two CI
+controls at `72166f5`. All 80 browser journeys, 800 baseline calls, 1,400 backfill
+batches and 200 due intervals complete in each. Cold-list p95 is 783/722 ms for
+shared/split placement, but server overview and ingestion isolation still fail;
+shared also has two overview 503s. The split CPUs are SMT siblings of the server
+CPUs, so physical isolation remains unproven. The [recorded comparison](evidence/alert-performance/2026-11-14-cpu-placement.json)
+retains hardware, source, artifact hashes and limitations. Both PRs #116/#117 pass
+all four ordinary CI gates; diagnostic failure is preserved, with no capacity adoption.
+
+Server attribution, 2026-11-14: [F4-T22](tasks/F4-T22.md) finds measured runnable
+CPU wait amplifying concurrent overview queries, with roughly 13–24 ms of bracketed
+CPU work. SQL serialization and typed codec probes do not justify a payload rewrite.
+A separate duplicate transaction-setup correction passes focused PostgreSQL
+authority/expiry/value checks and five normal-container journey steps in 2.3 min.
+Its performance impact is unmeasured; cold-list, admission and ingestion gates
+remain open. The next controlled comparison separates server and client CPUs.
+
+Separate client preparation, 2026-11-14: [F4-T21](tasks/F4-T21.md) extracts the
+ten API readers and browser lane into a bounded stdin-driven runner. Eighteen
+focused checks and TypeScript pass. Real retained-stack verification completes
+80 journeys and 300 successful requests in 91.270 s, with clean shutdown, and
+correctly reports overview latency failure. This cohosted reduced-work diagnostic
+is not capacity acceptance; separate-client hardware and controller coordination
+remain pending. Cold-list/overview performance stays the primary investigation.
+
+Cold-list scheduling diagnosis, 2026-11-14: [F4-T20](tasks/F4-T20.md) removes
+confirmed unchanged-size sparkline redraws. Focused checks, twelve browser cases
+and six identical before/after renders pass. The full control still fails:
+cold-list p95 1.742 s, one overview admission 503, ingestion isolation; all
+80 journeys and 600 due intervals complete. OS counters then establish
+565–743 ms of renderer run-queue wait in sampled diagnostic intervals, versus
+255–269 ms executing. Client/server CPU separation is needed for the next
+representative measurement; available remote hardware has been requested.
+The guard is verified, but no end-to-end improvement, merge or adoption is claimed.
+
+Cold-list attribution, 2026-11-14: [F4-T19](tasks/F4-T19.md) prioritizes the
+user-visible list failure. Matched traces put 576–820 ms after overview JSON and
+before chart/content readiness in the two slowest loads. Separate full-writer and
+omitted-writer runs observed cold-list p95 of 1.531 and 1.224 s, both outside budget;
+fixture/clock alignment and duration differ, so this is not an isolated effect size. All
+80 journeys and 200 due intervals complete without API errors. This reduced-load
+result cannot establish capacity. Three unloaded browser profiles take 405–470 ms;
+three ten-reader burst profiles take 959–1,049 ms, exposing frontend work amplified
+by contention. Resize/layout attribution follows; application source is unchanged.
+PR #112 passes all four CI gates. No merge or alert-calculation adoption is authorized.
+
+Historical retry pacing, 2026-11-14: [F4-T18](tasks/F4-T18.md) preserves calculation
+order and durable work while pausing after unsuccessful history turns. Focused
+checks pass in 3.498 s, fairness in 0.391 s and normal-container seeding in 217.459 s.
+The [full control](evidence/alert-performance/2026-11-14-history-retry-control.json)
+completes all 800 calculations, 1,400 backfill batches, 80 browser journeys and
+400 due intervals without API errors. Waiting historical query time falls to
+5.261 s while successful cursor advances increase to 823. Acceptance still fails:
+cold-list p95 1.531 s and ingestion p95 87–92 ms versus 17 ms alone. The same SQL
+backfill now finishes faster, increasing offered write pressure; further attribution
+and production-admission evidence remain necessary. The preceding
+[PR #111](https://github.com/dsolsona/almanac/pull/111) passes all four CI gates.
+No merge or alert-calculation adoption is authorized.
+
+Overview query correction, 2026-11-13: [F4-T17](tasks/F4-T17.md) reduces redundant
+planning and page presentation work while preserving exact keyset results.
+Focused PostgreSQL checks pass in 15.188 s and normal-container seeding passes in
+267.802 s. The [full 200-SLO control](evidence/alert-performance/2026-11-13-overview-control.json)
+still fails: page SQL p95 improves to 317.589 ms, but cold-list p95 is 1.627 s,
+two overview requests fail pool admission and ingestion isolation remains outside
+budget. All 800 batches, 1,400 backfill batches, 80 browser journeys and 600 due
+intervals complete. Retained traces attribute most remaining canonical query work
+to historical extrema rebuilding; further causal investigation remains necessary.
+
+Combined performance control, 2026-11-13: [F4-T16](tasks/F4-T16.md) skips canonical
+aggregation for known-pending first windows while preserving snapshot/error order.
+Integrated storage checks pass in 11.497 s and the normal-container seed passes
+in 254.995 s. The [200-SLO control](evidence/alert-performance/2026-11-13-scheduler-preflight-control.json)
+still fails: two overview admission 503s, cold-list p95 1.994 s and ingestion
+isolation. All 400 due intervals, 800 calculation batches, 1,400 backfill batches
+and 80 browser journeys complete. Complete observer coverage now narrows attribution;
+all 8,226 waiting current attempts skip canonical calculation, and idle PostgreSQL
+CPU falls to 49.48% of one core. Overview planning/execution investigation follows.
+
+Scheduler correction, 2026-11-13: [F4-T15](tasks/F4-T15.md) removes repeated
+projection JSON extraction from two due-work queries. Same-snapshot probes retain
+exact selection and reduce compatible-projection medians from about 400 ms to
+30 ms; all-version-mismatch scans add about 5 ms. Fourteen focused integrated
+checks pass in 11.774 s and six normal-container collection/SLO journeys pass in
+254.440 s. Full 200-SLO performance and calculation adoption remain open.
+
+Performance investigation, 2026-11-13: the [instrumented baseline](evidence/alert-performance/2026-11-13-instrumented-baseline.json)
+on `925d156` completes 80 browser journeys, 800 baseline batches and all 1,400
+backfill batches. All 400 due intervals are observed; authentication succeeds.
+Three overview admission failures and list/ingestion latency still fail acceptance.
+PostgreSQL consumes about one CPU during ingestion-only activity, with two due
+queries totaling 58.7 s elapsed in a 62.1-s phase; physical-plan attribution follows.
+The database observer's multiline-JSON failure is preserved and corrected separately;
+resource samples/traces remain usable, but no wait samples cover the measured phases.
+Draft [PR #108](https://github.com/dsolsona/almanac/pull/108) contains the verified
+session correction and diagnostics above #107; calculation adoption remains open.
+
+Earlier investigation, 2026-11-13: [F4-T14](tasks/F4-T14.md) prioritizes the
+[complete issue inventory](evidence/alert-performance/README.md): authentication
+failures, overview/admission latency, ingestion interference and repeated pending
+work. A focused PostgreSQL reproduction confirms that read-only inspection's
+exclusive user/session locks conflict with protected readers; the intended
+regression fails at the existing 250-ms budget. The narrow shared-read correction
+passes focused security/concurrency checks and four normal-container journeys.
+Safe work/PID/SQLSTATE correlation and a bounded runtime observer are verified for
+the next diagnostic run; integrated workload acceptance remains pending.
+The corrected control is published in draft PR #107;
+it fails without candidate/oracle queries and does not permit calculation adoption.
+
+Calculation experiment controls, 2026-11-13: [F4-T13](tasks/F4-T13.md) has verified
+the eligible-backfill harness and isolated query modes; the increment is in review.
+Fourteen focused tests pass in 0.863 s after integration. The corrected seed passes
+in 249.071 s, but the [baseline-only control](evidence/alert-calculation/2026-11-13-baseline-only-control.json)
+fails in 182.838 s without candidate or oracle queries: ingestion p95 rises from
+12.4–13.0 ms to 62.0–65.1 ms, and a browser auth-context request returns 503.
+All 400 due intervals are present and no observations precede either validity
+bound. The lock blocker remains unknown; this is no capacity pass or causal
+attribution. Candidate-only and corrected paired measurements remain unrun;
+calculation adoption stays open. Earlier failures retain their validity limitation.
+
+Derived scheduling follow-up, 2026-11-13: [F4-T11](tasks/F4-T11.md) rebuilds one
+bounded source batch before due current projections, avoiding a reproduced
+one-turn waiting deferral. Integrated scheduler checks pass in 5.554 s; the
+[200-SLI diagnostic run](evidence/slo-overview-performance/2026-11-13-source-first-contention.json)
+matches all 3,200 windows and retains all due ingestion, but fails latency and
+browser completion. Its historical SQL fixture also predates declared validity;
+F4-T13 corrects that fixture and records a failed baseline-only control above.
+Calculation adoption and engine implementation remain pending.
+
+Selected alert detail presentation, 2026-11-13: [F4-T12](tasks/F4-T12.md) implements
+original/latest supplied evidence, exact shared-chart inspection and controlled
+acknowledgement cards. Forty-four focused component cases, TypeScript, eleven new
+browser cases and affected shared-consumer checks have passing evidence.
+[Reviewed renders](evidence/alert-occurrence-detail/README.md) retain both themes
+and all three viewport sizes. An unexplained test-wrapper termination remains
+documented. Production alert routes/APIs and engine acceptance remain separate.
+
+Selected alert list presentation, 2026-11-13: [F4-T10](tasks/F4-T10.md) adds
+paired-window evidence, global acknowledgement callbacks, compact filters, supplied
+SLO group totals and distinct history/gap states. Fourteen component cases and ten
+browser cases pass (3.60 s / 36.2 s), including touch and 10/20-row pagination.
+[Reviewed renders](evidence/alert-occurrence-list/README.md) use fictional catalogue
+data; production integration and engine acceptance remain pending.
+
+Overview query and experiment isolation, 2026-11-13: [F4-T07](tasks/F4-T07.md)
+adds a generated projection deadline and single-pass count classification. Focused
+PostgreSQL checks pass (18.320 s). A separately identified disk-backed 200-SLO run
+matches all 3,200 windows and observes every due live interval, but still fails
+ingestion and browser/API latency budgets. [Evidence](evidence/slo-overview-performance/2026-11-13-disk-contention.json)
+retains those failures. The calculation adoption gate remains open; repeated
+background preparation is the next measured correction target.
+
+Alert policy form foundation, 2026-11-13: [F4-T09](tasks/F4-T09.md) implements
+the selected compact creation form as shared controls and a development catalogue
+example. Focused checks pass 45 component cases (5.82 s), typecheck and nine browser
+cases (37.6 s), including both themes and touch. Reviewed
+[screenshots and limits](evidence/alert-policy-form/README.md) distinguish this
+presentation increment from production API/engine acceptance. The calculation
+gate and subsequent implementation in plan 0035 remain open.
+
+Alerting follow-up [F4-T04](tasks/F4-T04.md) keeps SLO current status usable during
+preparation, with explicit last-known or unavailable evidence and preserved auth.
+Focused storage/frontend/browser checks pass; the next contention run completes
+800 paired batches, all bounded backfill and all 400 due live intervals, but still
+fails ingestion/list latency and navigation gates. [Measured evidence](evidence/alert-calculation/2026-11-13-api-contention.json)
+preserves the failures and API-load overlap limitation. Overview SQL investigation
+continues; no fallback adoption or alert-engine completion is claimed.
+
+Alerting implementation continues under [plan 0035](plans/0035-alerting-delivery.md).
+[F4-T03](tasks/F4-T03.md) fixes the reproduced agent/grant/measurement foreign-key
+lock conflict; focused authority and ingestion checks pass in 6.173 s. The corrected
+200-SLI run still fails ingestion and browser budgets; [evidence](evidence/alert-calculation/2026-11-13-bounded-contention.json)
+preserves 149 exact paired batches, incomplete query lanes and 9/400 overdue live
+intervals. This is not fallback adoption or engine completion. The earlier
+fresh-observation counts below did not account for settling/dispatch allowances
+and must not be read as evidence of missed collection deadlines.
+
+Alerting calculation experiment, 2026-11-13: [F4-T02](tasks/F4-T02.md), published in
+[draft PR #95](https://github.com/dsolsona/almanac/pull/95) above #94 in native
+stack 96, has
+[reviewable evidence](evidence/alert-calculation/README.md), with no production
+adoption. Focused exact-calculation checks pass (3.323 s); 800 paired contention
+batches independently match all 3,200 windows, candidate query p95 46.066 ms.
+The combined workload fails: first SLO lists take about 8 seconds, navigation
+workers fail, 190/200 SLIs deliver fresh intervals and bulk backfill reaches its
+deadline. The unpaced bulk-SQL fixture is a confounder; this does not establish
+fallback as the cause. Retain accepted calculation behavior and obtain bounded
+backfill/ingestion-baseline evidence before adoption. Details and missing admission,
+ingestion-latency and physical-plan guarantees are explicit in the task.
+
+Alerting design review, 2026-11-13: [F4-T01](tasks/F4-T01.md) prepares proposed
+[ADR-0051](adr/0051-durable-alert-policy-state-machine.md), draft
+[SPEC-0021](specs/0021-alert-policy-engine.md) and
+[SPEC-0022](specs/0022-alert-management-ui.md), with the selected
+[A/current creation mocks](design/mocks/alert-options/README.md). Initial engine
+verification scope is 100/200 policies; SLO/condition/occurrence counts are explicit.
+Review supports full-window readiness, a 24-hour catch-up horizon and explicit
+cancelled ranges; complete contracts remain draft. Review corrections retain
+aggregate-pending boundaries for retry, narrow ADR supersession to evaluation,
+define administrative closure/archive outcomes and distinguish ready-to-commit
+latency from total detection delay (which has no numeric target yet). The latest
+proposal tests bounded raw calculation of dirty interior portions in the shared
+calculator before accepting the architecture. [SPEC-0020](specs/0020-cumulative-slo-calculation.md)
+records the proposed amendment; its accepted behavior remains in force. The next
+step is deterministic per-SLI query equivalence and a 200-SLI rollover/backfill
+contention measurement. Ordered breach/recovery, handoff and stopped-worker recovery
+remain in later 100/200-policy engine acceptance. Pending boundaries retry through
+the existing bounded scheduler with fair admission; no separate publication-wakeup
+mechanism or blocked-dependency table is required. Complete policy evaluations
+remain ordered; unsuccessful fallback retains durable pending work.
+The five-minute closed-hour target belongs to chart history, not source aggregate
+readiness. F4-T02 records the subsequent experiment; no fallback adoption or
+end-to-end target is claimed.
+[Draft PR #94](https://github.com/dsolsona/almanac/pull/94) includes the contracts,
+interactive mocks and selected renders. Local mock checks passed 288 assertions;
+staged-only documentation validation passed. No engine implementation, benchmark
+or merge is claimed.
+
 SLO detail redesign, 2026-11-12: [F6-T11](tasks/F6-T11.md) is published in
 [PR #91](https://github.com/dsolsona/almanac/pull/91) under
 [ADR-0049](adr/0049-slo-budget-in-context-detail.md). Refined B integrates the

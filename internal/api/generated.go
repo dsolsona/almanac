@@ -1452,6 +1452,30 @@ func (e SloBurnValueWindowSeconds) Valid() bool {
 	}
 }
 
+// Defines values for SloCurrentStatusCurrentState.
+const (
+	SloCurrentStatusCurrentStateFailed      SloCurrentStatusCurrentState = "failed"
+	SloCurrentStatusCurrentStateReady       SloCurrentStatusCurrentState = "ready"
+	SloCurrentStatusCurrentStateStale       SloCurrentStatusCurrentState = "stale"
+	SloCurrentStatusCurrentStateUnavailable SloCurrentStatusCurrentState = "unavailable"
+)
+
+// Valid indicates whether the value is a known member of the SloCurrentStatusCurrentState enum.
+func (e SloCurrentStatusCurrentState) Valid() bool {
+	switch e {
+	case SloCurrentStatusCurrentStateFailed:
+		return true
+	case SloCurrentStatusCurrentStateReady:
+		return true
+	case SloCurrentStatusCurrentStateStale:
+		return true
+	case SloCurrentStatusCurrentStateUnavailable:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SloCurrentStatusUrgency.
 const (
 	SloCurrentStatusUrgencyHealthy        SloCurrentStatusUrgency = "healthy"
@@ -3459,16 +3483,22 @@ type SloCreateRequest struct {
 
 // SloCurrentStatus defines model for SloCurrentStatus.
 type SloCurrentStatus struct {
-	Burn1h        SloBurnValue            `json:"burn_1h"`
-	Burn6h        SloBurnValue            `json:"burn_6h"`
-	Current       SloOperationalValue     `json:"current"`
-	Exhaustion    SloExhaustionEstimate   `json:"exhaustion"`
-	Generation    DerivedGeneration       `json:"generation"`
-	LeadingReason SloUrgencyReason        `json:"leading_reason"`
-	Reasons       []SloUrgencyReason      `json:"reasons"`
-	Slo           Slo                     `json:"slo"`
-	Urgency       SloCurrentStatusUrgency `json:"urgency"`
+	Burn1h  SloBurnValue        `json:"burn_1h"`
+	Burn6h  SloBurnValue        `json:"burn_6h"`
+	Current SloOperationalValue `json:"current"`
+
+	// CurrentState Calculation readiness. Stale/failed values retain the original evaluation and generation; unavailable values contain no performance numbers. Observation freshness is separate.
+	CurrentState  *SloCurrentStatusCurrentState `json:"current_state,omitempty"`
+	Exhaustion    SloExhaustionEstimate         `json:"exhaustion"`
+	Generation    DerivedGeneration             `json:"generation"`
+	LeadingReason SloUrgencyReason              `json:"leading_reason"`
+	Reasons       []SloUrgencyReason            `json:"reasons"`
+	Slo           Slo                           `json:"slo"`
+	Urgency       SloCurrentStatusUrgency       `json:"urgency"`
 }
+
+// SloCurrentStatusCurrentState Calculation readiness. Stale/failed values retain the original evaluation and generation; unavailable values contain no performance numbers. Observation freshness is separate.
+type SloCurrentStatusCurrentState string
 
 // SloCurrentStatusUrgency defines model for SloCurrentStatus.Urgency.
 type SloCurrentStatusUrgency string
@@ -5342,7 +5372,7 @@ type ClientInterface interface {
 
 	// GetSloCurrentStatus Read the published current SLO result independently of history
 	//
-	// Reads an exact prepared projection with source and definition generation evidence. No historical computation runs in this handler. Unprepared or invalidated data returns 503 derived_data_pending and Retry-After 2. Source-observation freshness remains separate from calculation lag.
+	// Reads an exact prepared projection with source and definition generation evidence. No historical computation runs in this handler. Successful reads return 200 with current_state describing calculation readiness. Pending or failed updates retain compatible last-known values as stale or failed, including their original evaluation and generation. Without compatible values, the response is unavailable and contains no performance numbers. Clients must inspect current_state before treating values as current. Source-observation freshness remains separate from calculation lag.
 	//
 	// Corresponds with GET /api/v1/slos/{slo_id}/status (the `GetSloCurrentStatus` operationId).
 	GetSloCurrentStatus(ctx context.Context, sloId SloId, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -6837,7 +6867,7 @@ func (c *Client) RetrySloPreparation(ctx context.Context, sloId SloId, jobId ope
 
 // GetSloCurrentStatus Read the published current SLO result independently of history
 //
-// Reads an exact prepared projection with source and definition generation evidence. No historical computation runs in this handler. Unprepared or invalidated data returns 503 derived_data_pending and Retry-After 2. Source-observation freshness remains separate from calculation lag.
+// Reads an exact prepared projection with source and definition generation evidence. No historical computation runs in this handler. Successful reads return 200 with current_state describing calculation readiness. Pending or failed updates retain compatible last-known values as stale or failed, including their original evaluation and generation. Without compatible values, the response is unavailable and contains no performance numbers. Clients must inspect current_state before treating values as current. Source-observation freshness remains separate from calculation lag.
 //
 // Corresponds with GET /api/v1/slos/{slo_id}/status (the `GetSloCurrentStatus` operationId).
 func (c *Client) GetSloCurrentStatus(ctx context.Context, sloId SloId, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -11178,7 +11208,7 @@ type ClientWithResponsesInterface interface {
 
 	// GetSloCurrentStatusWithResponse Read the published current SLO result independently of history
 	//
-	// Reads an exact prepared projection with source and definition generation evidence. No historical computation runs in this handler. Unprepared or invalidated data returns 503 derived_data_pending and Retry-After 2. Source-observation freshness remains separate from calculation lag.
+	// Reads an exact prepared projection with source and definition generation evidence. No historical computation runs in this handler. Successful reads return 200 with current_state describing calculation readiness. Pending or failed updates retain compatible last-known values as stale or failed, including their original evaluation and generation. Without compatible values, the response is unavailable and contains no performance numbers. Clients must inspect current_state before treating values as current. Source-observation freshness remains separate from calculation lag.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -16052,7 +16082,7 @@ func (c *ClientWithResponses) RetrySloPreparationWithResponse(ctx context.Contex
 
 // GetSloCurrentStatusWithResponse Read the published current SLO result independently of history
 //
-// Reads an exact prepared projection with source and definition generation evidence. No historical computation runs in this handler. Unprepared or invalidated data returns 503 derived_data_pending and Retry-After 2. Source-observation freshness remains separate from calculation lag.
+// Reads an exact prepared projection with source and definition generation evidence. No historical computation runs in this handler. Successful reads return 200 with current_state describing calculation readiness. Pending or failed updates retain compatible last-known values as stale or failed, including their original evaluation and generation. Without compatible values, the response is unavailable and contains no performance numbers. Clients must inspect current_state before treating values as current. Source-observation freshness remains separate from calculation lag.
 //
 // Returns a wrapper object for the known response body format(s).
 //

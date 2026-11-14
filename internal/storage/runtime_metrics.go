@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"runtime/metrics"
@@ -13,6 +14,8 @@ import (
 	"github.com/dsolsona/almanac/internal/storage/dbgen"
 	"github.com/dsolsona/almanac/internal/telemetry"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -106,8 +109,33 @@ type tracedQuery struct {
 	span    trace.Span
 }
 
-func (t runtimeQueryTracer) TraceQueryStart(ctx context.Context, _ *pgx.Conn, data pgx.TraceQueryStartData) context.Context {
+func recordQueryConnection(span trace.Span, conn *pgx.Conn) {
+	if span.IsRecording() && conn != nil && conn.PgConn() != nil {
+		span.SetAttributes(attribute.Int64("db.postgresql.backend_pid", int64(conn.PgConn().PID())))
+	}
+}
+
+func recordQuerySQLState(span trace.Span, err error) {
+	if !span.IsRecording() {
+		return
+	}
+	failure, ok := errors.AsType[*pgconn.PgError](err)
+	if !ok || failure == nil || len(failure.Code) != 5 {
+		return
+	}
+	// Only the protocol's five uppercase ASCII letters/digits are safe to export.
+	// Error messages, detail, SQL and arguments can contain credentials.
+	for _, character := range failure.Code {
+		if !(character >= '0' && character <= '9') && !(character >= 'A' && character <= 'Z') {
+			return
+		}
+	}
+	span.SetAttributes(attribute.String("db.response.status_code", failure.Code))
+}
+
+func (t runtimeQueryTracer) TraceQueryStart(ctx context.Context, conn *pgx.Conn, data pgx.TraceQueryStartData) context.Context {
 	ctx, span := telemetry.DatabaseQuery(ctx, data.SQL, t.class)
+	recordQueryConnection(span, conn)
 	return context.WithValue(ctx, queryTimingKey{}, tracedQuery{started: time.Now(), span: span})
 }
 
@@ -117,6 +145,7 @@ func (t runtimeQueryTracer) TraceQueryEnd(ctx context.Context, _ *pgx.Conn, data
 		return
 	}
 	t.metrics.observe(time.Since(query.started), data.Err)
+	recordQuerySQLState(query.span, data.Err)
 	telemetry.DatabaseResult(query.span, data.CommandTag.RowsAffected(), data.Err)
 }
 

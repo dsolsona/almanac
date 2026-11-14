@@ -1,9 +1,12 @@
-import { Component, lazy, Suspense, useRef, useState, type ReactNode } from 'react';
+import { Component, lazy, Suspense, useEffect, useRef, useState, type ReactNode } from 'react';
 import { SliRecentStrip } from '../components/charts/SliRecentStrip.tsx';
 import { OperationalControlsSection } from './OperationalControlsSection.tsx';
+import { AlertPolicyExample } from './AlertPolicyExample.tsx';
+import { AlertOccurrenceExample } from './AlertOccurrenceExample.tsx';
 import { ApplicationShell, Button, DatePicker, Dialog, LoadingIndicator, MeasurementChoiceCards, Panel, QueryEditor, SelectField, StatusBadge, Switch, TextField, ThemeToggle } from '../components/ui/index.ts';
 import '../styles/catalogue.css';
 
+const AlertDetailExample = lazy(() => import('./AlertDetailExample.tsx').then(module => ({ default: module.AlertDetailExample })));
 const ChartsSection = lazy(() => import('./ChartsSection.tsx').then((module) => ({ default: module.ChartsSection })));
 const recentMeasurementExamples = [
   { interval_start: '2026-10-25T11:58:00Z', interval_end: '2026-10-25T11:58:15Z', state: 'observed', good_count: '98', total_count: '100' },
@@ -13,7 +16,7 @@ const recentMeasurementExamples = [
   { interval_start: '2026-10-25T11:59:00Z', interval_end: '2026-10-25T11:59:15Z', state: 'failed', good_count: null, total_count: null },
 ] as const;
 
-class ChartsLoadBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+class ChartsLoadBoundary extends Component<{ children: ReactNode; subject?: 'alert-detail' }, { failed: boolean }> {
   state = { failed: false };
 
   static getDerivedStateFromError() {
@@ -21,9 +24,10 @@ class ChartsLoadBoundary extends Component<{ children: ReactNode }, { failed: bo
   }
 
   render() {
-    if (this.state.failed) return <section id="charts" className="charts-load-error" aria-labelledby="charts-load-error-title">
-      <h2 id="charts-load-error-title">Charts are unavailable</h2>
-      <p role="alert">Chart examples could not be loaded. Other catalogue controls remain available.</p>
+    const detail = this.props.subject === 'alert-detail', id = detail ? 'alert-detail' : 'charts';
+    if (this.state.failed) return <section id={id} className="charts-load-error" aria-labelledby={`${id}-load-error-title`}>
+      <h2 id={`${id}-load-error-title`}>{detail ? 'Alert detail is unavailable' : 'Charts are unavailable'}</h2>
+      <p role="alert">{detail ? 'Alert detail could not be loaded.' : 'Chart examples could not be loaded.'} Other catalogue controls remain available.</p>
       <Button variant="outline" onClick={() => window.location.reload()}>Reload catalogue to retry</Button>
     </section>;
     return this.props.children;
@@ -46,6 +50,12 @@ export function Catalogue() {
   const [demoDate, setDemoDate] = useState('2026-10-25');
   const [demoQuery, setDemoQuery] = useState('sum(rate(requests_total{status=~"2.."}[1m]))');
   const [chartsOpen, setChartsOpen] = useState(false);
+  const [alertDetailOpen, setAlertDetailOpen] = useState(() => window.location.hash.startsWith('#alert-detail'));
+  useEffect(() => {
+    const reveal = () => { if (window.location.hash.startsWith('#alert-detail')) setAlertDetailOpen(true); };
+    window.addEventListener('hashchange', reveal);
+    return () => window.removeEventListener('hashchange', reveal);
+  }, []);
   const triggerRef = useRef<HTMLButtonElement>(null);
   function demonstrateSave() {
     setPending(true);
@@ -61,7 +71,7 @@ export function Catalogue() {
     <a className="skip-link" href="#catalogue-main">Skip to catalogue</a>
     <header className="masthead"><a href="/" className="wordmark">ALMANAC</a><span className="catalogue-label">LOCAL COMPONENT CATALOGUE</span><ThemeToggle /></header>
     <nav className="catalogue-nav" aria-label="Catalogue sections">
-      <a href="#foundations">Foundations</a><a href="#application-shell">Application shell</a><a href="#buttons">Buttons</a><a href="#forms">Forms</a><a href="#status">Status</a><a href="#panels">Panels</a><a href="#dialog">Dialog</a><a href="#controls">Controls</a><a href="#operational">Operational</a><button type="button" aria-expanded={chartsOpen} aria-controls={chartsOpen ? 'charts' : undefined} onClick={() => setChartsOpen(true)}>Charts</button>
+      <a href="#foundations">Foundations</a><a href="#application-shell">Application shell</a><a href="#buttons">Buttons</a><a href="#forms">Forms</a><a href="#status">Status</a><a href="#panels">Panels</a><a href="#dialog">Dialog</a><a href="#controls">Controls</a><a href="#operational">Operational</a><button type="button" aria-expanded={chartsOpen} aria-controls={chartsOpen ? 'charts' : undefined} onClick={() => setChartsOpen(true)}>Charts</button><button type="button" aria-expanded={alertDetailOpen} aria-controls={alertDetailOpen ? 'alert-detail' : undefined} onClick={() => setAlertDetailOpen(true)}>Alert detail</button>
     </nav>
     <main id="catalogue-main" className="catalogue-main">
       <section className="catalogue-intro">
@@ -115,6 +125,9 @@ export function Catalogue() {
       </section>
       <section className="catalogue-section" id="controls" aria-labelledby="controls-heading"><div className="section-heading"><p className="eyebrow mono">07 / CONTROLS</p><h2 id="controls-heading">Calendar, switches and loading</h2><p>Keyboard-first controls and visible pending feedback remain responsive at narrow widths.</p></div><div className="control-panels"><Panel heading="Calendar and switches"><div className="feedback-controls"><div className="field-stack"><DatePicker label="Start date" value={demoDate} today="2026-10-25" onValueChange={(date) => { setDemoDate(date); setFeedback(date ? `Calendar selected ${date}.` : 'Calendar selection cleared.'); }} hint="Calendar dates are shown in local form."/><DatePicker label="Locked date" value="2026-10-25" today="2026-10-25" disabled onValueChange={() => undefined}/></div><div className="field-stack"><Switch label="Notifications" hint="Send a local example notification."/><Switch label="Maintenance mode" hint="This is a disabled example." checked disabled onChange={() => undefined}/></div></div></Panel><Panel heading="Loading feedback"><LoadingIndicator label="Refreshing catalogue data"/></Panel></div><Panel heading="SLI measurement and query editors"><div className="measurement-demo"><MeasurementChoiceCards value="event_counts" onChange={() => undefined}/><p className="measurement-units"><strong>Query values represent:</strong> event counts over each completed interval.</p><QueryEditor id="catalogue-good-query" label="Good count query" value={demoQuery} onChange={setDemoQuery} /><QueryEditor id="catalogue-total-query" label="Total count query" value="sum(rate(requests_total[1m]))" onChange={() => undefined} /><QueryEditor id="catalogue-logsql-query" label="Span count query" language="LogsQL" value="* | stats count() as events" onChange={() => undefined} /><QueryEditor id="catalogue-traceql-query" label="Trace count query" language="TraceQL" value="{} | count_over_time()" onChange={() => undefined} /><QueryEditor id="catalogue-logql-query" label="Log count query" language="LogQL" value={'sum(count_over_time({app="checkout"}[$interval]))'} onChange={() => undefined} /><SliRecentStrip samples={[...recentMeasurementExamples]} cadenceSeconds={15} /></div></Panel></section>
       <OperationalControlsSection />
+      <AlertPolicyExample />
+      <AlertOccurrenceExample />
+      {alertDetailOpen && <ChartsLoadBoundary subject="alert-detail"><Suspense fallback={<p role="status">Loading alert detail example…</p>}><AlertDetailExample /></Suspense></ChartsLoadBoundary>}
       {chartsOpen && <ChartsLoadBoundary><Suspense fallback={<p role="status">Loading chart examples…</p>}><ChartsSection /></Suspense></ChartsLoadBoundary>}
       <footer className="catalogue-footer"><span className="mono">ALMANAC · FOUNDATION CATALOGUE</span><a href="#catalogue-main">Back to top ↑</a></footer>
     </main>

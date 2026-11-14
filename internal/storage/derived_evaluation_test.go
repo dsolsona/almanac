@@ -80,6 +80,13 @@ func TestCurrentWindowBatchRejectsMixedClockAndUnboundedInput(t *testing.T) {
 	}
 }
 
+func TestEmptyDerivedWindowBatchDoesNotRead(t *testing.T) {
+	values, err := evaluateDerivedWindows(t.Context(), nil, pgtype.UUID{}, 1, nil)
+	if err != nil || len(values) != 0 {
+		t.Fatalf("empty window batch: values=%v err=%v", values, err)
+	}
+}
+
 func TestDerivedHourEdgesStayExactForIrregularAndLongCadences(t *testing.T) {
 	for _, seconds := range []int{15, 17, 60, 90, 420, 3600, 3601, 86399, 86400} {
 		cadence := time.Duration(seconds) * time.Second

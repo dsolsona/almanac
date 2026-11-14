@@ -14,9 +14,9 @@ WITH dirty AS (
 ), current_state AS (
  SELECT coalesce(max(greatest(0,extract(epoch FROM ($1::timestamptz-g.evaluated_through)))),0)::float8 AS lag,
  count(*) FILTER(WHERE g.id IS NULL OR g.definition_revision<>d.revision OR g.measurement_revision<>d.measurement_revision
- OR g.calculation_version<>$2 OR g.source_generation<>coalesce(source.generation,0)
+ OR p.performance_complete IS NOT TRUE OR g.calculation_version<>$2 OR g.source_generation<>coalesce(source.generation,0)
  OR g.evaluated_through<to_timestamp(floor(extract(epoch FROM $1::timestamptz)/d.cadence_seconds)*d.cadence_seconds)
- OR coalesce((p.payload->>'_current_valid_until')::timestamptz,'-infinity'::timestamptz)<=$1::timestamptz
+ OR coalesce(public.almanac_projection_deadline(p.current_valid_until),'-infinity'::timestamptz)<=$1::timestamptz
  OR g.retention_start<>to_timestamp(ceil(extract(epoch FROM ($1::timestamptz-interval '365 days'))/d.cadence_seconds)*d.cadence_seconds)) AS pending
  FROM public.almanac_slos s
  JOIN public.almanac_slo_definitions d ON d.slo_id=s.id AND d.revision=s.definition_revision

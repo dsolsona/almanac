@@ -1,0 +1,271 @@
+{
+  "applicationImage": "0ba5b819af459dccdd22dd3a246f895e1003f7e396e104cb9552b00f65c3080e",
+  "applicationRevision": "5b2c1a4",
+  "diagnostic": "Main-thread profile, retained fixture without API/query/backfill load; not capacity evidence",
+  "profiles": [
+    {
+      "run": 0,
+      "journey": {
+        "traceId": "f9afa493519f2c244433eb864b709224",
+        "journey": "slo.list",
+        "result": "ready",
+        "recording": true,
+        "duration": 404.90000000596046
+      },
+      "longTasks": [
+        {
+          "start": 298.5,
+          "duration": 77
+        }
+      ],
+      "rows": 20,
+      "readyCharts": 20,
+      "sampledSelfMSByAsset": {
+        "BudgetSparklinePlot-DwiKajwx.js": 103.389,
+        "(program)": 93.14699999999998,
+        "(idle)": 83.67299999999994,
+        "index-CRt0hf8L.js": 64.462,
+        "(garbage collector)": 12.233,
+        "SlosPage-DTBNhq7L.js": 9.053,
+        "client-BZVyWNzi.js": 7.499,
+        "fetch": 1.203,
+        "get Temporal": 1.11,
+        "vocabulary-kUn7Zq9b.js": 1.104,
+        "createElementNS": 1.09,
+        "addEventListener": 1.085,
+        "removeChild": 1.077,
+        "appendChild": 1.064,
+        "evaluate": 0.751
+      },
+      "profileSHA256": "f84c3953daea25dc8cbedb41fa3939184a675d927b1cf5ba621e1606929e616b"
+    },
+    {
+      "run": 1,
+      "journey": {
+        "traceId": "32a198507828a007b48da5f7a990d848",
+        "journey": "slo.list",
+        "result": "ready",
+        "recording": true,
+        "duration": 470.2000000178814
+      },
+      "longTasks": [
+        {
+          "start": 337.5,
+          "duration": 103
+        }
+      ],
+      "rows": 20,
+      "readyCharts": 20,
+      "sampledSelfMSByAsset": {
+        "(program)": 136.478,
+        "BudgetSparklinePlot-DwiKajwx.js": 128.654,
+        "(idle)": 86.99699999999999,
+        "index-CRt0hf8L.js": 81.02700000000002,
+        "(garbage collector)": 14.173,
+        "SlosPage-DTBNhq7L.js": 5.411,
+        "client-BZVyWNzi.js": 4.247,
+        "createElement": 2.224,
+        "vocabulary-kUn7Zq9b.js": 2.1559999999999997,
+        "requestAnimationFrame": 1.345,
+        "fetch": 1.184,
+        "InjectedScript": 1.084,
+        "": 0.972,
+        "parseEvaluationResultValue": 0.091
+      },
+      "profileSHA256": "cc759e2afa8bf02ebe446f0dc6a1c513a9b98d87003bbf27782d1b0751d9234e"
+    },
+    {
+      "run": 2,
+      "journey": {
+        "traceId": "5cddeb55910c131387d138386af59fff",
+        "journey": "slo.list",
+        "result": "ready",
+        "recording": true,
+        "duration": 436.19999998807907
+      },
+      "longTasks": [
+        {
+          "start": 337.59999999403954,
+          "duration": 68
+        }
+      ],
+      "rows": 20,
+      "readyCharts": 20,
+      "sampledSelfMSByAsset": {
+        "(idle)": 111.24199999999999,
+        "(program)": 106.24999999999994,
+        "BudgetSparklinePlot-DwiKajwx.js": 92.52899999999995,
+        "index-CRt0hf8L.js": 84.07799999999997,
+        "(garbage collector)": 13.157,
+        "client-BZVyWNzi.js": 9.725999999999999,
+        "SlosPage-DTBNhq7L.js": 5.5169999999999995,
+        "addEventListener": 2.769,
+        "createTextNode": 2.401,
+        "next": 2.257,
+        "": 2.183,
+        "fetch": 1.07,
+        "removeChild": 0.59
+      },
+      "profileSHA256": "aa4dcec8444025583e030916a48e2644c5527fa03568d98087b9bf50af65501d"
+    }
+  ],
+  "limitations": [
+    "V8 sampling weights include elapsed/scheduling time and do not establish exact CPU consumption.",
+    "No synthetic API/query/backfill load; this does not reproduce the failed loaded gap.",
+    "Profiling adds overhead; these are mechanism probes, not page-performance acceptance.",
+    "Asset grouping includes ECharts dependencies bundled into the sparkline chunk; it does not attribute all that work to the sparkline component itself."
+  ],
+  "readBurstDiagnostic": "Main-thread profile with ten API readers; no calculation/backfill load, not capacity evidence",
+  "readBurstProfiles": [
+    {
+      "run": 0,
+      "journey": {
+        "traceId": "cccac77ce02d4dc8851ba64324125b1f",
+        "journey": "slo.list",
+        "result": "ready",
+        "recording": true,
+        "duration": 1049.0999999940395
+      },
+      "longTasks": [
+        {
+          "start": 275.5,
+          "duration": 69
+        },
+        {
+          "start": 748.3000000119209,
+          "duration": 111
+        },
+        {
+          "start": 860.0999999940395,
+          "duration": 157
+        }
+      ],
+      "rows": 20,
+      "readyCharts": 20,
+      "sampledSelfMSByAsset": {
+        "BudgetSparklinePlot-DwiKajwx.js": 255.91600000000014,
+        "(program)": 231.254,
+        "index-CRt0hf8L.js": 183.45099999999996,
+        "(idle)": 172.45299999999997,
+        "(garbage collector)": 29.396,
+        "client-BZVyWNzi.js": 19.902,
+        "SlosPage-DTBNhq7L.js": 19.888,
+        "get Temporal": 19.218,
+        "UtilityScript": 6.043,
+        "requestAnimationFrame": 4.512,
+        "createElementNS": 3.782,
+        "addEventListener": 3.774,
+        "appendChild": 3.58,
+        "next": 3.309,
+        "setTimeout": 0.909,
+        "fetch": 0.687
+      },
+      "apiRequests": 30,
+      "apiErrors": [],
+      "failedReadLanes": [],
+      "profileSHA256": "2064d801c7c3b8a13dd72f745f102424959571cc9429dd8cc29b051a59365a92"
+    },
+    {
+      "run": 1,
+      "journey": {
+        "traceId": "131f6306d104184db79b2a9dd9e85af4",
+        "journey": "slo.list",
+        "result": "ready",
+        "recording": true,
+        "duration": 996.2000000178814
+      },
+      "longTasks": [
+        {
+          "start": 835.6000000238419,
+          "duration": 51
+        },
+        {
+          "start": 886.8000000119209,
+          "duration": 80
+        }
+      ],
+      "rows": 20,
+      "readyCharts": 20,
+      "sampledSelfMSByAsset": {
+        "(idle)": 354.1290000000001,
+        "(program)": 210.46700000000013,
+        "BudgetSparklinePlot-DwiKajwx.js": 156.047,
+        "index-CRt0hf8L.js": 133.583,
+        "client-BZVyWNzi.js": 29.022,
+        "SlosPage-DTBNhq7L.js": 26.917000000000005,
+        "(garbage collector)": 22.488,
+        "InjectedScript": 16.444,
+        "requestAnimationFrame": 6.479,
+        "removeChild": 3.598,
+        "": 3.3,
+        "next": 2.3680000000000003,
+        "fetch": 2.143,
+        "RegExp: ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$": 1.179,
+        "getElementsByTagName": 1.074,
+        "getComputedStyle": 1.067,
+        "createTextNode": 1.026,
+        "querySelector": 0.987,
+        "vocabulary-kUn7Zq9b.js": 0.608,
+        "get Temporal": 0.272,
+        "createElementNS": 0.138
+      },
+      "apiRequests": 30,
+      "apiErrors": [],
+      "failedReadLanes": [],
+      "profileSHA256": "4131d3ad7c2eab02c9b620a74abdac8bf44aacb2dbb1d443f22a002ca490abbb"
+    },
+    {
+      "run": 2,
+      "journey": {
+        "traceId": "e9b475ac0c2cc7213a8510b8c0cbec14",
+        "journey": "slo.list",
+        "result": "ready",
+        "recording": true,
+        "duration": 958.8000000119209
+      },
+      "longTasks": [
+        {
+          "start": 194.5,
+          "duration": 90
+        },
+        {
+          "start": 723.1000000238419,
+          "duration": 94
+        },
+        {
+          "start": 817.1000000238419,
+          "duration": 115
+        }
+      ],
+      "rows": 20,
+      "readyCharts": 20,
+      "sampledSelfMSByAsset": {
+        "(program)": 237.39399999999995,
+        "(idle)": 220.76800000000003,
+        "BudgetSparklinePlot-DwiKajwx.js": 201.105,
+        "index-CRt0hf8L.js": 182.92199999999997,
+        "SlosPage-DTBNhq7L.js": 20.701999999999998,
+        "(garbage collector)": 20.185,
+        "client-BZVyWNzi.js": 18.637999999999998,
+        "fetch": 9.951,
+        "addEventListener": 4.496,
+        "requestAnimationFrame": 2.67,
+        "get Temporal": 1.09,
+        "vocabulary-kUn7Zq9b.js": 1.041,
+        "createElement": 1.03
+      },
+      "apiRequests": 30,
+      "apiErrors": [],
+      "failedReadLanes": [],
+      "profileSHA256": "265a569e0abab17461db75f7afdb419fa3dd3eb8b314b7a4e016419d4d8208c3"
+    }
+  ],
+  "followUp": {
+    "identifiedFrame": "xb in BudgetSparklinePlot-DwiKajwx.js, line 8: ECharts dimension measurement using getComputedStyle/clientWidth/clientHeight",
+    "paths": [
+      "chart initialization -> renderer resize -> dimension measurement",
+      "ResizeObserver callback -> chart resize -> renderer resize -> dimension measurement"
+    ],
+    "meaning": "Both initialization and observer resizes consume sampled time. Redundant layout/read-write cycles are a hypothesis requiring actual callback/dimension and render-count evidence before a fix."
+  }
+}
