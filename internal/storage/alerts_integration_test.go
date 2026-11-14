@@ -119,7 +119,7 @@ func TestIntegrationAlertJournal(t *testing.T) {
 	var ack alertStoredOccurrence
 	alertTestTx(t, f.conn, func(tx pgx.Tx) error {
 		var err error
-		ack, err = acknowledgeAlertTx(t.Context(), tx, alertAcknowledgement{ID: first.Occurrence.ID, ExpectedVersion: first.Version, ActorID: f.f.userID, RequestID: "ack", At: f.at.Add(2 * time.Second)})
+		ack, err = acknowledgeAlertTx(t.Context(), tx, alertAcknowledgement{ID: first.Occurrence.ID, ExpectedVersion: first.Version, ActorID: f.f.userID, RequestID: "ack", Now: func() time.Time { return f.at.Add(2 * time.Second) }})
 		return err
 	})
 	if ack.Occurrence.AcknowledgedBy != f.f.userID || ack.Occurrence.State != alert.Acknowledged {
@@ -540,7 +540,7 @@ func TestIntegrationAlertAcknowledgementRecoveryRace(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer rollbackTransaction(tx)
-	if _, err := acknowledgeAlertTx(t.Context(), tx, alertAcknowledgement{ID: opened.Occurrence.ID, ExpectedVersion: opened.Version, ActorID: f.f.userID, RequestID: "race-ack", At: f.at.Add(time.Minute)}); err != nil {
+	if _, err := acknowledgeAlertTx(t.Context(), tx, alertAcknowledgement{ID: opened.Occurrence.ID, ExpectedVersion: opened.Version, ActorID: f.f.userID, RequestID: "race-ack", Now: func() time.Time { return f.at.Add(time.Minute) }}); err != nil {
 		t.Fatal(err)
 	}
 	type outcome struct {
@@ -567,7 +567,7 @@ func TestIntegrationAlertAcknowledgementRecoveryRace(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer rollbackTransaction(rejected)
-	if _, err := acknowledgeAlertTx(t.Context(), rejected, alertAcknowledgement{ID: opened.Occurrence.ID, ExpectedVersion: opened.Version, ActorID: f.f.userID, RequestID: "old-ack", At: f.at.Add(2 * time.Minute)}); !errors.Is(err, ErrAlertStale) {
+	if _, err := acknowledgeAlertTx(t.Context(), rejected, alertAcknowledgement{ID: opened.Occurrence.ID, ExpectedVersion: opened.Version, ActorID: f.f.userID, RequestID: "old-ack", Now: func() time.Time { return f.at.Add(2 * time.Minute) }}); !errors.Is(err, ErrAlertStale) {
 		t.Fatalf("terminal stale acknowledgement accepted: %v", err)
 	}
 }
@@ -670,7 +670,7 @@ func TestIntegrationAlertSharedSloIndependence(t *testing.T) {
 		t.Fatalf("policies sharing SLO conflated: %+v", results)
 	}
 	alertTestTx(t, f.conn, func(tx pgx.Tx) error {
-		_, err := acknowledgeAlertTx(t.Context(), tx, alertAcknowledgement{ID: results[a].Occurrence.ID, ExpectedVersion: results[a].Version, ActorID: f.f.userID, RequestID: "team-a-ack", At: f.at.Add(2 * time.Second)})
+		_, err := acknowledgeAlertTx(t.Context(), tx, alertAcknowledgement{ID: results[a].Occurrence.ID, ExpectedVersion: results[a].Version, ActorID: f.f.userID, RequestID: "team-a-ack", Now: func() time.Time { return f.at.Add(2 * time.Second) }})
 		return err
 	})
 	row, err := dbgen.New(f.conn).LockAlertOccurrence(t.Context(), mustPGUUID(results[b].Occurrence.ID))

@@ -192,7 +192,7 @@ func AcknowledgeAlert(ctx context.Context, databaseURL string, input Acknowledge
 		Version int64
 	}{input.ID, input.ExpectedVersion}
 	return executeAlertCommand(ctx, databaseURL, input.AlertCommandInput, "alert.acknowledge", request, func(ctx context.Context, tx pgx.Tx, q *dbgen.Queries, actor string) (AlertCommandResult, error) {
-		if _, err := acknowledgeAlertTx(ctx, tx, alertAcknowledgement{ID: input.ID, ActorID: actor, RequestID: input.RequestID, ExpectedVersion: input.ExpectedVersion, At: normalizedAgentNow(input.Now)}); err != nil {
+		if _, err := acknowledgeAlertTx(ctx, tx, alertAcknowledgement{ID: input.ID, ActorID: actor, RequestID: input.RequestID, ExpectedVersion: input.ExpectedVersion, Now: input.Now}); err != nil {
 			return AlertCommandResult{}, err
 		}
 		record, err := readAlertRecord(ctx, q, input.ID)

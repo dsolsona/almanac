@@ -249,7 +249,7 @@ func (r *Runtime) commitAlertEvaluation(ctx context.Context, claim alertClaim, i
 type alertAcknowledgement struct {
 	ID, ActorID, RequestID string
 	ExpectedVersion        int64
-	At                     time.Time
+	Now                    func() time.Time
 }
 
 // acknowledgeAlertTx is inside the future authenticated management transaction.
@@ -258,7 +258,7 @@ type alertAcknowledgement struct {
 func acknowledgeAlertTx(ctx context.Context, tx pgx.Tx, input alertAcknowledgement) (alertStoredOccurrence, error) {
 	id, idOK := canonicalUUID(input.ID)
 	_, actorOK := canonicalUUID(input.ActorID)
-	if !idOK || !actorOK || input.RequestID == "" || input.ExpectedVersion <= 0 || input.At.IsZero() {
+	if !idOK || !actorOK || input.RequestID == "" || input.ExpectedVersion <= 0 || input.Now == nil {
 		return alertStoredOccurrence{}, ErrAlertInvalid
 	}
 	q := dbgen.New(tx)
@@ -269,11 +269,15 @@ func acknowledgeAlertTx(ctx context.Context, tx pgx.Tx, input alertAcknowledgeme
 	if row.Version != input.ExpectedVersion {
 		return alertStoredOccurrence{}, ErrAlertStale
 	}
+	now := normalizedAgentNow(input.Now)
+	if now.IsZero() {
+		return alertStoredOccurrence{}, ErrAlertInvalid
+	}
 	stored, err := decodeAlertOccurrence(row)
 	if err != nil {
 		return alertStoredOccurrence{}, err
 	}
-	transition, err := alert.Acknowledge(*stored.Occurrence, input.ActorID, input.At)
+	transition, err := alert.Acknowledge(*stored.Occurrence, input.ActorID, now)
 	if err != nil {
 		return alertStoredOccurrence{}, err
 	}
@@ -289,7 +293,7 @@ func acknowledgeAlertTx(ctx context.Context, tx pgx.Tx, input alertAcknowledgeme
 	if err := insertAlertTransition(ctx, q, stored, transition, pgtype.UUID{}, input.RequestID); err != nil {
 		return alertStoredOccurrence{}, err
 	}
-	if err := q.InsertAgentAudit(ctx, dbgen.InsertAgentAuditParams{Actor: input.ActorID, SubjectID: id, Action: "alert.acknowledged", OccurredAt: timestamp(input.At), RequestID: input.RequestID}); err != nil {
+	if err := q.InsertAgentAudit(ctx, dbgen.InsertAgentAuditParams{Actor: input.ActorID, SubjectID: id, Action: "alert.acknowledged", OccurredAt: timestamp(now), RequestID: input.RequestID}); err != nil {
 		return alertStoredOccurrence{}, err
 	}
 	return stored, nil

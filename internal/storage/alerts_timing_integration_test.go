@@ -144,7 +144,7 @@ func TestIntegrationAlertAcknowledgementDuringOccurrenceWait(t *testing.T) {
 			defer closeIntegrationConn(observer)
 			waitForAgentQueryWait(t, observer, "%FROM public.almanac_alert_occurrences%FOR UPDATE%")
 			ackAt := f.at.Add(time.Minute + 2*time.Second)
-			if _, err := acknowledgeAlertTx(t.Context(), tx, alertAcknowledgement{ID: opened.Occurrence.ID, ExpectedVersion: opened.Version, ActorID: f.f.userID, RequestID: "wait-ack", At: ackAt}); err != nil {
+			if _, err := acknowledgeAlertTx(t.Context(), tx, alertAcknowledgement{ID: opened.Occurrence.ID, ExpectedVersion: opened.Version, ActorID: f.f.userID, RequestID: "wait-ack", Now: func() time.Time { return ackAt }}); err != nil {
 				t.Fatal(err)
 			}
 			completedAt := ackAt.Add(time.Second)
