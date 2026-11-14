@@ -7,8 +7,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dsolsona/almanac/internal/alert"
 	"github.com/dsolsona/almanac/internal/sli"
 	"github.com/dsolsona/almanac/internal/storage/dbgen"
+	"github.com/jackc/pgx/v5"
 )
 
 func TestIntegrationAlertCutoffRestart(t *testing.T) {
@@ -68,5 +70,51 @@ func TestIntegrationAlertCutoffRestart(t *testing.T) {
 	row, err := dbgen.New(f.conn).LockAlertCursor(t.Context(), dbgen.LockAlertCursorParams{PolicyID: mustPGUUID(claim.PolicyID), Revision: 1})
 	if err != nil || !row.PendingCutoff.Valid || !row.PendingCutoff.Time.Equal(cutoff) || !row.NextScheduledAt.Time.Equal(f.at) {
 		t.Fatalf("lost durable pending boundary: %+v %v", row, err)
+	}
+}
+
+func TestIntegrationAlertCutoffRejectsDifferentEvidence(t *testing.T) {
+	t.Parallel()
+	f := newAlertTestFixture(t)
+	f.policy(t, "Mismatched pin")
+	claim := f.claim(t, f.at)
+	pinned, err := f.runtime.pinAlertCutoff(t.Context(), claim, f.clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := f.input(t, claim, alert.Complete, true)
+	input.Snapshot.Cutoff = pinned.Add(-time.Minute)
+	for i := range input.Windows {
+		input.Windows[i].Snapshot = input.Snapshot
+		input.Windows[i].Start = input.Windows[i].Start.Add(-time.Minute)
+		input.Windows[i].End = input.Snapshot.Cutoff
+	}
+	if _, err := f.runtime.commitAlertEvaluation(t.Context(), claim, input, f.limits, f.clock); !errors.Is(err, ErrAlertStale) {
+		t.Fatalf("journal accepted a different cutoff: %v", err)
+	}
+	cursor, err := dbgen.New(f.conn).LockAlertCursor(t.Context(), dbgen.LockAlertCursorParams{PolicyID: mustPGUUID(claim.PolicyID), Revision: 1})
+	if err != nil || !cursor.PendingCutoff.Valid || !cursor.PendingCutoff.Time.Equal(pinned) || !cursor.NextScheduledAt.Time.Equal(f.at) || cursor.LastEvaluationID.Valid || cursor.OpenOccurrenceID.Valid {
+		t.Fatalf("rejected evidence mutated the head: %+v %v", cursor, err)
+	}
+}
+
+func TestIntegrationAlertCutoffCancellationClearsPin(t *testing.T) {
+	t.Parallel()
+	f := newAlertTestFixture(t)
+	id := f.policy(t, "Cancelled pin")
+	claim := f.claim(t, f.at)
+	if _, err := f.runtime.pinAlertCutoff(t.Context(), claim, f.clock); err != nil {
+		t.Fatal(err)
+	}
+	alertTestTx(t, f.conn, func(tx pgx.Tx) error {
+		_, err := disableAlertPolicyTx(t.Context(), tx, alertDisableInput{PolicyID: id, ActorID: f.f.userID, Reason: "retired", RequestID: "cancel-pin", ExpectedVersion: 1, EffectiveAt: f.at, Now: f.clock})
+		return err
+	})
+	cursor, err := dbgen.New(f.conn).LockAlertCursor(t.Context(), dbgen.LockAlertCursorParams{PolicyID: mustPGUUID(id), Revision: 1})
+	if err != nil || cursor.PendingCutoff.Valid || cursor.Schedulable || cursor.ClaimToken.Valid {
+		t.Fatalf("cancelled head retained active work: %+v %v", cursor, err)
+	}
+	if _, err := f.runtime.pinAlertCutoff(t.Context(), claim, f.clock); !errors.Is(err, ErrAlertStale) {
+		t.Fatalf("cancelled worker restored pin: %v", err)
 	}
 }

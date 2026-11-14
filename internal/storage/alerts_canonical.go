@@ -134,16 +134,9 @@ func prepareAlertEvidence(ctx context.Context, q *dbgen.Queries, claim alertClai
 	for _, duration := range durations {
 		windows = append(windows, slo.WindowInput{At: cutoff, Now: now, Duration: duration, Cadence: cadence, FreshnessGrace: grace, Target: input.Objective.Target, ValidFrom: input.Objective.DefinitionValidFrom, SliValidFrom: input.Objective.MeasurementValidFrom, RetentionStart: input.Objective.RetentionStart})
 	}
-	values, err := evaluateDerivedWindows(ctx, q, row.SliID, row.MeasurementRevision, windows)
+	input.Windows, err = readAlertCanonicalWindows(ctx, q, row.SliID, row.MeasurementRevision, windows, input.Snapshot, claim.ScheduledAt)
 	if err != nil {
 		return result, err
-	}
-	for index, value := range values {
-		evidence, err := canonicalAlertWindow(input.Snapshot, claim.ScheduledAt, grace, durations[index], value)
-		if err != nil {
-			return result, err
-		}
-		input.Windows = append(input.Windows, evidence)
 	}
 	if _, err := alert.Evaluate(input, limits); err != nil {
 		return result, err
