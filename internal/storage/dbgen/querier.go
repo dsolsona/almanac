@@ -91,6 +91,7 @@ type Querier interface {
 	EnsureSloExtremaCursors(ctx context.Context, arg EnsureSloExtremaCursorsParams) (int64, error)
 	ExhaustRetentionWork(ctx context.Context, nextAttemptAt pgtype.Timestamptz) error
 	ExpireRetentionSourceWork(ctx context.Context, arg ExpireRetentionSourceWorkParams) (int64, error)
+	FailAlertCursor(ctx context.Context, arg FailAlertCursorParams) (int64, error)
 	FailDerivedBatch(ctx context.Context, arg FailDerivedBatchParams) error
 	FailLoginAttempt(ctx context.Context, arg FailLoginAttemptParams) error
 	FailRetentionWork(ctx context.Context, arg FailRetentionWorkParams) error
@@ -278,6 +279,7 @@ type Querier interface {
 	PublishDerivedCurrentProjection(ctx context.Context, arg PublishDerivedCurrentProjectionParams) (int64, error)
 	PublishSloExtrema(ctx context.Context, arg PublishSloExtremaParams) (int64, error)
 	ReadAlertBinding(ctx context.Context, id pgtype.UUID) (ReadAlertBindingRow, error)
+	ReadAlertCursor(ctx context.Context, arg ReadAlertCursorParams) (AlmanacAlertCursor, error)
 	// Read publication text once per projection, not once per retained hour.
 	// Keep timestamp parsing in its conditional predicate so unrelated due/backoff
 	// branches retain their existing behavior for malformed cache metadata.
@@ -323,6 +325,7 @@ type Querier interface {
 	// Expired inputs need no derived preparation, but an active source lease must finish or expire.
 	RetentionHasDependencies(ctx context.Context, arg RetentionHasDependenciesParams) (bool, error)
 	RetireAgentCredential(ctx context.Context, arg RetireAgentCredentialParams) (int64, error)
+	RetryAlertCursor(ctx context.Context, arg RetryAlertCursorParams) (int64, error)
 	RetryCurrentSloPreparation(ctx context.Context, arg RetryCurrentSloPreparationParams) (int64, error)
 	RetrySloExtrema(ctx context.Context, arg RetrySloExtremaParams) (int64, error)
 	RetrySourceAggregate(ctx context.Context, arg RetrySourceAggregateParams) (int64, error)

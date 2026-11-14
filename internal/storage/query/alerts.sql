@@ -8,7 +8,7 @@ INSERT INTO public.almanac_alert_cursors(policy_id,revision,origin_at,next_sched
 -- name: ClaimAlertCursors :many
 WITH candidates AS (
  SELECT c.policy_id,c.revision FROM public.almanac_alert_cursors c JOIN public.almanac_alert_policies p ON p.id=c.policy_id
- WHERE c.schedulable AND p.enabled AND p.evaluation_revision=c.revision
+ WHERE c.schedulable AND NOT c.exhausted AND p.enabled AND p.evaluation_revision=c.revision
  AND c.next_scheduled_at<=sqlc.arg(now)::timestamptz AND c.available_at<=sqlc.arg(now)::timestamptz
  AND (c.last_attempt_tick IS NULL OR c.last_attempt_tick<sqlc.arg(tick)::timestamptz)
  AND (c.claim_until IS NULL OR c.claim_until<=sqlc.arg(now)::timestamptz)
@@ -48,7 +48,7 @@ WHERE id=$1 AND version=$8 AND state IN ('firing','acknowledged');
 INSERT INTO public.almanac_alert_transitions(id,policy_id,revision,occurrence_id,sequence,from_state,to_state,cause,effective_at,detected_at,actor_id,reason,evaluation_id,request_id)
 VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14);
 -- name: AdvanceAlertCursor :execrows
-UPDATE public.almanac_alert_cursors SET next_scheduled_at=$3,available_at=$3,version=version+1,last_cutoff=$4,last_evaluation_id=$5,open_occurrence_id=$6,pending_cutoff=NULL,claim_token=NULL,claim_until=NULL,waiting_reason=''
+UPDATE public.almanac_alert_cursors SET next_scheduled_at=$3,available_at=$3,version=version+1,last_cutoff=$4,last_evaluation_id=$5,open_occurrence_id=$6,pending_cutoff=NULL,claim_token=NULL,claim_until=NULL,waiting_reason='',failure_attempts=0,failure_since=NULL,last_failure_at=NULL,exhausted=false
 WHERE policy_id=$1 AND revision=$2 AND epoch=$7 AND claim_token=$8 AND version=$9 AND next_scheduled_at=sqlc.arg(expected_boundary) AND schedulable;
 -- name: DeferAlertCursor :execrows
 UPDATE public.almanac_alert_cursors SET available_at=$3,claim_token=NULL,claim_until=NULL,waiting_reason=$4

@@ -60,6 +60,7 @@ sql:
       - internal/storage/migrations/0054_maintenance_authority.sql
       - internal/storage/migrations/0055_projection_performance_integrity.sql
       - internal/storage/migrations/0056_alert_journal.sql
+      - internal/storage/migrations/0057_alert_processing_failures.sql
     gen:
       go:
         package: dbgen

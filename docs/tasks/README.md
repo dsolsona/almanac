@@ -1,5 +1,8 @@
 # Implementation tasks
 
+[F4-T32](F4-T32.md) connects bounded processor turns to durable evaluation,
+pending/failure handling and audited retry; runtime registration remains gated.
+
 [F4-T31](F4-T31.md) connects canonical SLO counts to alert evidence and persists
 pending cutoffs across retries/restart; production activation remains gated.
 

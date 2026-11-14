@@ -12,7 +12,7 @@ import (
 )
 
 const advanceAlertCursor = `-- name: AdvanceAlertCursor :execrows
-UPDATE public.almanac_alert_cursors SET next_scheduled_at=$3,available_at=$3,version=version+1,last_cutoff=$4,last_evaluation_id=$5,open_occurrence_id=$6,pending_cutoff=NULL,claim_token=NULL,claim_until=NULL,waiting_reason=''
+UPDATE public.almanac_alert_cursors SET next_scheduled_at=$3,available_at=$3,version=version+1,last_cutoff=$4,last_evaluation_id=$5,open_occurrence_id=$6,pending_cutoff=NULL,claim_token=NULL,claim_until=NULL,waiting_reason='',failure_attempts=0,failure_since=NULL,last_failure_at=NULL,exhausted=false
 WHERE policy_id=$1 AND revision=$2 AND epoch=$7 AND claim_token=$8 AND version=$9 AND next_scheduled_at=$10 AND schedulable
 `
 
@@ -76,7 +76,7 @@ func (q *Queries) CancelAlertCursor(ctx context.Context, arg CancelAlertCursorPa
 const claimAlertCursors = `-- name: ClaimAlertCursors :many
 WITH candidates AS (
  SELECT c.policy_id,c.revision FROM public.almanac_alert_cursors c JOIN public.almanac_alert_policies p ON p.id=c.policy_id
- WHERE c.schedulable AND p.enabled AND p.evaluation_revision=c.revision
+ WHERE c.schedulable AND NOT c.exhausted AND p.enabled AND p.evaluation_revision=c.revision
  AND c.next_scheduled_at<=$4::timestamptz AND c.available_at<=$4::timestamptz
  AND (c.last_attempt_tick IS NULL OR c.last_attempt_tick<$3::timestamptz)
  AND (c.claim_until IS NULL OR c.claim_until<=$4::timestamptz)
@@ -84,7 +84,7 @@ WITH candidates AS (
  LIMIT $5 FOR UPDATE OF c SKIP LOCKED
 )
 UPDATE public.almanac_alert_cursors c SET epoch=c.epoch+1,claim_token=$1,claim_until=$2,last_attempt_tick=$3,last_dispatched_at=$4,waiting_reason=''
-FROM candidates selected WHERE (c.policy_id,c.revision)=(selected.policy_id,selected.revision) RETURNING c.policy_id, c.revision, c.schedulable, c.origin_at, c.next_scheduled_at, c.available_at, c.version, c.epoch, c.claim_token, c.claim_until, c.last_attempt_tick, c.last_dispatched_at, c.pending_cutoff, c.last_cutoff, c.last_evaluation_id, c.open_occurrence_id, c.waiting_reason
+FROM candidates selected WHERE (c.policy_id,c.revision)=(selected.policy_id,selected.revision) RETURNING c.policy_id, c.revision, c.schedulable, c.origin_at, c.next_scheduled_at, c.available_at, c.version, c.epoch, c.claim_token, c.claim_until, c.last_attempt_tick, c.last_dispatched_at, c.pending_cutoff, c.last_cutoff, c.last_evaluation_id, c.open_occurrence_id, c.waiting_reason, c.failure_attempts, c.failure_since, c.last_failure_at, c.exhausted
 `
 
 type ClaimAlertCursorsParams struct {
@@ -128,6 +128,10 @@ func (q *Queries) ClaimAlertCursors(ctx context.Context, arg ClaimAlertCursorsPa
 			&i.LastEvaluationID,
 			&i.OpenOccurrenceID,
 			&i.WaitingReason,
+			&i.FailureAttempts,
+			&i.FailureSince,
+			&i.LastFailureAt,
+			&i.Exhausted,
 		); err != nil {
 			return nil, err
 		}
@@ -470,7 +474,7 @@ func (q *Queries) InsertAlertTransition(ctx context.Context, arg InsertAlertTran
 }
 
 const lockAlertCursor = `-- name: LockAlertCursor :one
-SELECT policy_id, revision, schedulable, origin_at, next_scheduled_at, available_at, version, epoch, claim_token, claim_until, last_attempt_tick, last_dispatched_at, pending_cutoff, last_cutoff, last_evaluation_id, open_occurrence_id, waiting_reason FROM public.almanac_alert_cursors WHERE policy_id=$1 AND revision=$2 FOR UPDATE
+SELECT policy_id, revision, schedulable, origin_at, next_scheduled_at, available_at, version, epoch, claim_token, claim_until, last_attempt_tick, last_dispatched_at, pending_cutoff, last_cutoff, last_evaluation_id, open_occurrence_id, waiting_reason, failure_attempts, failure_since, last_failure_at, exhausted FROM public.almanac_alert_cursors WHERE policy_id=$1 AND revision=$2 FOR UPDATE
 `
 
 type LockAlertCursorParams struct {
@@ -499,6 +503,10 @@ func (q *Queries) LockAlertCursor(ctx context.Context, arg LockAlertCursorParams
 		&i.LastEvaluationID,
 		&i.OpenOccurrenceID,
 		&i.WaitingReason,
+		&i.FailureAttempts,
+		&i.FailureSince,
+		&i.LastFailureAt,
+		&i.Exhausted,
 	)
 	return i, err
 }

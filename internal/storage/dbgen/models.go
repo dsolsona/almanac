@@ -111,6 +111,10 @@ type AlmanacAlertCursor struct {
 	LastEvaluationID pgtype.UUID        `json:"last_evaluation_id"`
 	OpenOccurrenceID pgtype.UUID        `json:"open_occurrence_id"`
 	WaitingReason    string             `json:"waiting_reason"`
+	FailureAttempts  int32              `json:"failure_attempts"`
+	FailureSince     pgtype.Timestamptz `json:"failure_since"`
+	LastFailureAt    pgtype.Timestamptz `json:"last_failure_at"`
+	Exhausted        bool               `json:"exhausted"`
 }
 
 type AlmanacAlertEvaluation struct {
