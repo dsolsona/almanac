@@ -2,8 +2,12 @@ Historical CPU correction, 2026-11-14: [F4-T24](tasks/F4-T24.md) identifies eage
 decimal formatting before extrema selection. The scoped change keeps exact
 summaries until selection; focused canonical/oracle/odd-cadence/retention checks
 pass. A fixed-hour profile retains identical output and reduces sampled Go CPU
-per build by about 29%. All five normal-container journey steps pass in 2.2 min;
-full-load acceptance remains pending.
+per build by about 29%. All five normal-container journey steps pass in 2.2 min.
+The [full control](evidence/alert-performance/2026-11-14-deferred-extrema-control.json)
+still fails overview/ingestion latency while completing all 800/1,400/80 work
+items and all 400 due intervals in each run. Split hardware/topology changed,
+preventing a direct timing attribution. Three ordinary CI gates pass; resource-table
+keyboard navigation fails end-to-end verification and is being investigated.
 
 CPU-placement comparison, 2026-11-14: [F4-T23](tasks/F4-T23.md) completes two CI
 controls at `72166f5`. All 80 browser journeys, 800 baseline calls, 1,400 backfill
