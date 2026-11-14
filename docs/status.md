@@ -2,14 +2,20 @@ Writer attribution, 2026-11-14: [F4-T26](tasks/F4-T26.md) exposes the existing
 explicit omission mode in the CPU-control workflow. Default complete controls
 retain all historical batches. Reduced controls record their mode and zero
 planned/actual writes; neither can silently substitute for capacity acceptance.
-The next diagnostic isolates writer pressure on the current application source.
+The [completed diagnostic](evidence/alert-performance/2026-11-14-writer-omission.json)
+proves zero writer activity: split ingestion p95 is 12.40–13.02 ms loaded versus
+9.71–10.20 ms alone, cold-list p95 418.9 ms, but overview and relative ingestion
+limits still fail. Shared cohosting on one physical core remains much slower and
+records API/ingestion failures. All calculation/browser/due work completes.
+All four ordinary PR #120 CI gates pass; reduced work is not capacity acceptance.
 
 Resource-table verification, 2026-11-14: [F4-T25](tasks/F4-T25.md) traces the CI
 failure to a positional locator retargeted when sorting finishes after Back.
 The test waits for sorting and binds keyboard/source-link actions to captured
 resource hrefs. The actual onboarding/resource-table journey passes in 22.9 s;
-independent review finds no actionable defects. Broad CI follows on the corrected
-candidate; original failed evidence is retained.
+independent review finds no actionable defects. All four ordinary CI gates pass
+on `2692060` (fast 4m13s, browser 5m46s, integration 9m41s, end-to-end 9m36s);
+original failed evidence is retained.
 
 Historical CPU correction, 2026-11-14: [F4-T24](tasks/F4-T24.md) identifies eager
 decimal formatting before extrema selection. The scoped change keeps exact

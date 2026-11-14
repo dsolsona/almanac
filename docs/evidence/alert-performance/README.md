@@ -256,6 +256,34 @@ comparisons pass. Dense-transition hours can retain every endpoint and save less
 Normal deployment and the full workload remain separate acceptance checks;
 increased rebuild throughput may shift pressure to PostgreSQL.
 
+## Historical-writer omission
+
+[F4-T26](../../tasks/F4-T26.md) runs the current instrumented control with its
+explicit synthetic-writer omission. The [recorded result](2026-11-14-writer-omission.json)
+proves zero writer batches/process activity while retaining 800 calculations and
+80 browser journeys in each run. All due intervals arrive. This deliberately
+reduced workload cannot establish production capacity or fallback equivalence.
+
+Split AMD9V45 uses one physical core for server threads and the other for clients.
+Loaded ingestion p95 falls to 12.40–13.02 ms versus 9.71–10.20 ms alone; the prior
+full control on the same reported model/topology measured 96.21–101.03 ms loaded.
+Different host instances/phases limit causal subtraction. All lanes complete
+without API/ingestion errors, cold-list p95/max is 418.9/680.2 ms, but overview
+HTTP p95 remains 247.5 ms and the conservative relative ingestion bound still fails.
+
+Shared AMD9V74 puts server and clients on the same physical core. It remains
+slow without the writer: cold-list p95/max 1,190.1/1,714.9 ms, loaded ingestion
+135.38–142.15 ms, one unsuccessful ingestion and two API failures. This runner
+differs from prior shared Intel runs; cohosting and topology remain explicit limits.
+
+Observed first-five page calls per PID are slower, but later page calls remain
+costly. Retained samples mostly show active/no-event PostgreSQL states, which
+cannot distinguish execution from descheduling. Initial shared acquisition also
+includes real connection-configuration statements before the protected read
+times out. The next bounded discriminator measures actual fresh-pool admission,
+prepared-plan counters, backend CPU/runqueue and repeated unchanged page queries
+against one restored snapshot, before adopting another application change.
+
 ## Priorities
 
 Rank reflects observed user impact. Related symptoms are grouped; the suspected
