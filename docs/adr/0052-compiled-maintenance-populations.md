@@ -29,8 +29,16 @@ Propose two maintained components and one shared totals interface.
    intervals with immutable bounds and inclusion-revision lifetimes. A job for
    authority revision R reads raw membership-version pages in indexed start/key
    order, filters validity at R, and unions intervals online with a persisted
-   frontier. Later mutations cannot move an R-visible row's bounds or remove it.
+   frontier. Capture a fixed, finite input fence when compilation starts,
+   independently of membership validity at R. Later inserts must neither extend
+   that input nor require scanning an unbounded population of newer versions to
+   find the next page. The chosen query/index must establish both properties;
+   revision filtering alone is insufficient. Later mutations cannot move an
+   R-visible row's bounds or remove it.
    Publish only a complete snapshot. Keep in-progress work unavailable to readers.
+   Completing a historical-R snapshot does not promote it as current: promotion
+   separately validates current exclusion authority. Historical snapshots remain
+   usable for the same-facts recovery comparison.
    Declarations may be numerous, but every turn visits a bounded raw page and
    finite quiescent input eventually completes; a legitimate fragmented mask is
    not permanently rejected because one request cannot scan it.
@@ -63,6 +71,17 @@ Propose two maintained components and one shared totals interface.
    distinguish fully excluded, zero traffic, missing eligible data and unknown
    excluded event totals. All current/history/alert consumers call this shared
    path; no alert-specific subtraction or quality rule is introduced.
+
+Receipt equivalence is an explicit prerequisite, not an assumed property of the
+existing summaries. SPEC-0020's retained marks and the raw evaluator take the
+maximum receipt over eligible observed/known-empty contributions. Existing
+canonical hourly and raw-edge queries also include failed/incomplete receipts.
+For an observed minute received at 10:01 and a failed minute received at 10:03,
+those implementations currently return different receipts despite identical
+counts. Reconcile the canonical queries, persisted summaries and retained marks
+with the accepted population before claiming complete oracle equivalence or
+reusing their receipt metadata here. Test failed/incomplete and excluded latest
+receipts explicitly; retain processing/collection progress as separate metadata.
 
 ## Publication and compatibility
 
