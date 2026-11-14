@@ -130,6 +130,36 @@ observer-driven resize; whether redundant layout explains the loaded gap needs
 further instrumentation. Profiles carry overhead and omit the other workload
 lanes; neither their timings nor the reduced-load result substitute for acceptance.
 
+## Confirmed resize waste and browser CPU starvation
+
+[F4-T20](../../tasks/F4-T20.md) observes twenty initial resize callbacks after all
+sparklines are already ready at the same dimensions, costing 38.5–89.8 ms in
+three read-burst probes. The exact-size guard reduces those callback totals to
+0.2–0.7 ms. Focused checks, twelve browser cases and identical before/after
+renders preserve geometry, gaps, themes, real resizes and hidden/revealed charts.
+
+The [full control](2026-11-14-sparkline-control.json) still fails: cold-list p95/max
+1,742.4/1,878.9 ms, cold-detail maximum 1,033.9 ms and one overview admission 503.
+Every calculation/backfill/browser lane completes, and all 600 due intervals
+arrive without unsuccessful ingestion. Server overview p95 is 460.629 ms, page SQL
+267.665 ms and client overview 1,358.194 ms. No end-to-end improvement is established.
+
+[Matched Chromium and OS probes](2026-11-14-browser-scheduling.json) identify a
+material client bottleneck: the renderer spends 565–743 ms runnable but waiting
+for CPU in sampled portions of 1.11–1.26-s loads, with 255–269 ms running. The
+browser and load generator share the two-core VM with server/database work.
+This is stronger than inferring contention from CPU percentages or long tasks;
+Linux's independent run-queue counter establishes runnable waiting. It does not
+identify each competing process, and retained historical repair remains active.
+Profiling overhead and sampled boundaries are explicit limitations.
+
+The next discriminating check separates the client machine from the server,
+retaining workload, authentication, exact values and latency budgets. It needs
+available hardware/connection information; no remote connection is assumed.
+Server overview/admission and ingestion isolation remain failed and cannot be
+waived by the client diagnosis. Another speculative application optimization or
+undifferentiated full load would not resolve that attribution gap.
+
 ## Priorities
 
 Rank reflects observed user impact. Related symptoms are grouped; the suspected
@@ -138,10 +168,10 @@ integrated capacity pass.
 
 | Order | Issue | User impact | Bottleneck evidence | Current status |
 | --- | --- | --- | --- | --- |
-| 1 | Slow SLO overview and interactive admission exhaustion | Lists still exceed one second; latest control has no API errors | Latest cold-list p95 1,530.8 ms; page SQL p95 274.2 ms; prior admission failures remain retained | No admission failure in latest run; read/transfer/resource budgets remain open |
-| 2 | Live ingestion slows under competing work | Latency isolation fails | Latest p95 16.6–17.4 → 87.3–91.6 ms; 446 accepted and all 400 due intervals present | Absolute p95 passes; relative limit fails |
+| 1 | Slow SLO overview and interactive admission exhaustion | Lists still exceed one second; latest control has no API errors | Latest cold-list p95 1,742.4 ms; one admission 503; page SQL p95 267.7 ms; OS counters establish substantial browser run-queue wait | Client/server isolation and server admission/read budgets remain open |
+| 2 | Live ingestion slows under competing work | Latency isolation fails | Latest p95 23.4–24.5 → 96.2–101.0 ms; 526 accepted and all 600 due intervals present | Absolute p95 passes; relative limit fails |
 | 3 | Expensive scheduling and repeated pending calculations | Background work consumes capacity without publishing current values | Idle PostgreSQL ~49.5% of one CPU; due queries consume ~25.1 s in 62.6 s. Loaded phase has 8,226 waiting attempts /776 publications | Current waiting calculations skip canonical sums. Historical waiting work falls to 453 calls /5.261 s; more useful work and faster synthetic writes still keep PostgreSQL busy |
-| 4 | Pending aggregate windows and unproven alert capacity | Proposed alert evaluations would retain pending boundaries | Latest 11/800 baseline batches pending (prior 102; publication progress differs); bounded fallback exactness has separate passing fixtures | Calculation-adoption gate remains open |
+| 4 | Pending aggregate windows and unproven alert capacity | Proposed alert evaluations would retain pending boundaries | Latest 2/800 baseline batches pending (earlier 11/102; publication progress differs); bounded fallback exactness has separate passing fixtures | Calculation-adoption gate remains open |
 | Corrected | Authentication fails during navigation | Previously prevented page opening | Shared inspection queries preserve authority; 40/40 loaded auth-context calls succeed and all 80 journeys complete | Original conflict corrected and verified under load; other 503s are pool admission failures |
 
 ## Authentication failures: corrected database lock contention

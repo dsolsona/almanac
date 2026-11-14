@@ -115,13 +115,14 @@ JOIN (VALUES ${goods}) g(sli_id,good) USING(sli_id);`);
   writeFileSync(`${root}/ingestion-baseline.json`, JSON.stringify({ baselineStart, baselineEnd, ingestionOnly }, null, 2));
   const before = resourceSnapshot();
   const backfillPlan = backfillProfile(historicalWrites, backfill.length);
-  const profile = { baseRevision: '5b2c1a4', diagnosticCandidate: 'F4-T19 historical-write attribution; application unchanged', postgresStorage, mode, fixtureVersion: calculationFixtureVersion,
+  const profile = { baseRevision: 'c77d961', diagnosticCandidate: 'F4-T20 skip unchanged sparkline resizes', postgresStorage, mode, fixtureVersion: calculationFixtureVersion,
     backfill: backfillPlan, capacityEligible: backfillPlan.fullWorkload && mode === 'paired',
     initialHistoryStart: fleet.initialHistoryStart, eligibleFrom: fleet.eligibleFrom, historyClosedThrough: fleet.historyClosedThrough, backfillRanges: ranges,
     eligibilityCheckedSlis: eligibility.length,
     plannedQueryCalls: plannedCalculationCalls(mode, 800), independentReferenceEnabled: mode === 'paired',
     applicationImage: compose('images', '--quiet', 'app').trim(),
     sourceHashes: Object.fromEntries(['../internal/storage/testdata/alert_window_fallback.sql',
+      'src/components/charts/useEChart.ts', 'src/components/charts/BudgetSparklinePlot.tsx',
       'perf/alert-calculation.perf.ts', 'perf/alert-calculation.experiment.ts', 'perf/alert-calculation.metrics.ts', 'perf/alert-calculation.seed.ts', 'playwright.alert-calculation.config.ts', '../compose.e2e.yaml', '../internal/storage/query/agent_access.sql', '../internal/storage/query/slis.sql', '../internal/storage/derived_current.go', '../internal/storage/query/derived_projections.sql', '../api/openapi.yaml', '../web/src/slos/SloDetailPanels.tsx',
       '../internal/storage/query/derived_overview.sql', '../internal/storage/query/slo_list_references.sql',
       '../internal/storage/dbgen/slo_list_references.sql.go',

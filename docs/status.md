@@ -1,3 +1,13 @@
+Cold-list scheduling diagnosis, 2026-11-14: [F4-T20](tasks/F4-T20.md) removes
+confirmed unchanged-size sparkline redraws. Focused checks, twelve browser cases
+and six identical before/after renders pass. The full control still fails:
+cold-list p95 1.742 s, one overview admission 503, ingestion isolation; all
+80 journeys and 600 due intervals complete. OS counters then establish
+565–743 ms of renderer run-queue wait in sampled diagnostic intervals, versus
+255–269 ms executing. Client/server CPU separation is needed for the next
+representative measurement; available remote hardware has been requested.
+The guard is verified, but no end-to-end improvement, merge or adoption is claimed.
+
 Cold-list attribution, 2026-11-14: [F4-T19](tasks/F4-T19.md) prioritizes the
 user-visible list failure. Matched traces put 576–820 ms after overview JSON and
 before chart/content readiness in the two slowest loads. Omitting synthetic SQL

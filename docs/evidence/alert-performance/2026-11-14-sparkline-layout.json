@@ -1,0 +1,107 @@
+{
+  "baseRevision": "c77d961ccbbc2023eda34019b395fdf8d4459790",
+  "applicationBaselineRevision": "5b2c1a4",
+  "meaning": "Unchanged application on retained F4-T19 fixture; three profiled cold loads with ten API readers. Observer wrapper records callbacks without changing behavior.",
+  "baseline": [
+    {
+      "run": 0,
+      "journeyMS": 1014.3000000119209,
+      "traceID": "643a4e859f77dd14a80aaea4cdbd5807",
+      "callbacks": 20,
+      "callbackTotalMS": 89.79999995231628,
+      "charts": 20,
+      "allAlreadyReady": true,
+      "allDimensionsAlreadyMatched": true,
+      "apiRequests": 30,
+      "apiFailures": []
+    },
+    {
+      "run": 1,
+      "journeyMS": 883.8000000119209,
+      "traceID": "dc621a79a8141dbac0a7f0c24d6fd189",
+      "callbacks": 20,
+      "callbackTotalMS": 40.69999998807907,
+      "charts": 20,
+      "allAlreadyReady": true,
+      "allDimensionsAlreadyMatched": true,
+      "apiRequests": 30,
+      "apiFailures": []
+    },
+    {
+      "run": 2,
+      "journeyMS": 883.9000000059605,
+      "traceID": "fb596f137e510c8e42a4ce63f1176dd0",
+      "callbacks": 20,
+      "callbackTotalMS": 38.5,
+      "charts": 20,
+      "allAlreadyReady": true,
+      "allDimensionsAlreadyMatched": true,
+      "apiRequests": 30,
+      "apiFailures": []
+    }
+  ],
+  "baselineArtifactSHA256": "f2a74b5746e680811e323be7b787365260fe8bbf53023949053f78cde79922fc",
+  "focusedChecks": {
+    "regressionRedSeconds": 1.89,
+    "relatedCases": 30,
+    "relatedCasesSeconds": 4.33,
+    "typingFailure": "Incomplete test-only ResizeObserverEntry was rejected; corrected to a complete observer entry without application changes.",
+    "correctedHookCases": 2,
+    "correctedHookSeconds": 1.22,
+    "typecheck": "passed",
+    "browserCases": 6,
+    "browserBeforeSeconds": 19.5,
+    "browserAfterSeconds": 19.2,
+    "hiddenBrowserCases": 6,
+    "hiddenBrowserSeconds": 21.3
+  },
+  "screenshots": [
+    {
+      "case": "sparkline-layout-budget-sp-32b98-me-across-real-size-changes-desktop-dark",
+      "identical": true,
+      "beforeSHA256": "fda95315b90361e6669b6cb687da05e8df1204c8ac1fd262cd11c609d97bb310",
+      "afterSHA256": "fda95315b90361e6669b6cb687da05e8df1204c8ac1fd262cd11c609d97bb310"
+    },
+    {
+      "case": "sparkline-layout-budget-sp-32b98-me-across-real-size-changes-desktop-light",
+      "identical": true,
+      "beforeSHA256": "2f8a44422369f9876a1c83f071a57fa9bbdae1051b018d93429b959820935962",
+      "afterSHA256": "2f8a44422369f9876a1c83f071a57fa9bbdae1051b018d93429b959820935962"
+    },
+    {
+      "case": "sparkline-layout-budget-sp-32b98-me-across-real-size-changes-intermediate-dark",
+      "identical": true,
+      "beforeSHA256": "7f351678ef8cae154c6e59238350f9639efa6f0751f4d4dc4aa3a1912440e76c",
+      "afterSHA256": "7f351678ef8cae154c6e59238350f9639efa6f0751f4d4dc4aa3a1912440e76c"
+    },
+    {
+      "case": "sparkline-layout-budget-sp-32b98-me-across-real-size-changes-intermediate-light",
+      "identical": true,
+      "beforeSHA256": "41b59459ba678eacf2241956d9c3be6485ecc884331040288927e7a57b74e032",
+      "afterSHA256": "41b59459ba678eacf2241956d9c3be6485ecc884331040288927e7a57b74e032"
+    },
+    {
+      "case": "sparkline-layout-budget-sp-32b98-me-across-real-size-changes-mobile-dark",
+      "identical": true,
+      "beforeSHA256": "2794b9ecd822ff1e1d0545504293f32f605c93ccb767377f10b02097823aad46",
+      "afterSHA256": "2794b9ecd822ff1e1d0545504293f32f605c93ccb767377f10b02097823aad46"
+    },
+    {
+      "case": "sparkline-layout-budget-sp-32b98-me-across-real-size-changes-mobile-light",
+      "identical": true,
+      "beforeSHA256": "f19ee4b35abee665cb8a88c4d087d38aca01a720e5ae6b50a3231e5bcec9f870",
+      "afterSHA256": "f19ee4b35abee665cb8a88c4d087d38aca01a720e5ae6b50a3231e5bcec9f870"
+    }
+  ],
+  "review": {
+    "actionableFindings": 0,
+    "unverified": [
+      "Full loaded navigation remains failed; the complete control is retained separately."
+    ]
+  },
+  "limitations": [
+    "Elapsed callback time is not exclusive CPU time.",
+    "This identifies one unnecessary operation, not the entire 576\u2013820-ms post-parse gap.",
+    "API read bursts omit calculation/backfill and are not capacity acceptance."
+  ]
+}

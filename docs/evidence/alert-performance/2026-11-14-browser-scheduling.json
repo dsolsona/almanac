@@ -1,0 +1,158 @@
+{
+  "applicationImage": "0ae944680e195fbd6bd24049f3537b4110d37c11ac7cdba64ce1f16784611c08",
+  "applicationBase": "c77d961",
+  "diagnostic": "Retained full-control fixture with continuing background repair; ten API readers and one profiled browser. Synthetic query/writer processes have stopped, but their historical backlog is not reset.",
+  "threadClockProfiles": [
+    {
+      "run": 0,
+      "journeyMS": 1707.2000000178814,
+      "traceID": "6125ceadc0dc73272ced02bcdab264be",
+      "completeMainThreadTasks": 511,
+      "tasksWithThreadClock": 510,
+      "measuredTasksElapsedMS": 1242.956,
+      "measuredTasksThreadMS": 301.225,
+      "unknownThreadClockTasks": 1,
+      "unknownTasksElapsedMS": 0.002,
+      "resizeCallbackMS": 0.19999998807907104,
+      "readyCharts": 20,
+      "apiRequests": 30,
+      "apiErrors": [],
+      "failedReadLanes": [],
+      "traceSHA256": "f3335627b8aa22d4a5899b151a7ce00a41653bb45f5d53af730fff36f250c110"
+    },
+    {
+      "run": 1,
+      "journeyMS": 1313.5999999940395,
+      "traceID": "e78bf5722bd3f0681c626b7ecb09264a",
+      "completeMainThreadTasks": 498,
+      "tasksWithThreadClock": 497,
+      "measuredTasksElapsedMS": 983.624,
+      "measuredTasksThreadMS": 270.411,
+      "unknownThreadClockTasks": 1,
+      "unknownTasksElapsedMS": 0.001,
+      "resizeCallbackMS": 0.20000001788139343,
+      "readyCharts": 20,
+      "apiRequests": 30,
+      "apiErrors": [],
+      "failedReadLanes": [],
+      "traceSHA256": "5a3dcc3399460418df48e9848a265f6885875b8b227c49a085009f7064de04bc"
+    },
+    {
+      "run": 2,
+      "journeyMS": 1344.0999999940395,
+      "traceID": "2edb4ad74e82e6137c658b193e067c97",
+      "completeMainThreadTasks": 511,
+      "tasksWithThreadClock": 511,
+      "measuredTasksElapsedMS": 925.197,
+      "measuredTasksThreadMS": 281.568,
+      "unknownThreadClockTasks": 0,
+      "unknownTasksElapsedMS": 0.0,
+      "resizeCallbackMS": 0.699999988079071,
+      "readyCharts": 20,
+      "apiRequests": 30,
+      "apiErrors": [],
+      "failedReadLanes": [],
+      "traceSHA256": "afddfc592caebd9827b0d3ed79e7cd0a62f7e8347c49052db41c6d5ade99c6ba"
+    }
+  ],
+  "schedulerCounterProfiles": [
+    {
+      "run": 0,
+      "journeyMS": 1264.5,
+      "traceID": "ae37fd68fa254c4b8059fca1335f2f3a",
+      "completeMainThreadTasks": 505,
+      "tasksWithThreadClock": 504,
+      "measuredTasksElapsedMS": 870.234,
+      "measuredTasksThreadMS": 251.316,
+      "unknownThreadClockTasks": 1,
+      "unknownTasksElapsedMS": 0.002,
+      "resizeCallbackMS": 0.30000001192092896,
+      "readyCharts": 20,
+      "apiRequests": 30,
+      "apiErrors": [
+        {
+          "name": "overview",
+          "milliseconds": 402.7046079999999,
+          "status": 503
+        }
+      ],
+      "failedReadLanes": [],
+      "traceSHA256": "47bd23391831e0003a662c5859e3063daca34a51a023b6cee96cedd980bca892",
+      "rendererScheduler": {
+        "samples": 23,
+        "fromJourneyMS": 19.8,
+        "toJourneyMS": 1242.79,
+        "coveredMS": 1222.99,
+        "runtimeMS": 269.118585,
+        "runnableWaitMS": 711.52008,
+        "maximumSampleGapMS": 91.628,
+        "schedulerSHA256": "4f9684ffcac90ea8e1dcd687cce8c52780ef4bf2a861ff30d092e215d40081fa"
+      }
+    },
+    {
+      "run": 1,
+      "journeyMS": 1191.7999999821186,
+      "traceID": "f104a594ecbf01785fc17178fc6e00b2",
+      "completeMainThreadTasks": 477,
+      "tasksWithThreadClock": 477,
+      "measuredTasksElapsedMS": 895.355,
+      "measuredTasksThreadMS": 242.574,
+      "unknownThreadClockTasks": 0,
+      "unknownTasksElapsedMS": 0.0,
+      "resizeCallbackMS": 0.4000000059604645,
+      "readyCharts": 20,
+      "apiRequests": 30,
+      "apiErrors": [],
+      "failedReadLanes": [],
+      "traceSHA256": "6c01c92dd5c336f217c5e653b3b307ffee8350dc990a950157a7876f3f352671",
+      "rendererScheduler": {
+        "samples": 22,
+        "fromJourneyMS": 29.599999969482422,
+        "toJourneyMS": 1160.2439999694825,
+        "coveredMS": 1130.644,
+        "runtimeMS": 255.477107,
+        "runnableWaitMS": 743.016918,
+        "maximumSampleGapMS": 92.08,
+        "schedulerSHA256": "c6c16bf757d9fa7eca66a3ebc0435435307a029b14e734ed3f878c5b92f823e5"
+      }
+    },
+    {
+      "run": 2,
+      "journeyMS": 1110.800000011921,
+      "traceID": "29f8169cb5e286e2a4e4331b463095cc",
+      "completeMainThreadTasks": 502,
+      "tasksWithThreadClock": 502,
+      "measuredTasksElapsedMS": 738.887,
+      "measuredTasksThreadMS": 234.311,
+      "unknownThreadClockTasks": 0,
+      "unknownTasksElapsedMS": 0.0,
+      "resizeCallbackMS": 0.5000000298023224,
+      "readyCharts": 20,
+      "apiRequests": 30,
+      "apiErrors": [],
+      "failedReadLanes": [],
+      "traceSHA256": "71f677d766f9958497c5b6e24877064a50717bec1eddd89fb5581fdda67636d6",
+      "rendererScheduler": {
+        "samples": 21,
+        "fromJourneyMS": 26.435,
+        "toJourneyMS": 1105.918,
+        "coveredMS": 1079.483,
+        "runtimeMS": 258.980126,
+        "runnableWaitMS": 564.782371,
+        "maximumSampleGapMS": 71.792,
+        "schedulerSHA256": "aabe5a46e788eaebe269e95be38d33a1d0ee2b2f744e448c8f5697e8a744dd27"
+      }
+    }
+  ],
+  "schedulerCounterReference": "https://www.kernel.org/doc/html/latest/scheduler/sched-stats.html",
+  "interpretation": "The unchanged-dimension callbacks now cost under 1 ms. Linux renderer-main-thread counters establish 565\u2013743 ms of runnable runqueue wait in sampled journey intervals, with 255\u2013269 ms running. Browser starvation is a material measurement bottleneck; a separate client machine is needed to separate server and client capacity.",
+  "limitations": [
+    "Three profiles per diagnostic, with instrumentation overhead; no latency pass or general effect size.",
+    "Process counters cover sampled subintervals, not exact navigation boundaries. Maximum gaps are recorded; counter updates and reads have boundary uncertainty.",
+    "Thread elapsed minus CPU alone includes scheduling and blocking; only the separate runqueue counter establishes runnable wait.",
+    "Counters do not identify which competing process caused each wait.",
+    "Historical repair continues after the full control; these probes are not a quiescent no-backfill fixture.",
+    "Server overview/admission and ingestion budgets remain failed; browser contention does not waive them.",
+    "One or two microsecond tasks lack thread-clock durations in three profiles. They are reported separately and excluded from matched elapsed/CPU totals; no missing duration is interpreted as zero CPU."
+  ]
+}
