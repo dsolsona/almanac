@@ -138,10 +138,17 @@ an already committed decision, including custom windows unsupported by the
 existing 1h/6h SLO-chart API.
 
 When more points exist, select actual evaluations deterministically by time
-buckets, retaining each bucket's first/last and short/long burn extrema, plus
-the response endpoints, within the 120-point limit. Return sampling/resolution
-metadata. This graph does not claim to preserve every transition; the separately
-paged lifecycle does. Preserve unavailable intervals as explicit gaps and never
+buckets. Candidate points are each bucket's first/last and short/long burn
+extrema, plus the response endpoints. The requested limit is a hard bound:
+retain the endpoints first, then global short maximum, long maximum, short
+minimum and long minimum, then remaining bucket candidates in time order.
+Deduplicate evaluation IDs; extrema ties use effective cutoff then evaluation ID.
+If the limit is two, return only the endpoints: burns of 1, 5 and 1 yield the two
+1-valued endpoints, with the omitted maximum disclosed in sampling metadata.
+Return sampling/resolution metadata including whether extrema were omitted.
+This graph does not claim to preserve every transition or spike. The separately
+paged lifecycle retains every lifecycle transition. Preserve unavailable intervals
+as explicit gaps and never
 join a line through them or average values into invented decision evidence.
 All numeric points retain their actual timestamps/counts and immutable
 `as_evaluated` provenance; different points may have different source generations.

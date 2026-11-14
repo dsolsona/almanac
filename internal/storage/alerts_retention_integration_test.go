@@ -3,6 +3,7 @@
 package storage
 
 import (
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -71,6 +72,29 @@ func TestIntegrationAlertRetentionCompaction(t *testing.T) {
 	var fakeCounts bool
 	if err := f.conn.QueryRow(t.Context(), `SELECT (SELECT count(*) FROM almanac_alert_evaluations),(SELECT count(*) FROM almanac_alert_ranges WHERE kind='compacted_evaluations'),EXISTS(SELECT 1 FROM almanac_alert_ranges WHERE summary::text LIKE '%Good%' OR summary::text LIKE '%Total%')`).Scan(&evaluations, &ranges, &fakeCounts); err != nil || compacted != 7 || evaluations != 1 || ranges != 2 || fakeCounts {
 		t.Fatalf("compaction outcome: removed=%d eval=%d ranges=%d fake=%v %v", compacted, evaluations, ranges, fakeCounts, err)
+	}
+}
+
+func TestIntegrationAlertRetentionMinimumBatch(t *testing.T) {
+	t.Parallel()
+	f := newAlertTestFixture(t)
+	seedAlertRetentionClear(t, f, 3, 0)
+	f.now = f.at.Add(3 * 24 * time.Hour)
+	result, err := f.runtime.maintainAlertEvidence(t.Context(), alertRetentionTestOptions(f.now, 1), f.clock)
+	if !errors.Is(err, ErrAlertInvalid) || result != (alertRetentionResult{}) {
+		t.Fatalf("batch incapable of compaction was accepted: %+v %v", result, err)
+	}
+	var untouched bool
+	if err := f.conn.QueryRow(t.Context(), `SELECT bool_and(version=1) FROM almanac_alert_retention_work`).Scan(&untouched); err != nil || !untouched {
+		t.Fatalf("invalid batch advanced work: %v %v", untouched, err)
+	}
+	result, err = f.runtime.maintainAlertEvidence(t.Context(), alertRetentionTestOptions(f.now, 2), f.clock)
+	if err != nil || result.CompactedEvaluations != 2 || result.Scanned > 6 {
+		t.Fatalf("minimum valid batch did not compact within three bounded pages: %+v %v", result, err)
+	}
+	var evaluations, ranges, pinned int
+	if err := f.conn.QueryRow(t.Context(), `SELECT (SELECT count(*) FROM almanac_alert_evaluations),(SELECT count(*) FROM almanac_alert_ranges WHERE kind='compacted_evaluations'),(SELECT count(*) FROM almanac_alert_evaluations e JOIN almanac_alert_cursors c ON c.last_evaluation_id=e.id)`).Scan(&evaluations, &ranges, &pinned); err != nil || evaluations != 1 || ranges != 1 || pinned != 1 {
+		t.Fatalf("minimum batch lost retained evidence: evaluations=%d ranges=%d pinned=%d %v", evaluations, ranges, pinned, err)
 	}
 }
 
@@ -190,6 +214,18 @@ func TestIntegrationAlertRetentionConcurrentBatches(t *testing.T) {
 
 func TestIntegrationAlertRetentionPinnedPrefixProgress(t *testing.T) {
 	t.Parallel()
+	verifyAlertRetentionPinnedPrefix(t, 4)
+}
+
+func TestIntegrationAlertRetentionPageBoundaryPair(t *testing.T) {
+	t.Parallel()
+	// Three pinned rows put the following two unpinned evaluations on
+	// different two-row pages. A complete sweep must still consider the pair.
+	verifyAlertRetentionPinnedPrefix(t, 3)
+}
+
+func verifyAlertRetentionPinnedPrefix(t *testing.T, quietCount int) {
+	t.Helper()
 	f := newAlertTestFixture(t)
 	register := func(id, name string, first time.Time) {
 		t.Helper()
@@ -211,7 +247,7 @@ func TestIntegrationAlertRetentionPinnedPrefixProgress(t *testing.T) {
 		return err
 	})
 	register("ffffffff-ffff-4fff-8fff-ffffffffffff", "Later quiet", f.at.Add(3*time.Minute))
-	for index := 3; index < 7; index++ {
+	for index := 3; index < 3+quietCount; index++ {
 		f.now = f.at.Add(time.Duration(index) * time.Minute)
 		claim := f.claim(t, f.now)
 		if _, err := f.runtime.commitAlertEvaluation(t.Context(), claim, f.input(t, claim, alert.Complete, false), f.limits, f.clock); err != nil {

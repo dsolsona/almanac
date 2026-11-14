@@ -127,7 +127,7 @@ func compactionSummary(entry RetentionEntry) ([]ConditionCompactionSummary, erro
 		}
 		for _, window := range []WindowEvidence{condition.Short, condition.Long} {
 			duration := window.End.Sub(window.Start)
-			if window.Snapshot != identity || !window.End.Equal(identity.Cutoff) || window.Start.IsZero() || duration <= 0 || duration > 30*24*time.Hour || duration%time.Minute != 0 {
+			if !sameSnapshot(window.Snapshot, identity) || !window.End.Equal(identity.Cutoff) || window.Start.IsZero() || duration <= 0 || duration > 30*24*time.Hour || duration%time.Minute != 0 {
 				return nil, ErrCompaction
 			}
 			switch window.Quality {

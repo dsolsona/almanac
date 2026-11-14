@@ -53,6 +53,35 @@ func TestCompactionExactSummary(t *testing.T) {
 	}
 }
 
+func TestCompactionSemanticSnapshotTimes(t *testing.T) {
+	t.Parallel()
+	zone := time.FixedZone("fixture", 2*60*60)
+	var entries []RetentionEntry
+	for index := range 2 {
+		input, limits := decisionFixture()
+		offset := time.Duration(index) * time.Minute
+		input.Snapshot.Cutoff = input.Snapshot.Cutoff.Add(offset)
+		for i := range input.Windows {
+			window := &input.Windows[i]
+			window.Snapshot.Cutoff = input.Snapshot.Cutoff.In(zone)
+			window.Start = window.Start.Add(offset).In(zone)
+			window.End = window.End.Add(offset).In(zone)
+		}
+		evaluation, err := Evaluate(input, limits)
+		if err != nil {
+			t.Fatalf("equal-instant window evidence rejected by Evaluate: %v", err)
+		}
+		if evaluation.Snapshot.Cutoff == evaluation.Conditions[0].Short.Snapshot.Cutoff {
+			t.Fatal("fixture does not exercise different time representations")
+		}
+		entries = append(entries, RetentionEntry{ID: strconv.Itoa(index), Evaluation: evaluation, ScheduledAt: input.Snapshot.Cutoff, CommittedAt: input.Snapshot.Cutoff.Add(time.Second)})
+	}
+	runs, err := PlanCompaction(entries, entries[1].ScheduledAt.Add(time.Hour))
+	if err != nil || len(runs) != 1 || !reflect.DeepEqual(runs[0].EvaluationIDs, []string{"0", "1"}) || !runs[0].First.Cutoff.Equal(entries[0].ScheduledAt) || !runs[0].Last.Cutoff.Equal(entries[1].ScheduledAt) {
+		t.Fatalf("valid consecutive evaluations failed compaction: %+v %v", runs, err)
+	}
+}
+
 func TestCompactionRunBoundaries(t *testing.T) {
 	t.Parallel()
 	for _, test := range []struct {

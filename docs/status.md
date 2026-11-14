@@ -1,7 +1,12 @@
 Foundation PR, 2026-11-14: ready [PR #121](https://github.com/dsolsona/almanac/pull/121)
 publishes the unwired foundations as one candidate. All four application CI gates
 pass on `6f89bdf`: unit 3m32s, browser 7m58s, end-to-end 9m09s and integration
-9m44s. CodeRabbit review remains pending. Final local verification passes 156 focused
+9m44s. Initial CodeRabbit review completes with three valid findings; corrections
+add semantic timestamp comparison, a minimum two-row retention batch and explicit
+chart-sampling priority. Further inspection also fixes pairs stranded across scan
+pages with a bounded one-row overlap. Integrated focused race checks pass 46 domain
+cases in 1.019 s and 18 PostgreSQL retention/upgrade cases in 6.364 s; refreshed
+remote checks remain required after publication. Final local verification passes 156 focused
 storage/race/upgrade cases in 28.879 s and 117 domain cases in 1.026 s. SQLC
 regeneration is clean; documentation checks cover 287 files/2,181 local links.
 Retention now protects active and last-breaching evidence, exposes compacted

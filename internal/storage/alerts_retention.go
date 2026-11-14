@@ -22,7 +22,7 @@ type alertRetentionResult struct{ Scanned, CompactedEvaluations, DeletedEvaluati
 // prefix cannot starve later policies or cause an unbounded eligibility scan.
 func (r *Runtime) maintainAlertEvidence(ctx context.Context, options alertRetentionOptions, clock func() time.Time) (alertRetentionResult, error) {
 	var total alertRetentionResult
-	if clock == nil || options.Batch < 1 || options.Batch > 200 {
+	if clock == nil || options.Batch < 2 || options.Batch > 200 {
 		return total, ErrAlertInvalid
 	}
 	now := normalizedAgentNow(clock)
@@ -237,6 +237,10 @@ func retainAlertEvaluations(ctx context.Context, q *dbgen.Queries, work dbgen.Al
 	if len(rows) == 0 {
 		return result, alertRetentionAdvance(ctx, q, work, pgtype.UUID{}, 0, pgtype.Timestamptz{}, pgtype.UUID{}, true)
 	}
-	last := rows[len(rows)-1]
+	// Re-read the final row with its successor so a compactable pair cannot
+	// remain split across every sweep. Batch >= 2 still advances at least one
+	// key per full page. Deleted rows need no carry-over; their keys remain
+	// valid checkpoints and the next transaction rechecks all surviving pins.
+	last := rows[max(0, len(rows)-2)]
 	return result, alertRetentionAdvance(ctx, q, work, last.PolicyID, last.Revision, last.ScheduledAt, last.ID, false)
 }
