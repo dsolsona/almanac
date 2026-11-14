@@ -1,5 +1,8 @@
 # Implementation tasks
 
+[F4-T37](F4-T37.md) specifies the bounded shared maintenance-population candidate;
+adoption and numerical resource limits remain proposed.
+
 [F4-T36](F4-T36.md) protects active/last-breaching evidence and adds bounded,
 restartable compaction/retention without production cleanup registration.
 
