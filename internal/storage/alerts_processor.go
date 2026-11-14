@@ -10,6 +10,7 @@ import (
 	"github.com/dsolsona/almanac/internal/storage/dbgen"
 	"github.com/dsolsona/almanac/internal/telemetry"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // All options are explicit internal admission inputs. Production registration
@@ -100,8 +101,11 @@ func (r *Runtime) processAlertClaim(ctx context.Context, claim alertClaim, optio
 	if ctx.Err() != nil {
 		return "stale", err
 	} // expiry/restart recovers the claim
-	if errors.Is(err, ErrDerivedPending) || errors.Is(err, ErrAlertStale) {
+	if errors.Is(err, ErrDerivedPending) || errors.Is(err, ErrAlertStale) || alertBackpressure(err) {
 		reason := "aggregate_pending"
+		if alertBackpressure(err) {
+			reason = "database_backpressure"
+		}
 		if errors.Is(err, ErrAlertExclusionsPending) {
 			reason = "exclusion_calculation_pending"
 		}
@@ -113,6 +117,12 @@ func (r *Runtime) processAlertClaim(ctx context.Context, claim alertClaim, optio
 			return "stale", nil
 		}
 		if deferred != nil {
+			if alertBackpressure(deferred) {
+				// Admission may still be unavailable. Preserve the lease for
+				// expiry/reclaim rather than spending failure attempts merely
+				// because even the pending-state write could not be admitted.
+				return "pending", deferred
+			}
 			return "failed", deferred
 		}
 		return "pending", nil
@@ -127,6 +137,24 @@ func (r *Runtime) processAlertClaim(ctx context.Context, claim alertClaim, optio
 		return "stale", err
 	}
 	return "failed", errors.Join(err, failed)
+}
+
+// Unlike derivedTemporary, source exhaustion is not transient alert work: the
+// canonical adapter turns it into per-window calculation_failed evidence.
+func alertBackpressure(err error) bool {
+	if errors.Is(err, ErrDerivedSourceFailed) {
+		return false
+	}
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, ErrCancelled) || errors.Is(err, errReadSerialization) || errors.Is(err, errDatabaseConflict) || errors.Is(err, ErrOperationalResource) {
+		return true
+	}
+	if failure, ok := errors.AsType[*pgconn.PgError](err); ok {
+		switch failure.Code {
+		case "40001", "40P01", "55P03", "57014":
+			return true
+		}
+	}
+	return false
 }
 
 func (r *Runtime) evaluateAlertClaim(ctx context.Context, claim alertClaim, options alertProcessorOptions, clock func() time.Time) (string, error) {
