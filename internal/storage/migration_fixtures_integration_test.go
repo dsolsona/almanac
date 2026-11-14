@@ -13,7 +13,8 @@ import (
 // removes their triggers, but their shared history function must be removed too.
 func dropAlertJournalFixture(t *testing.T, conn *pgx.Conn) {
 	t.Helper()
-	if _, err := conn.Exec(t.Context(), `DROP TABLE IF EXISTS
+	if _, err := conn.Exec(t.Context(), `DROP VIEW IF EXISTS public.almanac_alert_catalog;
+DROP TABLE IF EXISTS
 public.almanac_alert_transitions, public.almanac_alert_ranges,
 public.almanac_alert_cursors, public.almanac_alert_occurrences,
 public.almanac_alert_evaluations, public.almanac_alert_policy_revisions,

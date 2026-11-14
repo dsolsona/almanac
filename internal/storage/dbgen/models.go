@@ -93,6 +93,20 @@ type AlmanacAgentRuntimeStatus struct {
 	UpdatedAt                    pgtype.Timestamptz `json:"updated_at"`
 }
 
+type AlmanacAlertCatalog struct {
+	ID          pgtype.UUID        `json:"id"`
+	PolicyID    pgtype.UUID        `json:"policy_id"`
+	Revision    int64              `json:"revision"`
+	State       string             `json:"state"`
+	OpenedAt    pgtype.Timestamptz `json:"opened_at"`
+	PolicyName  string             `json:"policy_name"`
+	Severity    string             `json:"severity"`
+	SloID       pgtype.UUID        `json:"slo_id"`
+	SloName     string             `json:"slo_name"`
+	ServiceID   pgtype.UUID        `json:"service_id"`
+	ServiceName string             `json:"service_name"`
+}
+
 type AlmanacAlertCursor struct {
 	PolicyID         pgtype.UUID        `json:"policy_id"`
 	Revision         int64              `json:"revision"`

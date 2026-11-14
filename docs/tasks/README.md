@@ -1,5 +1,8 @@
 # Implementation tasks
 
+[F4-T34](F4-T34.md) adds server-side alert/policy pagination, global SLO group
+totals, immutable history and processing-health reads for the selected UI.
+
 [F4-T33](F4-T33.md) adds authenticated alert commands, replay reconciliation and
 immutable evidence reads before public API/CLI integration.
 

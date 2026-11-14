@@ -14,6 +14,12 @@ adds authenticated create/acknowledge/disable/retry, actor-scoped replay lookup
 and immutable firing/latest evidence reads. The integrated focused selection
 passes 47 cases under race in 17.414 s, including terminal-window failure alongside
 a healthy matching condition. Public routes and sustained acceptance remain open.
+[F4-T34](tasks/F4-T34.md) adds paginated alert/policy reads, complete filtered/SLO
+totals, latest condition evidence, transition/range history and separate processing
+status. The integrated focused race/upgrade selection passes 60 cases in 16.943 s.
+These unregistered foundations remain one local feature candidate; public
+activation/default contracts, maintenance calculations and API/CLI/UI delivery
+remain explicit next work.
 
 Review consolidation, 2026-11-14: [F4-T28](tasks/F4-T28.md) is integrated into main
 as `412d397` through PR #120. All 26 original stack heads and Merged PR states are
