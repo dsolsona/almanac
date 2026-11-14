@@ -1,5 +1,8 @@
 # Implementation tasks
 
+[F4-T21](F4-T21.md) prepares independently runnable navigation clients to separate
+client CPU starvation from server latency; remote execution remains pending.
+
 [F4-T18](F4-T18.md) bounds unsuccessful historical turns without skipping window
 validation, changing durable retry rules or slowing successful draining.
 

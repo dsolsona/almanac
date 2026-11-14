@@ -130,6 +130,19 @@ observer-driven resize; whether redundant layout explains the loaded gap needs
 further instrumentation. Profiles carry overhead and omit the other workload
 lanes; neither their timings nor the reduced-load result substitute for acceptance.
 
+## Separate client preparation
+
+[F4-T21](../../tasks/F4-T21.md) extracts the existing ten API readers and browser
+lane into a bounded, credential-safe stdin runner with source identities and
+explicit partial/failure results. Eighteen focused checks and TypeScript pass.
+The [real functional check](2026-11-14-navigation-runner.json) completes 80 journeys
+and 300 successful API requests, then reports overview p95 650.836 ms as a failure.
+Cold-list p95/max is 678.8/889 ms in this retained, reduced-work fixture. This is
+functional evidence only: synthetic query/writer lanes are absent, background
+repair may continue, and the client is still cohosted. Full-load failures remain
+open; separate-client hardware and controller coordination remain prerequisites
+for the next representative comparison.
+
 ## Confirmed resize waste and browser CPU starvation
 
 [F4-T20](../../tasks/F4-T20.md) observes twenty initial resize callbacks after all

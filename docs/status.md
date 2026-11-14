@@ -1,3 +1,11 @@
+Separate client preparation, 2026-11-14: [F4-T21](tasks/F4-T21.md) extracts the
+ten API readers and browser lane into a bounded stdin-driven runner. Eighteen
+focused checks and TypeScript pass. Real retained-stack verification completes
+80 journeys and 300 successful requests in 91.270 s, with clean shutdown, and
+correctly reports overview latency failure. This cohosted reduced-work diagnostic
+is not capacity acceptance; separate-client hardware and controller coordination
+remain pending. Cold-list/overview performance stays the primary investigation.
+
 Cold-list scheduling diagnosis, 2026-11-14: [F4-T20](tasks/F4-T20.md) removes
 confirmed unchanged-size sparkline redraws. Focused checks, twelve browser cases
 and six identical before/after renders pass. The full control still fails:
