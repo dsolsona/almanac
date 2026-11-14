@@ -3,7 +3,8 @@ import {readFileSync, statSync} from 'node:fs';
 import {isIP} from 'node:net';
 
 // Node loads this trust file at process startup. Chromium receives only its
-// public-key pin, scoped to the disposable browser and the selected HTTPS origin.
+// public-key pin, scoped to the disposable browser process. Validate the selected
+// certificate against the requested host before launching that browser.
 // No global certificate-verification override or private key is accepted.
 export function navigationTransport(baseURL: string) {
   const url = new URL(baseURL);

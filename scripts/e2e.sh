@@ -47,7 +47,25 @@ up() {
   compose --profile agent build --quiet agent
   # A rebuild leaves the previous images untagged; remove this project's, never anyone else's.
   docker image prune --force --filter label=com.docker.compose.project="$COMPOSE_PROJECT_NAME" >/dev/null
-  compose --profile sources up --detach --wait --wait-timeout 120 app loki tempo sources-ready
+  if compose --profile sources up --detach --wait --wait-timeout 120 app loki tempo sources-ready; then
+    return 0
+  else
+    startup_status=$?
+  fi
+  # Preserve public fixture readiness evidence before the EXIT trap removes it.
+  # Do not dump container environments, application secrets or authentication state.
+  startup_evidence=".local/e2e/startup-$(date -u +%Y%m%dT%H%M%SZ)"
+  mkdir -p "$startup_evidence" || return "$startup_status"
+  compose ps --all >"$startup_evidence/services.txt" 2>&1 || true
+  compose logs --no-color --tail 200 loki tempo sources-ready >"$startup_evidence/providers.log" 2>&1 || true
+  for startup_service in loki tempo sources-ready; do
+    startup_container=$(compose ps --all --quiet "$startup_service") || startup_container=''
+    if [ -n "$startup_container" ]; then
+      docker inspect --format '{{json .State.Health}}' "$startup_container" >"$startup_evidence/$startup_service-health.json" 2>&1 || true
+    fi
+  done
+  printf 'Startup readiness evidence: %s\n' "$startup_evidence" >&2
+  return "$startup_status"
 }
 
 case "${1:-}" in

@@ -264,7 +264,13 @@ test('a new 98% SLO becomes Healthy from collected eligible data without a full 
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('link', { name: 'SLOs' }).click();
   const row = page.locator('.app-slo-row').filter({ hasText: name });
-  await expect(row.getByText('Healthy', { exact: true })).toBeVisible();
+  // Navigation can cross a cadence boundary while its next projection is pending.
+  // Lists intentionally do not poll: exercise the operator's explicit Refresh
+  // action rather than waiting for a frozen response to change by itself.
+  await expect(async () => {
+    await page.getByRole('button', { name: 'Refresh SLOs', exact: true }).click();
+    await expect(row.getByText('Healthy', { exact: true })).toBeVisible({ timeout: 500 });
+  }).toPass({ timeout: 10_000, intervals: [200, 500, 1_000] });
   await expect(row.locator('.app-slo-budget b')).toHaveText('50%');
   await expect(row.locator('.app-slo-burn b')).toHaveText('0.5×');
 });

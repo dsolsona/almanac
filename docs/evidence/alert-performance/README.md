@@ -526,8 +526,9 @@ selection and scheduler wakeups to avoid replacing transactions with a tight pol
 
 ## Calculation readiness and alert capacity remain unproven
 
-The latest baseline returns pending in **252/800 batches**; the earlier control
-returned **150/800**. This is accepted
+Earlier controls returned pending in **252/800 batches** and **150/800**.
+These are historical samples; later controls and their limitations are recorded
+above. This is accepted
 calculator preparation state, not a proven arithmetic defect. The proposed alert
 engine must preserve those boundaries rather than treating them as clear.
 

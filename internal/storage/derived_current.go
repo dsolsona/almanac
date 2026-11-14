@@ -140,6 +140,15 @@ func validPublishedCurrentItem(item api.SloOperationalOverviewItem, row dbgen.Ge
 		if !performance.State.Valid() || !performance.BudgetUnit.Valid() {
 			return false
 		}
+		// Definitive performance always has calculated counts and ratios. Unknown
+		// and not-applicable windows legitimately retain nullable numeric fields.
+		if performance.State == "met" || performance.State == "violated" {
+			if performance.Good == nil || performance.Total == nil || performance.Bad == nil ||
+				performance.Attainment == nil || performance.AllowedBudget == nil || performance.RemainingBudget == nil ||
+				performance.ConsumedFraction == nil || performance.RemainingFraction == nil || performance.Burn == nil {
+				return false
+			}
+		}
 	}
 	return item.Burn1h.WindowSeconds == 3600 && item.Burn6h.WindowSeconds == 21600 &&
 		!item.Burn1h.Start.IsZero() && !item.Burn1h.End.IsZero() && !item.Burn6h.Start.IsZero() && !item.Burn6h.End.IsZero()

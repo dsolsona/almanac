@@ -1,5 +1,8 @@
 # Implementation tasks
 
+[F4-T28](F4-T28.md) closes valid alerting-stack review findings, diagnoses required
+check failures and integrates the authorized checkpoint before engine delivery resumes.
+
 [F4-T26](F4-T26.md) isolates synthetic historical write pressure using the existing
 explicit omission mode, preserving all remaining workload counts and budgets.
 

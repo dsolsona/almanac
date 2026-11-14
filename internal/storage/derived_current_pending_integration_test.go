@@ -32,13 +32,19 @@ func TestIntegrationCurrentStatusDuringPreparation(t *testing.T) {
 	if err := s.conn.QueryRow(t.Context(), `SELECT payload FROM public.almanac_slo_current_projections WHERE slo_id=$1`, id).Scan(&originalPayload); err != nil {
 		t.Fatal(err)
 	}
-	for _, replacement := range []string{`jsonb_build_object('_current_valid_until',payload->'_current_valid_until')`, `jsonb_set(payload,'{generation,source_generation}','"999999"')`} {
+	for _, replacement := range []string{
+		`jsonb_build_object('_current_valid_until',payload->'_current_valid_until')`,
+		`jsonb_set(payload,'{generation,source_generation}','"999999"')`,
+		`payload #- '{current,performance,total}'`,
+		`payload #- '{burn_1h,performance,total}'`,
+		`payload #- '{burn_6h,performance,total}'`,
+	} {
 		if _, err := s.conn.Exec(t.Context(), `UPDATE public.almanac_slo_current_projections SET payload=`+replacement+` WHERE slo_id=$1`, id); err != nil {
 			t.Fatal(err)
 		}
 		got, err := ReadCurrentSloStatus(t.Context(), s.f.databaseURL, input)
 		if err != nil || got.CurrentState == nil || *got.CurrentState != "unavailable" || got.Current.Performance.Total != nil {
-			t.Fatalf("corrupt current projection was presented as evidence: %+v %v", got.CurrentState, err)
+			t.Fatalf("corrupt current projection (%s) was presented as evidence: %+v %v", replacement, got.CurrentState, err)
 		}
 		if _, err := s.conn.Exec(t.Context(), `UPDATE public.almanac_slo_current_projections SET payload=$2 WHERE slo_id=$1`, id, originalPayload); err != nil {
 			t.Fatal(err)
@@ -121,7 +127,7 @@ func TestIntegrationCurrentStatusDuringPreparation(t *testing.T) {
 	if err != nil || corrupt.CurrentState == nil || *corrupt.CurrentState != "unavailable" || corrupt.Current.Performance.Total != nil {
 		t.Fatalf("corrupt published result did not become explicitly unavailable: %+v %v", corrupt, err)
 	}
-	for _, field := range []string{"current", "burn_6h", "generation", "current.window", "current.quality", "exhaustion.current_quality", "exhaustion.one_hour_quality", "reasons.0.code"} {
+	for _, field := range []string{"current", "burn_6h", "generation", "current.window", "current.quality", "current.performance.total", "burn_1h.performance.total", "burn_6h.performance.total", "exhaustion.current_quality", "exhaustion.one_hour_quality", "reasons.0.code"} {
 		if _, err := s.conn.Exec(t.Context(), `UPDATE public.almanac_slo_current_projections SET payload=$2::jsonb #- string_to_array($3,'.') WHERE slo_id=$1`, id, payloadBefore, field); err != nil {
 			t.Fatal(err)
 		}

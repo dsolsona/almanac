@@ -1,3 +1,12 @@
+Review consolidation, 2026-11-14: [F4-T28](tasks/F4-T28.md) closes validated
+review findings and the failed integration/collection checks before integrating
+the existing alerting stack. All 26 stack PRs are ready and their initial reviews
+have completed. New optimization work is paused. The maintainer authorized fixing
+valid feedback, refreshing reviews, merging the stack and resuming alerting delivery.
+This authorization does not itself adopt the experimental calculator or complete
+the production alert lifecycle. Current required CI failures remain open until
+diagnosed corrections and verification are recorded in F4-T28.
+
 Writer attribution, 2026-11-14: [F4-T26](tasks/F4-T26.md) exposes the existing
 explicit omission mode in the CPU-control workflow. Default complete controls
 retain all historical batches. Reduced controls record their mode and zero
@@ -7,7 +16,8 @@ proves zero writer activity: split ingestion p95 is 12.40–13.02 ms loaded vers
 9.71–10.20 ms alone, cold-list p95 418.9 ms, but overview and relative ingestion
 limits still fail. Shared cohosting on one physical core remains much slower and
 records API/ingestion failures. All calculation/browser/due work completes.
-All four ordinary PR #120 CI gates pass; reduced work is not capacity acceptance.
+All four ordinary PR #120 CI gates passed on `a060c19`; the subsequent `88c4461`
+integration failure is tracked in F4-T28. Reduced work is not capacity acceptance.
 
 Resource-table verification, 2026-11-14: [F4-T25](tasks/F4-T25.md) traces the CI
 failure to a positional locator retargeted when sorting finishes after Back.
@@ -65,8 +75,9 @@ The guard is verified, but no end-to-end improvement, merge or adoption is claim
 
 Cold-list attribution, 2026-11-14: [F4-T19](tasks/F4-T19.md) prioritizes the
 user-visible list failure. Matched traces put 576–820 ms after overview JSON and
-before chart/content readiness in the two slowest loads. Omitting synthetic SQL
-backfill lowers cold-list p95 from 1.531 to 1.224 s, still outside budget; all
+before chart/content readiness in the two slowest loads. Separate full-writer and
+omitted-writer runs observed cold-list p95 of 1.531 and 1.224 s, both outside budget;
+fixture/clock alignment and duration differ, so this is not an isolated effect size. All
 80 journeys and 200 due intervals complete without API errors. This reduced-load
 result cannot establish capacity. Three unloaded browser profiles take 405–470 ms;
 three ten-reader burst profiles take 959–1,049 ms, exposing frontend work amplified

@@ -789,7 +789,7 @@ public.almanac_maintenance_exclusions;
 DROP FUNCTION public.almanac_initialize_slo_exclusion_state(), public.almanac_immutable_maintenance_revision()`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := conn.Exec(t.Context(), `DROP FUNCTION public.almanac_projection_deadline(text)`); err != nil {
+	if _, err := conn.Exec(t.Context(), `DROP FUNCTION public.almanac_projection_deadline(text), public.almanac_projection_performance_complete(jsonb)`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := conn.Exec(t.Context(), `ALTER TABLE public.almanac_sli_coverage DROP COLUMN ingestion_generation`); err != nil {
