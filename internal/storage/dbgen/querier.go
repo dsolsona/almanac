@@ -271,6 +271,7 @@ type Querier interface {
 	MarkDerivedHoursDirty(ctx context.Context, arg MarkDerivedHoursDirtyParams) error
 	MarkInitialOwnerProvisioned(ctx context.Context, arg MarkInitialOwnerProvisionedParams) error
 	MarkSliObservation(ctx context.Context, arg MarkSliObservationParams) error
+	PinAlertCutoff(ctx context.Context, arg PinAlertCutoffParams) (int64, error)
 	// Preview counts stop at 1001; the report labels these as lower bounds.
 	PreviewCalculatedRetention(ctx context.Context, arg PreviewCalculatedRetentionParams) (PreviewCalculatedRetentionRow, error)
 	PruneExpiredLoginAttempts(ctx context.Context, nowAt pgtype.Timestamptz) error

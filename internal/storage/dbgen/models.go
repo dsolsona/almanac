@@ -106,6 +106,7 @@ type AlmanacAlertCursor struct {
 	ClaimUntil       pgtype.Timestamptz `json:"claim_until"`
 	LastAttemptTick  pgtype.Timestamptz `json:"last_attempt_tick"`
 	LastDispatchedAt pgtype.Timestamptz `json:"last_dispatched_at"`
+	PendingCutoff    pgtype.Timestamptz `json:"pending_cutoff"`
 	LastCutoff       pgtype.Timestamptz `json:"last_cutoff"`
 	LastEvaluationID pgtype.UUID        `json:"last_evaluation_id"`
 	OpenOccurrenceID pgtype.UUID        `json:"open_occurrence_id"`

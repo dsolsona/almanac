@@ -1,5 +1,8 @@
 # Implementation tasks
 
+[F4-T31](F4-T31.md) connects canonical SLO counts to alert evidence and persists
+pending cutoffs across retries/restart; production activation remains gated.
+
 [F4-T30](F4-T30.md) builds durable alert claims and atomic occurrence/evidence
 journaling against the exact core; production activation remains gated.
 

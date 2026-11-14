@@ -48,6 +48,7 @@ CREATE TABLE public.almanac_alert_cursors (
  origin_at timestamptz NOT NULL, next_scheduled_at timestamptz NOT NULL, available_at timestamptz NOT NULL,
  version bigint NOT NULL DEFAULT 1 CHECK(version>0), epoch bigint NOT NULL DEFAULT 0 CHECK(epoch>=0),
  claim_token uuid, claim_until timestamptz, last_attempt_tick timestamptz, last_dispatched_at timestamptz,
+ pending_cutoff timestamptz CHECK(pending_cutoff<=next_scheduled_at),
  last_cutoff timestamptz, last_evaluation_id uuid, open_occurrence_id uuid, waiting_reason text NOT NULL DEFAULT '',
  PRIMARY KEY(policy_id,revision), CHECK ((claim_token IS NULL)=(claim_until IS NULL)),
  CHECK (claim_token IS NULL OR epoch>0), CHECK (next_scheduled_at>=origin_at),

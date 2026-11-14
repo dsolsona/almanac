@@ -1,3 +1,14 @@
+Alert foundations, 2026-11-14: the maintainer explicitly approved building the
+unwired state machine/storage first, retaining calculator adoption, activation and
+release gates. [F4-T29](tasks/F4-T29.md) implements exact conditions/global lifecycle;
+[F4-T30](tasks/F4-T30.md) adds durable claims, atomic evidence/occurrences and
+catch-up ranges, with independent review's timing races reproduced and fixed.
+[F4-T31](tasks/F4-T31.md) connects canonical empty-mask counts and durable pending
+cutoffs; its combined focused race/migration selection passes in 11.184 s.
+These remain one unmerged feature candidate. No production alert worker/API/UI is
+registered yet, nonzero maintenance calculations remain explicit pending, and the
+failed fallback/capacity evidence has not been adopted.
+
 Review consolidation, 2026-11-14: [F4-T28](tasks/F4-T28.md) is integrated into main
 as `412d397` through PR #120. All 26 original stack heads and Merged PR states are
 verified. All four application CI gates pass on final candidate `ab58ecd`

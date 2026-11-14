@@ -272,9 +272,9 @@ This avoids mistaking each ordinary cursor/evidence-version advance for an expan
 administrative authorization. It is an interpretation to reconcile in the spec,
 not an independently accepted amendment in this plan.
 
-No persisted maintenance exclusion catalogue/activation transaction exists at this
-base: retained calculations carry exclusion revision fields but readers largely
-use revision zero. Pure excluded-window arithmetic is a prerequisite, not the
+The persisted maintenance authority from plan 0039 slice A is integrated, but
+derived consumers still largely use revision zero. Pure excluded-window arithmetic
+and the authority catalogue are prerequisites, not the
 complete AC-07 implementation. Reuse the shared model from
 [SPEC-0016](../specs/0016-maintenance-exclusions.md); provide a canonical exclusion
 snapshot/generation whose writes atomically invalidate derived work and fence

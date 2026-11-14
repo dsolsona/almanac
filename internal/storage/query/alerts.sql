@@ -48,7 +48,7 @@ WHERE id=$1 AND version=$8 AND state IN ('firing','acknowledged');
 INSERT INTO public.almanac_alert_transitions(id,policy_id,revision,occurrence_id,sequence,from_state,to_state,cause,effective_at,detected_at,actor_id,reason,evaluation_id,request_id)
 VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14);
 -- name: AdvanceAlertCursor :execrows
-UPDATE public.almanac_alert_cursors SET next_scheduled_at=$3,available_at=$3,version=version+1,last_cutoff=$4,last_evaluation_id=$5,open_occurrence_id=$6,claim_token=NULL,claim_until=NULL,waiting_reason=''
+UPDATE public.almanac_alert_cursors SET next_scheduled_at=$3,available_at=$3,version=version+1,last_cutoff=$4,last_evaluation_id=$5,open_occurrence_id=$6,pending_cutoff=NULL,claim_token=NULL,claim_until=NULL,waiting_reason=''
 WHERE policy_id=$1 AND revision=$2 AND epoch=$7 AND claim_token=$8 AND version=$9 AND next_scheduled_at=sqlc.arg(expected_boundary) AND schedulable;
 -- name: DeferAlertCursor :execrows
 UPDATE public.almanac_alert_cursors SET available_at=$3,claim_token=NULL,claim_until=NULL,waiting_reason=$4
@@ -58,5 +58,5 @@ INSERT INTO public.almanac_alert_ranges(id,policy_id,revision,starts_at,ends_at,
 -- name: DisableAlertPolicyIdentity :execrows
 UPDATE public.almanac_alert_policies SET enabled=false,version=version+1,updated_at=$3 WHERE id=$1 AND version=$2 AND enabled;
 -- name: CancelAlertCursor :execrows
-UPDATE public.almanac_alert_cursors SET schedulable=false,next_scheduled_at=$3,available_at=$3,version=version+1,epoch=epoch+1,claim_token=NULL,claim_until=NULL,open_occurrence_id=NULL,waiting_reason='policy_disabled'
+UPDATE public.almanac_alert_cursors SET schedulable=false,next_scheduled_at=$3,available_at=$3,version=version+1,epoch=epoch+1,pending_cutoff=NULL,claim_token=NULL,claim_until=NULL,open_occurrence_id=NULL,waiting_reason='policy_disabled'
 WHERE policy_id=$1 AND revision=$2 AND version=$4;

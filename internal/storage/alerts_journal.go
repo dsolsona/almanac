@@ -149,6 +149,9 @@ func (r *Runtime) commitAlertEvaluation(ctx context.Context, claim alertClaim, i
 		if cursor.LastCutoff.Valid && !identity.Cutoff.After(cursor.LastCutoff.Time) {
 			return ErrAlertStale
 		}
+		if cursor.PendingCutoff.Valid && !cursor.PendingCutoff.Time.Equal(identity.Cutoff) {
+			return ErrAlertStale
+		}
 		var stored alertStoredOccurrence
 		if cursor.OpenOccurrenceID.Valid {
 			row, err := q.LockAlertOccurrence(ctx, cursor.OpenOccurrenceID)
