@@ -40,7 +40,11 @@ func (q *Queries) AdvanceAlertRetentionWork(ctx context.Context, arg AdvanceAler
 }
 
 const alertRangesOverlap = `-- name: AlertRangesOverlap :one
-SELECT EXISTS(SELECT 1 FROM public.almanac_alert_ranges WHERE policy_id=$1 AND revision=$2 AND starts_at<$3::timestamptz AND ends_at>$4::timestamptz)
+SELECT EXISTS(SELECT 1 FROM (
+ SELECT ends_at FROM public.almanac_alert_ranges
+ WHERE policy_id=$1 AND revision=$2 AND starts_at<$3::timestamptz
+ ORDER BY starts_at DESC LIMIT 1
+) predecessor WHERE ends_at>$4::timestamptz)
 `
 
 type AlertRangesOverlapParams struct {
@@ -50,6 +54,11 @@ type AlertRangesOverlapParams struct {
 	StartsAt pgtype.Timestamptz `json:"starts_at"`
 }
 
+// Ranges for one policy revision are disjoint: cursor-locked writers advance
+// monotonically, and compaction only replaces existing evaluations after this
+// check. Therefore only the greatest start below the proposed end can overlap.
+// Keep the end filter outside LIMIT so the unique (policy_id,revision,starts_at)
+// index proves absence with one predecessor, not all earlier history.
 func (q *Queries) AlertRangesOverlap(ctx context.Context, arg AlertRangesOverlapParams) (bool, error) {
 	row := q.db.QueryRow(ctx, alertRangesOverlap,
 		arg.PolicyID,

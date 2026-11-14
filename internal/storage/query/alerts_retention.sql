@@ -50,7 +50,16 @@ AND NOT EXISTS(SELECT 1 FROM public.almanac_alert_cursors c WHERE c.last_evaluat
 AND NOT EXISTS(SELECT 1 FROM public.almanac_alert_ranges r WHERE r.reference_evaluation_id=e.id);
 
 -- name: AlertRangesOverlap :one
-SELECT EXISTS(SELECT 1 FROM public.almanac_alert_ranges WHERE policy_id=$1 AND revision=$2 AND starts_at<sqlc.arg(ends_at)::timestamptz AND ends_at>sqlc.arg(starts_at)::timestamptz);
+-- Ranges for one policy revision are disjoint: cursor-locked writers advance
+-- monotonically, and compaction only replaces existing evaluations after this
+-- check. Therefore only the greatest start below the proposed end can overlap.
+-- Keep the end filter outside LIMIT so the unique (policy_id,revision,starts_at)
+-- index proves absence with one predecessor, not all earlier history.
+SELECT EXISTS(SELECT 1 FROM (
+ SELECT ends_at FROM public.almanac_alert_ranges
+ WHERE policy_id=$1 AND revision=$2 AND starts_at<sqlc.arg(ends_at)::timestamptz
+ ORDER BY starts_at DESC LIMIT 1
+) predecessor WHERE ends_at>sqlc.arg(starts_at)::timestamptz);
 
 -- name: InsertAlertCompactionRange :exec
 INSERT INTO public.almanac_alert_ranges(id,policy_id,revision,starts_at,ends_at,cadence_seconds,kind,reason,recorded_at,summary)

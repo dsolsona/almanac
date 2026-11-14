@@ -33,6 +33,11 @@ type Querier interface {
 	AgentHasUnsettledCurrentLease(ctx context.Context, arg AgentHasUnsettledCurrentLeaseParams) (bool, error)
 	AggregateSloObservations(ctx context.Context, arg AggregateSloObservationsParams) (AggregateSloObservationsRow, error)
 	AlertPolicyRevisionExists(ctx context.Context, arg AlertPolicyRevisionExistsParams) (bool, error)
+	// Ranges for one policy revision are disjoint: cursor-locked writers advance
+	// monotonically, and compaction only replaces existing evaluations after this
+	// check. Therefore only the greatest start below the proposed end can overlap.
+	// Keep the end filter outside LIMIT so the unique (policy_id,revision,starts_at)
+	// index proves absence with one predecessor, not all earlier history.
 	AlertRangesOverlap(ctx context.Context, arg AlertRangesOverlapParams) (bool, error)
 	ArchiveAgent(ctx context.Context, arg ArchiveAgentParams) (AlmanacAgent, error)
 	ArchiveService(ctx context.Context, arg ArchiveServiceParams) (int64, error)

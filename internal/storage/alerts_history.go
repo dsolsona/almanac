@@ -73,6 +73,7 @@ type AlertRangeRecord struct {
 	ID, Kind, Reason, ActorID, RequestID, EvaluationID string
 	Start, End, RecordedAt                             time.Time
 	CadenceSeconds                                     int64
+	Summary                                            *AlertCompactionSummary `json:",omitzero"`
 }
 type AlertRangePage struct {
 	Items      []AlertRangeRecord
@@ -104,6 +105,10 @@ func ListAlertHistoryRanges(ctx context.Context, databaseURL string, input ListA
 		}
 		for _, row := range rows[:min(len(rows), input.Limit)] {
 			record := AlertRangeRecord{ID: row.ID.String(), Kind: row.Kind, Reason: row.Reason, RequestID: row.RequestID, Start: row.StartsAt.Time.UTC(), End: row.EndsAt.Time.UTC(), RecordedAt: row.RecordedAt.Time.UTC(), CadenceSeconds: row.CadenceSeconds}
+			record.Summary, err = decodeAlertCompactionSummary(row)
+			if err != nil {
+				return err
+			}
 			if row.ActorID.Valid {
 				record.ActorID = row.ActorID.String()
 			}

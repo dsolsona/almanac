@@ -210,12 +210,7 @@ func retainAlertEvaluations(ctx context.Context, q *dbgen.Queries, work dbgen.Al
 		if overlap {
 			continue
 		}
-		summary, err := marshalAlertData(struct {
-			FormatVersion int
-			First, Last   alert.SnapshotIdentity
-			Truth         alert.Truth
-			Conditions    []alert.ConditionCompactionSummary
-		}{1, run.First, run.Last, run.Truth, run.Conditions})
+		summary, err := marshalAlertData(AlertCompactionSummary{FormatVersion: 1, First: run.First, Last: run.Last, Truth: run.Truth, Conditions: run.Conditions})
 		if err != nil {
 			return result, err
 		}
