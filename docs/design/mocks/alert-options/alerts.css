@@ -92,6 +92,7 @@ button,a,input,select,summary{touch-action:manipulation}button{cursor:pointer}bu
 .condition-input input:focus{border:0;box-shadow:none;outline:none}
 .condition-input .unit{color:var(--text-2);font:14px var(--mono)}
 .condition-input:has([aria-invalid=true]){border-color:var(--crit)}
+.condition-input:has([aria-invalid=true]):focus-within{border-color:var(--accent)}
 .condition-value .invalid-value{color:var(--status-breached)}
 @media(pointer:coarse){.condition-input{height:44px}}
 

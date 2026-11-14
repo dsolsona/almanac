@@ -81,3 +81,21 @@ tables retain their existing labelled horizontal-scroll region.
 
 These corrections do not establish authenticated alert journeys, global
 acknowledgement semantics, engine correctness or performance capacity.
+
+## Fresh cumulative review: invalid editor focus
+
+The retained creation mock's invalid border overrode the focused accent border.
+The keyboard regression reproduced that exact mismatch (609 ms). Focus now uses
+the same single accent border as other text fields; the associated error message
+and invalid semantics remain. No control dimensions or layout change.
+
+`make shell CMD='cd web && npm run test:browser -- browser/alert-review-fixes.spec.ts --project=desktop-light -g "invalid condition editors"'`
+passes both themes at 360 and 1440 px: 3.0 s test / 10.5 s Playwright total.
+Primary inspected light desktop and dark mobile captures. The check also exercises
+correction, Escape and keyboard reopening with stable control dimensions.
+
+Two test-fixture corrections retain their failed evidence: viewport-relative y
+coordinates changed by 0.5 px after mobile screenshot scrolling, so the geometry
+assertion compares control dimensions; navigating to the identical static-mock URL
+retained the previous draft, so independent scenarios now start a fresh document.
+Neither correction changes an application deadline or retries a failed scenario.

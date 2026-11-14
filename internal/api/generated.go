@@ -5372,7 +5372,7 @@ type ClientInterface interface {
 
 	// GetSloCurrentStatus Read the published current SLO result independently of history
 	//
-	// Reads an exact prepared projection with source and definition generation evidence. No historical computation runs in this handler. Unprepared or invalidated data returns 503 derived_data_pending and Retry-After 2. Source-observation freshness remains separate from calculation lag.
+	// Reads an exact prepared projection with source and definition generation evidence. No historical computation runs in this handler. Successful reads return 200 with current_state describing calculation readiness. Pending or failed updates retain compatible last-known values as stale or failed, including their original evaluation and generation. Without compatible values, the response is unavailable and contains no performance numbers. Clients must inspect current_state before treating values as current. Source-observation freshness remains separate from calculation lag.
 	//
 	// Corresponds with GET /api/v1/slos/{slo_id}/status (the `GetSloCurrentStatus` operationId).
 	GetSloCurrentStatus(ctx context.Context, sloId SloId, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -6867,7 +6867,7 @@ func (c *Client) RetrySloPreparation(ctx context.Context, sloId SloId, jobId ope
 
 // GetSloCurrentStatus Read the published current SLO result independently of history
 //
-// Reads an exact prepared projection with source and definition generation evidence. No historical computation runs in this handler. Unprepared or invalidated data returns 503 derived_data_pending and Retry-After 2. Source-observation freshness remains separate from calculation lag.
+// Reads an exact prepared projection with source and definition generation evidence. No historical computation runs in this handler. Successful reads return 200 with current_state describing calculation readiness. Pending or failed updates retain compatible last-known values as stale or failed, including their original evaluation and generation. Without compatible values, the response is unavailable and contains no performance numbers. Clients must inspect current_state before treating values as current. Source-observation freshness remains separate from calculation lag.
 //
 // Corresponds with GET /api/v1/slos/{slo_id}/status (the `GetSloCurrentStatus` operationId).
 func (c *Client) GetSloCurrentStatus(ctx context.Context, sloId SloId, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -11208,7 +11208,7 @@ type ClientWithResponsesInterface interface {
 
 	// GetSloCurrentStatusWithResponse Read the published current SLO result independently of history
 	//
-	// Reads an exact prepared projection with source and definition generation evidence. No historical computation runs in this handler. Unprepared or invalidated data returns 503 derived_data_pending and Retry-After 2. Source-observation freshness remains separate from calculation lag.
+	// Reads an exact prepared projection with source and definition generation evidence. No historical computation runs in this handler. Successful reads return 200 with current_state describing calculation readiness. Pending or failed updates retain compatible last-known values as stale or failed, including their original evaluation and generation. Without compatible values, the response is unavailable and contains no performance numbers. Clients must inspect current_state before treating values as current. Source-observation freshness remains separate from calculation lag.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -16082,7 +16082,7 @@ func (c *ClientWithResponses) RetrySloPreparationWithResponse(ctx context.Contex
 
 // GetSloCurrentStatusWithResponse Read the published current SLO result independently of history
 //
-// Reads an exact prepared projection with source and definition generation evidence. No historical computation runs in this handler. Unprepared or invalidated data returns 503 derived_data_pending and Retry-After 2. Source-observation freshness remains separate from calculation lag.
+// Reads an exact prepared projection with source and definition generation evidence. No historical computation runs in this handler. Successful reads return 200 with current_state describing calculation readiness. Pending or failed updates retain compatible last-known values as stale or failed, including their original evaluation and generation. Without compatible values, the response is unavailable and contains no performance numbers. Clients must inspect current_state before treating values as current. Source-observation freshness remains separate from calculation lag.
 //
 // Returns a wrapper object for the known response body format(s).
 //

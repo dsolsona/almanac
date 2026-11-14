@@ -83,6 +83,49 @@ test('retained creation mock keeps every condition control inside intermediate c
   }
 });
 
+test('invalid condition editors retain visible focus without changing geometry', async ({ page }) => {
+  for (const theme of ['light', 'dark']) for (const width of [360, 1440]) {
+    await page.setViewportSize({ width, height: 1000 });
+    // The same URL at another width retains the draft in this static mock.
+    // Start a fresh document for each independent form-entry scenario.
+    await page.goto('about:blank');
+    await page.goto(`file:///workspace/docs/design/mocks/alert-options/index.html?theme=${theme}#a/new`);
+    await page.getByLabel('Alert policy name', { exact: true }).fill('Checkout burn');
+    const picker = page.getByRole('combobox', { name: 'SLO', exact: true });
+    await picker.fill('Checkout');
+    await page.getByRole('option').first().click();
+    const control = page.locator('.condition-control').first();
+    await control.getByRole('button').click();
+    const field = control.getByRole('textbox');
+    await field.fill('invalid duration');
+    await page.getByRole('button', { name: 'Create alert policy', exact: true }).click();
+    await expect(field).toHaveAttribute('aria-invalid', 'true');
+    await expect(field).toBeFocused();
+    const editor = control.locator('.condition-input');
+    const bounds = await editor.boundingBox();
+    // Invalid state keeps its message; focus uses the same single accent border
+    // as other text fields, rather than disappearing behind the error border.
+    const focusBorder = await editor.evaluate(element => getComputedStyle(element).borderColor);
+    const accent = await editor.evaluate(element => {
+      const probe = document.createElement('span');
+      probe.style.color = 'var(--accent)'; element.append(probe);
+      const color = getComputedStyle(probe).color; probe.remove(); return color;
+    });
+    expect(focusBorder).toBe(accent);
+    await expect(page.locator('#form-error')).toContainText('Enter a duration');
+    await control.screenshot({ path: `../.local/alert-ui-review-fixes/invalid-focus-${theme}-${width}.png` });
+    await field.fill('10 min');
+    await field.press('Escape');
+    await expect(control.getByRole('button')).toBeFocused();
+    await control.getByRole('button').press('Enter');
+    await expect(field).toBeFocused();
+    const reopened = (await editor.boundingBox())!;
+    // Screenshots and focus may scroll the mobile viewport by a fractional
+    // pixel. Control dimensions, rather than viewport coordinates, are stable.
+    expect({ width: reopened.width, height: reopened.height }).toEqual({ width: bounds!.width, height: bounds!.height });
+  }
+});
+
 for (const colorScheme of ['light', 'dark'] as const) {
   test(`touch inspection follows shrink and expansion in ${colorScheme}`, async ({ browser, baseURL }) => {
     const context = await browser.newContext({ baseURL, viewport: { width: 360, height: 800 }, hasTouch: true, isMobile: true, colorScheme });
