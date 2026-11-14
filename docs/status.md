@@ -1,3 +1,14 @@
+Foundation review candidate, 2026-11-14: final local verification passes 156 focused
+storage/race/upgrade cases in 28.879 s and 117 domain cases in 1.026 s. SQLC
+regeneration is clean; documentation checks cover 287 files/2,181 local links.
+Retention now protects active and last-breaching evidence, exposes compacted
+outcome/provenance summaries and uses bounded durable scan checkpoints; populated
+0058→0059 upgrade preserves journal history and terminal immutability. These
+results establish the unwired foundation candidate, not public/production or
+capacity acceptance. The public profile remains pending maintainer review;
+[ADR-0052](adr/0052-compiled-maintenance-populations.md) is the proposed shared
+maintenance-calculation candidate for the remaining nonzero-mask gate.
+
 Alert foundations, 2026-11-14: the maintainer explicitly approved building the
 unwired state machine/storage first, retaining calculator adoption, activation and
 release gates. [F4-T29](tasks/F4-T29.md) implements exact conditions/global lifecycle;
