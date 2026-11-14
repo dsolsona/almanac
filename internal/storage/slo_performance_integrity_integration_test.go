@@ -98,3 +98,56 @@ func TestIntegrationServiceSummaryRejectsIncompletePerformance(t *testing.T) {
 	}
 	assertRepairState(0, 1)
 }
+
+func TestIntegrationProjectionPerformanceUpgrade(t *testing.T) {
+	t.Parallel()
+	s := newSelfHealFixture(t, "performance-upgrade", true)
+	valid := s.createSLO(t, "performance-upgrade-valid")
+	clones, cleanup := cloneReviewObjectives(t, s.conn, valid, "performance-upgrade-invalid", 1)
+	defer cleanup()
+	invalid := clones[0].String()
+	s.drain(t, "upgrade source")
+	for _, id := range []string{valid, invalid} {
+		if err := s.runtime.refreshCurrentProjection(t.Context(), mustPGUUID(id), s.clock); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// No worker runs while the private fixture models a populated 0054 database.
+	s.runtime.Close()
+	if _, err := s.conn.Exec(t.Context(), `UPDATE public.almanac_slo_current_projections SET payload=payload #- '{current,performance,total}' WHERE slo_id=$1`, invalid); err != nil {
+		t.Fatal(err)
+	}
+	type publication struct{ generation, payload string }
+	before := make(map[string]publication)
+	for _, id := range []string{valid, invalid} {
+		var value publication
+		if err := s.conn.QueryRow(t.Context(), `SELECT generation_id::text,payload::text FROM public.almanac_slo_current_projections WHERE slo_id=$1`, id).Scan(&value.generation, &value.payload); err != nil {
+			t.Fatal(err)
+		}
+		before[id] = value
+	}
+	tag, err := s.conn.Exec(t.Context(), `
+ALTER TABLE public.almanac_slo_current_projections DROP COLUMN performance_complete;
+DROP FUNCTION public.almanac_projection_performance_complete(jsonb);
+DELETE FROM public.almanac_schema_migrations WHERE version=55;`)
+	if err != nil || tag.RowsAffected() != 1 {
+		t.Fatalf("prepare populated 0054 fixture: removed=%d err=%v", tag.RowsAffected(), err)
+	}
+	if state, err := CheckCompatibility(t.Context(), s.f.databaseURL); err != nil || state != CompatibilityPending {
+		t.Fatalf("0054 compatibility = %v: %v", state, err)
+	}
+	upgraded, err := Upgrade(t.Context(), s.f.databaseURL)
+	if err != nil || upgraded.Applied != 1 || upgraded.DatabaseSchemaVersion != 55 {
+		t.Fatalf("populated 0054 to 0055 upgrade: %+v %v", upgraded, err)
+	}
+	for _, id := range []string{valid, invalid} {
+		var value publication
+		var complete bool
+		if err := s.conn.QueryRow(t.Context(), `SELECT generation_id::text,payload::text,performance_complete FROM public.almanac_slo_current_projections WHERE slo_id=$1`, id).Scan(&value.generation, &value.payload, &complete); err != nil {
+			t.Fatal(err)
+		}
+		if value != before[id] || complete != (id == valid) {
+			t.Fatalf("upgrade changed publication or misclassified retained evidence: unchanged=%v complete=%v want=%v", value == before[id], complete, id == valid)
+		}
+	}
+}
