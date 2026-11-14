@@ -3,7 +3,7 @@
 - Status: proposed
 - Created: 2026-11-12
 - Accepted: pending
-- Approval: pending; maintainer authorized drafts and a draft PR, not engine implementation
+- Approval: full decision pending; maintainer authorized continued implementation and explicitly approved unwired foundations on 2026-11-14, retaining production/calculation gates
 - Investigation: maintainer approved testing bounded raw calculation as the preferred candidate; adoption requires experiment evidence and contract acceptance
 - Related specs: [SPEC-0021](../specs/0021-alert-policy-engine.md), [SPEC-0022](../specs/0022-alert-management-ui.md)
 - Supersedes / superseded by: proposes superseding only the evaluation scheduling and occurrence-ordering decisions in [ADR-0010](0010-alert-evaluation-and-delivery.md); delivery, worker authorization, egress and shared persistence boundaries remain accepted; not effective until acceptance

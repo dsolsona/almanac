@@ -1,5 +1,8 @@
 # Implementation tasks
 
+[F4-T35](F4-T35.md) prepares concrete public defaults, activation and replay
+contracts for maintainer review before public wiring.
+
 [F4-T34](F4-T34.md) adds server-side alert/policy pagination, global SLO group
 totals, immutable history and processing-health reads for the selected UI.
 

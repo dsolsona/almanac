@@ -3,10 +3,10 @@
 - Status: draft
 - Created: 2026-11-12
 - Accepted: pending
-- Approval: pending; drafts and initial 100/200-policy verification scope authorized
-- Implementation: not started
+- Approval: full draft pending; continued implementation and unwired foundations authorized, with initial 100/200-policy verification scope
+- Implementation: in progress; unwired foundations, production activation gated
 - Related ADRs: [ADR-0051](../adr/0051-durable-alert-policy-state-machine.md) (proposed)
-- Plan: none; design review tracked in [F4-T01](../tasks/F4-T01.md)
+- Plan: [0035](../plans/0035-alerting-delivery.md); initial design review in [F4-T01](../tasks/F4-T01.md)
 - Supersedes / superseded by: proposed replacement of SPEC-0011's initial evaluation/lifecycle and release scope; no accepted contract is superseded yet
 
 ## Purpose
@@ -451,8 +451,14 @@ preset confirmation before UI implementation acceptance, as SPEC-0022 records.
 
 ## Verification evidence
 
-No alert engine is implemented or benchmarked. Documentation checks and mock
-evidence are recorded in F4-T01; they do not satisfy the engine acceptance criteria.
+The maintainer explicitly approved the unwired foundation sequence on 2026-11-14.
+[F4-T29](../tasks/F4-T29.md) through [F4-T34](../tasks/F4-T34.md) implement exact
+decisions, durable journaling/processing, canonical empty-mask evidence,
+authenticated commands and catalogue/history reads. Their focused PostgreSQL/race
+evidence does not establish production activation, nonzero maintenance integration
+or capacity acceptance. The [public contract proposal](../design/alerting-public-contract.md)
+closes remaining defaults/activation questions for review. The full draft,
+fallback adoption and release gates remain pending.
 
 ## Change notes
 
