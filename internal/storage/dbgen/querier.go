@@ -266,6 +266,8 @@ type Querier interface {
 	LockUnrevokedAgentCredentials(ctx context.Context, agentID pgtype.UUID) (int64, error)
 	LoginAttemptKeys(ctx context.Context, arg LoginAttemptKeysParams) (LoginAttemptKeysRow, error)
 	LoginAttemptKeysByID(ctx context.Context, id pgtype.UUID) (LoginAttemptKeysByIDRow, error)
+	// Read-only lookup deliberately does not lock the receipt row.
+	LookupAlertCommand(ctx context.Context, arg LookupAlertCommandParams) (LookupAlertCommandRow, error)
 	MarkDatasourceReassignmentDrained(ctx context.Context, arg MarkDatasourceReassignmentDrainedParams) (int64, error)
 	// A calculation found the SLI's aggregates contradicting themselves (ADR-0034): rebuild the hours it
 	// read from the raw observations. Nothing is marked for an SLI with no accepted observations.
@@ -280,6 +282,9 @@ type Querier interface {
 	PublishSloExtrema(ctx context.Context, arg PublishSloExtremaParams) (int64, error)
 	ReadAlertBinding(ctx context.Context, id pgtype.UUID) (ReadAlertBindingRow, error)
 	ReadAlertCursor(ctx context.Context, arg ReadAlertCursorParams) (AlmanacAlertCursor, error)
+	ReadAlertEvaluation(ctx context.Context, id pgtype.UUID) (AlmanacAlertEvaluation, error)
+	ReadAlertOccurrence(ctx context.Context, id pgtype.UUID) (AlmanacAlertOccurrence, error)
+	ReadAlertPolicy(ctx context.Context, id pgtype.UUID) (ReadAlertPolicyRow, error)
 	// Read publication text once per projection, not once per retained hour.
 	// Keep timestamp parsing in its conditional predicate so unrelated due/backoff
 	// branches retain their existing behavior for malformed cache metadata.

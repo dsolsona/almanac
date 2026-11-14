@@ -1,5 +1,8 @@
 # Implementation tasks
 
+[F4-T33](F4-T33.md) adds authenticated alert commands, replay reconciliation and
+immutable evidence reads before public API/CLI integration.
+
 [F4-T32](F4-T32.md) connects bounded processor turns to durable evaluation,
 pending/failure handling and audited retry; runtime registration remains gated.
 
