@@ -67,6 +67,19 @@ func TestAggregateEvaluationMatchesCanonicalIntervals(t *testing.T) {
 			if !reflect.DeepEqual(canonical, aggregated) {
 				t.Fatalf("aggregate differs from canonical evaluator:\ncanonical=%+v\naggregate=%+v", canonical, aggregated)
 			}
+			summary, err := EvaluateOperationalTotalsSummary(t.Context(), input, totals)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if summary.Good != nil || summary.Attainment != nil || summary.Coverage != nil {
+				t.Fatal("summary eagerly formatted public values")
+			}
+			// A returned summary owns its counts even when its caller reuses totals.
+			totals.Good.SetInt64(0)
+			totals.Total.SetInt64(0)
+			if got := summary.WithValues(); !reflect.DeepEqual(canonical, got) {
+				t.Fatalf("deferred aggregate differs from canonical evaluator: got=%+v want=%+v", got, canonical)
+			}
 		})
 	}
 }

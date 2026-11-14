@@ -1,0 +1,62 @@
+{
+  "baseRevision": "8c6053c66654c0c1eccdd34beb80362c520f56c5",
+  "capacityAcceptance": false,
+  "profile": "One ready historical hour,60-second cadence,one-hour SLO,real PostgreSQL; fixed clock and identical canonical fixture; setup excluded from CPU sampling.",
+  "before": {
+    "iterations": 1637,
+    "wallSeconds": 15.010210654,
+    "sampledGoCPUSeconds": 8.93,
+    "sampledCPUPerBuildMS": 5.455100794135614
+  },
+  "after": {
+    "iterations": 2070,
+    "wallSeconds": 15.004006311,
+    "sampledGoCPUSeconds": 8.06,
+    "sampledCPUPerBuildMS": 3.8937198067632854
+  },
+  "sampledCPUPerBuildReductionPercent": 28.622403990240784,
+  "equalSerializedOutput": true,
+  "outputBytes": 3206,
+  "outputSHA256": "2406e2fc456e9e2eea9ba3f2e93b033739c54423abf9ed5bee18eba73033b5f9",
+  "sourceSHA256": {
+    "internal/slo/aggregate.go": "f41006bc0d3a09fa73629d76bc06a3555e2b5145c2f288fc422e2bab5c92a36d",
+    "internal/slo/aggregate_test.go": "308950e6dff661a5cdce10fa0535c6600a82c7fc2f248b5fb57984c183b8cdea",
+    "internal/storage/derived_evaluation.go": "953e4c411e8e814abeb618ebd4b647b4d3b64ab680c8084e018b6a2fa23092c4",
+    "internal/storage/retained_tiles.go": "56be36ed2e432ce5fc0fd2ee8258d1e2324eb64300a14b252620f160ebf385fd",
+    "internal/storage/slo_extrema.go": "e672a2efbd1f6682ef958f544b334323fcc463d41a1ab5f7ca57cfb741e68070",
+    "internal/storage/slo_extrema_worker.go": "4fe9fe410a9ec1e92c826aee72164c991fcfa98ed4ac717d7a44fc47fa19c952",
+    "internal/storage/slo_extrema_summary_test.go": "ab57d9201ff498543de9cfc7a5241383adb4654999e420d2eccb5de31f5fa47a"
+  },
+  "privateArtifactsSHA256": {
+    "cpu-before.pprof": "a852a13b9ba627a4f38a54be0b5424e31f1c188cc1d5f29d58f0dcc52a8dedfe",
+    "cpu.pprof": "023e1efcfdb12442d1ce7ce948a0c0178fed9b58d84ff0a44f1fadce712ab0b8",
+    "probe.go": "e4699bac8a6a4f79b60a498d148f0305de2f4f276e9188bb8a7c00d239396123",
+    "probe.log": "eb010f30e1dc1bbd7296a96795b6ad12f7d13ad4e85be8c3f6be3ee14d934f05",
+    "probe-after.log": "c5a47f2c9270c190d04efe3c394fa80bffeeb139a5d90a8ce7de996aef6dc2b0"
+  },
+  "verification": {
+    "sloUnitPackageSeconds": 0.006,
+    "selectedStorageUnitSeconds": 0.051,
+    "integrationSeconds": 18.661,
+    "integrationGroups": [
+      "ExtremaWorkerClosesHoursWithExactInputs",
+      "ExtremaDailyCompositionMatchesFullCanonicalSweep",
+      "LateExtremaRebuildUsesCurrentCutoffAndPreservesNeighbour",
+      "ExtremaDetailMatchesRawOracleInOneSnapshot"
+    ],
+    "additionalSummaryVariantsSeconds": 0.014,
+    "firstWindowReadinessSeconds": 1.082,
+    "normalContainerJourneyTests": 5,
+    "normalContainerJourneyPlaywrightDuration": "2.2m",
+    "applicationImage": "sha256:1b51e0b2a905f119be08d1d39a7d1f2cdc9990558575647f073325939d6dd213",
+    "documentationFiles": 270,
+    "documentationLinks": 2072
+  },
+  "limitations": [
+    "Two sequential isolated fixture profiles, not a mixed workload A/B or deployment-capacity result.",
+    "Go CPU sampling excludes PostgreSQL execution and network waits; cumulative profile categories overlap.",
+    "Sampling uncertainty and environmental scheduling remain; allocation counts were not measured.",
+    "Dense quality transitions can retain every endpoint and may save little formatting work.",
+    "Normal deployment and full200-SLO control are recorded separately when complete."
+  ]
+}

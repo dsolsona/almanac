@@ -10,6 +10,16 @@ import (
 // SLO-scoped mask; Excluded carries separate statistics from inside that mask.
 // Both populations must come from the same source and exclusion revision.
 func EvaluateOperationalTotals(ctx context.Context, input WindowInput, totals WindowTotals) (WindowResult, error) {
+	result, err := EvaluateOperationalTotalsSummary(ctx, input, totals)
+	if err != nil {
+		return WindowResult{}, err
+	}
+	return result.WithValues(), nil
+}
+
+// EvaluateOperationalTotalsSummary retains exact arithmetic and quality while
+// deferring public decimal formatting until WithValues is called on selected results.
+func EvaluateOperationalTotalsSummary(ctx context.Context, input WindowInput, totals WindowTotals) (WindowResult, error) {
 	switch {
 	case len(input.Observations) != 0 || totals.Good == nil || totals.Total == nil:
 		return WindowResult{}, fmt.Errorf("%w: totals and observations both supplied or counts missing", ErrOperationalFacts)
@@ -49,7 +59,7 @@ func EvaluateOperationalTotals(ctx context.Context, input WindowInput, totals Wi
 	sweep.total.Set(totals.Total)
 	sweep.observedCount, sweep.emptyCount, sweep.zeroTraffic = totals.Observed, totals.KnownEmpty, totals.ZeroTraffic
 	sweep.totals = &totals
-	result, err := sweep.AtContext(ctx, input.At)
+	result, err := sweep.AtSummaryContext(ctx, input.At)
 	if err != nil {
 		return WindowResult{}, err
 	}

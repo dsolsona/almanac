@@ -1,3 +1,10 @@
+Historical CPU correction, 2026-11-14: [F4-T24](tasks/F4-T24.md) identifies eager
+decimal formatting before extrema selection. The scoped change keeps exact
+summaries until selection; focused canonical/oracle/odd-cadence/retention checks
+pass. A fixed-hour profile retains identical output and reduces sampled Go CPU
+per build by about 29%. All five normal-container journey steps pass in 2.2 min;
+full-load acceptance remains pending.
+
 CPU-placement comparison, 2026-11-14: [F4-T23](tasks/F4-T23.md) completes two CI
 controls at `72166f5`. All 80 browser journeys, 800 baseline calls, 1,400 backfill
 batches and 200 due intervals complete in each. Cold-list p95 is 783/722 ms for

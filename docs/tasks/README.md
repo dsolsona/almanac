@@ -1,5 +1,8 @@
 # Implementation tasks
 
+[F4-T24](F4-T24.md) profiles historical rebuild CPU and defers decimal formatting
+until exact extrema selection, with canonical equality and workload validation.
+
 [F4-T23](F4-T23.md) prepares a controlled CI comparison with server/client CPUs
 shared or separated, retaining the complete existing baseline workload.
 

@@ -98,6 +98,42 @@ func makeExtremaLane(samples []api.SloOperationalSample, start, end time.Time, t
 	if err != nil {
 		return extremaLane{}, err
 	}
+	return extremaLaneFromSelected(samples, selected)
+}
+
+func makeExtremaSummaryLane(values []slo.WindowResult, start, end time.Time, target, metric, revision string) (extremaLane, error) {
+	samples := make([]api.SloOperationalSample, len(values))
+	indices := make(map[time.Time]int, len(values))
+	for index, value := range values {
+		samples[index] = operationalSample(value, start, end, revision)
+		indices[value.End] = index
+	}
+	selected, err := reduceRetainedLaneWithKey(samples, start, end, target, sloOperationalSeriesLimit, func(index int, _ api.SloOperationalSample) (*big.Rat, error) {
+		burn := values[index].ExactBurn
+		if burn == nil {
+			return nil, nil
+		}
+		switch metric {
+		case "budget", "attainment":
+			return new(big.Rat).Neg(burn), nil
+		case "burn":
+			return burn, nil
+		default:
+			return nil, slo.ErrOperationalFacts
+		}
+	})
+	if err != nil {
+		return extremaLane{}, err
+	}
+	for index, sample := range selected {
+		formatted := operationalSample(values[indices[sample.EvaluationAt]].WithValues(), start, end, revision)
+		formatted.RetainedExtrema, formatted.DisplayCoverage = sample.RetainedExtrema, sample.DisplayCoverage
+		selected[index] = formatted
+	}
+	return extremaLaneFromSelected(samples, selected)
+}
+
+func extremaLaneFromSelected(samples, selected []api.SloOperationalSample) (extremaLane, error) {
 	presence, err := retainedDisplayCoverage(samples)
 	if err != nil {
 		return extremaLane{}, err

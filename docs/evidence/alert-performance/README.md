@@ -239,6 +239,23 @@ The next investigation follows the remaining server admission/query and ingestio
 critical paths. The earlier two-CPU/4-GB microVM failures remain valid evidence;
 their difference from these faster, larger runners is not solely a placement effect.
 
+## Historical calculation CPU
+
+[F4-T24](../../tasks/F4-T24.md) profiles the actual hour builder on one ready
+canonical fixture, outside setup. Eager formatting projects every endpoint before
+the extrema reducer selects retained marks. The scoped correction shares aggregate
+validation and selection, retaining exact summaries until the selected marks need
+decimal strings. It changes neither scheduling nor readiness.
+
+The [bounded comparison](2026-11-14-deferred-extrema-formatting.json) completes
+1,637 builds before and 2,070 after in fifteen seconds each, with identical
+3,206-byte serialized evidence. Sampled Go CPU per completed build falls from
+5.455 to 3.894 ms, about 29%. Independent canonical projections, selected mark/tie
+checks, real PostgreSQL hour/day composition, odd cadences and retained raw-oracle
+comparisons pass. Dense-transition hours can retain every endpoint and save less.
+Normal deployment and the full workload remain separate acceptance checks;
+increased rebuild throughput may shift pressure to PostgreSQL.
+
 ## Priorities
 
 Rank reflects observed user impact. Related symptoms are grouped; the suspected
@@ -247,8 +264,8 @@ integrated capacity pass.
 
 | Order | Issue | User impact | Bottleneck evidence | Current status |
 | --- | --- | --- | --- | --- |
-| 1 | Slow SLO overview and interactive admission exhaustion | Lists still exceed one second; latest full control has an overview 503 | Latest cold-list p95 1,742.4 ms; one admission 503; page SQL p95 267.7 ms; OS counters establish substantial browser run-queue wait | Client/server isolation and server admission/read budgets remain open |
-| 2 | Live ingestion slows under competing work | Latency isolation fails | Latest p95 23.4–24.5 → 96.2–101.0 ms; 526 accepted and all 600 due intervals present | Absolute p95 passes; relative limit fails |
+| 1 | Slow SLO overview and interactive admission exhaustion | MicroVM lists exceed one second; shared CI has two overview 503s | CI overview HTTP p95 486.9/340.1 ms shared/split, page SQL 315.9/206.5 ms; cold-list 783.3/722.2 ms. Earlier microVM cold-list p95 1,742.4 ms | Physical client/server isolation and server admission/read budgets remain open |
+| 2 | Live ingestion slows under competing work | Latency isolation fails | CI shared p95 6.57–6.90 → 68.38–71.80 ms; split 8.39–8.81 → 46.28–48.59 ms. No unsuccessful ingestion; all 200 due intervals present in both | Absolute p95 passes; relative limit fails |
 | 3 | Expensive scheduling and repeated pending calculations | Background work consumes capacity without publishing current values | Idle PostgreSQL ~49.5% of one CPU; due queries consume ~25.1 s in 62.6 s. Loaded phase has 8,226 waiting attempts /776 publications | Current waiting calculations skip canonical sums. Historical waiting work falls to 453 calls /5.261 s; more useful work and faster synthetic writes still keep PostgreSQL busy |
 | 4 | Pending aggregate windows and unproven alert capacity | Proposed alert evaluations would retain pending boundaries | Latest 2/800 baseline batches pending (earlier 11/102; publication progress differs); bounded fallback exactness has separate passing fixtures | Calculation-adoption gate remains open |
 | Corrected | Authentication fails during navigation | Previously prevented page opening | Shared inspection queries preserve authority; 40/40 loaded auth-context calls succeed and all 80 journeys complete | Original conflict corrected and verified under load; other 503s are pool admission failures |

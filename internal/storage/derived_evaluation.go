@@ -70,6 +70,12 @@ func derivedWindowBatchParams(sliID pgtype.UUID, revision int64, inputs []slo.Wi
 }
 
 func evaluateDerivedWindows(ctx context.Context, q *dbgen.Queries, sliID pgtype.UUID, revision int64, inputs []slo.WindowInput) ([]slo.WindowResult, error) {
+	return evaluateDerivedWindowsUsing(ctx, q, sliID, revision, inputs, slo.EvaluateOperationalTotals)
+}
+
+type derivedTotalsEvaluator func(context.Context, slo.WindowInput, slo.WindowTotals) (slo.WindowResult, error)
+
+func evaluateDerivedWindowsUsing(ctx context.Context, q *dbgen.Queries, sliID pgtype.UUID, revision int64, inputs []slo.WindowInput, evaluate derivedTotalsEvaluator) ([]slo.WindowResult, error) {
 	if len(inputs) == 0 {
 		return []slo.WindowResult{}, nil
 	}
@@ -106,9 +112,9 @@ func evaluateDerivedWindows(ctx context.Context, q *dbgen.Queries, sliID pgtype.
 		if count.Ordinal != int32(index+1) {
 			return nil, slo.ErrOperationalFacts
 		}
-		results[index], err = evaluateDerivedCounts(ctx, inputs[index], dbgen.ReadDerivedWindowTotalsRow{Good: count.Good, Total: count.Total, Observed: count.Observed,
+		results[index], err = evaluateDerivedCountsUsing(ctx, inputs[index], dbgen.ReadDerivedWindowTotalsRow{Good: count.Good, Total: count.Total, Observed: count.Observed,
 			KnownEmpty: count.KnownEmpty, ZeroTraffic: count.ZeroTraffic, FirstObservation: count.FirstObservation,
-			LastObservation: count.LastObservation, LatestReceipt: count.LatestReceipt, Prepared: count.Prepared, Exhausted: count.Exhausted})
+			LastObservation: count.LastObservation, LatestReceipt: count.LatestReceipt, Prepared: count.Prepared, Exhausted: count.Exhausted}, evaluate)
 		if err != nil {
 			return nil, err
 		}
@@ -117,6 +123,10 @@ func evaluateDerivedWindows(ctx context.Context, q *dbgen.Queries, sliID pgtype.
 }
 
 func evaluateDerivedCounts(ctx context.Context, input slo.WindowInput, counts dbgen.ReadDerivedWindowTotalsRow) (slo.WindowResult, error) {
+	return evaluateDerivedCountsUsing(ctx, input, counts, slo.EvaluateOperationalTotals)
+}
+
+func evaluateDerivedCountsUsing(ctx context.Context, input slo.WindowInput, counts dbgen.ReadDerivedWindowTotalsRow, evaluate derivedTotalsEvaluator) (slo.WindowResult, error) {
 	if counts.Exhausted {
 		return slo.WindowResult{}, ErrDerivedSourceFailed
 	}
@@ -135,7 +145,7 @@ func evaluateDerivedCounts(ctx context.Context, input slo.WindowInput, counts db
 		return new(value.Time.UTC())
 	}
 	input.Observations = nil
-	return slo.EvaluateOperationalTotals(ctx, input, slo.WindowTotals{
+	return evaluate(ctx, input, slo.WindowTotals{
 		Good: good, Total: total, Observed: counts.Observed, KnownEmpty: counts.KnownEmpty, ZeroTraffic: counts.ZeroTraffic,
 		FirstObservation: optionalTime(counts.FirstObservation), LastObservation: optionalTime(counts.LastObservation), LatestReceipt: optionalTime(counts.LatestReceipt),
 	})
