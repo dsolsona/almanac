@@ -4,8 +4,12 @@ the existing alerting stack. All 26 stack PRs are ready and their initial review
 have completed. New optimization work is paused. The maintainer authorized fixing
 valid feedback, refreshing reviews, merging the stack and resuming alerting delivery.
 This authorization does not itself adopt the experimental calculator or complete
-the production alert lifecycle. Current required CI failures remain open until
-diagnosed corrections and verification are recorded in F4-T28.
+the production alert lifecycle. All four application CI gates pass on cumulative
+head `29035f2`. Its fresh CodeRabbit review identified additional maintenance,
+focus, documentation and diagnostic-evidence corrections; those are integrated
+and receive focused verification plus current-head CI before merge. The proposed
+extra migration lock is already supplied by its foreign keys; readiness evidence
+is recorded without imposing an incompatible ready-only HTTP gate.
 
 Writer attribution, 2026-11-14: [F4-T26](tasks/F4-T26.md) exposes the existing
 explicit omission mode in the CPU-control workflow. Default complete controls
