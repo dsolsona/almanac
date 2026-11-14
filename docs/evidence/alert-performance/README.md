@@ -199,6 +199,46 @@ and explicit-only configures three times. The scoped correction configures once
 with the same bounds; its focused and deployment evidence belongs to F4-T22.
 No major latency improvement is attributed to that small correction.
 
+## CI logical-CPU placement
+
+[F4-T23](../../tasks/F4-T23.md) runs the existing control on two fresh CI runners
+at `72166f5`. Both report Intel Xeon 6975P-C, four logical CPUs and about 16 GB RAM.
+Server containers use CPUs 0/1; clients use 0/1 in `shared`, 2/3 in `split`.
+**The topology reports 0/2 and 1/3 as SMT siblings.** This separates logical CPU
+scheduling but still shares physical execution cores, memory, storage and kernel.
+Separate runners and fixture timing also limit causal comparison.
+
+The [source-bound result](2026-11-14-cpu-placement.json) preserves both failures.
+All 800 baseline calls, 1,400 backfill batches, 80 browser journeys and 200 due
+intervals complete in each run, with no unsuccessful ingestion. Cold-list p95/max
+is 783.3/823.8 ms shared and 722.2/750.7 ms split; all measured browser journeys
+are below one second. Shared has two overview 503s, terminating two API readers
+early; split completes all fourteen lanes without API errors. Thus completed API
+work differs, despite identical planned workloads.
+
+Server performance still fails: observed overview HTTP p95 is 486.9 ms shared
+and 340.1 ms split; page-query p95 is 315.9/206.5 ms. Client overview p95 is
+616.1/446.7 ms. Ingestion p95 is 6.57–6.90 ms alone versus 68.38–71.80 ms loaded
+in shared, and 8.39–8.81 ms versus 46.28–48.59 ms in split. The absolute ingestion
+budget passes; isolation fails. Pending baseline batches are 31/18 respectively.
+This does not validate the proposed fallback or alert-engine capacity.
+
+Docker samples put mean loaded PostgreSQL/backend/client CPU at
+106.89/40.59/44.73% of one CPU shared and 134.35/53.16/53.42% split. The split
+server processes approach their two-logical-CPU ceiling even with client affinity
+separated. Both shared 503s fail protected overview acquisition at about 250 ms,
+after successful bootstrap/readiness preflight and before page SQL. Ingestion
+trace inflation spans many round trips; sparse blocker samples identify other
+live requests, while several long spans overlap PostgreSQL idle/ClientRead.
+Neither span duration nor sparse samples establish SQL CPU or a dominant lock.
+
+Normal setup, seed, CPU checks, export pagination and independent cleanup checks
+complete in both jobs. Observer streams complete without errors. Trace pagination
+retains 136,864/152,045 unique spans; asynchronous OTLP arrival remains unproven.
+The next investigation follows the remaining server admission/query and ingestion
+critical paths. The earlier two-CPU/4-GB microVM failures remain valid evidence;
+their difference from these faster, larger runners is not solely a placement effect.
+
 ## Priorities
 
 Rank reflects observed user impact. Related symptoms are grouped; the suspected

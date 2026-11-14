@@ -1,8 +1,11 @@
-CPU-placement comparison, 2026-11-14: [F4-T23](tasks/F4-T23.md) prepares an explicit
-manual CI diagnostic with two server CPUs in both variants and two client CPUs
-either shared or separate. It requires four available CPUs, preserves the existing
-200-SLO workload and stages only filtered evidence. Actual runner execution and
-the comparison remain pending; this is not separate-machine acceptance.
+CPU-placement comparison, 2026-11-14: [F4-T23](tasks/F4-T23.md) completes two CI
+controls at `72166f5`. All 80 browser journeys, 800 baseline calls, 1,400 backfill
+batches and 200 due intervals complete in each. Cold-list p95 is 783/722 ms for
+shared/split placement, but server overview and ingestion isolation still fail;
+shared also has two overview 503s. The split CPUs are SMT siblings of the server
+CPUs, so physical isolation remains unproven. The [recorded comparison](evidence/alert-performance/2026-11-14-cpu-placement.json)
+retains hardware, source, artifact hashes and limitations. Both PRs #116/#117 pass
+all four ordinary CI gates; diagnostic failure is preserved, with no capacity adoption.
 
 Server attribution, 2026-11-14: [F4-T22](tasks/F4-T22.md) finds measured runnable
 CPU wait amplifying concurrent overview queries, with roughly 13–24 ms of bracketed

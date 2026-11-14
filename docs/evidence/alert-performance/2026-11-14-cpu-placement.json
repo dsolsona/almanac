@@ -1,0 +1,763 @@
+{
+  "revision": "72166f5d9e8739b14f472b3a36f48eabcefd4370",
+  "run": "https://github.com/dsolsona/almanac/actions/runs/43594151977",
+  "capacityAcceptance": false,
+  "placements": {
+    "shared": {
+      "profile": {
+        "cpuModel": "Intel(R) Xeon(R) 6975P-C",
+        "hostMemoryBytes": 16464297984,
+        "availableCPUs": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "serverCPUs": [
+          0,
+          1
+        ],
+        "clientCPUs": [
+          0,
+          1
+        ],
+        "clientEffectiveCPUs": [
+          0,
+          1
+        ],
+        "topology": {
+          "0": {
+            "physical_package_id": "0",
+            "core_id": "0",
+            "thread_siblings_list": "0,2"
+          },
+          "1": {
+            "physical_package_id": "0",
+            "core_id": "1",
+            "thread_siblings_list": "1,3"
+          },
+          "2": {
+            "physical_package_id": "0",
+            "core_id": "0",
+            "thread_siblings_list": "0,2"
+          },
+          "3": {
+            "physical_package_id": "0",
+            "core_id": "1",
+            "thread_siblings_list": "1,3"
+          }
+        },
+        "sourceHashes": {
+          "scripts/alert-cpu-control.py": "4d8966b6349482511553f3c1740b8f2039b99acd4e83423d4cdd31a037888516",
+          "scripts/e2e.sh": "31cd79161fe8ab6043044e4f1a9cfd7786682b21cddcf08d0dba6e067135ce9d",
+          "docs/evidence/alert-performance/observe-control.py": "95d9f25b6702f9d80d8cb2cf59b70e4c0c880885ee658decaafadedbab5acda9",
+          "web/perf/alert-calculation.perf.ts": "6e80695333f50014cf42fc0cdb74198804a8057abdd161002fd228bae287dbbe",
+          "web/perf/alert-calculation.seed.ts": "7b5b9612ea225c0b6145a845f242cc104f610cc27794b6aac300be38addf6ea4",
+          "web/playwright.alert-calculation.config.ts": "1b1584176d7b468750b1f6cc1a84f4df47486777a03c425097fd834eba42a1a9",
+          "compose.yaml": "76a4948b18a78c3f0ff5c8e51b39f3e7a8679cde494698f0b76e349bd964f4df",
+          "compose.e2e.yaml": "4796baeef6c7f8195624098f6c58487818db39b68fac6e4811d8267739b9b4a1",
+          "compose.e2e.disk.yaml": "695de1b6c5004c7aa2a3b29b9bc91836c5486aee7cf1ad3a6839a2f50a556163"
+        },
+        "measuredAssignments": [
+          {
+            "id": "03a9c26f12784ee59f241d08e3d82c2ca22a29989905e5313577a6d3ba8d71f0",
+            "role": "agent",
+            "cpus": [
+              0,
+              1
+            ],
+            "image": "sha256:0de8baaa9843f3ddcae6e901abf6363e742d8228c615f242703c244582e78281"
+          },
+          {
+            "id": "0d5bc7abe97d3bb4f643039a86d6a28b225260979268b0377a3322d772ea8776",
+            "role": "tempo",
+            "cpus": [
+              0,
+              1
+            ],
+            "image": "sha256:7b8eb5c4235854c6103f21b10db306c73d580bdd71bf65626d87cd3e2339eaab"
+          },
+          {
+            "id": "2be8dbe0877c785e9a69bd1447883f444ef9ce2619863b5986710211e61a0660",
+            "role": "victoriatraces",
+            "cpus": [
+              0,
+              1
+            ],
+            "image": "sha256:0e594d6d171f74445e3e63ea5fa7657271d911baa03c09bc9f1f3a8554f20bbe"
+          },
+          {
+            "id": "38ed67d36133bf50974d11b5c2ae4a2c8035a79cc2d84218c50fd304f3869388",
+            "role": "sources-ready",
+            "cpus": [
+              0,
+              1
+            ],
+            "image": "sha256:ffa0c7daf725e85d72826c834502ffef21542e1952f1b8ba1ed4160062654ea2"
+          },
+          {
+            "id": "39346c95c5d5ac9d43afd7f7277fd94bfbb0c978db8467a20939ca0b97eb4cee",
+            "role": "victoriametrics",
+            "cpus": [
+              0,
+              1
+            ],
+            "image": "sha256:430a695f97af0e91c051ebe1f386752af2c6c61af7c9691b658f0a5f53f17fa9"
+          },
+          {
+            "id": "546b5d37450944569e8ac6828c0d89472807d153ff2cc1bfaa08e1a20ef2d5b0",
+            "role": "loki",
+            "cpus": [
+              0,
+              1
+            ],
+            "image": "sha256:27aa13d6e69207a0936744ae8cd40a437a3ae3c848f7c6a962d5cfeddcb9a4fe"
+          },
+          {
+            "id": "570b1e6085aa7f35d2f368527338ac29f8f228b21129f15042da173a99888551",
+            "role": "app",
+            "cpus": [
+              0,
+              1
+            ],
+            "image": "sha256:362e576ad4bef1678ae1ea7e3d4624863367b8ffe125e9d689db064f8768d286"
+          },
+          {
+            "id": "ce07329d875d6d373e07410615cfb1b1136aab851471fb1a1018ae87414fa5c8",
+            "role": "postgres",
+            "cpus": [
+              0,
+              1
+            ],
+            "image": "sha256:a1be1c8380f5c8ca80b4ad72f6be191f8a283e0ecb2e9496b1ee67dc0022d0f1"
+          }
+        ],
+        "exitCode": 1,
+        "cleanupExitCode": 0,
+        "cleanupChecks": [
+          {
+            "exitCode": 0,
+            "remainingCount": 0
+          },
+          {
+            "exitCode": 0,
+            "remainingCount": 0
+          }
+        ]
+      },
+      "stepSeconds": {
+        "setup": 86.98507830099999,
+        "seed": 188.574519652,
+        "measurement": 180.04070308300004
+      },
+      "evidence": {
+        "complete": false,
+        "errors": [
+          "incomplete_workload_result"
+        ]
+      },
+      "backfill": {
+        "plannedBatches": 1400,
+        "completedBatches": 1400
+      },
+      "due": {
+        "intervals": 200,
+        "missing": 0,
+        "slisWithMissing": 0,
+        "nonObserved": 0
+      },
+      "ingestionOnly": {
+        "accepted": 201,
+        "duplicate": 0,
+        "unsuccessful": 0,
+        "p95LowerSeconds": 0.006573987,
+        "p95UpperSeconds": 0.006902686,
+        "elapsedSeconds": 61.099
+      },
+      "ingestionUnderLoad": {
+        "accepted": 359,
+        "duplicate": 0,
+        "unsuccessful": 0,
+        "p95LowerSeconds": 0.068377728,
+        "p95UpperSeconds": 0.071796614,
+        "elapsedSeconds": 107.869
+      },
+      "queries": {
+        "queryCount": 800,
+        "pendingBaseline": 31,
+        "baselineMS": {
+          "count": 800,
+          "mean": 8.429067500000011,
+          "p95": 24.627,
+          "max": 110.143
+        }
+      },
+      "outcomes": [
+        {
+          "status": "fulfilled"
+        },
+        {
+          "status": "fulfilled"
+        },
+        {
+          "status": "fulfilled"
+        },
+        {
+          "status": "fulfilled"
+        },
+        {
+          "status": "fulfilled"
+        },
+        {
+          "status": "rejected",
+          "code": "lane_failed"
+        },
+        {
+          "status": "fulfilled"
+        },
+        {
+          "status": "fulfilled"
+        },
+        {
+          "status": "fulfilled"
+        },
+        {
+          "status": "fulfilled"
+        },
+        {
+          "status": "rejected",
+          "code": "lane_failed"
+        },
+        {
+          "status": "fulfilled"
+        },
+        {
+          "status": "fulfilled"
+        },
+        {
+          "status": "fulfilled"
+        }
+      ],
+      "browserMS": {
+        "list-cold": {
+          "count": 20,
+          "mean": 580.0599999999977,
+          "p95": 783.2999999999302,
+          "max": 823.8000000000466
+        },
+        "list-warm": {
+          "count": 20,
+          "mean": 238.87999999998138,
+          "p95": 289.20000000006985,
+          "max": 305.4000000000233
+        },
+        "detail-cold": {
+          "count": 20,
+          "mean": 391.1400000000023,
+          "p95": 705.5999999999767,
+          "max": 746.5999999999767
+        },
+        "detail-warm": {
+          "count": 20,
+          "mean": 168.9649999999965,
+          "p95": 259.29999999993015,
+          "max": 266.0999999999767
+        }
+      },
+      "apiMS": {
+        "overview": {
+          "count": 90,
+          "mean": 305.1972038333331,
+          "p95": 616.1247470000017,
+          "max": 785.4711779999998
+        },
+        "status": {
+          "count": 88,
+          "mean": 105.04511146590994,
+          "p95": 217.60818599999766,
+          "max": 396.3406959999993
+        },
+        "history": {
+          "count": 88,
+          "mean": 213.46102776136334,
+          "p95": 416.28573199998937,
+          "max": 483.0169950000054
+        }
+      },
+      "apiFailures": [
+        {
+          "beganAt": 1794659109216,
+          "finishedAt": 1794659109717,
+          "milliseconds": 500.94859200000064,
+          "status": 503,
+          "name": "overview"
+        },
+        {
+          "beganAt": 1794659109207,
+          "finishedAt": 1794659109718,
+          "milliseconds": 511.52685600000405,
+          "status": 503,
+          "name": "overview"
+        }
+      ],
+      "observer": {
+        "workload_exit_code": 1,
+        "finished_at": "2026-11-14T12:27:05.433217+00:00",
+        "samples": {
+          "database": 1791,
+          "resources": 6426
+        },
+        "samplers_completed": {
+          "database": true,
+          "resources": true
+        },
+        "processes_terminated": true,
+        "errors": []
+      },
+      "traceExport": {
+        "complete": true,
+        "rows": 136864,
+        "rawRows": 145558,
+        "requests": 32,
+        "errors": [],
+        "exportStartedAt": "2026-11-14T12:27:05.702298+00:00",
+        "completenessScope": "query-pagination-only",
+        "ingestionLagNotEstablished": true,
+        "limitations": [
+          "No exporter flush/drain barrier; spans may arrive after this export.",
+          "Complete means uncapped queried pages, not that every emitted span arrived."
+        ],
+        "from": "2026-11-14T12:24:05.706000+00:00",
+        "through": "2026-11-14T12:27:05.703453+00:00",
+        "seconds": 8.661912302000019,
+        "exportFinishedAt": "2026-11-14T12:27:14.364223+00:00"
+      },
+      "loadedTraceMilliseconds": {
+        "GET /api/v1/slos/overview": {
+          "count": 122,
+          "mean": 200.44304226229514,
+          "p95": 486.928344,
+          "max": 577.773181
+        },
+        "db.ListSloOverviewPage": {
+          "count": 120,
+          "mean": 131.98900613333336,
+          "p95": 315.857585,
+          "max": 442.408208
+        },
+        "POST /api/agent/v1/observations": {
+          "count": 313,
+          "mean": 24.315294651757185,
+          "p95": 75.732999,
+          "max": 379.701249
+        }
+      },
+      "artifactSHA256": {
+        "traces.jsonl.gz": "77ce12e8efced97e9956c7779f4879542defa48ec2b049a112e423f342f49663",
+        "observer-result.json": "a3bd650b0b4a7e4dafdd47a732b0ba6f6f205c5604bf650a945487282b342633",
+        "queries.json": "742db00bb170e606def15a5dddf856e37e18b1a1a680770a15fc8b6f0710b438",
+        "backfill.json": "6c203f03a53bb6a5becd8b7a6e8911f36b64dc94e368721efe34cb0273f0b4d6",
+        "evidence-result.json": "c93965462f6265072b2353dedf2ea53f19c138b5f6e64905209c6e53628eb886",
+        "trace-result.json": "e1da456edfb6f8194c7ba52c30ce1269b4e77705e0f3cc321ad1af7427300138",
+        "workload.json": "33e53fa612b93eb7fb1073c14d1ed2affd89c98ad300852d31b8d839ef50932a",
+        "profile.json": "46ff69cd3a018a2ca59fb4da8b6b634a94da6a71ca546d533da532b21da361f5",
+        "resources.jsonl": "1cecf15cb14b4d62fffb361b2ce239fbb47cc167f6b63cb8d27aca1b74f2240c",
+        "database.jsonl": "7987895c8b434bf068fba7b72bc1e772d7cadd1461a850b00666f9abe853dda6"
+      },
+      "meanDockerCPUPercent": {
+        "alone": {
+          "postgres": 33.89,
+          "app": 4.42,
+          "client": 3.15,
+          "samplesPerContainer": 244
+        },
+        "loaded": {
+          "postgres": 106.89,
+          "app": 40.59,
+          "client": 44.73,
+          "samplesPerContainer": 432
+        }
+      }
+    },
+    "split": {
+      "profile": {
+        "cpuModel": "Intel(R) Xeon(R) 6975P-C",
+        "hostMemoryBytes": 16464302080,
+        "availableCPUs": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "serverCPUs": [
+          0,
+          1
+        ],
+        "clientCPUs": [
+          2,
+          3
+        ],
+        "clientEffectiveCPUs": [
+          2,
+          3
+        ],
+        "topology": {
+          "0": {
+            "physical_package_id": "0",
+            "core_id": "0",
+            "thread_siblings_list": "0,2"
+          },
+          "1": {
+            "physical_package_id": "0",
+            "core_id": "1",
+            "thread_siblings_list": "1,3"
+          },
+          "2": {
+            "physical_package_id": "0",
+            "core_id": "0",
+            "thread_siblings_list": "0,2"
+          },
+          "3": {
+            "physical_package_id": "0",
+            "core_id": "1",
+            "thread_siblings_list": "1,3"
+          }
+        },
+        "sourceHashes": {
+          "scripts/alert-cpu-control.py": "4d8966b6349482511553f3c1740b8f2039b99acd4e83423d4cdd31a037888516",
+          "scripts/e2e.sh": "31cd79161fe8ab6043044e4f1a9cfd7786682b21cddcf08d0dba6e067135ce9d",
+          "docs/evidence/alert-performance/observe-control.py": "95d9f25b6702f9d80d8cb2cf59b70e4c0c880885ee658decaafadedbab5acda9",
+          "web/perf/alert-calculation.perf.ts": "6e80695333f50014cf42fc0cdb74198804a8057abdd161002fd228bae287dbbe",
+          "web/perf/alert-calculation.seed.ts": "7b5b9612ea225c0b6145a845f242cc104f610cc27794b6aac300be38addf6ea4",
+          "web/playwright.alert-calculation.config.ts": "1b1584176d7b468750b1f6cc1a84f4df47486777a03c425097fd834eba42a1a9",
+          "compose.yaml": "76a4948b18a78c3f0ff5c8e51b39f3e7a8679cde494698f0b76e349bd964f4df",
+          "compose.e2e.yaml": "4796baeef6c7f8195624098f6c58487818db39b68fac6e4811d8267739b9b4a1",
+          "compose.e2e.disk.yaml": "695de1b6c5004c7aa2a3b29b9bc91836c5486aee7cf1ad3a6839a2f50a556163"
+        },
+        "measuredAssignments": [
+          {
+            "id": "043aaa84d135fd65fda9c8f22be7405be789ee058f11f10d1f406bb9752e0dc4",
+            "role": "tempo",
+            "cpus": [
+              0,
+              1
+            ],
+            "image": "sha256:7b8eb5c4235854c6103f21b10db306c73d580bdd71bf65626d87cd3e2339eaab"
+          },
+          {
+            "id": "75d424905e1f7baee651262cfb936f4d713a9d03db0d9f4ba014ba5728dc4750",
+            "role": "app",
+            "cpus": [
+              0,
+              1
+            ],
+            "image": "sha256:81e79c32ba49fa161878a0178a2dbd04d04add434074fdbc23adb85cf9fea904"
+          },
+          {
+            "id": "8df8fc97e777d56aff9218a63255de2c91e09d368e310f09b6bcccf0f7e0a7a4",
+            "role": "agent",
+            "cpus": [
+              0,
+              1
+            ],
+            "image": "sha256:074349d5c87bab194a6d49a5fe7ce20c3dd2336ccd9a6a1e14e2c7697f23d114"
+          },
+          {
+            "id": "95d26d37dd5c3865281f6354ceb88e744e36f8a3128c07b28b932d54736da50c",
+            "role": "postgres",
+            "cpus": [
+              0,
+              1
+            ],
+            "image": "sha256:a1be1c8380f5c8ca80b4ad72f6be191f8a283e0ecb2e9496b1ee67dc0022d0f1"
+          },
+          {
+            "id": "af2e001965d29b9679d341e66141effdd8bf60918d4e37c98916f61c895b479d",
+            "role": "victoriatraces",
+            "cpus": [
+              0,
+              1
+            ],
+            "image": "sha256:0e594d6d171f74445e3e63ea5fa7657271d911baa03c09bc9f1f3a8554f20bbe"
+          },
+          {
+            "id": "b324b41ca0750d87e0a2718fd785ec1b6678127146e8c687b216e435d0b1c660",
+            "role": "sources-ready",
+            "cpus": [
+              0,
+              1
+            ],
+            "image": "sha256:ffa0c7daf725e85d72826c834502ffef21542e1952f1b8ba1ed4160062654ea2"
+          },
+          {
+            "id": "b5f4c82c7bc39fb7c35beb3ecc20b3abb6cb4cc0545feec8054cde2c5c63d4a6",
+            "role": "loki",
+            "cpus": [
+              0,
+              1
+            ],
+            "image": "sha256:27aa13d6e69207a0936744ae8cd40a437a3ae3c848f7c6a962d5cfeddcb9a4fe"
+          },
+          {
+            "id": "fab3467a1fc3a0eef9c4d47c612fcab89b9e94dd996d78c8742bb0894d24a420",
+            "role": "victoriametrics",
+            "cpus": [
+              0,
+              1
+            ],
+            "image": "sha256:430a695f97af0e91c051ebe1f386752af2c6c61af7c9691b658f0a5f53f17fa9"
+          }
+        ],
+        "exitCode": 1,
+        "cleanupExitCode": 0,
+        "cleanupChecks": [
+          {
+            "exitCode": 0,
+            "remainingCount": 0
+          },
+          {
+            "exitCode": 0,
+            "remainingCount": 0
+          }
+        ]
+      },
+      "stepSeconds": {
+        "setup": 86.90518257400001,
+        "seed": 187.657154161,
+        "measurement": 179.95822078500004
+      },
+      "evidence": {
+        "complete": true,
+        "errors": []
+      },
+      "backfill": {
+        "plannedBatches": 1400,
+        "completedBatches": 1400
+      },
+      "due": {
+        "intervals": 200,
+        "missing": 0,
+        "slisWithMissing": 0,
+        "nonObserved": 0
+      },
+      "ingestionOnly": {
+        "accepted": 203,
+        "duplicate": 0,
+        "unsuccessful": 0,
+        "p95LowerSeconds": 0.008390257,
+        "p95UpperSeconds": 0.008809769,
+        "elapsedSeconds": 61.107
+      },
+      "ingestionUnderLoad": {
+        "accepted": 350,
+        "duplicate": 0,
+        "unsuccessful": 0,
+        "p95LowerSeconds": 0.046280741,
+        "p95UpperSeconds": 0.048594778,
+        "elapsedSeconds": 104.55
+      },
+      "queries": {
+        "queryCount": 800,
+        "pendingBaseline": 18,
+        "baselineMS": {
+          "count": 800,
+          "mean": 6.229027500000004,
+          "p95": 14.974,
+          "max": 38.468
+        }
+      },
+      "outcomes": [
+        {
+          "status": "fulfilled"
+        },
+        {
+          "status": "fulfilled"
+        },
+        {
+          "status": "fulfilled"
+        },
+        {
+          "status": "fulfilled"
+        },
+        {
+          "status": "fulfilled"
+        },
+        {
+          "status": "fulfilled"
+        },
+        {
+          "status": "fulfilled"
+        },
+        {
+          "status": "fulfilled"
+        },
+        {
+          "status": "fulfilled"
+        },
+        {
+          "status": "fulfilled"
+        },
+        {
+          "status": "fulfilled"
+        },
+        {
+          "status": "fulfilled"
+        },
+        {
+          "status": "fulfilled"
+        },
+        {
+          "status": "fulfilled"
+        }
+      ],
+      "browserMS": {
+        "list-cold": {
+          "count": 20,
+          "mean": 519.9750000000174,
+          "p95": 722.2000000000698,
+          "max": 750.7000000000698
+        },
+        "list-warm": {
+          "count": 20,
+          "mean": 188.79499999999535,
+          "p95": 207.90000000002328,
+          "max": 225.80000000004657
+        },
+        "detail-cold": {
+          "count": 20,
+          "mean": 298.7700000000012,
+          "p95": 347.5999999999767,
+          "max": 441
+        },
+        "detail-warm": {
+          "count": 20,
+          "mean": 130.25999999999766,
+          "p95": 195.29999999993015,
+          "max": 486.0999999999767
+        }
+      },
+      "apiMS": {
+        "overview": {
+          "count": 110,
+          "mean": 247.1796234272724,
+          "p95": 446.7306389999867,
+          "max": 519.1519960000005
+        },
+        "status": {
+          "count": 110,
+          "mean": 61.93988285454623,
+          "p95": 146.61522100000002,
+          "max": 210.77125000000524
+        },
+        "history": {
+          "count": 110,
+          "mean": 173.32651168181664,
+          "p95": 277.4830999999831,
+          "max": 337.0605260000011
+        }
+      },
+      "apiFailures": [],
+      "observer": {
+        "workload_exit_code": 1,
+        "finished_at": "2026-11-14T12:27:07.522662+00:00",
+        "samples": {
+          "database": 1795,
+          "resources": 6426
+        },
+        "samplers_completed": {
+          "database": true,
+          "resources": true
+        },
+        "processes_terminated": true,
+        "errors": []
+      },
+      "traceExport": {
+        "complete": true,
+        "rows": 152045,
+        "rawRows": 162375,
+        "requests": 38,
+        "errors": [],
+        "exportStartedAt": "2026-11-14T12:27:07.770767+00:00",
+        "completenessScope": "query-pagination-only",
+        "ingestionLagNotEstablished": true,
+        "limitations": [
+          "No exporter flush/drain barrier; spans may arrive after this export.",
+          "Complete means uncapped queried pages, not that every emitted span arrived."
+        ],
+        "from": "2026-11-14T12:24:07.697000+00:00",
+        "through": "2026-11-14T12:27:05.242924+00:00",
+        "seconds": 9.492397008000012,
+        "exportFinishedAt": "2026-11-14T12:27:17.263182+00:00"
+      },
+      "loadedTraceMilliseconds": {
+        "GET /api/v1/slos/overview": {
+          "count": 140,
+          "mean": 153.26180967857132,
+          "p95": 340.138817,
+          "max": 389.642054
+        },
+        "db.ListSloOverviewPage": {
+          "count": 140,
+          "mean": 90.61535704285714,
+          "p95": 206.453815,
+          "max": 283.674456
+        },
+        "POST /api/agent/v1/observations": {
+          "count": 315,
+          "mean": 16.97392917142857,
+          "p95": 47.698007,
+          "max": 182.777419
+        }
+      },
+      "artifactSHA256": {
+        "traces.jsonl.gz": "99b294397a44e0dbd33e5d94482d978fa02c58463b044a09182d54ed8a3dd23f",
+        "observer-result.json": "bb167eadfcbb2ca46c5d00ec4d1f6c18334092f16b9a06b7f5b8d7351452596b",
+        "queries.json": "3c9db1d3766569dbfe0176d2a6db4e3067c5dbbe6152bc6ec7fc9288285b810a",
+        "backfill.json": "6c203f03a53bb6a5becd8b7a6e8911f36b64dc94e368721efe34cb0273f0b4d6",
+        "evidence-result.json": "1aad97b08bf948574fcbd1c416fa661285b92057d2c1aa4b4da9efd04eb0f87d",
+        "trace-result.json": "f1019582760eb54c17e2eb1a4d1ad91e6afa913f7cf5cdd6c47b396a0f0adf69",
+        "workload.json": "ce42858b6e9d3de71b8d431ee785c59d553a3675e93c2b8b13c5aa68311d8c25",
+        "profile.json": "471d9f7527908cac558d5322717456d91442dc8276add98edb13f8b04e893691",
+        "resources.jsonl": "0d21535849168b1103d3647c8ebbbdcca2454c9e5c7ddee4ea45360568043923",
+        "database.jsonl": "ca79782cbb7e08e9762f22c58984ced22e89e8ed0650d21f4a6663873b51b398"
+      },
+      "meanDockerCPUPercent": {
+        "alone": {
+          "postgres": 33.28,
+          "app": 4.26,
+          "client": 3.08,
+          "samplesPerContainer": 244
+        },
+        "loaded": {
+          "postgres": 134.35,
+          "app": 53.16,
+          "client": 53.42,
+          "samplesPerContainer": 418
+        }
+      }
+    }
+  },
+  "limitations": [
+    "Two independent runners with the same reported CPU model; this is not a same-host sequential pair.",
+    "Logical CPUs0/2 and1/3 are SMT siblings: split placement still shares physical cores.",
+    "Both runners have about16GB RAM; do not attribute improvement over the4GB microVM solely to CPU placement.",
+    "Shared run loses two API readers after503, so its completed API load is lower.",
+    "Synthetic historical SQL bypasses production backfill admission and has an elastic offered rate.",
+    "Trace export pagination completes, but asynchronous OTLP arrival is not proven complete.",
+    "All due intervals were observed; this is not alert-engine evaluation/endurance acceptance."
+  ],
+  "overviewAdmissionFailures": [
+    {
+      "traceID": "cbf7979149b2572b9f516b01a622fa67",
+      "httpMS": 315.089682,
+      "protectedAcquireMS": 250.160868
+    },
+    {
+      "traceID": "fe4f6bbab927c2e8ef55ca1a5a72dfea",
+      "httpMS": 316.295793,
+      "protectedAcquireMS": 250.6767
+    }
+  ],
+  "overviewAdmissionFailureCause": "Both shared failures occur acquiring the protected overview connection after successful bootstrap/readiness preflight, before page SQL.",
+  "interpretation": "Client scheduling interference is present, but split server containers also approach their two-logical-CPU ceiling. Trace duration is not SQL CPU or lock-wait time. Investigate competing historical/current work before another optimization."
+}
