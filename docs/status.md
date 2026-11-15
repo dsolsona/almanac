@@ -1,3 +1,14 @@
+Alert activation safeguard, 2026-11-15: [F4-T40](tasks/F4-T40.md) records
+pre-activation canonical cutoffs as explicit scheduled work and advances them
+without numerical evidence or failure charges. Independent review finds no defect;
+primary activation/upgrade checks pass in 4.987 s and client checks in 1.030 s.
+The processor remains unwired. [PR #122](https://github.com/dsolsona/almanac/pull/122)
+is fully green on `43d64d1`; merge authorization is pending. The next calculator
+architecture is concrete and reviewed in proposed [ADR-0052](adr/0052-compiled-maintenance-populations.md),
+with implementation/adoption approval still distinct from release gates.
+Supported SLI/SLO updates are metadata-only; future semantic activation/fanout and
+SLO archival are not current mutation paths and are not added by this safeguard.
+
 Alert management candidate, 2026-11-15: [F4-T38](tasks/F4-T38.md) and
 [F4-T39](tasks/F4-T39.md) connect protected API/CLI operations and the selected
 list/detail/compact form to persisted policies and immutable occurrence evidence.

@@ -12,21 +12,22 @@ import (
 )
 
 const advanceAlertCursor = `-- name: AdvanceAlertCursor :execrows
-UPDATE public.almanac_alert_cursors SET next_scheduled_at=$3,available_at=$3,version=version+1,last_cutoff=$4,last_evaluation_id=$5,open_occurrence_id=$6,pending_cutoff=NULL,claim_token=NULL,claim_until=NULL,waiting_reason='',failure_attempts=0,failure_since=NULL,last_failure_at=NULL,exhausted=false
-WHERE policy_id=$1 AND revision=$2 AND epoch=$7 AND claim_token=$8 AND version=$9 AND next_scheduled_at=$10 AND schedulable
+UPDATE public.almanac_alert_cursors SET next_scheduled_at=$3,available_at=$3,version=version+1,last_cutoff=$4,last_evaluation_id=$5,open_occurrence_id=$6,pending_cutoff=NULL,claim_token=NULL,claim_until=NULL,waiting_reason='',failure_attempts=CASE WHEN $10::boolean THEN failure_attempts ELSE 0 END,failure_since=CASE WHEN $10::boolean THEN failure_since ELSE NULL END,last_failure_at=CASE WHEN $10::boolean THEN last_failure_at ELSE NULL END,exhausted=CASE WHEN $10::boolean THEN exhausted ELSE false END
+WHERE policy_id=$1 AND revision=$2 AND epoch=$7 AND claim_token=$8 AND version=$9 AND next_scheduled_at=$11 AND schedulable
 `
 
 type AdvanceAlertCursorParams struct {
-	PolicyID         pgtype.UUID        `json:"policy_id"`
-	Revision         int64              `json:"revision"`
-	NextScheduledAt  pgtype.Timestamptz `json:"next_scheduled_at"`
-	LastCutoff       pgtype.Timestamptz `json:"last_cutoff"`
-	LastEvaluationID pgtype.UUID        `json:"last_evaluation_id"`
-	OpenOccurrenceID pgtype.UUID        `json:"open_occurrence_id"`
-	Epoch            int64              `json:"epoch"`
-	ClaimToken       pgtype.UUID        `json:"claim_token"`
-	Version          int64              `json:"version"`
-	ExpectedBoundary pgtype.Timestamptz `json:"expected_boundary"`
+	PolicyID             pgtype.UUID        `json:"policy_id"`
+	Revision             int64              `json:"revision"`
+	NextScheduledAt      pgtype.Timestamptz `json:"next_scheduled_at"`
+	LastCutoff           pgtype.Timestamptz `json:"last_cutoff"`
+	LastEvaluationID     pgtype.UUID        `json:"last_evaluation_id"`
+	OpenOccurrenceID     pgtype.UUID        `json:"open_occurrence_id"`
+	Epoch                int64              `json:"epoch"`
+	ClaimToken           pgtype.UUID        `json:"claim_token"`
+	Version              int64              `json:"version"`
+	PreserveFailureState bool               `json:"preserve_failure_state"`
+	ExpectedBoundary     pgtype.Timestamptz `json:"expected_boundary"`
 }
 
 func (q *Queries) AdvanceAlertCursor(ctx context.Context, arg AdvanceAlertCursorParams) (int64, error) {
@@ -40,6 +41,7 @@ func (q *Queries) AdvanceAlertCursor(ctx context.Context, arg AdvanceAlertCursor
 		arg.Epoch,
 		arg.ClaimToken,
 		arg.Version,
+		arg.PreserveFailureState,
 		arg.ExpectedBoundary,
 	)
 	if err != nil {
@@ -590,20 +592,21 @@ func (q *Queries) LockAlertSlo(ctx context.Context, id pgtype.UUID) (int64, erro
 }
 
 const readAlertBinding = `-- name: ReadAlertBinding :one
-SELECT p.id,p.slo_id,p.evaluation_revision,r.definition_revision,r.calculation_version,r.conditions,d.sli_id,d.measurement_revision
+SELECT p.id,p.slo_id,p.evaluation_revision,r.definition_revision,r.calculation_version,r.conditions,r.created_at AS activated_at,d.sli_id,d.measurement_revision
 FROM public.almanac_alert_policies p JOIN public.almanac_alert_policy_revisions r ON r.policy_id=p.id AND r.revision=p.evaluation_revision
 JOIN public.almanac_slo_definitions d ON d.slo_id=r.slo_id AND d.revision=r.definition_revision WHERE p.id=$1
 `
 
 type ReadAlertBindingRow struct {
-	ID                  pgtype.UUID `json:"id"`
-	SloID               pgtype.UUID `json:"slo_id"`
-	EvaluationRevision  int64       `json:"evaluation_revision"`
-	DefinitionRevision  int64       `json:"definition_revision"`
-	CalculationVersion  string      `json:"calculation_version"`
-	Conditions          []byte      `json:"conditions"`
-	SliID               pgtype.UUID `json:"sli_id"`
-	MeasurementRevision int64       `json:"measurement_revision"`
+	ID                  pgtype.UUID        `json:"id"`
+	SloID               pgtype.UUID        `json:"slo_id"`
+	EvaluationRevision  int64              `json:"evaluation_revision"`
+	DefinitionRevision  int64              `json:"definition_revision"`
+	CalculationVersion  string             `json:"calculation_version"`
+	Conditions          []byte             `json:"conditions"`
+	ActivatedAt         pgtype.Timestamptz `json:"activated_at"`
+	SliID               pgtype.UUID        `json:"sli_id"`
+	MeasurementRevision int64              `json:"measurement_revision"`
 }
 
 func (q *Queries) ReadAlertBinding(ctx context.Context, id pgtype.UUID) (ReadAlertBindingRow, error) {
@@ -616,6 +619,7 @@ func (q *Queries) ReadAlertBinding(ctx context.Context, id pgtype.UUID) (ReadAle
 		&i.DefinitionRevision,
 		&i.CalculationVersion,
 		&i.Conditions,
+		&i.ActivatedAt,
 		&i.SliID,
 		&i.MeasurementRevision,
 	)

@@ -38,10 +38,13 @@ func (r *Runtime) readAlertEvidence(ctx context.Context, claim alertClaim, cutof
 	if err != nil {
 		return alertPreparedEvidence{}, err
 	}
-	if !cutoff.IsZero() && !cutoff.Equal(pinned) {
+	if !cutoff.IsZero() && !cutoff.Equal(pinned.Cutoff) {
 		return alertPreparedEvidence{}, ErrAlertStale
 	}
-	cutoff = pinned
+	if pinned.SkippedBeforeActivation {
+		return alertPreparedEvidence{Cutoff: pinned.Cutoff}, ErrAlertInvalid
+	}
+	cutoff = pinned.Cutoff
 	now = normalizedAgentNow(clock)
 	bounded, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
@@ -101,7 +104,7 @@ func prepareAlertEvidence(ctx context.Context, q *dbgen.Queries, claim alertClai
 	}
 	result := alertPreparedEvidence{Cutoff: cutoff}
 	cadence := time.Duration(row.CadenceSeconds) * time.Second
-	if cutoff.IsZero() || cutoff.After(claim.ScheduledAt) || !floorSliBoundary(cutoff, cadence).Equal(cutoff) {
+	if cutoff.IsZero() || cutoff.Before(binding.ActivatedAt.Time) || cutoff.After(claim.ScheduledAt) || !floorSliBoundary(cutoff, cadence).Equal(cutoff) {
 		return result, ErrAlertInvalid
 	}
 	exclusion, err := q.ReadMaintenanceState(ctx, row.ID)

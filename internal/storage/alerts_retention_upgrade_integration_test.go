@@ -15,8 +15,8 @@ import (
 
 func TestIntegrationAlertRetentionUpgrade(t *testing.T) {
 	t.Parallel()
-	if latest := latestTestSchemaVersion(t); latest != 59 {
-		t.Fatalf("update the exact 0058 reconstruction for migration suffix after 0059: latest=%d", latest)
+	if latest := latestTestSchemaVersion(t); latest != 60 {
+		t.Fatalf("update the exact 0058 reconstruction for migration suffix after 0060: latest=%d", latest)
 	}
 	f := newAlertTestFixture(t)
 	active := f.policy(t, "Upgrade active")
@@ -80,16 +80,16 @@ ALTER TABLE public.almanac_alert_ranges DROP CONSTRAINT almanac_alert_range_summ
 ALTER TABLE public.almanac_alert_ranges DROP COLUMN summary;
 ALTER TABLE public.almanac_alert_ranges DROP CONSTRAINT almanac_alert_ranges_kind_check;
 ALTER TABLE public.almanac_alert_ranges ADD CONSTRAINT almanac_alert_ranges_kind_check CHECK(kind IN ('repeated_cutoff','unreconstructed_gap','administrative_cancellation'));
-DELETE FROM public.almanac_schema_migrations WHERE version=59;`)
-	if err != nil || tag.RowsAffected() != 1 {
+DELETE FROM public.almanac_schema_migrations WHERE version>=59;`)
+	if err != nil || tag.RowsAffected() != 2 {
 		t.Fatalf("reconstruct populated 0058: removed=%d %v", tag.RowsAffected(), err)
 	}
 	if state, err := CheckCompatibility(t.Context(), f.f.databaseURL); err != nil || state != CompatibilityPending {
 		t.Fatalf("0058 compatibility: %v %v", state, err)
 	}
 	result, err := Upgrade(t.Context(), f.f.databaseURL)
-	if err != nil || result.Applied != 1 || result.DatabaseSchemaVersion != 59 {
-		t.Fatalf("populated 0058 to 0059: %+v %v", result, err)
+	if err != nil || result.Applied != 2 || result.DatabaseSchemaVersion != 60 {
+		t.Fatalf("populated 0058 through 0060: %+v %v", result, err)
 	}
 	if after := snapshot(); after != before {
 		t.Fatal("forward upgrade changed occurrence/evaluation/transition/range history or prior migration ledger")

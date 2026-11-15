@@ -8,26 +8,34 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+type alertCutoffResult struct {
+	Cutoff                  time.Time
+	SkippedBeforeActivation bool
+}
+
 // pinAlertCutoff makes canonical eligibility a durable property of the current
 // scheduled head. New source facts may change counts, but never this boundary.
 // The authority transaction reads only the bounded ready tail, not any windows.
-func (r *Runtime) pinAlertCutoff(ctx context.Context, claim alertClaim, clock func() time.Time) (time.Time, error) {
+// An ineligible cutoff instead commits explicit scheduled coverage and advances;
+// activation does not restrict the historical measurements inside a later window.
+func (r *Runtime) pinAlertCutoff(ctx context.Context, claim alertClaim, clock func() time.Time) (alertCutoffResult, error) {
 	if clock == nil {
-		return time.Time{}, ErrAlertInvalid
+		return alertCutoffResult{}, ErrAlertInvalid
 	}
-	var cutoff time.Time
+	var result alertCutoffResult
 	err := r.alertTransaction(ctx, func(ctx context.Context, _ pgx.Tx, q *dbgen.Queries) error {
 		cursor, err := lockAlertRangeHead(ctx, q, claim, normalizedAgentNow(clock))
 		if err != nil {
 			return err
 		}
+		binding, err := q.ReadAlertBinding(ctx, cursor.PolicyID)
+		if err != nil {
+			return err
+		}
+		var cutoff time.Time
 		if cursor.PendingCutoff.Valid {
 			cutoff = cursor.PendingCutoff.Time.UTC()
 		} else {
-			binding, err := q.ReadAlertBinding(ctx, cursor.PolicyID)
-			if err != nil {
-				return err
-			}
 			row, err := q.GetSlo(ctx, binding.SloID)
 			if err != nil {
 				return err
@@ -40,6 +48,21 @@ func (r *Runtime) pinAlertCutoff(ctx context.Context, claim alertClaim, clock fu
 			if err != nil {
 				return err
 			}
+		}
+		if cutoff.IsZero() || cutoff.After(claim.ScheduledAt) {
+			return ErrAlertInvalid
+		}
+		result.Cutoff = cutoff
+		if cutoff.Before(binding.ActivatedAt.Time) {
+			now := normalizedAgentNow(clock)
+			if now.IsZero() || !cursor.ClaimUntil.Time.After(now) {
+				return ErrAlertStale
+			}
+			if err := advanceAlertRange(ctx, q, cursor, claim, claim.ScheduledAt.Add(time.Minute), now, "before_policy_activation", "before_policy_activation"); err != nil {
+				return err
+			}
+			result.SkippedBeforeActivation = true
+		} else if !cursor.PendingCutoff.Valid {
 			n, err := q.PinAlertCutoff(ctx, dbgen.PinAlertCutoffParams{PolicyID: cursor.PolicyID, Revision: cursor.Revision, PendingCutoff: timestamp(cutoff), Epoch: claim.Epoch, ClaimToken: claim.Token, Version: claim.Version, NextScheduledAt: timestamp(claim.ScheduledAt)})
 			if err != nil {
 				return err
@@ -55,7 +78,7 @@ func (r *Runtime) pinAlertCutoff(ctx context.Context, claim alertClaim, clock fu
 		return nil
 	})
 	if err != nil {
-		return time.Time{}, err
+		return alertCutoffResult{}, err
 	}
-	return cutoff, nil
+	return result, nil
 }

@@ -16,7 +16,19 @@ import (
 func TestIntegrationAlertCutoffRestart(t *testing.T) {
 	t.Parallel()
 	f := newAlertTestFixture(t)
+	// Create at the actual current clock, then schedule the first attempt five
+	// minutes later. Both withheld and late-arriving cutoffs follow activation.
+	createdAt := f.at
+	f.at = f.at.Add(5 * time.Minute)
 	f.policy(t, "Pinned boundary")
+	if _, err := execObservationFixture(t, f.conn, f.sliID, `INSERT INTO almanac_sli_observations
+ (interval_start,sli_id,measurement_revision,outcome,good_count,total_count,result_digest,missing_components,execution_id,delivery_id,agent_id,session_generation,configuration_revision,lease_id,agent_created_at,recorded_at)
+ SELECT point,sli_id,measurement_revision,outcome,good_count,total_count,result_digest,missing_components,gen_random_uuid(),gen_random_uuid(),agent_id,session_generation,configuration_revision,lease_id,point,point+interval '1 minute'
+ FROM almanac_sli_observations CROSS JOIN generate_series($2::timestamptz,$3::timestamptz-interval '1 minute',interval '1 minute') point
+ WHERE sli_id=$1 AND interval_start=$2::timestamptz-interval '1 minute'`, f.sliID, createdAt, f.at); err != nil {
+		t.Fatal(err)
+	}
+	f.now = f.at
 	// Withhold the not-yet-due tail so canonical eligibility initially uses the
 	// source allowance rather than the early completed interval at f.at.
 	var settling int32
@@ -35,8 +47,8 @@ func TestIntegrationAlertCutoffRestart(t *testing.T) {
 	}
 	claim := f.claim(t, f.at)
 	cutoff, err := f.runtime.pinAlertCutoff(t.Context(), claim, f.clock)
-	if err != nil || !cutoff.Equal(due) {
-		t.Fatalf("initial cutoff=%s want=%s: %v", cutoff, due, err)
+	if err != nil || !cutoff.Cutoff.Equal(due) {
+		t.Fatalf("initial cutoff=%+v want=%s: %v", cutoff, due, err)
 	}
 	if _, err := execObservationFixture(t, f.conn, f.sliID, `INSERT INTO almanac_sli_observations SELECT * FROM held_tail`); err != nil {
 		t.Fatal(err)
@@ -46,7 +58,7 @@ func TestIntegrationAlertCutoffRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	unpinned, err := liveSloEvaluationEnd(t.Context(), dbgen.New(f.conn), definition, claim.ScheduledAt, settling)
-	if err != nil || !unpinned.After(cutoff) {
+	if err != nil || !unpinned.After(cutoff.Cutoff) {
 		t.Fatalf("late tail did not change unpinned cutoff: %s %v", unpinned, err)
 	}
 	// Reclaim after expiry through a new Runtime, representing evaluator restart.
@@ -61,14 +73,14 @@ func TestIntegrationAlertCutoffRestart(t *testing.T) {
 		t.Fatalf("reclaim: %+v %v", claims, err)
 	}
 	kept, err := reopened.pinAlertCutoff(t.Context(), claims[0], func() time.Time { return now })
-	if err != nil || !kept.Equal(cutoff) {
-		t.Fatalf("restart moved pending cutoff=%s original=%s: %v", kept, cutoff, err)
+	if err != nil || !kept.Cutoff.Equal(cutoff.Cutoff) {
+		t.Fatalf("restart moved pending cutoff=%+v original=%+v: %v", kept, cutoff, err)
 	}
 	if _, err := f.runtime.pinAlertCutoff(t.Context(), claim, func() time.Time { return now }); !errors.Is(err, ErrAlertStale) {
 		t.Fatalf("expired worker rewrote pin: %v", err)
 	}
 	row, err := dbgen.New(f.conn).LockAlertCursor(t.Context(), dbgen.LockAlertCursorParams{PolicyID: mustPGUUID(claim.PolicyID), Revision: 1})
-	if err != nil || !row.PendingCutoff.Valid || !row.PendingCutoff.Time.Equal(cutoff) || !row.NextScheduledAt.Time.Equal(f.at) {
+	if err != nil || !row.PendingCutoff.Valid || !row.PendingCutoff.Time.Equal(cutoff.Cutoff) || !row.NextScheduledAt.Time.Equal(f.at) {
 		t.Fatalf("lost durable pending boundary: %+v %v", row, err)
 	}
 }
@@ -76,14 +88,18 @@ func TestIntegrationAlertCutoffRestart(t *testing.T) {
 func TestIntegrationAlertCutoffRejectsDifferentEvidence(t *testing.T) {
 	t.Parallel()
 	f := newAlertTestFixture(t)
+	// The mismatched cutoff must itself be eligible; otherwise activation
+	// rejection correctly precedes the distinct pending-pin fence.
+	f.at = f.at.Add(2 * time.Minute)
 	f.policy(t, "Mismatched pin")
+	f.now = f.at
 	claim := f.claim(t, f.at)
 	pinned, err := f.runtime.pinAlertCutoff(t.Context(), claim, f.clock)
 	if err != nil {
 		t.Fatal(err)
 	}
 	input := f.input(t, claim, alert.Complete, true)
-	input.Snapshot.Cutoff = pinned.Add(-time.Minute)
+	input.Snapshot.Cutoff = pinned.Cutoff.Add(time.Minute)
 	for i := range input.Windows {
 		input.Windows[i].Snapshot = input.Snapshot
 		input.Windows[i].Start = input.Windows[i].Start.Add(-time.Minute)
@@ -93,7 +109,7 @@ func TestIntegrationAlertCutoffRejectsDifferentEvidence(t *testing.T) {
 		t.Fatalf("journal accepted a different cutoff: %v", err)
 	}
 	cursor, err := dbgen.New(f.conn).LockAlertCursor(t.Context(), dbgen.LockAlertCursorParams{PolicyID: mustPGUUID(claim.PolicyID), Revision: 1})
-	if err != nil || !cursor.PendingCutoff.Valid || !cursor.PendingCutoff.Time.Equal(pinned) || !cursor.NextScheduledAt.Time.Equal(f.at) || cursor.LastEvaluationID.Valid || cursor.OpenOccurrenceID.Valid {
+	if err != nil || !cursor.PendingCutoff.Valid || !cursor.PendingCutoff.Time.Equal(pinned.Cutoff) || !cursor.NextScheduledAt.Time.Equal(f.at) || cursor.LastEvaluationID.Valid || cursor.OpenOccurrenceID.Valid {
 		t.Fatalf("rejected evidence mutated the head: %+v %v", cursor, err)
 	}
 }

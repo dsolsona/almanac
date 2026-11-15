@@ -79,6 +79,10 @@ describe('alert client',()=>{
   for(const status of ['unknown','expired']){clearQueryCache();const fetcher=fetchReply({status});expect((await alertClient.commandResult('alert-policy.create','key /?')).value.status).toBe(status);expect(new URL(fetcher.mock.calls[0][0],'https://example.test').searchParams.get('idempotency_key')).toBe('key /?');}
   clearQueryCache();fetchReply({status:'committed',result:{...command,operation:'alert-policy.disable'}});await expect(alertClient.commandResult('alert-policy.create','key')).rejects.toMatchObject({code:'invalid_response'});
  });
+ it('reads explicit pre-activation scheduled history',async()=>{
+  const page={items:[{id,kind:'before_policy_activation',reason:'before_policy_activation',start:at,end:'2026-11-15T12:01:00Z',recorded_at:at,cadence_seconds:60}]};
+  fetchReply(page);expect((await alertClient.ranges(id,'1',{limit:20})).value).toEqual(page);
+ });
  it('routes policy, evidence and bounded history reads',async()=>{
   const cases:[()=>Promise<unknown>,unknown,string,string?][]=[
    [()=>alertClient.policies({enabled:false,q:'x'}),{items:[],total:'0'},'/api/v1/alert-policies?enabled=false&q=x'],

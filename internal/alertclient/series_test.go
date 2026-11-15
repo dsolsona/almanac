@@ -13,6 +13,35 @@ const objectiveJSON = `{"target":"0.999","cadence_seconds":60,"definition_valid_
 
 var seriesJSON = `{"policy_id":"` + policyID + `","evaluation_revision":"9007199254740993","objective":` + objectiveJSON + `,"condition":{"id":"fast","short_window_seconds":300,"long_window_seconds":3600,"threshold":"14.4"},"start":"2026-11-15T10:00:00Z","end":"2026-11-15T12:00:00Z","points":[{"evaluation_id":"` + policyID + `","snapshot":` + snapshotJSON + `,"scheduled_at":"2026-11-15T12:00:00Z","committed_at":"2026-11-15T12:00:01Z","condition":{"id":"fast","threshold":"14.4","outcome":"matching","short":` + strings.Replace(windowJSON, "11:00:00", "11:55:00", 1) + `,"long":` + windowJSON + `}}],"gaps":[{"start":"2026-11-15T10:00:00Z","end":"2026-11-15T12:00:00Z","start_inclusive":true,"end_inclusive":false,"basis":"effective_cutoff","kind":"not_retained","reason":"no_retained_evaluation"}],"sampling":{"total":1,"returned":1,"reduced":false,"omitted_extrema":false,"method":"exact"}}`
 
+func TestAlertActivationRangeAndSeriesResponses(t *testing.T) {
+	rangeJSON := `{"items":[{"id":"` + policyID + `","kind":"before_policy_activation","reason":"before_policy_activation","start":"2026-11-15T11:58:00Z","end":"2026-11-15T11:59:00Z","recorded_at":"2026-11-15T12:00:00Z","cadence_seconds":60}]}`
+	activationSeries := strings.ReplaceAll(strings.ReplaceAll(seriesJSON, `"kind":"not_retained"`, `"kind":"before_policy_activation"`), `"basis":"effective_cutoff"`, `"basis":"scheduled_boundary"`)
+	for _, tc := range []struct {
+		input Input
+		body  string
+	}{
+		{Input{Kind: "alert-policies", Action: "ranges", ID: policyID, Revision: "1", Limit: 20}, rangeJSON},
+		{Input{Kind: "alerts", Action: "series", ID: policyID, ConditionID: "fast"}, activationSeries},
+	} {
+		t.Run(tc.input.Action, func(t *testing.T) {
+			ops, err := api.NewClient("https://almanac.test", api.WithHTTPClient(&http.Client{Transport: roundTrip(func(r *http.Request) (*http.Response, error) {
+				return &http.Response{StatusCode: 200, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(tc.body))}, nil
+			})}))
+			if err != nil {
+				t.Fatal(err)
+			}
+			body, _, err := New(ops, nil).Do(t.Context(), tc.input)
+			if err != nil || string(body) != tc.body {
+				t.Fatalf("activation provenance rejected/changed: %s %v", body, err)
+			}
+		})
+	}
+	invalid := strings.ReplaceAll(activationSeries, `"basis":"scheduled_boundary"`, `"basis":"effective_cutoff"`)
+	if validSeriesResponse([]byte(invalid), Input{Kind: "alerts", Action: "series", ID: policyID, ConditionID: "fast", Limit: 120}) {
+		t.Fatal("scheduled activation skip accepted as cutoff gap")
+	}
+}
+
 func TestAlertSeriesGeneratedRequestAndExactResponse(t *testing.T) {
 	for _, explicit := range []bool{false, true} {
 		t.Run(map[bool]string{false: "default", true: "explicit"}[explicit], func(t *testing.T) {

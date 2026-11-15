@@ -121,6 +121,9 @@ func (r *Runtime) commitAlertEvaluation(ctx context.Context, claim alertClaim, i
 			return ErrAlertStale
 		}
 		identity := input.Snapshot
+		if identity.Cutoff.Before(binding.ActivatedAt.Time) {
+			return ErrAlertInvalid
+		}
 		if identity.SLOID != binding.SloID.String() || identity.SLORevision != definition || identity.SLIRevision != measurement || identity.SourceGeneration != generation || identity.ExclusionRevision != exclusion || identity.CalculationVersion != binding.CalculationVersion || identity.CalculationVersion != operationalCalculationVersion {
 			return ErrAlertStale
 		}

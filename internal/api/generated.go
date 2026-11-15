@@ -447,6 +447,7 @@ func (e AlertQuality) Valid() bool {
 // Defines values for AlertRangeKind.
 const (
 	AlertRangeKindAdministrativeCancellation AlertRangeKind = "administrative_cancellation"
+	AlertRangeKindBeforePolicyActivation     AlertRangeKind = "before_policy_activation"
 	AlertRangeKindCompactedEvaluations       AlertRangeKind = "compacted_evaluations"
 	AlertRangeKindRepeatedCutoff             AlertRangeKind = "repeated_cutoff"
 	AlertRangeKindUnreconstructedGap         AlertRangeKind = "unreconstructed_gap"
@@ -456,6 +457,8 @@ const (
 func (e AlertRangeKind) Valid() bool {
 	switch e {
 	case AlertRangeKindAdministrativeCancellation:
+		return true
+	case AlertRangeKindBeforePolicyActivation:
 		return true
 	case AlertRangeKindCompactedEvaluations:
 		return true
@@ -489,6 +492,7 @@ func (e AlertSeriesGapBasis) Valid() bool {
 // Defines values for AlertSeriesGapKind.
 const (
 	AlertSeriesGapKindAdministrativeCancellation AlertSeriesGapKind = "administrative_cancellation"
+	AlertSeriesGapKindBeforePolicyActivation     AlertSeriesGapKind = "before_policy_activation"
 	AlertSeriesGapKindCompactedEvaluations       AlertSeriesGapKind = "compacted_evaluations"
 	AlertSeriesGapKindNotRetained                AlertSeriesGapKind = "not_retained"
 	AlertSeriesGapKindOutsideRevision            AlertSeriesGapKind = "outside_revision"
@@ -502,6 +506,8 @@ const (
 func (e AlertSeriesGapKind) Valid() bool {
 	switch e {
 	case AlertSeriesGapKindAdministrativeCancellation:
+		return true
+	case AlertSeriesGapKindBeforePolicyActivation:
 		return true
 	case AlertSeriesGapKindCompactedEvaluations:
 		return true

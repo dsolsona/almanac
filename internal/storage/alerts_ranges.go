@@ -52,7 +52,7 @@ func advanceAlertRange(ctx context.Context, q *dbgen.Queries, cursor dbgen.Alman
 	if err := q.InsertAlertRange(ctx, dbgen.InsertAlertRangeParams{ID: newAlertID(), PolicyID: cursor.PolicyID, Revision: cursor.Revision, StartsAt: timestamp(claim.ScheduledAt), EndsAt: timestamp(end), CadenceSeconds: 60, Kind: kind, Reason: reason, RecordedAt: timestamp(now), ReferenceEvaluationID: reference}); err != nil {
 		return err
 	}
-	n, err := q.AdvanceAlertCursor(ctx, dbgen.AdvanceAlertCursorParams{PolicyID: cursor.PolicyID, Revision: cursor.Revision, NextScheduledAt: timestamp(end), LastCutoff: cursor.LastCutoff, LastEvaluationID: cursor.LastEvaluationID, OpenOccurrenceID: cursor.OpenOccurrenceID, Epoch: claim.Epoch, ClaimToken: claim.Token, Version: claim.Version, ExpectedBoundary: timestamp(claim.ScheduledAt)})
+	n, err := q.AdvanceAlertCursor(ctx, dbgen.AdvanceAlertCursorParams{PolicyID: cursor.PolicyID, Revision: cursor.Revision, NextScheduledAt: timestamp(end), LastCutoff: cursor.LastCutoff, LastEvaluationID: cursor.LastEvaluationID, OpenOccurrenceID: cursor.OpenOccurrenceID, Epoch: claim.Epoch, ClaimToken: claim.Token, Version: claim.Version, ExpectedBoundary: timestamp(claim.ScheduledAt), PreserveFailureState: kind == "before_policy_activation"})
 	if err != nil {
 		return err
 	}

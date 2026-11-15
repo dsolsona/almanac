@@ -29,8 +29,13 @@ it('interrupts cutoff gaps and sampled intervals while retaining actual endpoint
   }
 });
 it('does not draw a scheduled range as an effective-cutoff gap',()=>{
-  const chart=evidenceChart({...value,gaps:[{start:first.snapshot.cutoff,end:last.snapshot.cutoff,start_inclusive:true,end_inclusive:false,basis:'scheduled_boundary',kind:'repeated_cutoff',reason:'same_cutoff'}]},first.condition);
-  expect(chart.lanes[0]!.series[0]!.points).toHaveLength(2);
+  for(const kind of ['repeated_cutoff','before_policy_activation'] as const){
+    const data={...value,gaps:[{start:first.snapshot.cutoff,end:last.snapshot.cutoff,start_inclusive:true,end_inclusive:false,basis:'scheduled_boundary' as const,kind,reason:kind}]};
+    expect(validSeries(data,'fast')).toBe(true);
+    const chart=evidenceChart(data,first.condition);
+    expect(chart.lanes[0]!.series[0]!.points).toHaveLength(2);
+    if(kind==='before_policy_activation')expect(validSeries({...data,gaps:[{...data.gaps[0]!,basis:'effective_cutoff'}]},'fast')).toBe(false);
+  }
 });
 it('keeps partial numerics provisional and zero traffic unavailable',()=>{
   const partial=structuredClone(first);partial.condition.short.quality='partial';partial.condition.outcome='unavailable';

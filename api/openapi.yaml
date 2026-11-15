@@ -1595,7 +1595,7 @@ components:
         start_inclusive: {type: boolean}
         end_inclusive: {type: boolean}
         basis: {type: string, enum: [effective_cutoff, scheduled_boundary]}
-        kind: {type: string, enum: [not_retained, unavailable, repeated_cutoff, unreconstructed_gap, administrative_cancellation, compacted_evaluations, outside_revision, pending]}
+        kind: {type: string, enum: [not_retained, unavailable, repeated_cutoff, unreconstructed_gap, administrative_cancellation, compacted_evaluations, before_policy_activation, outside_revision, pending]}
         reason: {type: string}
         range_id: {type: string, format: uuid}
     AlertSeriesSampling:
@@ -1729,7 +1729,7 @@ components:
       required: [id, kind, reason, start, end, recorded_at, cadence_seconds]
       properties:
         id: {type: string, format: uuid}
-        kind: {type: string, enum: [repeated_cutoff, unreconstructed_gap, administrative_cancellation, compacted_evaluations]}
+        kind: {type: string, enum: [repeated_cutoff, unreconstructed_gap, administrative_cancellation, compacted_evaluations, before_policy_activation]}
         reason: {type: string}
         actor_id: {type: string, format: uuid}
         request_id: {type: string}

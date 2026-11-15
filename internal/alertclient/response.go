@@ -177,7 +177,7 @@ func validResponse(data []byte, in Input, tag string) bool {
 			return false
 		}
 		for _, item := range v.Items {
-			if !validID(item.Id.String()) || !item.End.After(item.Start) || item.RecordedAt.IsZero() || item.CadenceSeconds != 60 || item.Reason == "" || !contains(string(item.Kind), "repeated_cutoff", "unreconstructed_gap", "administrative_cancellation", "compacted_evaluations") {
+			if !validID(item.Id.String()) || !item.End.After(item.Start) || item.RecordedAt.IsZero() || item.CadenceSeconds != 60 || item.Reason == "" || !contains(string(item.Kind), "repeated_cutoff", "unreconstructed_gap", "administrative_cancellation", "compacted_evaluations", "before_policy_activation") {
 				return false
 			}
 			if item.Summary != nil && (!validSnapshot(item.Summary.First) || !validSnapshot(item.Summary.Last) || len(item.Summary.Conditions) == 0) {
