@@ -26,10 +26,11 @@ const (
 // Runtime owns the backend's pools. Callers release every acquired connection;
 // the backend closes the runtime after stopping admission and draining requests.
 type Runtime struct {
-	pools       [3]*pgxpool.Pool
-	databaseURL string
-	compatible  atomic.Bool
-	metrics     runtimeMetrics
+	pools              [3]*pgxpool.Pool
+	databaseURL        string
+	compatible         atomic.Bool
+	metrics            runtimeMetrics
+	receiptRepairAfter atomic.Pointer[time.Time]
 }
 
 type runtimeContextKey struct{}

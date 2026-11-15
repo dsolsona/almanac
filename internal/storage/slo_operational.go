@@ -369,7 +369,7 @@ func readSloOverviewPage(ctx context.Context, databaseURL string, input Operatio
 	items := make([]api.SloOperationalOverviewItem, 0, len(rows))
 	for _, row := range rows {
 		var item api.SloOperationalOverviewItem
-		if json.Unmarshal(row.Payload, &item) != nil || !item.Urgency.Valid() {
+		if unmarshalReceiptMetadata(row.Payload, &item) != nil || !item.Urgency.Valid() {
 			return api.SloOperationalOverviewPage{}, errors.New("storage: invalid overview snapshot item")
 		}
 		item.Slo.Target = sli.NormalizeDecimal(item.Slo.Target)

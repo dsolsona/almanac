@@ -506,20 +506,22 @@ type AlmanacSliExecutionAttempt struct {
 }
 
 type AlmanacSliHourlyAggregate struct {
-	SliID                pgtype.UUID        `json:"sli_id"`
-	MeasurementRevision  int64              `json:"measurement_revision"`
-	HourStart            pgtype.Timestamptz `json:"hour_start"`
-	SourceGeneration     int64              `json:"source_generation"`
-	Good                 pgtype.Numeric     `json:"good"`
-	Total                pgtype.Numeric     `json:"total"`
-	ObservedIntervals    int64              `json:"observed_intervals"`
-	KnownEmptyIntervals  int64              `json:"known_empty_intervals"`
-	ZeroTrafficIntervals int64              `json:"zero_traffic_intervals"`
-	FirstIntervalStart   pgtype.Timestamptz `json:"first_interval_start"`
-	LastIntervalEnd      pgtype.Timestamptz `json:"last_interval_end"`
-	LatestReceiptAt      pgtype.Timestamptz `json:"latest_receipt_at"`
-	FirstObservationAt   pgtype.Timestamptz `json:"first_observation_at"`
-	LastObservationAt    pgtype.Timestamptz `json:"last_observation_at"`
+	SliID                   pgtype.UUID        `json:"sli_id"`
+	MeasurementRevision     int64              `json:"measurement_revision"`
+	HourStart               pgtype.Timestamptz `json:"hour_start"`
+	SourceGeneration        int64              `json:"source_generation"`
+	Good                    pgtype.Numeric     `json:"good"`
+	Total                   pgtype.Numeric     `json:"total"`
+	ObservedIntervals       int64              `json:"observed_intervals"`
+	KnownEmptyIntervals     int64              `json:"known_empty_intervals"`
+	ZeroTrafficIntervals    int64              `json:"zero_traffic_intervals"`
+	FirstIntervalStart      pgtype.Timestamptz `json:"first_interval_start"`
+	LastIntervalEnd         pgtype.Timestamptz `json:"last_interval_end"`
+	LatestReceiptAt         pgtype.Timestamptz `json:"latest_receipt_at"`
+	FirstObservationAt      pgtype.Timestamptz `json:"first_observation_at"`
+	LastObservationAt       pgtype.Timestamptz `json:"last_observation_at"`
+	ReceiptSourceGeneration pgtype.Int8        `json:"receipt_source_generation"`
+	CertifiedReceiptAt      pgtype.Timestamptz `json:"certified_receipt_at"`
 }
 
 type AlmanacSliMeasurement struct {

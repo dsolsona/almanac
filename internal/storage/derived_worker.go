@@ -76,6 +76,13 @@ func (r *Runtime) runDerivedTurn(ctx context.Context, logger *slog.Logger, clock
 		}
 		nextMetrics = now.Add(30 * time.Second)
 	}
+	// Optional legacy metadata repair follows source/current/metrics work and
+	// cannot turn a busy source loop into an unbounded repair drain.
+	if ctx.Err() == nil && r.claimReceiptRepair(clock().UTC()) {
+		if _, err := r.repairCanonicalReceipt(ctx); err != nil && ctx.Err() == nil && !derivedTemporary(ctx, err) {
+			logger.ErrorContext(ctx, "canonical receipt repair failed", "error", derivedErrorDetail(err))
+		}
+	}
 	// A full source batch must not skip current work or metrics before draining more.
 	if moreSource {
 		return nextMetrics, now

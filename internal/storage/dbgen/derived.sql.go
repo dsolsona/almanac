@@ -86,7 +86,14 @@ WITH measurement AS (
     SELECT a.good, a.total, a.observed_intervals AS observed,
            a.known_empty_intervals AS known_empty, a.zero_traffic_intervals AS zero_traffic,
            a.first_observation_at AS first_observation, a.last_observation_at AS last_observation,
-           a.latest_receipt_at AS latest_receipt
+           CASE WHEN a.receipt_source_generation IS NOT DISTINCT FROM a.source_generation
+                     AND a.certified_receipt_at IS NOT DISTINCT FROM a.latest_receipt_at
+                     AND a.observed_intervals+a.known_empty_intervals>0
+                THEN a.latest_receipt_at END AS latest_receipt,
+           (a.observed_intervals+a.known_empty_intervals>0 AND
+             (a.receipt_source_generation IS DISTINCT FROM a.source_generation
+              OR a.certified_receipt_at IS DISTINCT FROM a.latest_receipt_at
+              OR a.latest_receipt_at IS NULL)) AS receipt_unknown
     FROM public.almanac_sli_hourly_aggregates a
     WHERE a.sli_id=$1 AND a.measurement_revision=$2
       AND a.hour_start >= $3::timestamptz
@@ -98,7 +105,8 @@ WITH measurement AS (
            count(*) FILTER (WHERE c.outcome='complete_empty'),
            count(*) FILTER (WHERE c.outcome='observed' AND c.total_count=0),
            min(c.interval_start) FILTER (WHERE c.outcome='observed'),
-           max(c.interval_start+m.polling_interval_seconds*interval '1 second') FILTER (WHERE c.outcome='observed'), max(c.recorded_at)
+           max(c.interval_start+m.polling_interval_seconds*interval '1 second') FILTER (WHERE c.outcome='observed'),
+           max(c.recorded_at) FILTER (WHERE c.outcome IN ('observed','complete_empty')), false
     FROM raw_ranges r JOIN public.almanac_sli_observations c
       ON c.sli_id=$1 AND c.measurement_revision=$2
       AND c.interval_start >= r.start_at AND c.interval_start < r.end_at
@@ -113,7 +121,7 @@ SELECT coalesce(sum(good),0)::numeric::text AS good,
        coalesce(sum(zero_traffic),0)::bigint AS zero_traffic,
        min(first_observation)::timestamptz AS first_observation,
        max(last_observation)::timestamptz AS last_observation,
-       max(latest_receipt)::timestamptz AS latest_receipt,
+       CASE WHEN bool_or(receipt_unknown) THEN NULL ELSE max(latest_receipt) END::timestamptz AS latest_receipt,
        (SELECT prepared FROM readiness)::boolean AS prepared,
        (SELECT exhausted FROM readiness)::boolean AS exhausted
 FROM contributions

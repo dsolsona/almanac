@@ -2,7 +2,6 @@ package storage
 
 import (
 	"context"
-	"encoding/json/v2"
 	"errors"
 	"strconv"
 	"time"
@@ -166,7 +165,7 @@ func (r *extremaReader) preparePlan(ctx context.Context, base slo.WindowInput, b
 			day = operationalComplianceDay(value, part.end, base.ValidFrom, r.row.ID.Bytes, revision, base.Target, base.Duration, base.Cadence)
 		} else if row.Ready {
 			var lanes extremaLanes
-			if json.Unmarshal(row.Lanes, &lanes) != nil || lanes.Compliance == nil || !lanes.Compliance.DayEnd.Equal(part.end) ||
+			if unmarshalReceiptMetadata(row.Lanes, &lanes) != nil || lanes.Compliance == nil || !lanes.Compliance.DayEnd.Equal(part.end) ||
 				!lanes.Compliance.Mark.At.Equal(floorSliBoundary(part.end, base.Cadence)) || !row.RetentionStart.Valid {
 				return ErrDerivedFailed
 			}
@@ -202,7 +201,7 @@ func (r *extremaReader) preparePlan(ctx context.Context, base slo.WindowInput, b
 
 func (r *extremaReader) decode(ctx context.Context, base slo.WindowInput, part retainedReadPart, row dbgen.ReadSloExtremaPartsRow) (retainedSloTile, error) {
 	var lanes extremaLanes
-	if json.Unmarshal(row.Lanes, &lanes) != nil || !row.RetentionStart.Valid || lanes.Window == nil || lanes.Attainment == nil ||
+	if unmarshalReceiptMetadata(row.Lanes, &lanes) != nil || !row.RetentionStart.Valid || lanes.Window == nil || lanes.Attainment == nil ||
 		(time.Hour%base.Cadence == 0) != (lanes.Burn1h != nil) || (6*time.Hour%base.Cadence == 0) != (lanes.Burn6h != nil) {
 		return retainedSloTile{}, ErrDerivedFailed
 	}

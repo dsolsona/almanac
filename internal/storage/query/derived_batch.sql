@@ -33,7 +33,7 @@ WITH requested AS (
                count(*) FILTER (WHERE c.outcome='observed' AND c.total_count=0) AS zero_traffic,
                count(*) FILTER (WHERE c.outcome='observed' AND c.total_count IS NULL) AS missing_values,
                min(c.interval_start) AS first_interval,
-               max(c.interval_start+datasource.polling_interval_seconds*interval '1 second') AS last_interval,max(c.recorded_at) AS latest_receipt,
+               max(c.interval_start+datasource.polling_interval_seconds*interval '1 second') AS last_interval,max(c.recorded_at) FILTER (WHERE c.outcome IN ('observed','complete_empty')) AS latest_receipt,
                min(c.interval_start) FILTER (WHERE c.outcome='observed') AS first_observation,
                max(c.interval_start+datasource.polling_interval_seconds*interval '1 second') FILTER (WHERE c.outcome='observed') AS last_observation
         FROM public.almanac_sli_observations c
@@ -44,9 +44,9 @@ WITH requested AS (
     INSERT INTO public.almanac_sli_hourly_aggregates
         (sli_id,measurement_revision,hour_start,source_generation,good,total,
          observed_intervals,known_empty_intervals,zero_traffic_intervals,
-         first_interval_start,last_interval_end,latest_receipt_at,first_observation_at,last_observation_at)
+         first_interval_start,last_interval_end,latest_receipt_at,first_observation_at,last_observation_at,receipt_source_generation,certified_receipt_at)
     SELECT sli_id,revision,hour_start,generation,good,total,observed,known_empty,zero_traffic,
-           first_interval,last_interval,latest_receipt,first_observation,last_observation
+           first_interval,last_interval,latest_receipt,first_observation,last_observation,generation,latest_receipt
     FROM computed
     WHERE first_interval IS NOT NULL AND missing_values=0
     ON CONFLICT (sli_id,measurement_revision,hour_start) DO UPDATE
@@ -54,7 +54,8 @@ WITH requested AS (
         observed_intervals=EXCLUDED.observed_intervals,known_empty_intervals=EXCLUDED.known_empty_intervals,
         zero_traffic_intervals=EXCLUDED.zero_traffic_intervals,first_interval_start=EXCLUDED.first_interval_start,
         last_interval_end=EXCLUDED.last_interval_end,latest_receipt_at=EXCLUDED.latest_receipt_at,
-        first_observation_at=EXCLUDED.first_observation_at,last_observation_at=EXCLUDED.last_observation_at
+        first_observation_at=EXCLUDED.first_observation_at,last_observation_at=EXCLUDED.last_observation_at,
+        receipt_source_generation=EXCLUDED.receipt_source_generation,certified_receipt_at=EXCLUDED.certified_receipt_at
     WHERE almanac_sli_hourly_aggregates.source_generation<=EXCLUDED.source_generation
     RETURNING 1
 )

@@ -2,7 +2,6 @@ package storage
 
 import (
 	"context"
-	"encoding/json/v2"
 	"errors"
 	"strconv"
 	"time"
@@ -198,7 +197,7 @@ func buildExtremaHour(ctx context.Context, q *dbgen.Queries, row dbgen.GetSloRow
 }
 
 func publishExtrema(ctx context.Context, q *dbgen.Queries, work dbgen.ClaimSloExtremaCursorRow, lanes extremaLanes, start, end time.Time, generation int64, retention, now time.Time) error {
-	payload, err := json.Marshal(lanes)
+	payload, err := marshalReceiptMetadata(lanes)
 	if err != nil {
 		return err
 	}
@@ -248,13 +247,13 @@ func buildExtremaDay(ctx context.Context, q *dbgen.Queries, work dbgen.ClaimSloE
 				return err
 			}
 			stored.RetentionStart = timestamp(base.RetentionStart)
-			stored.Lanes, err = json.Marshal(lanes)
+			stored.Lanes, err = marshalReceiptMetadata(lanes)
 			if err != nil {
 				return err
 			}
 		}
 		var lanes extremaLanes
-		if err := json.Unmarshal(stored.Lanes, &lanes); err != nil {
+		if err := unmarshalReceiptMetadata(stored.Lanes, &lanes); err != nil {
 			return ErrDerivedFailed
 		}
 		input := base

@@ -238,6 +238,7 @@ type Querier interface {
 	// Keep timestamp parsing in its conditional predicate so unrelated due/backoff
 	// branches retain their existing behavior for malformed cache metadata.
 	ListDueDerivedObjectives(ctx context.Context, arg ListDueDerivedObjectivesParams) ([]pgtype.UUID, error)
+	ListLegacyReceiptHours(ctx context.Context, pageLimit int32) ([]ListLegacyReceiptHoursRow, error)
 	ListMaintenanceGrids(ctx context.Context, sloID pgtype.UUID) ([]ListMaintenanceGridsRow, error)
 	ListMaintenanceIdentities(ctx context.Context, arg ListMaintenanceIdentitiesParams) ([]ListMaintenanceIdentitiesRow, error)
 	ListMaintenanceScopes(ctx context.Context, arg ListMaintenanceScopesParams) ([]pgtype.UUID, error)
@@ -274,11 +275,13 @@ type Querier interface {
 	LockAlertRetentionWork(ctx context.Context, kind string) (AlmanacAlertRetentionWork, error)
 	LockAlertSli(ctx context.Context, id pgtype.UUID) (int64, error)
 	LockAlertSlo(ctx context.Context, id pgtype.UUID) (int64, error)
+	LockCanonicalReceiptSli(ctx context.Context, id pgtype.UUID) (pgtype.UUID, error)
 	LockDatasource(ctx context.Context, id pgtype.UUID) (AlmanacDatasource, error)
 	LockDatasourceReassignment(ctx context.Context, datasourceID pgtype.UUID) (AlmanacDatasourceReassignment, error)
 	LockDatasourceReassignmentAgents(ctx context.Context, agentIds []pgtype.UUID) ([]pgtype.UUID, error)
 	LockInitialOwnerState(ctx context.Context) (LockInitialOwnerStateRow, error)
 	LockLatestAgentOwnership(ctx context.Context, agentID pgtype.UUID) (AlmanacAgentOwnership, error)
+	LockLegacyReceiptHour(ctx context.Context, arg LockLegacyReceiptHourParams) (LockLegacyReceiptHourRow, error)
 	LockLifecycleAgent(ctx context.Context, agentID pgtype.UUID) (AlmanacAgent, error)
 	LockLifecycleCredential(ctx context.Context, arg LockLifecycleCredentialParams) (LockLifecycleCredentialRow, error)
 	LockLoginAttemptForFinish(ctx context.Context, id pgtype.UUID) (AlmanacLoginAttempt, error)
@@ -317,6 +320,10 @@ type Querier interface {
 	ReadAlertOccurrence(ctx context.Context, id pgtype.UUID) (AlmanacAlertOccurrence, error)
 	ReadAlertPolicy(ctx context.Context, id pgtype.UUID) (ReadAlertPolicyRow, error)
 	ReadAlertSeriesRevision(ctx context.Context, arg ReadAlertSeriesRevisionParams) (AlmanacAlertPolicyRevision, error)
+	// Read at most one physical hour plus one overflow sentinel. No count or source
+	// generation is repaired from this input; callers compare the exact retained
+	// population to the locked stored summary before certifying receipt metadata.
+	ReadCanonicalReceiptPopulation(ctx context.Context, arg ReadCanonicalReceiptPopulationParams) (ReadCanonicalReceiptPopulationRow, error)
 	// Read publication text once per projection, not once per retained hour.
 	// Keep timestamp parsing in its conditional predicate so unrelated due/backoff
 	// branches retain their existing behavior for malformed cache metadata.
@@ -387,6 +394,7 @@ type Querier interface {
 	UpdateAgentRuntimeHeartbeat(ctx context.Context, arg UpdateAgentRuntimeHeartbeatParams) (int64, error)
 	UpdateAlertOccurrence(ctx context.Context, arg UpdateAlertOccurrenceParams) (int64, error)
 	UpdateAlertPolicyIdentity(ctx context.Context, arg UpdateAlertPolicyIdentityParams) (int64, error)
+	UpdateCanonicalReceiptMetadata(ctx context.Context, arg UpdateCanonicalReceiptMetadataParams) (int64, error)
 	UpdateDatasource(ctx context.Context, arg UpdateDatasourceParams) (AlmanacDatasource, error)
 	UpdateDatasourceReassignmentProgress(ctx context.Context, arg UpdateDatasourceReassignmentProgressParams) error
 	UpdateLifecycleAgent(ctx context.Context, arg UpdateLifecycleAgentParams) (AlmanacAgent, error)

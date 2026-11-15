@@ -2,7 +2,6 @@ package storage
 
 import (
 	"context"
-	"encoding/json/v2"
 	"errors"
 	"time"
 
@@ -70,9 +69,9 @@ func ReadSloHistoryValues(ctx context.Context, databaseURL string, input SloHist
 		Generation: generationStamp(row.ID, row.SourceGeneration, row.DefinitionRevision, row.MeasurementRevision, row.CalculationVersion, row.EvaluatedThrough.Time, row.PublishedAt.Time, row.RetentionStart.Time),
 		Samples:    []api.SloOperationalSample{}, Days: []api.SloDailyComplianceDay{}}
 	if input.Lane == "compliance" {
-		err = json.Unmarshal(row.PageValues, &page.Days)
+		err = unmarshalReceiptMetadata(row.PageValues, &page.Days)
 	} else {
-		err = json.Unmarshal(row.PageValues, &page.Samples)
+		err = unmarshalReceiptMetadata(row.PageValues, &page.Samples)
 	}
 	if err != nil || len(page.Samples)+len(page.Days) != min(input.Limit, page.TotalValues-input.Offset) {
 		return api.SloHistoryValuePage{}, ErrDerivedFailed
