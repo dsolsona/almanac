@@ -1,5 +1,24 @@
 # Implementation tasks
 
+[F4-T50](F4-T50.md) connects maintenance-aware alert evidence and atomic durable
+preparation while retaining the production activation gate.
+
+[F4-T49](F4-T49.md) preserves actual maintenance provenance in immutable evidence
+and compaction endpoints without changing legacy digests.
+
+[F4-T48](F4-T48.md) executes durable bounded shared preparation work.
+
+[F4-T45](F4-T45.md) prepares exact immutable SLO-scoped physical-hour populations.
+
+[F4-T47](F4-T47.md) connects bounded populations to shared window evaluation.
+
+[F4-T44](F4-T44.md) connects immutable snapshots to exact bounded coverage ranks.
+
+[F4-T46](F4-T46.md) verifies indexed unchanged-range compatibility before adoption.
+
+[F4-T42](F4-T42.md) compiles immutable maintenance snapshots in bounded durable turns.
+[F4-T43](F4-T43.md) evaluates shared exact totals using bounded coverage certificates.
+
 [F4-T41](F4-T41.md) corrects receipt metadata, preserves legacy measurements and
 uses bounded repair while leaving the shared-calculator adoption gate intact.
 

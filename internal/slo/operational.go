@@ -101,6 +101,7 @@ type WindowSweep struct {
 	observedCount, emptyCount, zeroTraffic int64
 	lastAt                                 time.Time
 	exclusions                             exclusionMask
+	coverage                               *windowCoverageCounts
 	excludedGood, excludedTotal            big.Rat
 	excludedObserved, excludedEmpty        int64
 }
@@ -172,18 +173,7 @@ func (s *WindowSweep) AtSummaryContext(ctx context.Context, at time.Time) (Windo
 		return WindowResult{}, ErrInvalidCalculation
 	}
 	s.lastAt = at
-	windowStart := at.Add(-s.input.Duration)
-	eligible := ceilBoundary(maxTime(windowStart, s.input.ValidFrom, s.input.SliValidFrom), s.input.Cadence)
-	if eligible.After(at) {
-		eligible = at
-	}
-	retention := ceilBoundary(s.input.RetentionStart, s.input.Cadence)
-	if retention.Before(eligible) {
-		retention = eligible
-	}
-	if retention.After(at) {
-		retention = at
-	}
+	windowStart, eligible, retention := windowBounds(s.input, at)
 	for s.activeHead < len(s.active) && s.input.Observations[s.active[s.activeHead]].Start.Before(retention) {
 		if s.activeHead&1023 == 0 {
 			if err := ctx.Err(); err != nil {
@@ -279,10 +269,13 @@ func (s *WindowSweep) remove(index int) error {
 
 func (s *WindowSweep) result(ctx context.Context, at, windowStart, eligible, retention time.Time) (WindowResult, error) {
 	excluded := s.exclusions.count(eligible, at)
-	expected := int64(at.Sub(eligible)/s.input.Cadence) - excluded
-	expired := int64(retention.Sub(eligible)/s.input.Cadence) - s.exclusions.count(eligible, retention)
-	freshnessAt := s.exclusions.latestEligibleEnd(at)
 	retainedExcluded := s.exclusions.count(retention, at)
+	freshnessAt := s.exclusions.latestEligibleEnd(at)
+	if s.coverage != nil {
+		excluded, retainedExcluded, freshnessAt = s.coverage.excluded, s.coverage.retainedExcluded, s.coverage.latestEligibleEnd
+	}
+	expected := int64(at.Sub(eligible)/s.input.Cadence) - excluded
+	expired := int64(retention.Sub(eligible)/s.input.Cadence) - (excluded - retainedExcluded)
 	if s.excludedObserved > retainedExcluded || s.excludedEmpty > retainedExcluded-s.excludedObserved {
 		return WindowResult{}, fmt.Errorf("%w: excluded facts exceed retained excluded intervals", ErrOperationalFacts)
 	}
@@ -402,6 +395,22 @@ func (s *WindowSweep) result(ctx context.Context, at, windowStart, eligible, ret
 	result.ExactRemainingFraction = new(big.Rat).Sub(one, consumed)
 	result.ExactBurn = consumed
 	return result, nil
+}
+
+func windowBounds(input WindowInput, at time.Time) (windowStart, eligible, retention time.Time) {
+	windowStart = at.Add(-input.Duration)
+	eligible = ceilBoundary(maxTime(windowStart, input.ValidFrom, input.SliValidFrom), input.Cadence)
+	if eligible.After(at) {
+		eligible = at
+	}
+	retention = ceilBoundary(input.RetentionStart, input.Cadence)
+	if retention.Before(eligible) {
+		retention = eligible
+	}
+	if retention.After(at) {
+		retention = at
+	}
+	return windowStart, eligible, retention
 }
 
 func floorBoundary(at time.Time, cadence time.Duration) time.Time {

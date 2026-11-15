@@ -65,6 +65,11 @@ sql:
       - internal/storage/migrations/0059_alert_evidence_retention.sql
       - internal/storage/migrations/0060_alert_activation_ranges.sql
       - internal/storage/migrations/0061_canonical_receipt_metadata.sql
+      - internal/storage/migrations/0062_maintenance_compiler.sql
+      - internal/storage/migrations/0063_maintenance_scoped_hours.sql
+      - internal/storage/migrations/0064_maintenance_compatibility.sql
+      - internal/storage/migrations/0065_maintenance_evaluation_candidates.sql
+      - internal/storage/migrations/0066_maintenance_preparation.sql
     gen:
       go:
         package: dbgen

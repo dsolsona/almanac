@@ -63,6 +63,20 @@ func decodeAlertCompactionSummary(row dbgen.AlmanacAlertRange) (*AlertCompaction
 		if condition.ShortDuration <= 0 || condition.LongDuration < condition.ShortDuration || condition.LongDuration > 30*24*time.Hour || condition.ShortDuration%time.Minute != 0 || condition.LongDuration%time.Minute != 0 {
 			return nil, ErrAlertInvalid
 		}
+		for _, endpoint := range []struct {
+			snapshot    alert.SnapshotIdentity
+			duration    time.Duration
+			maintenance *alert.MaintenanceEvidence
+		}{
+			{summary.First, condition.ShortDuration, condition.FirstShortMaintenance},
+			{summary.Last, condition.ShortDuration, condition.LastShortMaintenance},
+			{summary.First, condition.LongDuration, condition.FirstLongMaintenance},
+			{summary.Last, condition.LongDuration, condition.LastLongMaintenance},
+		} {
+			if alert.ValidateMaintenanceEvidence(alert.WindowEvidence{Snapshot: endpoint.snapshot, Start: endpoint.snapshot.Cutoff.Add(-endpoint.duration), End: endpoint.snapshot.Cutoff, Maintenance: endpoint.maintenance}) != nil {
+				return nil, ErrAlertInvalid
+			}
+		}
 		for _, quality := range []alert.Quality{condition.ShortQuality, condition.LongQuality} {
 			switch quality {
 			case alert.Complete, alert.Missing, alert.Partial, alert.Stale, alert.ZeroTraffic, alert.Warmup, alert.Expired, alert.Excluded, alert.CalculationFailed:
