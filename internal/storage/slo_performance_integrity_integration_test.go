@@ -129,6 +129,10 @@ func TestIntegrationProjectionPerformanceUpgrade(t *testing.T) {
 	dropAlertJournalFixture(t, s.conn)
 	latest := latestTestSchemaVersion(t)
 	tag, err := s.conn.Exec(t.Context(), `
+DROP INDEX public.almanac_canonical_receipt_repair_idx;
+ALTER TABLE public.almanac_sli_hourly_aggregates
+ DROP COLUMN receipt_source_generation, DROP COLUMN certified_receipt_at,
+ ALTER COLUMN latest_receipt_at SET NOT NULL;
 ALTER TABLE public.almanac_slo_current_projections DROP COLUMN performance_complete;
 DROP FUNCTION public.almanac_projection_performance_complete(jsonb);
 DELETE FROM public.almanac_schema_migrations WHERE version>=55;`)
