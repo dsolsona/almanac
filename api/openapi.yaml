@@ -4,6 +4,185 @@ info:
   version: 1.0.0
   description: Anonymous operational endpoints for the independently runnable UI.
 paths:
+  /api/v1/alert-policies:
+    get:
+      operationId: listAlertPolicies
+      summary: List alert policy configuration, including policies without occurrences
+      security: [{SessionCookie: []}]
+      parameters:
+        - {$ref: '#/components/parameters/AlertLimit'}
+        - {$ref: '#/components/parameters/AlertCursor'}
+        - {name: slo_id, in: query, schema: {type: string, format: uuid}}
+        - {name: severity, in: query, schema: {$ref: '#/components/schemas/AlertSeverity'}}
+        - {name: enabled, in: query, schema: {type: boolean}}
+        - {name: q, in: query, schema: {type: string, maxLength: 256}}
+      responses:
+        '200': {description: Live filter-bound policy page, content: {application/json: {schema: {$ref: '#/components/schemas/AlertPolicyPage'}}}}
+        default: {$ref: '#/components/responses/AlertProblem'}
+    post:
+      operationId: createAlertPolicy
+      summary: Create an alert policy (Editor or Administrator)
+      description: Requires same-origin CSRF protection and a body no larger than 64 KiB. Replay reauthorizes the actor and returns the original committed result. Configuration does not itself fabricate an occurrence.
+      security: [{SessionCookie: [], CsrfToken: []}]
+      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AlertPolicyWrite'}}}}
+      responses:
+        '201': {description: Policy created, headers: {ETag: {schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/AlertCommandResult'}}}}
+        default: {$ref: '#/components/responses/AlertProblem'}
+  /api/v1/alert-policies/{policy_id}:
+    parameters: [{$ref: '#/components/parameters/AlertPolicyId'}]
+    get:
+      operationId: getAlertPolicy
+      summary: Read current alert policy configuration
+      security: [{SessionCookie: []}]
+      responses:
+        '200': {description: Policy configuration, headers: {ETag: {schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/AlertPolicy'}}}}
+        default: {$ref: '#/components/responses/AlertProblem'}
+    patch:
+      operationId: updateAlertPolicy
+      summary: Update alert policy configuration (Editor or Administrator)
+      description: Strict partial object, at most 64 KiB. Metadata changes preserve the evaluation revision; semantic changes supersede old work atomically. Omission preserves a field; null is not accepted.
+      security: [{SessionCookie: [], CsrfToken: []}]
+      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/ResourceIfMatch'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AlertPolicyPatch'}}}}
+      responses:
+        '200': {description: Committed update, headers: {ETag: {schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/AlertCommandResult'}}}}
+        default: {$ref: '#/components/responses/AlertProblem'}
+  /api/v1/alert-policies/{policy_id}/enable:
+    parameters: [{$ref: '#/components/parameters/AlertPolicyId'}]
+    post:
+      operationId: enableAlertPolicy
+      summary: Enable with a fresh evaluation revision (Editor or Administrator)
+      description: Requires same-origin CSRF protection and a body no larger than 64 KiB. Disabled time is not replayed.
+      security: [{SessionCookie: [], CsrfToken: []}]
+      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/ResourceIfMatch'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AlertPolicyCommand'}}}}
+      responses:
+        '200': {description: Committed enable, headers: {ETag: {schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/AlertCommandResult'}}}}
+        default: {$ref: '#/components/responses/AlertProblem'}
+  /api/v1/alert-policies/{policy_id}/disable:
+    parameters: [{$ref: '#/components/parameters/AlertPolicyId'}]
+    post:
+      operationId: disableAlertPolicy
+      summary: Disable and terminate open occurrences (Editor or Administrator)
+      description: Requires same-origin CSRF protection and a body no larger than 64 KiB. Disabling records administrative cancellation and preserves original evidence.
+      security: [{SessionCookie: [], CsrfToken: []}]
+      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/ResourceIfMatch'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AlertPolicyCommand'}}}}
+      responses:
+        '200': {description: Committed disable, headers: {ETag: {schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/AlertCommandResult'}}}}
+        default: {$ref: '#/components/responses/AlertProblem'}
+  /api/v1/alert-policies/{policy_id}/retry:
+    parameters: [{$ref: '#/components/parameters/AlertPolicyId'}]
+    post:
+      operationId: retryAlertPolicy
+      summary: Retry exhausted processing (Editor or Administrator)
+      description: Requires same-origin CSRF protection and a body no larger than 64 KiB. Preserves the pending boundary and immutable history.
+      security: [{SessionCookie: [], CsrfToken: []}]
+      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/ResourceIfMatch'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AlertPolicyCommand'}}}}
+      responses:
+        '200': {description: Committed retry, headers: {ETag: {schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/AlertCommandResult'}}}}
+        default: {$ref: '#/components/responses/AlertProblem'}
+  /api/v1/alert-policies/{policy_id}/ranges:
+    parameters: [{$ref: '#/components/parameters/AlertPolicyId'}]
+    get:
+      operationId: listAlertRanges
+      summary: Read recorded ranges for an immutable policy revision
+      security: [{SessionCookie: []}]
+      parameters:
+        - {name: revision, in: query, required: true, schema: {$ref: '#/components/schemas/AlertVersion'}}
+        - {$ref: '#/components/parameters/AlertLimit'}
+        - {$ref: '#/components/parameters/AlertCursor'}
+      responses:
+        '200': {description: Revision-bound history ranges, content: {application/json: {schema: {$ref: '#/components/schemas/AlertRangePage'}}}}
+        default: {$ref: '#/components/responses/AlertProblem'}
+  /api/v1/alerts:
+    get:
+      operationId: listAlerts
+      summary: List alert occurrences with global filtered totals
+      description: Stable filter-bound cursors over live pages, not a frozen cross-request snapshot. Group totals describe the complete filtered set for SLOs represented on the page.
+      security: [{SessionCookie: []}]
+      parameters:
+        - {$ref: '#/components/parameters/AlertLimit'}
+        - {$ref: '#/components/parameters/AlertCursor'}
+        - {name: scope, in: query, schema: {type: string, enum: [active, history, all], default: active}}
+        - {name: state, in: query, style: form, explode: false, schema: {type: array, items: {$ref: '#/components/schemas/AlertLifecycle'}}}
+        - {name: severity, in: query, style: form, explode: false, schema: {type: array, items: {$ref: '#/components/schemas/AlertSeverity'}}}
+        - {name: slo_id, in: query, schema: {type: string, format: uuid}}
+        - {name: service_id, in: query, schema: {type: string, format: uuid}}
+        - {name: q, in: query, schema: {type: string, maxLength: 256}}
+        - {name: group_by, in: query, schema: {type: string, enum: [none, slo], default: none}}
+        - {name: sort, in: query, schema: {type: string, enum: [newest, severity], default: newest}}
+      responses:
+        '200': {description: Occurrence page with exact stored evidence, content: {application/json: {schema: {$ref: '#/components/schemas/AlertPage'}}}}
+        default: {$ref: '#/components/responses/AlertProblem'}
+  /api/v1/alerts/{occurrence_id}:
+    parameters: [{$ref: '#/components/parameters/AlertOccurrenceId'}]
+    get:
+      operationId: getAlert
+      summary: Read lifecycle and original policy identity for an occurrence
+      security: [{SessionCookie: []}]
+      responses:
+        '200': {description: Stored occurrence, headers: {ETag: {schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/AlertRecord'}}}}
+        default: {$ref: '#/components/responses/AlertProblem'}
+  /api/v1/alerts/{occurrence_id}/acknowledge:
+    parameters: [{$ref: '#/components/parameters/AlertOccurrenceId'}]
+    post:
+      operationId: acknowledgeAlert
+      summary: Acknowledge globally without expiry (Editor or Administrator)
+      description: Requires same-origin CSRF protection. Body is an empty strict object, at most 64 KiB. Terminal occurrences conflict; acknowledgement never closes an occurrence. Replay preserves the original actor and timestamp.
+      security: [{SessionCookie: [], CsrfToken: []}]
+      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/ResourceIfMatch'}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AlertAcknowledge'}}}}
+      responses:
+        '200': {description: Committed acknowledgement, headers: {ETag: {schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/AlertCommandResult'}}}}
+        default: {$ref: '#/components/responses/AlertProblem'}
+  /api/v1/alerts/{occurrence_id}/evidence:
+    parameters: [{$ref: '#/components/parameters/AlertOccurrenceId'}]
+    get:
+      operationId: getAlertEvidence
+      summary: Read immutable firing or latest evaluation evidence
+      description: Reads the retained decision, never recalculates it from current source facts.
+      security: [{SessionCookie: []}]
+      parameters:
+        - {name: selection, in: query, schema: {type: string, enum: [firing, latest], default: latest}}
+      responses:
+        '200': {description: As-evaluated evidence, content: {application/json: {schema: {$ref: '#/components/schemas/AlertEvidence'}}}}
+        default: {$ref: '#/components/responses/AlertProblem'}
+  /api/v1/alerts/{occurrence_id}/transitions:
+    parameters: [{$ref: '#/components/parameters/AlertOccurrenceId'}]
+    get:
+      operationId: listAlertTransitions
+      summary: Read every retained lifecycle transition in sequence order
+      security: [{SessionCookie: []}]
+      parameters: [{$ref: '#/components/parameters/AlertLimit'}, {$ref: '#/components/parameters/AlertCursor'}]
+      responses:
+        '200': {description: Transition page, content: {application/json: {schema: {$ref: '#/components/schemas/AlertTransitionPage'}}}}
+        default: {$ref: '#/components/responses/AlertProblem'}
+  /api/v1/alert-processing:
+    get:
+      operationId: getAlertProcessing
+      summary: Read processing health for one policy
+      description: policy_id is required in this delivery. Aggregate processing is not provided. Processing health is separate from occurrence lifecycle and SLO truth.
+      security: [{SessionCookie: []}]
+      parameters:
+        - {name: policy_id, in: query, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200': {description: Policy processing state, content: {application/json: {schema: {$ref: '#/components/schemas/AlertProcessing'}}}}
+        default: {$ref: '#/components/responses/AlertProblem'}
+  /api/v1/alert-commands:
+    get:
+      operationId: getAlertCommand
+      summary: Reconcile a command for the current actor
+      description: Committed results are replayable for 24 hours; retained expired identities cannot execute again. Unknown is not proof that the command failed. Never automatically replace an uncertain key.
+      security: [{SessionCookie: []}]
+      parameters:
+        - {name: operation, in: query, required: true, schema: {$ref: '#/components/schemas/AlertOperation'}}
+        - {name: idempotency_key, in: query, required: true, schema: {type: string, minLength: 1, maxLength: 128}}
+      responses:
+        '200': {description: Actor-scoped command result, content: {application/json: {schema: {$ref: '#/components/schemas/AlertCommandLookup'}}}}
+        default: {$ref: '#/components/responses/AlertProblem'}
   /api/v1/account:
     get:
       operationId: getAccount
@@ -1005,6 +1184,24 @@ paths:
         '405': {description: Method not allowed}
 components:
   parameters:
+    AlertPolicyId:
+      name: policy_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    AlertOccurrenceId:
+      name: occurrence_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    AlertLimit:
+      name: limit
+      in: query
+      schema: {type: integer, minimum: 1, maximum: 200, default: 20}
+    AlertCursor:
+      name: cursor
+      in: query
+      schema: {type: string, maxLength: 1024}
     UserId:
       name: user_id
       in: path
@@ -1045,7 +1242,7 @@ components:
       name: If-Match
       in: header
       required: true
-      description: Strong tag formatted as "service:<id>:<version>" or "slo:<id>:<version>" for the resource.
+      description: Strong tag formatted as "service:<id>:<version>", "slo:<id>:<version>", "alert-policy:<id>:<version>" or "alert-occurrence:<id>:<version>" for the resource. Alert commands use configuration or occurrence state versions respectively; weak tags, lists and wildcards are rejected.
       schema: {type: string}
     DiagnosticId:
       name: diagnostic_id
@@ -1107,6 +1304,378 @@ components:
       name: X-CSRF-Token
       description: Tab-specific, cookie-bound token returned by context; purpose depends on the operation.
   schemas:
+    AlertSeverity:
+      type: string
+      enum: [low, medium, high]
+    AlertLifecycle:
+      type: string
+      enum: [firing, acknowledged, resolved, disabled, superseded]
+    AlertVersion:
+      type: string
+      pattern: '^[1-9][0-9]*$'
+      maxLength: 19
+      description: Exact positive decimal integer, no larger than signed int64 MaxInt64.
+    AlertCounter:
+      type: string
+      pattern: '^(0|[1-9][0-9]*)$'
+      maxLength: 19
+      description: Exact nonnegative decimal integer, no larger than signed int64 MaxInt64.
+    AlertExactDecimal:
+      type: string
+      pattern: '^[0-9]+(\.[0-9]+)?$'
+      maxLength: 96
+      description: Exact nonnegative decimal evidence, never a floating-point approximation. Absence is not zero.
+    AlertThreshold:
+      type: string
+      pattern: '^([0-9]*[1-9][0-9]*(\.[0-9]+)?|0+\.[0-9]*[1-9][0-9]*)$'
+      maxLength: 32
+      description: Positive exact burn threshold; reachability is validated against the exact SLO target.
+    AlertWindowSeconds:
+      type: integer
+      format: int64
+      minimum: 60
+      maximum: 2592000
+      multipleOf: 60
+      description: Whole minutes expressed as integer seconds; must also align to source cadence. Short must not exceed long.
+    AlertTimestamp:
+      type: string
+      format: date-time
+      description: UTC timestamp with Z suffix.
+    AlertCondition:
+      type: object
+      additionalProperties: false
+      required: [id, short_window_seconds, long_window_seconds, threshold]
+      properties:
+        id: {type: string, minLength: 1, maxLength: 64, pattern: '^[\x20-\x7e]+$'}
+        short_window_seconds: {$ref: '#/components/schemas/AlertWindowSeconds'}
+        long_window_seconds: {$ref: '#/components/schemas/AlertWindowSeconds'}
+        threshold: {$ref: '#/components/schemas/AlertThreshold'}
+    AlertConditions:
+      type: array
+      minItems: 1
+      maxItems: 8
+      description: Ordered conditions with unique stable IDs. AND within a condition, OR between conditions.
+      items: {$ref: '#/components/schemas/AlertCondition'}
+    AlertPolicyWrite:
+      type: object
+      additionalProperties: false
+      required: [name, slo_id, conditions]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 256, description: 'Human-readable name, at most 1024 UTF-8 bytes, without control characters.'}
+        slo_id: {type: string, format: uuid}
+        severity: {allOf: [{$ref: '#/components/schemas/AlertSeverity'}], default: medium}
+        enabled: {type: boolean, default: true}
+        confirm_non_30_day_presets: {type: boolean, default: false, description: Explicit confirmation when exact 30-day reference presets are used with another SLO period. This acknowledgement is not policy metadata.}
+        conditions: {$ref: '#/components/schemas/AlertConditions'}
+    AlertPolicyPatch:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        confirm_non_30_day_presets: {type: boolean, default: false, description: Explicit confirmation when exact 30-day reference presets are used with another SLO period. This acknowledgement is not policy metadata.}
+        name: {type: string, minLength: 1, maxLength: 256, description: 'At most 1024 UTF-8 bytes, without control characters.'}
+        slo_id: {type: string, format: uuid}
+        severity: {$ref: '#/components/schemas/AlertSeverity'}
+        conditions: {$ref: '#/components/schemas/AlertConditions'}
+        reason: {type: string}
+    AlertPolicy:
+      type: object
+      additionalProperties: false
+      required: [id, name, slo_id, severity, enabled, version, evaluation_revision, conditions, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        slo_id: {type: string, format: uuid}
+        severity: {$ref: '#/components/schemas/AlertSeverity'}
+        enabled: {type: boolean}
+        version: {$ref: '#/components/schemas/AlertVersion'}
+        evaluation_revision: {$ref: '#/components/schemas/AlertVersion'}
+        conditions: {$ref: '#/components/schemas/AlertConditions'}
+        created_at: {$ref: '#/components/schemas/AlertTimestamp'}
+        updated_at: {$ref: '#/components/schemas/AlertTimestamp'}
+    AlertPolicyCommand:
+      type: object
+      additionalProperties: false
+      properties:
+        reason: {type: string}
+    AlertAcknowledge:
+      type: object
+      additionalProperties: false
+      x-go-type: 'struct{}'
+    AlertOperation:
+      type: string
+      enum: [alert-policy.create, alert-policy.update, alert-policy.enable, alert-policy.disable, alert-policy.retry, alert.acknowledge]
+    AlertCommandResult:
+      type: object
+      additionalProperties: false
+      required: [operation, request_id]
+      description: The committed resource accompanies the operation. Policy commands may return both policy and an affected terminal alert; acknowledgement returns alert.
+      properties:
+        operation: {$ref: '#/components/schemas/AlertOperation'}
+        request_id: {type: string}
+        policy: {$ref: '#/components/schemas/AlertPolicy'}
+        alert: {$ref: '#/components/schemas/AlertRecord'}
+    AlertCommandLookup:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status: {type: string, enum: [committed, expired, unknown]}
+        result: {$ref: '#/components/schemas/AlertCommandResult'}
+      description: Result is present only for committed. Lookup is scoped to the authenticated actor.
+    AlertSnapshotIdentity:
+      type: object
+      additionalProperties: false
+      required: [slo_id, slo_revision, sli_revision, source_generation, exclusion_revision, calculation_version, cutoff]
+      properties:
+        slo_id: {type: string, format: uuid}
+        slo_revision: {$ref: '#/components/schemas/AlertVersion'}
+        sli_revision: {$ref: '#/components/schemas/AlertVersion'}
+        source_generation: {$ref: '#/components/schemas/AlertCounter'}
+        exclusion_revision: {$ref: '#/components/schemas/AlertCounter'}
+        calculation_version: {type: string}
+        cutoff: {$ref: '#/components/schemas/AlertTimestamp'}
+    AlertOriginalPolicy:
+      type: object
+      additionalProperties: false
+      required: [name, severity, slo_name, service_name, target, rolling_window_seconds]
+      properties:
+        name: {type: string}
+        severity: {$ref: '#/components/schemas/AlertSeverity'}
+        slo_name: {type: string}
+        service_name: {type: string}
+        target: {$ref: '#/components/schemas/AlertExactDecimal'}
+        rolling_window_seconds: {type: integer, format: int64}
+    AlertRecord:
+      type: object
+      additionalProperties: false
+      required: [id, policy_id, evaluation_revision, state, version, sequence, firing_snapshot, latest_snapshot, latest_breaching_snapshot, opened_detected_at, updated_at, original_policy]
+      properties:
+        id: {type: string, format: uuid}
+        policy_id: {type: string, format: uuid}
+        evaluation_revision: {$ref: '#/components/schemas/AlertVersion'}
+        state: {$ref: '#/components/schemas/AlertLifecycle'}
+        version: {$ref: '#/components/schemas/AlertVersion'}
+        sequence: {$ref: '#/components/schemas/AlertVersion'}
+        firing_snapshot: {$ref: '#/components/schemas/AlertSnapshotIdentity'}
+        latest_snapshot: {$ref: '#/components/schemas/AlertSnapshotIdentity'}
+        latest_breaching_snapshot: {$ref: '#/components/schemas/AlertSnapshotIdentity'}
+        opened_detected_at: {$ref: '#/components/schemas/AlertTimestamp'}
+        updated_at: {$ref: '#/components/schemas/AlertTimestamp'}
+        closed_at: {$ref: '#/components/schemas/AlertTimestamp'}
+        acknowledged_by: {type: string, format: uuid}
+        acknowledged_at: {$ref: '#/components/schemas/AlertTimestamp'}
+        original_policy: {$ref: '#/components/schemas/AlertOriginalPolicy'}
+    AlertQuality:
+      type: string
+      enum: [complete, missing, partial, stale, zero_traffic, warmup, expired, excluded, calculation_failed]
+    AlertTruth:
+      type: string
+      enum: [breaching, clear, indeterminate]
+    AlertConditionOutcome:
+      type: string
+      enum: [matching, not_matching, unavailable]
+    AlertWindowEvidence:
+      type: object
+      additionalProperties: false
+      required: [snapshot, start, end, quality]
+      description: Requested full half-open window and immutable as-evaluated quality. Good and total are present exactly when saved paired numeric counts are available, including partial, stale or zero-traffic observations. Absent numeric counts are omitted, never replaced with zero. Numeric presence does not make the condition usable; quality and outcome remain authoritative.
+      properties:
+        snapshot: {$ref: '#/components/schemas/AlertSnapshotIdentity'}
+        start: {$ref: '#/components/schemas/AlertTimestamp'}
+        end: {$ref: '#/components/schemas/AlertTimestamp'}
+        quality: {$ref: '#/components/schemas/AlertQuality'}
+        good: {$ref: '#/components/schemas/AlertExactDecimal'}
+        total: {$ref: '#/components/schemas/AlertExactDecimal'}
+        reason: {type: string}
+    AlertConditionResult:
+      type: object
+      additionalProperties: false
+      required: [id, threshold, outcome, short, long]
+      properties:
+        id: {type: string}
+        threshold: {$ref: '#/components/schemas/AlertThreshold'}
+        outcome: {$ref: '#/components/schemas/AlertConditionOutcome'}
+        short: {$ref: '#/components/schemas/AlertWindowEvidence'}
+        long: {$ref: '#/components/schemas/AlertWindowEvidence'}
+    AlertRecoveryComparison:
+      type: object
+      additionalProperties: false
+      required: [snapshot, truth, conditions]
+      description: The last-breaching exclusion mask applied to the same present source facts; not a recalculation of the original firing decision.
+      properties:
+        snapshot: {$ref: '#/components/schemas/AlertSnapshotIdentity'}
+        truth: {$ref: '#/components/schemas/AlertTruth'}
+        conditions: {type: array, items: {$ref: '#/components/schemas/AlertConditionResult'}}
+    AlertEvaluation:
+      type: object
+      additionalProperties: false
+      required: [policy_id, evaluation_revision, snapshot, truth, conditions]
+      properties:
+        policy_id: {type: string, format: uuid}
+        evaluation_revision: {$ref: '#/components/schemas/AlertVersion'}
+        snapshot: {$ref: '#/components/schemas/AlertSnapshotIdentity'}
+        truth: {$ref: '#/components/schemas/AlertTruth'}
+        conditions: {type: array, items: {$ref: '#/components/schemas/AlertConditionResult'}}
+        recovery_comparison: {$ref: '#/components/schemas/AlertRecoveryComparison'}
+    AlertObjective:
+      type: object
+      additionalProperties: false
+      required: [target, cadence_seconds, definition_valid_from, measurement_valid_from, retention_start]
+      properties:
+        target: {$ref: '#/components/schemas/AlertExactDecimal'}
+        cadence_seconds: {type: integer, format: int64, minimum: 1}
+        definition_valid_from: {$ref: '#/components/schemas/AlertTimestamp'}
+        measurement_valid_from: {$ref: '#/components/schemas/AlertTimestamp'}
+        retention_start: {$ref: '#/components/schemas/AlertTimestamp'}
+    AlertEvidence:
+      type: object
+      additionalProperties: false
+      required: [id, scheduled_at, committed_at, evaluation, objective]
+      properties:
+        id: {type: string, format: uuid}
+        scheduled_at: {$ref: '#/components/schemas/AlertTimestamp'}
+        committed_at: {$ref: '#/components/schemas/AlertTimestamp'}
+        evaluation: {$ref: '#/components/schemas/AlertEvaluation'}
+        objective: {$ref: '#/components/schemas/AlertObjective'}
+    AlertProcessing:
+      type: object
+      additionalProperties: false
+      required: [policy_id, revision, schedulable, exhausted, next_boundary, available_at, failure_attempts, lag_seconds]
+      properties:
+        policy_id: {type: string, format: uuid}
+        revision: {$ref: '#/components/schemas/AlertVersion'}
+        schedulable: {type: boolean}
+        exhausted: {type: boolean}
+        next_boundary: {$ref: '#/components/schemas/AlertTimestamp'}
+        available_at: {$ref: '#/components/schemas/AlertTimestamp'}
+        pending_cutoff: {$ref: '#/components/schemas/AlertTimestamp'}
+        last_cutoff: {$ref: '#/components/schemas/AlertTimestamp'}
+        last_evaluation_id: {type: string, format: uuid}
+        waiting_reason: {type: string}
+        failure_attempts: {type: integer, minimum: 0}
+        lag_seconds: {type: integer, format: int64, minimum: 0}
+    AlertPolicyCatalogItem:
+      type: object
+      additionalProperties: false
+      required: [policy, slo_name, processing]
+      properties:
+        policy: {$ref: '#/components/schemas/AlertPolicy'}
+        slo_name: {type: string}
+        open_occurrence_id: {type: string, format: uuid}
+        processing: {$ref: '#/components/schemas/AlertProcessing'}
+    AlertPolicyPage:
+      type: object
+      additionalProperties: false
+      required: [items, total]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/AlertPolicyCatalogItem'}}
+        total: {$ref: '#/components/schemas/AlertCounter'}
+        next_cursor: {type: string}
+    AlertCatalogItem:
+      type: object
+      additionalProperties: false
+      required: [alert, policy_name, severity, slo_id, slo_name, service_id, service_name, evaluation_id, evaluation, scheduled_at, committed_at, processing]
+      properties:
+        alert: {$ref: '#/components/schemas/AlertRecord'}
+        policy_name: {type: string}
+        severity: {$ref: '#/components/schemas/AlertSeverity'}
+        slo_id: {type: string, format: uuid}
+        slo_name: {type: string}
+        service_id: {type: string, format: uuid}
+        service_name: {type: string}
+        evaluation_id: {type: string, format: uuid}
+        evaluation: {$ref: '#/components/schemas/AlertEvaluation'}
+        scheduled_at: {$ref: '#/components/schemas/AlertTimestamp'}
+        committed_at: {$ref: '#/components/schemas/AlertTimestamp'}
+        processing: {$ref: '#/components/schemas/AlertProcessing'}
+    AlertGroup:
+      type: object
+      additionalProperties: false
+      required: [slo_id, slo_name, total]
+      properties:
+        slo_id: {type: string, format: uuid}
+        slo_name: {type: string}
+        total: {$ref: '#/components/schemas/AlertCounter'}
+    AlertPage:
+      type: object
+      additionalProperties: false
+      required: [items, groups, total]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/AlertCatalogItem'}}
+        groups: {type: array, items: {$ref: '#/components/schemas/AlertGroup'}}
+        total: {$ref: '#/components/schemas/AlertCounter'}
+        next_cursor: {type: string}
+    AlertTransition:
+      type: object
+      additionalProperties: false
+      required: [id, to, cause, request_id, sequence, effective_at, detected_at]
+      properties:
+        id: {type: string, format: uuid}
+        from: {$ref: '#/components/schemas/AlertLifecycle'}
+        to: {$ref: '#/components/schemas/AlertLifecycle'}
+        cause: {type: string, enum: [condition_matched, conditions_cleared, resolved_after_maintenance_change, evidence_updated, acknowledged, policy_disabled, definition_superseded, slo_archived]}
+        actor_id: {type: string, format: uuid}
+        reason: {type: string}
+        evaluation_id: {type: string, format: uuid}
+        request_id: {type: string}
+        sequence: {$ref: '#/components/schemas/AlertVersion'}
+        effective_at: {$ref: '#/components/schemas/AlertTimestamp'}
+        detected_at: {$ref: '#/components/schemas/AlertTimestamp'}
+    AlertTransitionPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/AlertTransition'}}
+        next_cursor: {type: string}
+    AlertConditionCompactionSummary:
+      type: object
+      additionalProperties: false
+      required: [id, threshold, outcome, short_window_seconds, long_window_seconds, short_quality, long_quality]
+      properties:
+        id: {type: string}
+        threshold: {$ref: '#/components/schemas/AlertThreshold'}
+        outcome: {$ref: '#/components/schemas/AlertConditionOutcome'}
+        short_window_seconds: {$ref: '#/components/schemas/AlertWindowSeconds'}
+        long_window_seconds: {$ref: '#/components/schemas/AlertWindowSeconds'}
+        short_quality: {$ref: '#/components/schemas/AlertQuality'}
+        long_quality: {$ref: '#/components/schemas/AlertQuality'}
+        short_reason: {type: string}
+        long_reason: {type: string}
+    AlertCompactionSummary:
+      type: object
+      additionalProperties: false
+      required: [first, last, truth, conditions]
+      description: Unchanged condition outcomes and actual endpoint identities only. Compacted middle numeric evidence is unavailable.
+      properties:
+        first: {$ref: '#/components/schemas/AlertSnapshotIdentity'}
+        last: {$ref: '#/components/schemas/AlertSnapshotIdentity'}
+        truth: {$ref: '#/components/schemas/AlertTruth'}
+        conditions: {type: array, items: {$ref: '#/components/schemas/AlertConditionCompactionSummary'}}
+    AlertRange:
+      type: object
+      additionalProperties: false
+      required: [id, kind, reason, start, end, recorded_at, cadence_seconds]
+      properties:
+        id: {type: string, format: uuid}
+        kind: {type: string, enum: [repeated_cutoff, unreconstructed_gap, administrative_cancellation, compacted_evaluations]}
+        reason: {type: string}
+        actor_id: {type: string, format: uuid}
+        request_id: {type: string}
+        evaluation_id: {type: string, format: uuid}
+        start: {$ref: '#/components/schemas/AlertTimestamp'}
+        end: {$ref: '#/components/schemas/AlertTimestamp'}
+        recorded_at: {$ref: '#/components/schemas/AlertTimestamp'}
+        cadence_seconds: {type: integer, format: int64, minimum: 1}
+        summary: {$ref: '#/components/schemas/AlertCompactionSummary'}
+    AlertRangePage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/AlertRange'}}
+        next_cursor: {type: string}
     UserRole:
       type: string
       enum: [viewer, editor, administrator]
@@ -2336,6 +2905,9 @@ components:
               message: {type: string}
         message: {type: string, example: Configured backend is unavailable}
   responses:
+    AlertProblem:
+      description: Safe alert request failure, including field validation, session denial, version or command conflict, expired receipt and processing unavailability. No credentials or raw internal errors are returned.
+      content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}
     UserProblem:
       description: Safe user request failure, with code invalid_request, unauthorized, forbidden, not_found, conflict, email_in_use, last_administrator, link_unavailable, password_policy, rate_limited or user_unavailable. No proof or password is returned.
       content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}

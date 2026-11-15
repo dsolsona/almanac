@@ -49,7 +49,7 @@ func (q *Queries) AdvanceAlertCursor(ctx context.Context, arg AdvanceAlertCursor
 }
 
 const cancelAlertCursor = `-- name: CancelAlertCursor :execrows
-UPDATE public.almanac_alert_cursors SET schedulable=false,next_scheduled_at=$3,available_at=$3,version=version+1,epoch=epoch+1,pending_cutoff=NULL,claim_token=NULL,claim_until=NULL,open_occurrence_id=NULL,waiting_reason='policy_disabled'
+UPDATE public.almanac_alert_cursors SET schedulable=false,next_scheduled_at=$3,available_at=$3,version=version+1,epoch=epoch+1,pending_cutoff=NULL,claim_token=NULL,claim_until=NULL,open_occurrence_id=NULL,waiting_reason=$5
 WHERE policy_id=$1 AND revision=$2 AND version=$4
 `
 
@@ -58,6 +58,7 @@ type CancelAlertCursorParams struct {
 	Revision        int64              `json:"revision"`
 	NextScheduledAt pgtype.Timestamptz `json:"next_scheduled_at"`
 	Version         int64              `json:"version"`
+	WaitingReason   string             `json:"waiting_reason"`
 }
 
 func (q *Queries) CancelAlertCursor(ctx context.Context, arg CancelAlertCursorParams) (int64, error) {
@@ -66,6 +67,7 @@ func (q *Queries) CancelAlertCursor(ctx context.Context, arg CancelAlertCursorPa
 		arg.Revision,
 		arg.NextScheduledAt,
 		arg.Version,
+		arg.WaitingReason,
 	)
 	if err != nil {
 		return 0, err
@@ -245,17 +247,23 @@ func (q *Queries) FindAlertEvaluationReceipt(ctx context.Context, arg FindAlertE
 }
 
 const insertAlertCursor = `-- name: InsertAlertCursor :exec
-INSERT INTO public.almanac_alert_cursors(policy_id,revision,origin_at,next_scheduled_at,available_at) VALUES($1,$2,$3,$3,$3)
+INSERT INTO public.almanac_alert_cursors(policy_id,revision,origin_at,next_scheduled_at,available_at,schedulable) VALUES($1,$2,$3,$3,$3,$4)
 `
 
 type InsertAlertCursorParams struct {
-	PolicyID pgtype.UUID        `json:"policy_id"`
-	Revision int64              `json:"revision"`
-	OriginAt pgtype.Timestamptz `json:"origin_at"`
+	PolicyID    pgtype.UUID        `json:"policy_id"`
+	Revision    int64              `json:"revision"`
+	OriginAt    pgtype.Timestamptz `json:"origin_at"`
+	Schedulable bool               `json:"schedulable"`
 }
 
 func (q *Queries) InsertAlertCursor(ctx context.Context, arg InsertAlertCursorParams) error {
-	_, err := q.db.Exec(ctx, insertAlertCursor, arg.PolicyID, arg.Revision, arg.OriginAt)
+	_, err := q.db.Exec(ctx, insertAlertCursor,
+		arg.PolicyID,
+		arg.Revision,
+		arg.OriginAt,
+		arg.Schedulable,
+	)
 	return err
 }
 
@@ -342,7 +350,7 @@ func (q *Queries) InsertAlertOccurrence(ctx context.Context, arg InsertAlertOccu
 }
 
 const insertAlertPolicy = `-- name: InsertAlertPolicy :exec
-INSERT INTO public.almanac_alert_policies(id,name,slo_id,evaluation_revision,severity,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6,$6)
+INSERT INTO public.almanac_alert_policies(id,name,slo_id,evaluation_revision,severity,created_at,updated_at,enabled) VALUES($1,$2,$3,$4,$5,$6,$6,$7)
 `
 
 type InsertAlertPolicyParams struct {
@@ -352,6 +360,7 @@ type InsertAlertPolicyParams struct {
 	EvaluationRevision int64              `json:"evaluation_revision"`
 	Severity           string             `json:"severity"`
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	Enabled            bool               `json:"enabled"`
 }
 
 // Internal backend journal; not a public or remote-worker API.
@@ -363,6 +372,7 @@ func (q *Queries) InsertAlertPolicy(ctx context.Context, arg InsertAlertPolicyPa
 		arg.EvaluationRevision,
 		arg.Severity,
 		arg.CreatedAt,
+		arg.Enabled,
 	)
 	return err
 }
@@ -638,6 +648,39 @@ func (q *Queries) UpdateAlertOccurrence(ctx context.Context, arg UpdateAlertOccu
 		arg.UpdatedAt,
 		arg.TerminalAt,
 		arg.Version,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const updateAlertPolicyIdentity = `-- name: UpdateAlertPolicyIdentity :execrows
+UPDATE public.almanac_alert_policies SET name=$3,severity=$4,slo_id=$5,evaluation_revision=$6,enabled=$7,version=version+1,updated_at=$8
+WHERE id=$1 AND version=$2
+`
+
+type UpdateAlertPolicyIdentityParams struct {
+	ID                 pgtype.UUID        `json:"id"`
+	Version            int64              `json:"version"`
+	Name               string             `json:"name"`
+	Severity           string             `json:"severity"`
+	SloID              pgtype.UUID        `json:"slo_id"`
+	EvaluationRevision int64              `json:"evaluation_revision"`
+	Enabled            bool               `json:"enabled"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) UpdateAlertPolicyIdentity(ctx context.Context, arg UpdateAlertPolicyIdentityParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateAlertPolicyIdentity,
+		arg.ID,
+		arg.Version,
+		arg.Name,
+		arg.Severity,
+		arg.SloID,
+		arg.EvaluationRevision,
+		arg.Enabled,
+		arg.UpdatedAt,
 	)
 	if err != nil {
 		return 0, err

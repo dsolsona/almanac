@@ -33,15 +33,19 @@ type alertRegistration struct {
 	SLOID, Name, Severity string
 	FirstBoundary, Now    time.Time
 	Limits                alert.Limits
+	Clock                 func() time.Time
+	Enabled               *bool
+	// Nil leaves generic internal registration independent of the public preset profile.
+	PresetConfirmation *bool
 }
 
-// registerAlertPolicy participates in its caller's transaction. The eventual
-// management caller must authenticate/authorize and write audit/receipt there.
-// No route, CLI or worker calls this unwired foundation yet.
+// registerAlertPolicy participates in its caller's transaction. The management
+// caller authenticates/authorizes and writes audit/receipt in that transaction.
+// Clock, when present, supplies Now after the source-authority locks.
 func registerAlertPolicy(ctx context.Context, tx pgx.Tx, input alertRegistration) error {
 	id, idOK := canonicalUUID(input.Policy.ID)
 	sloID, sloOK := canonicalUUID(input.SLOID)
-	if !idOK || !sloOK || strings.TrimSpace(input.Name) == "" || input.Policy.Revision != 1 || input.Now.IsZero() || input.FirstBoundary.Before(input.Now) || input.FirstBoundary.Nanosecond() != 0 || input.FirstBoundary.Unix()%60 != 0 {
+	if !idOK || !sloOK || strings.TrimSpace(input.Name) == "" || input.Policy.Revision != 1 {
 		return ErrAlertInvalid
 	}
 	if input.Severity != "low" && input.Severity != "medium" && input.Severity != "high" {
@@ -63,20 +67,33 @@ func registerAlertPolicy(ctx context.Context, tx pgx.Tx, input alertRegistration
 	if measurement != row.MeasurementRevision || definition != row.DefinitionRevision {
 		return ErrAlertStale
 	}
+	if input.Clock != nil {
+		input.Now = normalizedAgentNow(input.Clock)
+	}
+	input.FirstBoundary, err = alertActivationBoundary(input.FirstBoundary, input.Now, row.ActivatedAt.Time)
+	if err != nil {
+		return err
+	}
 	if err := alert.Validate(input.Policy, alertObjective(row, input.Now), input.Limits); err != nil {
 		return err
+	}
+	if input.PresetConfirmation != nil {
+		if err := validateAlertPresetConfirmation(row, input.Policy.Conditions, *input.PresetConfirmation); err != nil {
+			return err
+		}
 	}
 	conditions, err := marshalAlertData(input.Policy.Conditions)
 	if err != nil {
 		return err
 	}
-	if err := q.InsertAlertPolicy(ctx, dbgen.InsertAlertPolicyParams{ID: id, Name: strings.TrimSpace(input.Name), SloID: sloID, EvaluationRevision: 1, Severity: input.Severity, CreatedAt: timestamp(input.Now)}); err != nil {
+	enabled := input.Enabled == nil || *input.Enabled
+	if err := q.InsertAlertPolicy(ctx, dbgen.InsertAlertPolicyParams{ID: id, Name: strings.TrimSpace(input.Name), SloID: sloID, EvaluationRevision: 1, Severity: input.Severity, CreatedAt: timestamp(input.Now), Enabled: enabled}); err != nil {
 		return err
 	}
 	if err := q.InsertAlertPolicyRevision(ctx, dbgen.InsertAlertPolicyRevisionParams{PolicyID: id, Revision: 1, SloID: sloID, DefinitionRevision: definition, CalculationVersion: operationalCalculationVersion, Conditions: conditions, CreatedAt: timestamp(input.Now)}); err != nil {
 		return err
 	}
-	return q.InsertAlertCursor(ctx, dbgen.InsertAlertCursorParams{PolicyID: id, Revision: 1, OriginAt: timestamp(input.FirstBoundary)})
+	return q.InsertAlertCursor(ctx, dbgen.InsertAlertCursorParams{PolicyID: id, Revision: 1, OriginAt: timestamp(input.FirstBoundary), Schedulable: enabled})
 }
 
 func (r *Runtime) alertTransaction(ctx context.Context, work func(context.Context, pgx.Tx, *dbgen.Queries) error) error {

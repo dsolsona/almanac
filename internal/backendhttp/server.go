@@ -20,6 +20,7 @@ import (
 	"github.com/dsolsona/almanac/internal/agentprotocol"
 	"github.com/dsolsona/almanac/internal/agentruntime"
 	"github.com/dsolsona/almanac/internal/agentws"
+	"github.com/dsolsona/almanac/internal/alerthttp"
 	"github.com/dsolsona/almanac/internal/api"
 	"github.com/dsolsona/almanac/internal/authentication"
 	"github.com/dsolsona/almanac/internal/authhttp"
@@ -145,7 +146,14 @@ func New(ctx context.Context, cfg config.Config, service *authentication.Service
 	if err != nil {
 		return nil, errors.New("backendhttp: invalid objective handler configuration")
 	}
+	alerts, err := alerthttp.New(databaseURL, auth, alerthttp.Options{Runtime: runtime, Now: time.Now, Preflight: s.authenticationPreflight})
+	if err != nil {
+		return nil, errors.New("backendhttp: invalid alert handler configuration")
+	}
 	mux := http.NewServeMux()
+	for _, route := range []string{"/api/v1/alert-policies", "/api/v1/alert-policies/", "/api/v1/alerts", "/api/v1/alerts/", "/api/v1/alert-processing", "/api/v1/alert-commands"} {
+		mux.Handle(route, alerts)
+	}
 	users := userhttp.New(databaseURL, cfg.PublicOrigin, auth, service, time.Now, s.authenticationPreflight)
 	mux.Handle("/api/v1/account", users)
 	mux.Handle("/api/v1/account/", users)

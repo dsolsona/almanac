@@ -8,7 +8,6 @@ import (
 	"github.com/dsolsona/almanac/internal/alert"
 	"github.com/dsolsona/almanac/internal/storage/dbgen"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type alertDisableInput struct {
@@ -24,7 +23,7 @@ type alertDisableInput struct {
 func disableAlertPolicyTx(ctx context.Context, tx pgx.Tx, input alertDisableInput) (alertStoredOccurrence, error) {
 	id, idOK := canonicalUUID(input.PolicyID)
 	actor, actorOK := canonicalUUID(input.ActorID)
-	if !idOK || !actorOK || input.ExpectedVersion <= 0 || strings.TrimSpace(input.Reason) == "" || input.RequestID == "" || input.Now == nil || input.EffectiveAt.IsZero() {
+	if !idOK || !actorOK || input.ExpectedVersion <= 0 || strings.TrimSpace(input.Reason) == "" || input.RequestID == "" || input.Now == nil {
 		return alertStoredOccurrence{}, ErrAlertInvalid
 	}
 	q := dbgen.New(tx)
@@ -42,11 +41,11 @@ func disableAlertPolicyTx(ctx context.Context, tx pgx.Tx, input alertDisableInpu
 	if err != nil {
 		return alertStoredOccurrence{}, err
 	}
-	if policy.Version != input.ExpectedVersion {
+	if policy.Version != input.ExpectedVersion || policy.SloID != binding.SloID || policy.EvaluationRevision != binding.EvaluationRevision {
 		return alertStoredOccurrence{}, ErrAlertStale
 	}
 	detected := normalizedAgentNow(input.Now)
-	if detected.IsZero() || input.EffectiveAt.After(detected) || input.EffectiveAt.Before(policy.CreatedAt.Time) {
+	if detected.IsZero() || (!input.EffectiveAt.IsZero() && (input.EffectiveAt.After(detected) || input.EffectiveAt.Before(policy.CreatedAt.Time))) {
 		return alertStoredOccurrence{}, ErrAlertInvalid
 	}
 	if !policy.Enabled {
@@ -68,43 +67,18 @@ func disableAlertPolicyTx(ctx context.Context, tx pgx.Tx, input alertDisableInpu
 		}
 	}
 	detected = normalizedAgentNow(input.Now)
-	if detected.IsZero() || input.EffectiveAt.After(detected) {
+	effective := input.EffectiveAt
+	if effective.IsZero() {
+		effective = detected
+	}
+	if detected.IsZero() || effective.After(detected) || effective.Before(policy.CreatedAt.Time) {
 		return alertStoredOccurrence{}, ErrAlertInvalid
 	}
-	if stored.Occurrence != nil {
-		transition, err := alert.ApplyAdministrativeChange(stored.Occurrence, alert.PolicyDisabled, input.ActorID, input.Reason, input.EffectiveAt, detected)
-		if err != nil {
-			return alertStoredOccurrence{}, err
-		}
-		previous := stored.Version
-		stored.Occurrence = transition.Next
-		stored.Version++
-		stored.Sequence++
-		if err := writeAlertOccurrence(ctx, q, stored, previous); err != nil {
-			return alertStoredOccurrence{}, err
-		}
-		if err := insertAlertTransition(ctx, q, stored, transition, pgtype.UUID{}, input.RequestID); err != nil {
-			return alertStoredOccurrence{}, err
-		}
-	}
-	// Include the scheduled boundary at effective time. Never cancel later work
-	// merely because application of an already authorized boundary was delayed.
-	end := floorSliBoundary(input.EffectiveAt, time.Minute).Add(time.Minute)
-	next := cursor.NextScheduledAt
-	if cursor.Schedulable && cursor.NextScheduledAt.Time.Before(end) {
-		if err := q.InsertAlertRange(ctx, dbgen.InsertAlertRangeParams{ID: newAlertID(), PolicyID: id, Revision: policy.EvaluationRevision, StartsAt: cursor.NextScheduledAt, EndsAt: timestamp(end), CadenceSeconds: 60, Kind: "administrative_cancellation", Reason: input.Reason, RecordedAt: timestamp(detected), ReferenceEvaluationID: cursor.LastEvaluationID, ActorID: actor, RequestID: input.RequestID}); err != nil {
-			return alertStoredOccurrence{}, err
-		}
-		next = timestamp(end)
-	}
-	n, err := q.CancelAlertCursor(ctx, dbgen.CancelAlertCursorParams{PolicyID: id, Revision: policy.EvaluationRevision, NextScheduledAt: next, Version: cursor.Version})
+	stored, err = cancelAlertRevision(ctx, q, policy, cursor, stored, actor, input.ActorID, input.Reason, input.RequestID, alert.PolicyDisabled, effective, detected)
 	if err != nil {
 		return alertStoredOccurrence{}, err
 	}
-	if n != 1 {
-		return alertStoredOccurrence{}, ErrAlertStale
-	}
-	n, err = q.DisableAlertPolicyIdentity(ctx, dbgen.DisableAlertPolicyIdentityParams{ID: id, Version: input.ExpectedVersion, UpdatedAt: timestamp(detected)})
+	n, err := q.DisableAlertPolicyIdentity(ctx, dbgen.DisableAlertPolicyIdentityParams{ID: id, Version: input.ExpectedVersion, UpdatedAt: timestamp(detected)})
 	if err != nil {
 		return alertStoredOccurrence{}, err
 	}

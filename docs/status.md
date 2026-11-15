@@ -1,3 +1,12 @@
+Alert management continuation, 2026-11-15: the maintainer authorized merging
+[PR #121](https://github.com/dsolsona/almanac/pull/121) and continuing work. It is
+merged as `920b591`; main is pulled fast-forward. All four application CI gates
+pass on final `40c7680` (4m38s/5m06s/9m19s/9m25s), and CodeRabbit reports no new
+actionable comments with every thread resolved. [F4-T38](tasks/F4-T38.md) connects
+policy management and occurrence reads/actions to API/CLI. Public profile and
+architecture acceptance remain distinct from implementation authorization;
+calculator/maintenance/capacity gates still precede production activation.
+
 Foundation PR, 2026-11-14: ready [PR #121](https://github.com/dsolsona/almanac/pull/121)
 publishes the unwired foundations as one candidate. All four application CI gates
 pass on `6f89bdf`: unit 3m32s, browser 7m58s, end-to-end 9m09s and integration

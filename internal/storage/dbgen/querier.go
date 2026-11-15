@@ -376,6 +376,7 @@ type Querier interface {
 	UpdateAgentDesiredConfigurationRevision(ctx context.Context, arg UpdateAgentDesiredConfigurationRevisionParams) (int64, error)
 	UpdateAgentRuntimeHeartbeat(ctx context.Context, arg UpdateAgentRuntimeHeartbeatParams) (int64, error)
 	UpdateAlertOccurrence(ctx context.Context, arg UpdateAlertOccurrenceParams) (int64, error)
+	UpdateAlertPolicyIdentity(ctx context.Context, arg UpdateAlertPolicyIdentityParams) (int64, error)
 	UpdateDatasource(ctx context.Context, arg UpdateDatasourceParams) (AlmanacDatasource, error)
 	UpdateDatasourceReassignmentProgress(ctx context.Context, arg UpdateDatasourceReassignmentProgressParams) error
 	UpdateLifecycleAgent(ctx context.Context, arg UpdateLifecycleAgentParams) (AlmanacAgent, error)
