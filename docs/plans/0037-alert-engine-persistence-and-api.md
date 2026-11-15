@@ -89,6 +89,13 @@ Use the occurrence version plus cursor state version in commit preconditions.
 
 ## Evaluation and durable scheduling
 
+Implementation clarification: use the reviewed
+[public profile](../design/alerting-public-contract.md) for immediate policy
+activation. The immutable revision's authoritative creation time governs cutoff
+eligibility, independently of rounded scheduling origin. [F4-T40](../tasks/F4-T40.md)
+records deliberately ineligible boundaries before ordinary evaluation; source
+measurements inside otherwise valid full windows can predate policy activation.
+
 The internal consumer API is deliberately small. Define concrete types in
 `internal/alert` for `PolicyRevision`, `Condition`, `WindowEvidence`,
 `Evaluation`, `Occurrence`, `Transition`, `SnapshotIdentity` and `Claim`.

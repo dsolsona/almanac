@@ -87,7 +87,8 @@ func TestIntegrationAlertSeriesDelayedScheduledRepeats(t *testing.T) {
 	t.Parallel()
 	f := newAlertTestFixture(t)
 	cutoff := f.at
-	f.at, f.now = cutoff.Add(10*time.Minute), cutoff.Add(10*time.Minute)
+	// Create the policy first, then begin delayed scheduled processing.
+	f.at = cutoff.Add(10 * time.Minute)
 	f.policy(t, "Delayed series")
 	var occurrence string
 	for i := range 3 {
@@ -272,6 +273,8 @@ func TestIntegrationAlertSeriesCompactedInterior(t *testing.T) {
 		t.Run(delay.String(), func(t *testing.T) {
 			t.Parallel()
 			f := newAlertTestFixture(t)
+			// Policy activation precedes the delayed first scheduled receipt.
+			f.at = f.at.Add(delay)
 			cutoffStart := f.at.Add(-delay)
 			f.policy(t, "Compacted series")
 			var occurrence string

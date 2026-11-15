@@ -1,5 +1,8 @@
 # Implementation tasks
 
+[F4-T40](F4-T40.md) skips pre-activation canonical cutoffs with explicit durable
+ranges while preserving the unwired processor's ordering and failure budget.
+
 [F4-T39](F4-T39.md) connects the selected alert UI to persisted API operations,
 server-filtered evidence/groups and immutable chart data.
 

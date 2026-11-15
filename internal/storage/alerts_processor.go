@@ -23,7 +23,7 @@ type alertProcessorOptions struct {
 }
 
 type alertProcessorResult struct {
-	Claimed, Evaluations, Repeated, Gaps, Pending, Failed, Stale int
+	Claimed, Evaluations, Repeated, Gaps, BeforeActivation, Pending, Failed, Stale int
 }
 
 func (options alertProcessorOptions) validate() bool {
@@ -76,6 +76,8 @@ func (r *Runtime) processAlertTick(ctx context.Context, tick time.Time, options 
 				total.Evaluations++
 			case "repeat":
 				total.Repeated++
+			case "before_activation":
+				total.BeforeActivation++
 			case "gap":
 				total.Gaps++
 			case "pending":
@@ -163,10 +165,14 @@ func (r *Runtime) evaluateAlertClaim(ctx context.Context, claim alertClaim, opti
 	} else if skipped {
 		return "gap", nil
 	}
-	cutoff, err := r.pinAlertCutoff(ctx, claim, clock)
+	pinned, err := r.pinAlertCutoff(ctx, claim, clock)
 	if err != nil {
 		return "", err
 	}
+	if pinned.SkippedBeforeActivation {
+		return "before_activation", nil
+	}
+	cutoff := pinned.Cutoff
 	var cursor dbgen.AlmanacAlertCursor
 	err = r.alertTransaction(ctx, func(ctx context.Context, _ pgx.Tx, q *dbgen.Queries) error {
 		id, _ := canonicalUUID(claim.PolicyID)

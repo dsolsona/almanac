@@ -1438,7 +1438,7 @@ export interface components {
             /** @enum {string} */
             basis: "effective_cutoff" | "scheduled_boundary";
             /** @enum {string} */
-            kind: "not_retained" | "unavailable" | "repeated_cutoff" | "unreconstructed_gap" | "administrative_cancellation" | "compacted_evaluations" | "outside_revision" | "pending";
+            kind: "not_retained" | "unavailable" | "repeated_cutoff" | "unreconstructed_gap" | "administrative_cancellation" | "compacted_evaluations" | "before_policy_activation" | "outside_revision" | "pending";
             reason: string;
             /** Format: uuid */
             range_id?: string;
@@ -1554,7 +1554,7 @@ export interface components {
             /** Format: uuid */
             id: string;
             /** @enum {string} */
-            kind: "repeated_cutoff" | "unreconstructed_gap" | "administrative_cancellation" | "compacted_evaluations";
+            kind: "repeated_cutoff" | "unreconstructed_gap" | "administrative_cancellation" | "compacted_evaluations" | "before_policy_activation";
             reason: string;
             /** Format: uuid */
             actor_id?: string;

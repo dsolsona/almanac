@@ -91,7 +91,7 @@ func TestIntegrationAlertDeferralRetryElapsesWhileWaiting(t *testing.T) {
 	if err := f.conn.QueryRow(t.Context(), `SELECT next_scheduled_at,pending_cutoff,available_at,failure_attempts,claim_token IS NOT NULL,waiting_reason FROM almanac_alert_cursors WHERE policy_id=$1`, claim.PolicyID).Scan(&next, &cutoff, &available, &attempts, &held, &reason); err != nil {
 		t.Fatal(err)
 	}
-	if !next.Equal(claim.ScheduledAt) || !cutoff.Equal(pin) || !available.Equal(f.at.Add(time.Second+30*time.Millisecond)) || attempts != 0 || held || reason != "aggregate_pending" {
+	if !next.Equal(claim.ScheduledAt) || !cutoff.Equal(pin.Cutoff) || !available.Equal(f.at.Add(time.Second+30*time.Millisecond)) || attempts != 0 || held || reason != "aggregate_pending" {
 		t.Fatalf("pending lost boundary or retry state: next=%s cutoff=%s available=%s attempts=%d held=%v reason=%s", next, cutoff, available, attempts, held, reason)
 	}
 }

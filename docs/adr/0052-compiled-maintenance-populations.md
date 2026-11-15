@@ -25,16 +25,20 @@ formula. It is separate from the failed dirty-interior fallback experiment.
 
 Propose two maintained components and one shared totals interface.
 
-1. **Compile immutable exclusion snapshots.** Maintain versioned SLO membership
-   intervals with immutable bounds and inclusion-revision lifetimes. A job for
-   authority revision R reads raw membership-version pages in indexed start/key
-   order, filters validity at R, and unions intervals online with a persisted
-   frontier. Capture a fixed, finite input fence when compilation starts,
-   independently of membership validity at R. Later inserts must neither extend
-   that input nor require scanning an unbounded population of newer versions to
-   find the next page. The chosen query/index must establish both properties;
-   revision filtering alone is insufficient. Later mutations cannot move an
-   R-visible row's bounds or remove it.
+1. **Compile immutable exclusion snapshots.** Use the existing immutable
+   per-SLO maintenance change log, whose primary key is `(slo_id, revision)`.
+   Maintenance mutations increment the locked SLO authority and insert exactly
+   one corresponding event in the same transaction. Capture committed target R
+   and a durable input-retention pin atomically under the authority/cleanup
+   protocol. R is both the semantic target and the raw event upper bound; later
+   events have revisions greater than R and cannot extend this build.
+   Replay bounded raw event pages into build-owned membership keyed by exclusion
+   ID. An included event installs its referenced immutable declaration version,
+   bounds and provenance; an excluded event removes membership. Commit each page
+   and its raw revision cursor together under a build ownership fence. Seal that
+   membership before a second indexed start/key pass unions intervals online
+   with a persisted frontier. Do not filter a growing start-ordered population
+   and assume revision filtering bounds the scan.
    Publish only a complete snapshot. Keep in-progress work unavailable to readers.
    Completing a historical-R snapshot does not promote it as current: promotion
    separately validates current exclusion authority. Historical snapshots remain
@@ -121,6 +125,71 @@ last-breaching snapshot against the same present source facts. Both populations
 count against admission. The alert retains its revision and acknowledgement;
 only the resulting evidence determines ordinary recovery versus
 `resolved_after_maintenance_change`.
+
+## Finite compiler input and resumability
+
+The source is `almanac_slo_exclusion_changes`, not a scan of current declarations
+or declaration versions sorted by their start time. Its existing primary key
+supports the complete raw-page bound:
+
+```sql
+SELECT revision, exclusion_id, exclusion_revision, included
+FROM almanac_slo_exclusion_changes
+WHERE slo_id = $1 AND revision > $2 AND revision <= $3
+ORDER BY revision
+LIMIT $4;
+```
+
+Here `$3` is the build's immutable R, `$2` is its committed raw event cursor and
+`$4` is a mandatory bounded turn limit, not a newly adopted production default.
+Apply the limit before any membership/bounds filtering. Even an event that removes
+membership advances the raw cursor. No insertion beyond R can enter this index
+range. A continuously advancing current authority must not retarget or restart
+the historical build.
+
+Create the durable build and its source-retention pin in the same transaction
+that captures R, using the established authority lock order. Cleanup must share
+that synchronization protocol and honor the pin. Pin the required event range,
+referenced immutable declaration revisions/scopes and any starting checkpoint;
+the present immutability triggers forbid updates but do not prevent deletion.
+Retain those inputs until publication or an explicit fenced cancellation. A
+crashed worker losing its lease must not lose the input pin.
+
+Replay from an exact, complete membership checkpoint C at or before R, or from
+revision zero with empty membership. A checkpoint contains declaration membership
+and provenance, not only the union: an overlapping declaration may later be
+withdrawn. While initializing a stage from C, copy membership in bounded pages
+with a persisted copy cursor before applying later events. Require every event
+in `(C,R]` in revision order. A missing required revision is unavailable retained
+configuration history; it must never mean empty membership or a publishable
+partial snapshot. Detect the gap explicitly and require repair or a valid exact
+checkpoint. A pin cannot restore history that was already removed.
+
+Membership rows belong to one build, keyed by `(build_id, exclusion_id)`. Page
+effects, raw cursor and ownership/lease validation commit atomically. Seal the
+stage only after its complete input through R is consumed. Once sealed, stale or
+reclaimed workers cannot modify its membership. Traverse the sealed stage through
+an index on `(build_id, starts_at, exclusion_id)`; commit the union cursor, one
+unfinished interval and cumulative duration together. Publication requires the
+complete union and the current ownership fence. Partial membership/union state
+is not a readable mask. Current promotion separately checks current exclusion
+authority and applicable source identities; historical completion stays usable
+for the same-facts recovery comparison.
+
+Exact unchanged membership/bounds permit coverage reuse while retaining the new
+declaration/authority provenance. A metadata change must not require rebuilding
+every retained observation mark. Other overlapping or changed-bound cases require
+an exact union-equivalence certificate, not the event's `coverage_changed` flag
+alone. The sealed membership checkpoint is retained when later builds depend on
+it; an immutable union by itself is insufficient as their replay baseline.
+
+This supplies finite raw input and bounded turns, not acceptable total cost by
+assertion. Measure replay from zero/checkpoints, stage copying/index maintenance,
+publication, cleanup, concurrent historical builds and storage growth before
+adoption. Existing receipt reconciliation, exact compatibility indexing,
+partial-hour populations, shared current/last-breaching-mask reads and the
+100/200-policy correctness/performance gates remain prerequisites. No source
+semantic-edit or SLO archive endpoint is introduced by this decision.
 
 ## Alternatives considered
 

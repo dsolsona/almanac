@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/dsolsona/almanac/internal/api"
+	"github.com/dsolsona/almanac/internal/testpostgres"
 )
 
 func TestIntegrationExecutableAlertPolicyJourney(t *testing.T) {
@@ -133,6 +134,20 @@ func TestIntegrationExecutableAlertPolicyJourney(t *testing.T) {
 		t.Fatal("unknown command misrepresented")
 	}
 	run(0, "alert-policies", "ranges", idFlag, "--revision=1")
+	// The processor remains unwired. Seed only its immutable range representation
+	// to exercise the real protected HTTP/generated-client/executable read path;
+	// storage integration cases separately execute the actual atomic skip turn.
+	conn := testpostgres.Connect(t, f.databaseURL)
+	if _, err := conn.Exec(t.Context(), `INSERT INTO almanac_alert_ranges(id,policy_id,revision,starts_at,ends_at,cadence_seconds,kind,reason,recorded_at)
+ SELECT gen_random_uuid(),policy_id,revision,origin_at,origin_at+interval '1 minute',60,'before_policy_activation','before_policy_activation',origin_at
+ FROM almanac_alert_cursors WHERE policy_id=$1 AND revision=2`, policy.Id.String()); err != nil {
+		t.Fatal(err)
+	}
+	activationRanges := run(0, "alert-policies", "ranges", idFlag, "--revision=2")
+	var rangeItems []api.AlertRange
+	if json.Unmarshal(activationRanges.Result["items"], &rangeItems) != nil || len(rangeItems) != 1 || rangeItems[0].Kind != "before_policy_activation" {
+		t.Fatal("CLI lost explicit activation range")
+	}
 	run(0, "alerts", "processing", idFlag)
 	alerts := run(0, "alerts", "list", "--scope=all", "--group-by=slo", "--state=firing,acknowledged", "--severity=high,medium")
 	if json.Unmarshal(alerts.Result["total"], &total) != nil || total != "0" {
