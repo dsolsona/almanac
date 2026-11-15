@@ -2,7 +2,6 @@ package storage
 
 import (
 	"context"
-	"encoding/json/v2"
 	"errors"
 	"log/slog"
 	"strconv"
@@ -195,7 +194,7 @@ func loadRetainedSloHistory(ctx context.Context, q *dbgen.Queries, row dbgen.Get
 	cached, err := q.FindPreparedSloHistory(ctx, key)
 	if err == nil {
 		var result api.SloOperationalDetail
-		if json.Unmarshal(cached.Payload, &result) == nil && preparedHistoryMatches(result, key, cached.GenerationID) {
+		if unmarshalReceiptMetadata(cached.Payload, &result) == nil && preparedHistoryMatches(result, key, cached.GenerationID) {
 			if input.Runtime != nil {
 				input.Runtime.metrics.historyHits.Add(1)
 			}
@@ -251,7 +250,7 @@ func publishRetainedHistory(ctx context.Context, q *dbgen.Queries, result api.Sl
 	stamp := generationStamp(generationID, g.SourceGeneration, g.DefinitionRevision, g.MeasurementRevision, g.CalculationVersion,
 		g.EvaluatedThrough.Time, g.PublishedAt.Time, g.RetentionStart.Time)
 	result.Generation = &stamp
-	payload, err := json.Marshal(struct {
+	payload, err := marshalReceiptMetadata(struct {
 		api.SloOperationalDetail
 		Live       bool      `json:"_live"`
 		ValidUntil time.Time `json:"_current_valid_until,omitzero"`

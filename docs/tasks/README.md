@@ -1,5 +1,8 @@
 # Implementation tasks
 
+[F4-T41](F4-T41.md) corrects receipt metadata, preserves legacy measurements and
+uses bounded repair while leaving the shared-calculator adoption gate intact.
+
 [F4-T40](F4-T40.md) skips pre-activation canonical cutoffs with explicit durable
 ranges while preserving the unwired processor's ordering and failure budget.
 

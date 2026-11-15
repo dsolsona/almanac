@@ -29,8 +29,8 @@ func EvaluateOperationalTotalsSummary(ctx context.Context, input WindowInput, to
 		return WindowResult{}, fmt.Errorf("%w: interval counts are negative or zero traffic exceeds observed", ErrOperationalFacts)
 	case totals.Observed == 0 && (totals.Total.Sign() != 0 || totals.Good.Sign() != 0 || totals.FirstObservation != nil || totals.LastObservation != nil):
 		return WindowResult{}, fmt.Errorf("%w: counts or observation times without observed intervals", ErrOperationalFacts)
-	case totals.Observed > 0 && (totals.FirstObservation == nil || totals.LastObservation == nil || totals.LatestReceipt == nil):
-		return WindowResult{}, fmt.Errorf("%w: observed intervals without observation or receipt times", ErrOperationalFacts)
+	case totals.Observed > 0 && (totals.FirstObservation == nil || totals.LastObservation == nil):
+		return WindowResult{}, fmt.Errorf("%w: observed intervals without observation bounds", ErrOperationalFacts)
 	case totals.Total.Sign() == 0 && totals.ZeroTraffic != totals.Observed:
 		return WindowResult{}, fmt.Errorf("%w: zero total but not every observed interval is zero traffic", ErrOperationalFacts)
 	}

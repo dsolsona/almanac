@@ -135,6 +135,14 @@ A mark `M` is the complete input of one evaluation at one endpoint:
 | `state`, `quality`, `freshness` | The sample state, quality state and freshness the evaluator produced at build |
 | `retention_start` | Optional; present when the mark was evaluated under a boundary different from the row's, as happens when a daily row combines hours rebuilt at different times. The reader uses it over the row's value. |
 
+Receipt metadata can be absent when a legacy maximum cannot be certified from
+retained source observations. Suppress that maximum, including when a window
+also has known receipt contributions; do not present a known lower bound as its
+maximum. Preserve exact measurements, observation bounds, quality and freshness.
+Unknown receipt metadata alone does not make an evaluation unavailable. Private
+persistence certificates survive extracted value pages and are omitted from
+public responses; missing or unknown certificates quarantine only receipt fields.
+
 `marks` is ordered by `at` and contains exactly the endpoints the existing
 reducer selects: first, last, minimum, maximum and both endpoints of every
 change in state, quality or freshness, deduplicated. When those exceed 1,500 for

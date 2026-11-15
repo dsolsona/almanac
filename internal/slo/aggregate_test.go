@@ -83,3 +83,35 @@ func TestAggregateEvaluationMatchesCanonicalIntervals(t *testing.T) {
 		})
 	}
 }
+
+// Receipt time is diagnostic metadata. Retained counts and observation bounds
+// remain usable when expired raw history prevents certifying that maximum.
+func TestAggregateUnknownReceiptPreservesMeasurement(t *testing.T) {
+	start := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	input := WindowInput{At: start.Add(time.Minute), Now: start.Add(time.Minute), ValidFrom: start, SliValidFrom: start, RetentionStart: start, Duration: time.Minute, Cadence: time.Minute, FreshnessGrace: time.Minute, Target: "0.99"}
+	totals := WindowTotals{Good: big.NewRat(99, 1), Total: big.NewRat(100, 1), Observed: 1, FirstObservation: new(start), LastObservation: new(input.At), LatestReceipt: new(input.At)}
+	want, err := EvaluateOperationalTotals(t.Context(), input, totals)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want.LatestReceipt = nil
+	totals.LatestReceipt = nil
+	got, err := EvaluateOperationalTotals(t.Context(), input, totals)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("unknown receipt changed measurements: got=%+v want=%+v", got, want)
+	}
+	for _, missing := range []string{"first", "last"} {
+		invalid := totals
+		if missing == "first" {
+			invalid.FirstObservation = nil
+		} else {
+			invalid.LastObservation = nil
+		}
+		if _, err := EvaluateOperationalTotals(t.Context(), input, invalid); err == nil {
+			t.Errorf("accepted missing %s observation bound", missing)
+		}
+	}
+}

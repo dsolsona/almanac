@@ -1,11 +1,11 @@
 # ADR-0052: Compile scoped maintenance populations for the shared calculator
 
-- Status: proposed
+- Status: accepted
 - Created: 2026-11-14
-- Accepted: pending
-- Approval: pending; design candidate only, no production adoption
+- Accepted: 2026-11-15
+- Approval: maintainer explicitly approved implementation of fixed maintenance snapshots compiled in durable bounded stages on 2026-11-15; calculator adoption and production activation retain the correctness/performance gates
 - Related specs: [SPEC-0016](../specs/0016-maintenance-exclusions.md), [SPEC-0019](../specs/0019-backend-performance-and-derived-data.md), [SPEC-0020](../specs/0020-cumulative-slo-calculation.md), [SPEC-0021](../specs/0021-alert-policy-engine.md)
-- Supersedes / superseded by: proposes extending ADR-0040's shared count path for scoped exclusion populations; no observation-cumulative path or dirty-hour fallback is adopted
+- Supersedes / superseded by: extends ADR-0040's shared count path for scoped exclusion populations; no observation-cumulative path or dirty-hour fallback is adopted
 
 ## Context
 
@@ -18,12 +18,12 @@ exclusion revision would also make unaffected ranges wait.
 Alert policy reads must use the same mathematics and exclusion authority as SLO
 current/history/report reads. Full source windows, complete quality statistics,
 same-facts recovery comparison and preserved original evidence remain required.
-This candidate supplies a bounded preparation path rather than another alert-only
+This decision supplies a bounded preparation path rather than another alert-only
 formula. It is separate from the failed dirty-interior fallback experiment.
 
 ## Decision
 
-Propose two maintained components and one shared totals interface.
+Use two maintained components and one shared totals interface.
 
 1. **Compile immutable exclusion snapshots.** Use the existing immutable
    per-SLO maintenance change log, whose primary key is `(slo_id, revision)`.

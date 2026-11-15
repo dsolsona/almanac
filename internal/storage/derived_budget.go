@@ -2,7 +2,6 @@ package storage
 
 import (
 	"context"
-	"encoding/json/v2"
 	"errors"
 	"strconv"
 	"time"
@@ -42,7 +41,7 @@ func attachExtremaBudget(ctx context.Context, q *dbgen.Queries, item *api.SloOpe
 	item.BudgetHistoryState = &history
 	var previous []api.SloOperationalSample
 	var cache extremaBudgetCache
-	cacheHit := json.Unmarshal(state.Cache, &cache) == nil && json.Unmarshal(state.Samples, &previous) == nil &&
+	cacheHit := unmarshalReceiptMetadata(state.Cache, &cache) == nil && unmarshalReceiptMetadata(state.Samples, &previous) == nil &&
 		len(previous) > 0 && len(previous) <= 120 && len(cache.Closed) <= 120 &&
 		cache.RangeStart.Before(at) && !cache.RangeStart.Before(at.Add(-8*24*time.Hour)) &&
 		cache.ClosedThrough.Equal(closed) && cache.PublishedAt.Equal(state.PublishedAt.Time)
@@ -88,7 +87,7 @@ func attachExtremaBudget(ctx context.Context, q *dbgen.Queries, item *api.SloOpe
 			}
 			history = "unavailable"
 			item.BudgetSparkline = []api.SloOperationalSample{}
-			return json.Marshal(extremaBudgetCache{ClosedThrough: closed, PublishedAt: state.PublishedAt.Time, RangeStart: start})
+			return marshalReceiptMetadata(extremaBudgetCache{ClosedThrough: closed, PublishedAt: state.PublishedAt.Time, RangeStart: start})
 		}
 		revision := strconv.FormatInt(row.DefinitionRevision, 10)
 		if reader.first != nil {
@@ -149,5 +148,5 @@ func attachExtremaBudget(ctx context.Context, q *dbgen.Queries, item *api.SloOpe
 	}
 	item.BudgetHistoryGeneration = item.Generation
 	cache.LastStart = lastStart
-	return json.Marshal(cache)
+	return marshalReceiptMetadata(cache)
 }

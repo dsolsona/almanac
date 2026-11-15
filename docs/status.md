@@ -1,3 +1,22 @@
+Receipt reconciliation, 2026-11-15: [F4-T41](tasks/F4-T41.md) integrates nullable,
+certified canonical receipt metadata, safe legacy codecs and bounded low-priority
+repair without changing retained counts. Focused storage/race checks pass in
+16.249 s, shared SLO checks in 1.035 s and direct publication/repair cases in
+3.198 s. All ten normal collection-to-SLO container journeys pass in 5.5 minutes.
+Independent read-only review finds no actionable defect; generation/docs/remote
+CI complete the publication gates. ADR-0052 implementation is accepted; compiler,
+shared coverage and adjusted-population work continue with production adoption,
+engine activation and 100/200-policy release checks still gated.
+
+Alert continuation, 2026-11-15: the maintainer authorized and the primary merged
+[PR #122](https://github.com/dsolsona/almanac/pull/122) at verified `43d64d1`,
+producing main `a6360be`; main is pulled fast-forward. All four application CI
+checks passed (3m20s/7m37s/5m19s/9m54s). The maintainer also explicitly accepted
+[ADR-0052](adr/0052-compiled-maintenance-populations.md) for implementation;
+calculator adoption, production activation and release retain their gates.
+[F4-T41](tasks/F4-T41.md) corrects receipt metadata without rebuilding retained
+measurements. The alert processor remains unwired. PR #123 targets main after #122's merge; it is not merged.
+
 Alert activation safeguard, 2026-11-15: [F4-T40](tasks/F4-T40.md) records
 pre-activation canonical cutoffs as explicit scheduled work and advances them
 without numerical evidence or failure charges. Independent review finds no defect;

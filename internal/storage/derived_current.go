@@ -2,7 +2,6 @@ package storage
 
 import (
 	"context"
-	"encoding/json/v2"
 	"errors"
 	"strconv"
 	"strings"
@@ -94,7 +93,7 @@ func ReadCurrentSloStatus(ctx context.Context, databaseURL string, input Current
 
 func publishedCurrentStatus(row dbgen.GetPublishedCurrentProjectionRow) (api.SloCurrentStatus, error) {
 	var item api.SloOperationalOverviewItem
-	if err := json.Unmarshal(row.Payload, &item); err != nil || !validPublishedCurrentItem(item, row) {
+	if err := unmarshalReceiptMetadata(row.Payload, &item); err != nil || !validPublishedCurrentItem(item, row) {
 		return api.SloCurrentStatus{}, errors.New("storage: invalid current projection")
 	}
 	return api.SloCurrentStatus{CurrentState: new(api.SloCurrentStatusCurrentState("ready")), Slo: item.Slo, Current: item.Current,
@@ -327,7 +326,7 @@ func (r *Runtime) refreshCurrentProjection(ctx context.Context, id pgtype.UUID, 
 	if err != nil {
 		return err
 	}
-	payload, err := json.Marshal(struct {
+	payload, err := marshalReceiptMetadata(struct {
 		api.SloOperationalOverviewItem
 		ValidUntil time.Time `json:"_current_valid_until"`
 	}{SloOperationalOverviewItem: item, ValidUntil: currentCacheDeadline(row, contextRow, now, detail.Current.Quality, detail.Burn1h.Quality, detail.Burn6h.Quality)})

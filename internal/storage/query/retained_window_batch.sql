@@ -33,7 +33,14 @@ WITH measurement AS MATERIALIZED (
                coalesce(sum(h.zero_traffic_intervals),0)::bigint AS zero_traffic,
                min(h.first_observation_at)::timestamptz AS first_observation,
                max(h.last_observation_at)::timestamptz AS last_observation,
-               max(h.latest_receipt_at)::timestamptz AS latest_receipt
+               max(h.latest_receipt_at) FILTER (
+                 WHERE h.receipt_source_generation IS NOT DISTINCT FROM h.source_generation
+                   AND h.certified_receipt_at IS NOT DISTINCT FROM h.latest_receipt_at
+                   AND h.observed_intervals+h.known_empty_intervals>0)::timestamptz AS latest_receipt,
+               coalesce(bool_or(h.observed_intervals+h.known_empty_intervals>0 AND
+                 (h.receipt_source_generation IS DISTINCT FROM h.source_generation
+                  OR h.certified_receipt_at IS DISTINCT FROM h.latest_receipt_at
+                  OR h.latest_receipt_at IS NULL)),false) AS receipt_unknown
         FROM public.almanac_sli_hourly_aggregates h
         WHERE h.sli_id=sqlc.arg(sli_id) AND h.measurement_revision=sqlc.arg(measurement_revision)
           AND h.hour_start>=i.full_start AND h.hour_start<i.full_end
@@ -62,7 +69,8 @@ WITH measurement AS MATERIALIZED (
            CASE WHEN c.outcome='complete_empty' THEN 1 ELSE 0 END::bigint AS known_empty,
            CASE WHEN c.outcome='observed' AND c.total_count=0 THEN 1 ELSE 0 END::bigint AS zero_traffic,
            CASE WHEN c.outcome='observed' THEN c.interval_start END AS first_observation,
-           CASE WHEN c.outcome='observed' THEN c.interval_end END AS last_observation,c.recorded_at AS latest_receipt
+           CASE WHEN c.outcome='observed' THEN c.interval_end END AS last_observation,
+           CASE WHEN c.outcome IN ('observed','complete_empty') THEN c.recorded_at END AS latest_receipt
     FROM anchors a CROSS JOIN measurement m
     -- Preserve a parameterized range scan for each anchor, not a year-wide join.
     CROSS JOIN LATERAL (
@@ -96,7 +104,7 @@ SELECT r.ordinal,(t.good+coalesce(a.good,0)+coalesce(b.good,0))::numeric::text A
        (t.zero_traffic+coalesce(a.zero_traffic,0)+coalesce(b.zero_traffic,0))::bigint AS zero_traffic,
        LEAST(t.first_observation,a.first_observation,b.first_observation)::timestamptz AS first_observation,
        GREATEST(t.last_observation,a.last_observation,b.last_observation)::timestamptz AS last_observation,
-       GREATEST(t.latest_receipt,a.latest_receipt,b.latest_receipt)::timestamptz AS latest_receipt,
+       CASE WHEN t.receipt_unknown THEN NULL ELSE GREATEST(t.latest_receipt,a.latest_receipt,b.latest_receipt) END::timestamptz AS latest_receipt,
        coalesce(t.prepared,false)::boolean AS prepared,coalesce(t.exhausted,false)::boolean AS exhausted
 FROM requested r LEFT JOIN totals t ON t.full_start=r.full_start AND t.full_end=r.full_end
 LEFT JOIN edge_totals a ON a.start_at=r.edge_a_start AND a.end_at=r.edge_a_end
