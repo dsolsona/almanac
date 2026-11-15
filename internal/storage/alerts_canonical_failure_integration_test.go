@@ -14,6 +14,14 @@ import (
 )
 
 func TestIntegrationAlertCanonicalTerminalFailure(t *testing.T) {
+	testAlertCanonicalTerminalFailure(t, false)
+}
+
+func TestIntegrationAlertMaintenanceTerminalFailure(t *testing.T) {
+	testAlertCanonicalTerminalFailure(t, true)
+}
+
+func testAlertCanonicalTerminalFailure(t *testing.T, maintenance bool) {
 	t.Parallel()
 	for _, test := range []struct {
 		name                             string
@@ -62,6 +70,13 @@ VALUES($1,1,1,$2,$2::timestamptz+interval '1 hour',$3,$4,$5,$5)`, f.sliID, f.at.
 			}
 			claim := f.claim(t, f.at)
 			prepared, err := f.runtime.readAlertEvidence(t.Context(), claim, time.Time{}, f.limits, f.clock)
+			if maintenance {
+				m := alertMaintenanceFixture(f)
+				if _, err := CreateMaintenance(t.Context(), f.f.databaseURL, m.input("future-terminal")); err != nil {
+					t.Fatal(err)
+				}
+				prepared, err = alertMaintenancePrepare(t, f, claim)
+			}
 			if test.pending {
 				if !errors.Is(err, ErrDerivedPending) || len(prepared.Input.Windows) != 0 || !prepared.Cutoff.Equal(f.at) {
 					t.Fatalf("unfinished preparation became evidence: %+v %v", prepared, err)

@@ -345,6 +345,65 @@ type AlmanacLoginAttempt struct {
 	State      string             `json:"state"`
 }
 
+type AlmanacMaintenanceBuild struct {
+	ID             pgtype.UUID        `json:"id"`
+	SloID          pgtype.UUID        `json:"slo_id"`
+	TargetRevision int64              `json:"target_revision"`
+	Phase          string             `json:"phase"`
+	RawCursor      int64              `json:"raw_cursor"`
+	MemberStart    pgtype.Timestamptz `json:"member_start"`
+	MemberID       pgtype.UUID        `json:"member_id"`
+	FrontierStart  pgtype.Timestamptz `json:"frontier_start"`
+	FrontierEnd    pgtype.Timestamptz `json:"frontier_end"`
+	CumulativeUs   int64              `json:"cumulative_us"`
+	LeaseToken     pgtype.UUID        `json:"lease_token"`
+	LeaseUntil     pgtype.Timestamptz `json:"lease_until"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	CompletedAt    pgtype.Timestamptz `json:"completed_at"`
+}
+
+type AlmanacMaintenanceChangeSet struct {
+	SloID        pgtype.UUID `json:"slo_id"`
+	Revision     int64       `json:"revision"`
+	ScopeOrdinal int64       `json:"scope_ordinal"`
+	RangeCount   int16       `json:"range_count"`
+}
+
+type AlmanacMaintenanceChangedInput struct {
+	SloID        pgtype.UUID                      `json:"slo_id"`
+	Revision     int64                            `json:"revision"`
+	Part         int16                            `json:"part"`
+	ScopeOrdinal int64                            `json:"scope_ordinal"`
+	InputRange   pgtype.Range[pgtype.Timestamptz] `json:"input_range"`
+	ScopeKey     pgtype.Range[pgtype.Int8]        `json:"scope_key"`
+	RevisionKey  pgtype.Range[pgtype.Int8]        `json:"revision_key"`
+}
+
+type AlmanacMaintenanceComparison struct {
+	ID          pgtype.UUID        `json:"id"`
+	FirstBuild  pgtype.UUID        `json:"first_build"`
+	SecondBuild pgtype.UUID        `json:"second_build"`
+	State       string             `json:"state"`
+	AfterStart  pgtype.Timestamptz `json:"after_start"`
+	Compared    int64              `json:"compared"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+}
+
+type AlmanacMaintenanceCompatibility struct {
+	SloID          pgtype.UUID `json:"slo_id"`
+	ScopeOrdinal   pgtype.Int8 `json:"scope_ordinal"`
+	IndexedThrough int64       `json:"indexed_through"`
+	Unavailable    bool        `json:"unavailable"`
+}
+
+type AlmanacMaintenanceCoverage struct {
+	BuildID      pgtype.UUID        `json:"build_id"`
+	StartsAt     pgtype.Timestamptz `json:"starts_at"`
+	EndsAt       pgtype.Timestamptz `json:"ends_at"`
+	CumulativeUs int64              `json:"cumulative_us"`
+}
+
 type AlmanacMaintenanceExclusion struct {
 	ID              pgtype.UUID        `json:"id"`
 	CurrentRevision int64              `json:"current_revision"`
@@ -372,6 +431,45 @@ type AlmanacMaintenanceExclusionScope struct {
 	ExclusionID pgtype.UUID `json:"exclusion_id"`
 	Revision    int64       `json:"revision"`
 	SloID       pgtype.UUID `json:"slo_id"`
+}
+
+type AlmanacMaintenanceInputGuard struct {
+	SloID   pgtype.UUID `json:"slo_id"`
+	Touched bool        `json:"touched"`
+}
+
+type AlmanacMaintenanceMember struct {
+	BuildID           pgtype.UUID        `json:"build_id"`
+	ExclusionID       pgtype.UUID        `json:"exclusion_id"`
+	ExclusionRevision int64              `json:"exclusion_revision"`
+	SloID             pgtype.UUID        `json:"slo_id"`
+	StartsAt          pgtype.Timestamptz `json:"starts_at"`
+	EndsAt            pgtype.Timestamptz `json:"ends_at"`
+}
+
+type AlmanacMaintenancePreparation struct {
+	ID                  pgtype.UUID        `json:"id"`
+	Kind                string             `json:"kind"`
+	SloID               pgtype.UUID        `json:"slo_id"`
+	TargetRevision      int64              `json:"target_revision"`
+	BuildID             pgtype.UUID        `json:"build_id"`
+	SecondBuild         pgtype.UUID        `json:"second_build"`
+	SliID               pgtype.UUID        `json:"sli_id"`
+	DefinitionRevision  pgtype.Int8        `json:"definition_revision"`
+	MeasurementRevision pgtype.Int8        `json:"measurement_revision"`
+	HourStart           pgtype.Timestamptz `json:"hour_start"`
+	SourceGeneration    pgtype.Int8        `json:"source_generation"`
+	Priority            string             `json:"priority"`
+	State               string             `json:"state"`
+	AvailableAt         pgtype.Timestamptz `json:"available_at"`
+	LastTick            pgtype.Timestamptz `json:"last_tick"`
+	LeaseToken          pgtype.UUID        `json:"lease_token"`
+	LeaseEpoch          int64              `json:"lease_epoch"`
+	LeaseUntil          pgtype.Timestamptz `json:"lease_until"`
+	Attempts            int32              `json:"attempts"`
+	Reason              string             `json:"reason"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
 }
 
 type AlmanacManagementReceipt struct {
@@ -707,6 +805,36 @@ type AlmanacSloHistoryBlock struct {
 	Kind              string             `json:"kind"`
 	BudgetSparkline   []byte             `json:"budget_sparkline"`
 	PayloadBytes      pgtype.Int8        `json:"payload_bytes"`
+}
+
+type AlmanacSloMaintenanceHour struct {
+	SloID                    pgtype.UUID        `json:"slo_id"`
+	DefinitionRevision       int64              `json:"definition_revision"`
+	MeasurementRevision      int64              `json:"measurement_revision"`
+	BuildID                  pgtype.UUID        `json:"build_id"`
+	HourStart                pgtype.Timestamptz `json:"hour_start"`
+	SourceGeneration         int64              `json:"source_generation"`
+	SliID                    pgtype.UUID        `json:"sli_id"`
+	ExclusionRevision        int64              `json:"exclusion_revision"`
+	PreparedAt               pgtype.Timestamptz `json:"prepared_at"`
+	EligibleGood             pgtype.Numeric     `json:"eligible_good"`
+	EligibleTotal            pgtype.Numeric     `json:"eligible_total"`
+	EligibleExpected         int64              `json:"eligible_expected"`
+	EligibleObserved         int64              `json:"eligible_observed"`
+	EligibleKnownEmpty       int64              `json:"eligible_known_empty"`
+	EligibleZeroTraffic      int64              `json:"eligible_zero_traffic"`
+	EligibleFirstObservation pgtype.Timestamptz `json:"eligible_first_observation"`
+	EligibleLastObservation  pgtype.Timestamptz `json:"eligible_last_observation"`
+	EligibleLatestReceipt    pgtype.Timestamptz `json:"eligible_latest_receipt"`
+	ExcludedGood             pgtype.Numeric     `json:"excluded_good"`
+	ExcludedTotal            pgtype.Numeric     `json:"excluded_total"`
+	ExcludedExpected         int64              `json:"excluded_expected"`
+	ExcludedObserved         int64              `json:"excluded_observed"`
+	ExcludedKnownEmpty       int64              `json:"excluded_known_empty"`
+	ExcludedZeroTraffic      int64              `json:"excluded_zero_traffic"`
+	ExcludedFirstObservation pgtype.Timestamptz `json:"excluded_first_observation"`
+	ExcludedLastObservation  pgtype.Timestamptz `json:"excluded_last_observation"`
+	ExcludedLatestReceipt    pgtype.Timestamptz `json:"excluded_latest_receipt"`
 }
 
 type AlmanacUser struct {

@@ -114,6 +114,7 @@ func TestIntegrationProjectionPerformanceUpgrade(t *testing.T) {
 	}
 	// No worker runs while the private fixture models a populated 0054 database.
 	s.runtime.Close()
+	dropMaintenanceCompilerFixture(t, s.conn)
 	if _, err := s.conn.Exec(t.Context(), `UPDATE public.almanac_slo_current_projections SET payload=payload #- '{current,performance,total}' WHERE slo_id=$1`, invalid); err != nil {
 		t.Fatal(err)
 	}

@@ -1,3 +1,38 @@
+Maintenance-aware alert implementation, 2026-11-15:
+[F4-T42](tasks/F4-T42.md) through [F4-T49](tasks/F4-T49.md) are assembled on
+merged main `c78d668`: immutable bounded compilation, indexed coverage and
+compatibility, exact scoped-hour populations, shared window evaluation, durable
+preparation and preserved evidence provenance. [F4-T50](tasks/F4-T50.md) connects
+these to the internal alert processor with explicit caller limits. Real PostgreSQL
+checks cover pending-to-ready processing, same-facts maintenance recovery of an
+acknowledged occurrence, restart at the original cutoff, stale-parent rollback
+and queue-write failure without losing its claim. Independent review corrected a
+reproduced multi-revision preparation deadlock before integration. Terminal
+preparation outcomes now become per-window unavailable evidence, preserving ready
+independent conditions without policy exhaustion or indefinite pending. Queue-wait
+and policy-rebind races also have real PostgreSQL regressions and corrections.
+
+This is one combined implementation increment; no PR per internal layer is open.
+Combined focused checks pass (134 integration groups/216 cases before the terminal
+correction; the final affected 63 groups/98 cases pass in 31.845s). All eleven normal
+container journeys pass in 5.7 minutes. Final independent read-only review finds no
+actionable defects. Publication/remote CI follows. Runtime registration, shared
+current/history calculator adoption and the 100/200-policy release gates remain
+outstanding. This is not production activation or capacity acceptance.
+
+Alert integration, 2026-11-15: the maintainer approved merging verified
+[PR #123](https://github.com/dsolsona/almanac/pull/123) (`1dbdf38`) and
+[PR #124](https://github.com/dsolsona/almanac/pull/124) (`a69dbb3`). All four
+application CI checks pass on both heads. GitHub rejected merge commits under
+its linear-history rule; the authorized native stack then merged by squash as
+`58a5bac` and `c78d668`, without rule bypass. Main is pulled. The assembled
+compiler, bounded shared coverage, rank adapter and scoped-hour primitives are
+under integrated review in [F4-T42](tasks/F4-T42.md), [F4-T43](tasks/F4-T43.md),
+[F4-T44](tasks/F4-T44.md) and [F4-T45](tasks/F4-T45.md). Compatibility proofs and
+window integration continue in [F4-T46](tasks/F4-T46.md) and
+[F4-T47](tasks/F4-T47.md). Production evaluation and the 100/200-policy gates
+remain open; there is no new PR per internal layer.
+
 Receipt reconciliation, 2026-11-15: [F4-T41](tasks/F4-T41.md) integrates nullable,
 certified canonical receipt metadata, safe legacy codecs and bounded low-priority
 repair without changing retained counts. Focused storage/race checks pass in

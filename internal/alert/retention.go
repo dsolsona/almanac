@@ -2,7 +2,6 @@ package alert
 
 import (
 	"errors"
-	"slices"
 	"strings"
 	"time"
 )
@@ -24,6 +23,10 @@ type ConditionCompactionSummary struct {
 	ShortDuration, LongDuration time.Duration
 	ShortQuality, LongQuality   Quality
 	ShortReason, LongReason     string
+	FirstShortMaintenance       *MaintenanceEvidence `json:",omitempty"`
+	LastShortMaintenance        *MaintenanceEvidence `json:",omitempty"`
+	FirstLongMaintenance        *MaintenanceEvidence `json:",omitempty"`
+	LastLongMaintenance         *MaintenanceEvidence `json:",omitempty"`
 }
 
 type CompactionRun struct {
@@ -74,7 +77,7 @@ func PlanCompaction(entries []RetentionEntry, before time.Time) ([]CompactionRun
 		evaluation := entry.Evaluation
 		if len(run.EvaluationIDs) > 0 {
 			previous := entries[index-1].Evaluation
-			if evaluation.PolicyID != previous.PolicyID || evaluation.Revision != previous.Revision || !entry.ScheduledAt.Equal(run.End) || !evaluation.Snapshot.Cutoff.After(run.Last.Cutoff) || evaluation.Snapshot.SourceGeneration < run.Last.SourceGeneration || !compactionMeaning(run.First, evaluation.Snapshot) || evaluation.Truth != run.Truth || !slices.Equal(summary, run.Conditions) {
+			if evaluation.PolicyID != previous.PolicyID || evaluation.Revision != previous.Revision || !entry.ScheduledAt.Equal(run.End) || !evaluation.Snapshot.Cutoff.After(run.Last.Cutoff) || evaluation.Snapshot.SourceGeneration < run.Last.SourceGeneration || !compactionMeaning(run.First, evaluation.Snapshot) || evaluation.Truth != run.Truth || !sameCompactionConditions(summary, run.Conditions) {
 				flush()
 			}
 		}
@@ -84,6 +87,10 @@ func PlanCompaction(entries []RetentionEntry, before time.Time) ([]CompactionRun
 		run.EvaluationIDs = append(run.EvaluationIDs, entry.ID)
 		run.End = entry.ScheduledAt.Add(time.Minute)
 		run.Last = evaluation.Snapshot
+		for i := range run.Conditions {
+			run.Conditions[i].LastShortMaintenance = cloneMaintenance(summary[i].LastShortMaintenance)
+			run.Conditions[i].LastLongMaintenance = cloneMaintenance(summary[i].LastLongMaintenance)
+		}
 	}
 	flush()
 	return runs, nil
@@ -126,6 +133,9 @@ func compactionSummary(entry RetentionEntry) ([]ConditionCompactionSummary, erro
 			return nil, ErrCompaction
 		}
 		for _, window := range []WindowEvidence{condition.Short, condition.Long} {
+			if ValidateMaintenanceEvidence(window) != nil {
+				return nil, ErrCompaction
+			}
 			duration := window.End.Sub(window.Start)
 			if !sameSnapshot(window.Snapshot, identity) || !window.End.Equal(identity.Cutoff) || window.Start.IsZero() || duration <= 0 || duration > 30*24*time.Hour || duration%time.Minute != 0 {
 				return nil, ErrCompaction
@@ -161,10 +171,33 @@ func compactionSummary(entry RetentionEntry) ([]ConditionCompactionSummary, erro
 		default:
 			return nil, ErrCompaction
 		}
-		summary = append(summary, ConditionCompactionSummary{ID: condition.ID, Threshold: condition.Threshold, Outcome: condition.Outcome, ShortDuration: short, LongDuration: long, ShortQuality: condition.Short.Quality, LongQuality: condition.Long.Quality, ShortReason: condition.Short.Reason, LongReason: condition.Long.Reason})
+		summary = append(summary, ConditionCompactionSummary{ID: condition.ID, Threshold: condition.Threshold, Outcome: condition.Outcome, ShortDuration: short, LongDuration: long, ShortQuality: condition.Short.Quality, LongQuality: condition.Long.Quality, ShortReason: condition.Short.Reason, LongReason: condition.Long.Reason, FirstShortMaintenance: cloneMaintenance(condition.Short.Maintenance), LastShortMaintenance: cloneMaintenance(condition.Short.Maintenance), FirstLongMaintenance: cloneMaintenance(condition.Long.Maintenance), LastLongMaintenance: cloneMaintenance(condition.Long.Maintenance)})
 	}
 	if evaluation.Truth != truth {
 		return nil, ErrCompaction
 	}
 	return summary, nil
+}
+
+// Endpoint provenance may change while outcomes stay equal. Do not infer any
+// provenance for omitted middle points, or prevent otherwise valid compaction.
+func sameCompactionConditions(a, b []ConditionCompactionSummary) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i, x := range a {
+		y := b[i]
+		x.FirstShortMaintenance = nil
+		x.LastShortMaintenance = nil
+		x.FirstLongMaintenance = nil
+		x.LastLongMaintenance = nil
+		y.FirstShortMaintenance = nil
+		y.LastShortMaintenance = nil
+		y.FirstLongMaintenance = nil
+		y.LastLongMaintenance = nil
+		if x != y {
+			return false
+		}
+	}
+	return true
 }

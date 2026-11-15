@@ -1,0 +1,194 @@
+//go:build integration
+
+package storage
+
+import (
+	"errors"
+	"testing"
+	"time"
+
+	"github.com/dsolsona/almanac/internal/alert"
+	"github.com/jackc/pgx/v5"
+)
+
+func alertMaintenanceFixture(f alertTestFixture) maintenanceFixture {
+	var verifier [32]byte
+	verifier[0] = 98
+	return maintenanceFixture{selfHealFixture: f.selfHealFixture, ids: []string{f.sloID}, proof: DatasourceProof{SessionVerifier: verifier}}
+}
+
+func alertMaintenancePrepare(t *testing.T, f alertTestFixture, claim alertClaim) (alertPreparedEvidence, error) {
+	t.Helper()
+	tx, err := f.conn.BeginTx(t.Context(), pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rollbackTransaction(tx)
+	return prepareMaintenanceAlertEvidence(t.Context(), tx, claim, claim.ScheduledAt, f.limits, maintenanceWindowLimits{MaxSourceHours: 100, MaxRawRows: 2000, MaxFragments: 2000}, f.now)
+}
+
+func TestIntegrationAlertMaintenanceFuture(t *testing.T) {
+	t.Parallel()
+	f := newAlertTestFixture(t)
+	f.policy(t, "Future maintenance")
+	f.drain(t, "future alert maintenance")
+	m := alertMaintenanceFixture(f)
+	if _, err := CreateMaintenance(t.Context(), f.f.databaseURL, m.input("future")); err != nil {
+		t.Fatal(err)
+	}
+	prepared, err := alertMaintenancePrepare(t, f, f.claim(t, f.at))
+	if err != nil || len(prepared.Input.Windows) != 2 || prepared.Input.Snapshot.ExclusionRevision != 1 {
+		t.Fatalf("compatible future exclusion blocked evidence: %v", err)
+	}
+	for _, w := range prepared.Input.Windows {
+		good, total := "4950", "5000"
+		if w.End.Sub(w.Start) == time.Hour {
+			good, total = "59400", "60000"
+		}
+		if w.Quality != alert.Complete || w.Good != good || w.Total != total {
+			t.Fatalf("future exclusion changed counts: %+v", w)
+		}
+		if w.Maintenance == nil || w.Maintenance.ComputedRevision != 0 || w.Maintenance.RequestedRevision != 1 || w.Maintenance.Proof == nil || w.Maintenance.Proof.Kind != "indexed_absence" {
+			t.Fatalf("actual computed identity/proof lost: %+v", w.Maintenance)
+		}
+	}
+}
+
+func TestIntegrationAlertMaintenancePreparation(t *testing.T) {
+	t.Parallel()
+	f := newAlertTestFixture(t)
+	f.policy(t, "Partial maintenance")
+	f.drain(t, "maintenance preparation")
+	m := alertMaintenanceFixture(f)
+	declaration := m.input("partial")
+	declaration.Start, declaration.End = f.at.Add(-4*time.Minute), f.at.Add(-2*time.Minute)
+	if _, err := CreateMaintenance(t.Context(), f.f.databaseURL, declaration); err != nil {
+		t.Fatal(err)
+	}
+	claim := f.claim(t, f.at)
+	missing, err := alertMaintenancePrepare(t, f, claim)
+	if !errors.Is(err, ErrDerivedPending) || len(missing.Input.Windows) != 0 || !missing.Cutoff.Equal(f.at) || len(missing.Preparation) != 1 || missing.Preparation[0].Kind != "mask" || missing.Preparation[0].RequestedRevision != 1 {
+		t.Fatalf("missing mask lost original work: preparations=%+v err=%v", missing.Preparation, err)
+	}
+	build := compilerCapture(t, m, nil)
+	compilerFinish(t, m, build.ID, 2)
+	missing, err = alertMaintenancePrepare(t, f, claim)
+	if !errors.Is(err, ErrDerivedPending) || len(missing.Input.Windows) != 0 || len(missing.Preparation) != 1 || missing.Preparation[0].Kind != "scoped_hour" {
+		t.Fatalf("missing partial hour lost exact target: preparations=%+v err=%v", missing.Preparation, err)
+	}
+	alertTestTx(t, f.conn, func(tx pgx.Tx) error {
+		_, err := prepareMaintenanceHour(t.Context(), tx, maintenanceHourInput{maintenanceHourKey: missing.Preparation[0].Hour, RetentionStart: f.historyStart, Deadline: f.now.Add(time.Minute)}, f.clock)
+		return err
+	})
+	ready, err := alertMaintenancePrepare(t, f, claim)
+	if err != nil || len(ready.Input.Windows) != 2 || len(ready.Preparation) != 0 {
+		t.Fatalf("prepared evidence remained unavailable: %v", err)
+	}
+	for _, w := range ready.Input.Windows {
+		good, total := "2970", "3000"
+		if w.End.Sub(w.Start) == time.Hour {
+			good, total = "57420", "58000"
+		}
+		if w.Good != good || w.Total != total || w.Quality != alert.Complete {
+			t.Fatalf("incorrect eligible population: %+v", w)
+		}
+	}
+}
+
+func TestIntegrationAlertMaintenanceRecovery(t *testing.T) {
+	t.Parallel()
+	s := newSelfHealFixture(t, "alert-maintenance-recovery", true)
+	final := s.at
+	s.at, s.now = final.Add(-time.Minute), final.Add(-time.Minute)
+	f := alertTestFixture{s, s.createSLO(t, "recovery"), alert.Limits{MaxConditions: 8, MaxDecimalBytes: 96}}
+	if _, err := execObservationFixture(t, f.conn, f.sliID, `UPDATE almanac_sli_observations SET good_count=CASE WHEN interval_start >= $2::timestamptz-interval '5 minutes' AND interval_start < $2::timestamptz-interval '1 minute' THEN 0 ELSE 1000 END,ingestion_generation=0 WHERE sli_id=$1`, f.sliID, final); err != nil {
+		t.Fatal(err)
+	}
+	f.policy(t, "Maintenance recovery")
+	f.drain(t, "recovery source")
+	first := f.claim(t, f.at)
+	before, err := alertMaintenancePrepare(t, f, first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fired, err := f.runtime.commitAlertEvaluation(t.Context(), first, before.Input, f.limits, func() time.Time { return f.at.Add(time.Second) })
+	if err != nil || fired.Occurrence == nil {
+		t.Fatalf("expected source breach: %+v %v", fired, err)
+	}
+	alertTestTx(t, f.conn, func(tx pgx.Tx) error {
+		_, err := acknowledgeAlertTx(t.Context(), tx, alertAcknowledgement{ID: fired.Occurrence.ID, ExpectedVersion: fired.Version, ActorID: f.f.userID, RequestID: "maintenance-ack", Now: func() time.Time { return f.at.Add(2 * time.Second) }})
+		return err
+	})
+	f.at, f.now = final, final
+	m := alertMaintenanceFixture(f)
+	declaration := m.input("exclude-failures")
+	declaration.Start, declaration.End = final.Add(-5*time.Minute), final.Add(-time.Minute)
+	if _, err := CreateMaintenance(t.Context(), f.f.databaseURL, declaration); err != nil {
+		t.Fatal(err)
+	}
+	build := compilerCapture(t, m, nil)
+	compilerFinish(t, m, build.ID, 2)
+	claim := f.claim(t, final)
+	prepared, err := alertMaintenancePrepare(t, f, claim)
+	if !errors.Is(err, ErrDerivedPending) || len(prepared.Preparation) != 1 || prepared.Preparation[0].Kind != "scoped_hour" {
+		t.Fatalf("expected exact source preparation: %+v %v", prepared.Preparation, err)
+	}
+	alertTestTx(t, f.conn, func(tx pgx.Tx) error {
+		_, err := prepareMaintenanceHour(t.Context(), tx, maintenanceHourInput{maintenanceHourKey: prepared.Preparation[0].Hour, RetentionStart: f.historyStart, Deadline: f.now.Add(time.Minute)}, f.clock)
+		return err
+	})
+	prepared, err = alertMaintenancePrepare(t, f, claim)
+	if err != nil || prepared.Input.RecoveryBaseline == nil || prepared.Input.RecoveryBaseline.ExclusionRevision != 0 || len(prepared.Calculations) != 2 {
+		t.Fatalf("same-facts baseline unavailable: %v", err)
+	}
+	ev, err := alert.Evaluate(prepared.Input, f.limits)
+	if err != nil || ev.Truth != alert.Clear || ev.RecoveryComparison == nil || ev.RecoveryComparison.Truth != alert.Breaching || ev.Snapshot.SourceGeneration != ev.RecoveryComparison.Snapshot.SourceGeneration {
+		t.Fatalf("wrong recovery attribution: %+v %v", ev, err)
+	}
+	for _, w := range prepared.Input.Windows {
+		want := "1000"
+		if w.End.Sub(w.Start) == time.Hour {
+			want = "56000"
+		}
+		if w.Good != want || w.Total != want {
+			t.Fatalf("wrong independent eligible counts: %+v", w)
+		}
+	}
+	resolved, err := f.runtime.commitAlertEvaluation(t.Context(), claim, prepared.Input, f.limits, func() time.Time { return final.Add(time.Second) })
+	if err != nil || resolved.Occurrence == nil || resolved.Occurrence.ID != fired.Occurrence.ID || resolved.Occurrence.State != alert.Resolved || resolved.Occurrence.AcknowledgedBy != f.f.userID {
+		t.Fatalf("lost shared lifecycle: %+v %v", resolved, err)
+	}
+	var cause string
+	err = f.conn.QueryRow(t.Context(), `SELECT cause FROM almanac_alert_transitions WHERE occurrence_id=$1 ORDER BY sequence DESC LIMIT 1`, fired.Occurrence.ID).Scan(&cause)
+	if err != nil || cause != string(alert.ResolvedAfterMaintenanceChange) {
+		t.Fatalf("wrong persisted recovery cause: %s %v", cause, err)
+	}
+}
+
+func TestIntegrationAlertMaintenanceFullyExcluded(t *testing.T) {
+	t.Parallel()
+	f := newAlertTestFixture(t)
+	f.policy(t, "Fully excluded")
+	f.drain(t, "excluded source")
+	m := alertMaintenanceFixture(f)
+	declaration := m.input("fully-excluded")
+	declaration.Start, declaration.End = f.at.Add(-time.Hour), f.at
+	if _, err := CreateMaintenance(t.Context(), f.f.databaseURL, declaration); err != nil {
+		t.Fatal(err)
+	}
+	build := compilerCapture(t, m, nil)
+	compilerFinish(t, m, build.ID, 2)
+	prepared, err := alertMaintenancePrepare(t, f, f.claim(t, f.at))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, w := range prepared.Input.Windows {
+		if w.Quality != alert.Excluded {
+			t.Fatalf("excluded window became usable: %+v", w)
+		}
+	}
+	ev, err := alert.Evaluate(prepared.Input, f.limits)
+	if err != nil || ev.Truth != alert.Indeterminate {
+		t.Fatalf("fully excluded population became truth: %+v %v", ev, err)
+	}
+}

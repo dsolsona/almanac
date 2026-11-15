@@ -65,6 +65,7 @@ type WindowEvidence struct {
 	Start, End          time.Time
 	Quality             Quality
 	Good, Total, Reason string
+	Maintenance         *MaintenanceEvidence `json:",omitempty"`
 }
 
 type Input struct {
@@ -189,6 +190,10 @@ func window(input Input, evidence WindowEvidence, limits Limits) (WindowEvidence
 	if !sameSnapshot(input.Snapshot, evidence.Snapshot) || !evidence.End.Equal(input.Snapshot.Cutoff) || !evidence.Start.Before(evidence.End) {
 		return invalid()
 	}
+	if err := ValidateMaintenanceEvidence(evidence); err != nil {
+		return invalid()
+	}
+	evidence.Maintenance = cloneMaintenance(evidence.Maintenance)
 	duration := evidence.End.Sub(evidence.Start)
 	if duration > 30*24*time.Hour || duration%time.Minute != 0 || duration%input.Objective.Cadence != 0 {
 		return invalid()

@@ -237,6 +237,10 @@ func sameAlertSeriesSnapshot(a, b alert.SnapshotIdentity) bool {
 // recomputing a historical condition outcome or policy truth. Counts and all
 // identity/window fields must still match the digest-protected raw evidence.
 func alertSeriesWindowMatches(objective alert.Objective, raw, saved alert.WindowEvidence) bool {
+	if alert.ValidateMaintenanceEvidence(raw) != nil || alert.ValidateMaintenanceEvidence(saved) != nil || !raw.Maintenance.Equal(saved.Maintenance) {
+		return false
+	}
+	raw.Maintenance, saved.Maintenance = nil, nil
 	if raw.Quality == alert.Complete {
 		if total, ok := new(big.Rat).SetString(raw.Total); ok && total.Sign() == 0 {
 			raw.Quality, raw.Reason = alert.ZeroTraffic, "zero_traffic"

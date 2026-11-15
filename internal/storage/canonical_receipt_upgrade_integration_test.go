@@ -12,7 +12,7 @@ import (
 
 func TestIntegrationCanonicalReceiptPopulatedUpgrade(t *testing.T) {
 	t.Parallel()
-	if latest := latestTestSchemaVersion(t); latest != 61 {
+	if latest := latestTestSchemaVersion(t); latest != 66 {
 		t.Fatalf("update exact0060 reconstruction: latest=%d", latest)
 	}
 	s := newSelfHealFixture(t, "receipt-upgrade", true)
@@ -21,13 +21,14 @@ func TestIntegrationCanonicalReceiptPopulatedUpgrade(t *testing.T) {
 	}
 	s.drain(t, "populated receipt upgrade")
 	s.runtime.Close()
+	dropMaintenanceCompilerFixture(t, s.conn)
 	// Recreate actual legacy metadata (including an all-failed non-null receipt).
 	if _, err := s.conn.Exec(t.Context(), `UPDATE almanac_sli_hourly_aggregates SET latest_receipt_at=$1`, s.at.Add(time.Minute)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.conn.Exec(t.Context(), `DROP INDEX almanac_canonical_receipt_repair_idx;
  ALTER TABLE almanac_sli_hourly_aggregates DROP COLUMN receipt_source_generation,DROP COLUMN certified_receipt_at,ALTER COLUMN latest_receipt_at SET NOT NULL;
- DELETE FROM almanac_schema_migrations WHERE version=61;`); err != nil {
+ DELETE FROM almanac_schema_migrations WHERE version>=61;`); err != nil {
 		t.Fatal(err)
 	}
 	snapshot := func() string {
@@ -44,7 +45,7 @@ func TestIntegrationCanonicalReceiptPopulatedUpgrade(t *testing.T) {
 	}
 	before := snapshot()
 	result, err := Upgrade(t.Context(), s.f.databaseURL)
-	if err != nil || result.Applied != 1 || result.DatabaseSchemaVersion != 61 {
+	if err != nil || result.Applied != 6 || result.DatabaseSchemaVersion != 66 {
 		t.Fatalf("upgrade %+v %v", result, err)
 	}
 	if snapshot() != before {

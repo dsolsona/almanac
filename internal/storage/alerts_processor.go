@@ -20,7 +20,22 @@ type alertProcessorOptions struct {
 	Lease, Horizon, PendingRetry, FailureRetry time.Duration
 	MaxAttempts                                int32
 	Limits                                     alert.Limits
+	Maintenance                                *alertMaintenanceOptions
 }
+
+// Nil retains the pre-adoption gate. These are explicit internal caller limits,
+// not a production configuration/default or runtime registration.
+type alertMaintenanceOptions struct {
+	Windows     maintenanceWindowLimits
+	Preparation maintenancePreparationLimits
+}
+
+type alertPreparationPublicationError struct{ cause error }
+
+func (*alertPreparationPublicationError) Error() string {
+	return "storage: alert preparation publication failed"
+}
+func (e *alertPreparationPublicationError) Unwrap() error { return e.cause }
 
 type alertProcessorResult struct {
 	Claimed, Evaluations, Repeated, Gaps, BeforeActivation, Pending, Failed, Stale int
@@ -28,6 +43,9 @@ type alertProcessorResult struct {
 
 func (options alertProcessorOptions) validate() bool {
 	if options.MaxPolicies <= 0 || options.MaxPolicies > 200 || options.Concurrency <= 0 || options.Concurrency > options.MaxPolicies || options.MaxAttempts <= 0 || options.Limits.MaxConditions <= 0 || options.Limits.MaxDecimalBytes <= 0 {
+		return false
+	}
+	if m := options.Maintenance; m != nil && (m.Windows.MaxSourceHours < 0 || m.Windows.MaxRawRows <= 0 || m.Windows.MaxFragments <= 0 || m.Preparation.MaxRequests < 1 || m.Preparation.MaxRequests > derivedWindowBatchLimit || m.Preparation.MaxSourceHours < 1 || m.Preparation.MaxSourceHours > 10000) {
 		return false
 	}
 	for _, duration := range []time.Duration{options.Lease, options.Horizon, options.PendingRetry, options.FailureRetry} {
@@ -103,6 +121,11 @@ func (r *Runtime) processAlertClaim(ctx context.Context, claim alertClaim, optio
 	if ctx.Err() != nil {
 		return "stale", err
 	} // expiry/restart recovers the claim
+	if _, publicationFailed := errors.AsType[*alertPreparationPublicationError](err); publicationFailed {
+		// Saving dependency work failed. Preserve the claim/pin for lease expiry;
+		// a generic deferral must not release it as though requests were saved.
+		return "pending", err
+	}
 	if errors.Is(err, ErrDerivedPending) || errors.Is(err, ErrAlertStale) || alertBackpressure(err) {
 		reason := "aggregate_pending"
 		if alertBackpressure(err) {
@@ -186,8 +209,21 @@ func (r *Runtime) evaluateAlertClaim(ctx context.Context, claim alertClaim, opti
 	if cursor.LastCutoff.Valid && cursor.LastCutoff.Time.Equal(cutoff) {
 		return "repeat", r.recordAlertRepeatedCutoff(ctx, claim, cutoff, clock)
 	}
-	prepared, err := r.readAlertEvidence(ctx, claim, cutoff, options.Limits, clock)
+	var maintenance *maintenanceWindowLimits
+	if options.Maintenance != nil {
+		maintenance = &options.Maintenance.Windows
+	}
+	prepared, err := r.readAlertEvidenceUsing(ctx, claim, cutoff, options.Limits, clock, maintenance)
 	if err != nil {
+		if options.Maintenance != nil && errors.Is(err, ErrDerivedPending) && len(prepared.Preparation) > 0 {
+			if pendingErr := r.deferAlertMaintenanceWork(ctx, claim, prepared, options.Maintenance.Preparation, clock, options.PendingRetry); pendingErr != nil {
+				if errors.Is(pendingErr, ErrAlertStale) {
+					return "", pendingErr
+				}
+				return "pending", &alertPreparationPublicationError{cause: pendingErr}
+			}
+			return "pending", nil
+		}
 		return "", err
 	}
 	_, err = r.commitAlertEvaluation(ctx, claim, prepared.Input, options.Limits, clock)

@@ -24,3 +24,59 @@ DROP FUNCTION IF EXISTS public.almanac_immutable_alert_history()`); err != nil {
 		t.Fatalf("remove alert journal fixture objects: %v", err)
 	}
 }
+
+// Remove the exact unwired 0062 suffix before replaying an older populated
+// schema. Do not use CASCADE to hide an unmodeled dependency.
+func dropMaintenanceCompilerFixture(t *testing.T, conn *pgx.Conn) {
+	t.Helper()
+	dropMaintenanceCompatibilityFixture(t, conn)
+	if _, err := conn.Exec(t.Context(), `DROP TABLE public.almanac_slo_maintenance_hours`); err != nil {
+		t.Fatalf("reconstruct pre-0063 scoped-hour schema: %v", err)
+	}
+	if _, err := conn.Exec(t.Context(), `
+ DROP TRIGGER almanac_maintenance_change_pin ON public.almanac_slo_exclusion_changes;
+ DROP TRIGGER almanac_maintenance_scope_pin ON public.almanac_maintenance_exclusion_scopes;
+ DROP INDEX public.almanac_maintenance_change_provenance_idx;
+ DROP TABLE public.almanac_maintenance_coverage,public.almanac_maintenance_members,
+ public.almanac_maintenance_builds,public.almanac_maintenance_input_guards;
+ DROP FUNCTION public.almanac_guard_maintenance_input_delete(),
+ public.almanac_guard_maintenance_compiler_stage(),public.almanac_guard_maintenance_build_identity();`); err != nil {
+		t.Fatalf("reconstruct pre-0062 compiler schema: %v", err)
+	}
+}
+
+// This private schema rewind removes the exact 0065 indexes and 0064 objects before replay.
+func dropMaintenanceCompatibilityFixture(t *testing.T, conn *pgx.Conn) {
+	t.Helper()
+	if _, err := conn.Exec(t.Context(), `DROP TABLE public.almanac_maintenance_preparation;
+DROP FUNCTION public.guard_maintenance_preparation_identity()`); err != nil {
+		t.Fatalf("reconstruct pre-0066 preparation schema: %v", err)
+	}
+	if _, err := conn.Exec(t.Context(), `DROP INDEX public.almanac_maintenance_complete_candidate_idx,public.almanac_maintenance_hour_candidate_idx`); err != nil {
+		t.Fatalf("reconstruct pre-0065 candidate indexes: %v", err)
+	}
+	if _, err := conn.Exec(t.Context(), `
+ DROP TRIGGER almanac_maintenance_change_analyze ON public.almanac_slo_exclusion_changes;
+ DROP TRIGGER almanac_maintenance_complete_coverage_pin ON public.almanac_maintenance_coverage;
+ DROP TRIGGER almanac_maintenance_comparison_identity ON public.almanac_maintenance_comparisons;
+ DROP TRIGGER almanac_maintenance_compatibility_identity ON public.almanac_maintenance_compatibility;
+ DROP FUNCTION public.almanac_analyze_inserted_maintenance_change(),public.almanac_analyze_maintenance_change(uuid,bigint),
+ public.almanac_guard_maintenance_comparison(),public.almanac_guard_complete_maintenance_coverage(),public.almanac_guard_maintenance_compatibility();
+ DROP TABLE public.almanac_maintenance_comparisons,public.almanac_maintenance_changed_inputs,
+ public.almanac_maintenance_change_sets,public.almanac_maintenance_compatibility;`); err != nil {
+		t.Fatalf("reconstruct pre-0064 compatibility schema: %v", err)
+	}
+}
+
+// Model history created before 0064: every ordinary authority/audit/grid guard
+// remains enabled, and only the newly added derived analyzer is absent.
+func setLegacyMaintenanceAnalysis(t *testing.T, conn *pgx.Conn, legacy bool) {
+	t.Helper()
+	statement := `ALTER TABLE public.almanac_slo_exclusion_changes ENABLE TRIGGER almanac_maintenance_change_analyze`
+	if legacy {
+		statement = `ALTER TABLE public.almanac_slo_exclusion_changes DISABLE TRIGGER almanac_maintenance_change_analyze`
+	}
+	if _, err := conn.Exec(t.Context(), statement); err != nil {
+		t.Fatal(err)
+	}
+}

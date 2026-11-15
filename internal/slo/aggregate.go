@@ -20,6 +20,10 @@ func EvaluateOperationalTotals(ctx context.Context, input WindowInput, totals Wi
 // EvaluateOperationalTotalsSummary retains exact arithmetic and quality while
 // deferring public decimal formatting until WithValues is called on selected results.
 func EvaluateOperationalTotalsSummary(ctx context.Context, input WindowInput, totals WindowTotals) (WindowResult, error) {
+	return evaluateOperationalTotalsSummary(ctx, input, totals, nil)
+}
+
+func evaluateOperationalTotalsSummary(ctx context.Context, input WindowInput, totals WindowTotals, coverage *WindowCoverage) (WindowResult, error) {
 	switch {
 	case len(input.Observations) != 0 || totals.Good == nil || totals.Total == nil:
 		return WindowResult{}, fmt.Errorf("%w: totals and observations both supplied or counts missing", ErrOperationalFacts)
@@ -33,10 +37,19 @@ func EvaluateOperationalTotalsSummary(ctx context.Context, input WindowInput, to
 		return WindowResult{}, fmt.Errorf("%w: observed intervals without observation bounds", ErrOperationalFacts)
 	case totals.Total.Sign() == 0 && totals.ZeroTraffic != totals.Observed:
 		return WindowResult{}, fmt.Errorf("%w: zero total but not every observed interval is zero traffic", ErrOperationalFacts)
+	case totals.Total.Sign() > 0 && totals.ZeroTraffic == totals.Observed:
+		return WindowResult{}, fmt.Errorf("%w: positive total without a traffic-bearing observed interval", ErrOperationalFacts)
 	}
 	sweep, err := NewWindowSweepContext(ctx, input)
 	if err != nil {
 		return WindowResult{}, err
+	}
+	if coverage != nil {
+		counts, err := validateWindowCoverage(input, totals, *coverage)
+		if err != nil {
+			return WindowResult{}, err
+		}
+		sweep.coverage = &counts
 	}
 	excluded := totals.Excluded
 	switch {

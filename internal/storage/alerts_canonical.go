@@ -17,14 +17,22 @@ import (
 var ErrAlertExclusionsPending = errors.Join(ErrDerivedPending, errors.New("storage: alert exclusion calculator not integrated"))
 
 type alertPreparedEvidence struct {
-	Cutoff time.Time
-	Input  alert.Input
+	Cutoff           time.Time
+	Input            alert.Input
+	Snapshot         alert.SnapshotIdentity
+	MaintenanceInput maintenanceEvaluationInput
+	Preparation      []maintenanceEvaluationPreparation
+	Calculations     []maintenanceEvaluatedMask
 }
 
 // readAlertEvidence is an unwired canonical adapter. Persist the first selected
 // cutoff before calculation, then retain that pin through every pending retry.
 // Returning a cutoff on error is preparation metadata, never partial evidence.
 func (r *Runtime) readAlertEvidence(ctx context.Context, claim alertClaim, cutoff time.Time, limits alert.Limits, clock func() time.Time) (alertPreparedEvidence, error) {
+	return r.readAlertEvidenceUsing(ctx, claim, cutoff, limits, clock, nil)
+}
+
+func (r *Runtime) readAlertEvidenceUsing(ctx context.Context, claim alertClaim, cutoff time.Time, limits alert.Limits, clock func() time.Time, maintenance *maintenanceWindowLimits) (alertPreparedEvidence, error) {
 	ctx, span := telemetry.Tracer().Start(ctx, "alert.evidence.read")
 	defer span.End()
 	if !validAlertClaim(claim) || clock == nil {
@@ -61,7 +69,12 @@ func (r *Runtime) readAlertEvidence(ctx context.Context, claim alertClaim, cutof
 	if _, err := tx.Exec(bounded, "SET LOCAL statement_timeout='5s'; SET LOCAL lock_timeout='250ms'; SET LOCAL jit=off"); err != nil {
 		return alertPreparedEvidence{}, err
 	}
-	prepared, err := prepareAlertEvidence(bounded, dbgen.New(tx), claim, cutoff, limits, now)
+	var prepared alertPreparedEvidence
+	if maintenance == nil {
+		prepared, err = prepareAlertEvidence(bounded, dbgen.New(tx), claim, cutoff, limits, now)
+	} else {
+		prepared, err = prepareMaintenanceAlertEvidence(bounded, tx, claim, cutoff, limits, *maintenance, now)
+	}
 	if err != nil {
 		return prepared, err
 	}
@@ -72,6 +85,20 @@ func (r *Runtime) readAlertEvidence(ctx context.Context, claim alertClaim, cutof
 }
 
 func prepareAlertEvidence(ctx context.Context, q *dbgen.Queries, claim alertClaim, cutoff time.Time, limits alert.Limits, now time.Time) (alertPreparedEvidence, error) {
+	return prepareAlertEvidenceSnapshot(ctx, q, nil, claim, cutoff, limits, maintenanceWindowLimits{}, now)
+}
+
+// prepareMaintenanceAlertEvidence remains an explicit unwired consumer. Its
+// caller supplies both one RR transaction and shared calculation admission.
+func prepareMaintenanceAlertEvidence(ctx context.Context, tx pgx.Tx, claim alertClaim, cutoff time.Time, limits alert.Limits, work maintenanceWindowLimits, now time.Time) (alertPreparedEvidence, error) {
+	if tx == nil {
+		return alertPreparedEvidence{}, ErrAlertInvalid
+	}
+	return prepareAlertEvidenceSnapshot(ctx, dbgen.New(tx), tx, claim, cutoff, limits, work, now)
+}
+
+func prepareAlertEvidenceSnapshot(ctx context.Context, q *dbgen.Queries, tx pgx.Tx, claim alertClaim, cutoff time.Time, limits alert.Limits, work maintenanceWindowLimits, now time.Time) (alertPreparedEvidence, error) {
+	cutoff = cutoff.UTC()
 	policyID, _ := canonicalUUID(claim.PolicyID)
 	binding, err := q.ReadAlertBinding(ctx, policyID)
 	if err != nil {
@@ -111,7 +138,7 @@ func prepareAlertEvidence(ctx context.Context, q *dbgen.Queries, claim alertClai
 	if err != nil {
 		return result, err
 	}
-	if exclusion != 0 {
+	if exclusion != 0 && tx == nil {
 		// The shared nonzero-mask calculator is a separate integration gate.
 		// Even a future or metadata-only declaration cannot be relabeled zero.
 		return result, ErrAlertExclusionsPending
@@ -136,6 +163,9 @@ func prepareAlertEvidence(ctx context.Context, q *dbgen.Queries, claim alertClai
 	windows := make([]slo.WindowInput, 0, len(durations))
 	for _, duration := range durations {
 		windows = append(windows, slo.WindowInput{At: cutoff, Now: now, Duration: duration, Cadence: cadence, FreshnessGrace: grace, Target: input.Objective.Target, ValidFrom: input.Objective.DefinitionValidFrom, SliValidFrom: input.Objective.MeasurementValidFrom, RetentionStart: input.Objective.RetentionStart})
+	}
+	if tx != nil {
+		return readMaintenanceAlertWindows(ctx, tx, claim, input, windows, limits, work)
 	}
 	input.Windows, err = readAlertCanonicalWindows(ctx, q, row.SliID, row.MeasurementRevision, windows, input.Snapshot, claim.ScheduledAt)
 	if err != nil {
