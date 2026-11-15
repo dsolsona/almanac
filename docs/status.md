@@ -1,3 +1,23 @@
+Alert management candidate, 2026-11-15: [F4-T38](tasks/F4-T38.md) and
+[F4-T39](tasks/F4-T39.md) connect protected API/CLI operations and the selected
+list/detail/compact form to persisted policies and immutable occurrence evidence.
+Global acknowledgement, exact rates, server filters/groups and command recovery
+have focused HTTP/PostgreSQL and browser evidence. The selected-route browser
+matrix passes 11 cases in 1.1 minutes; four readiness/touch cases pass in 11.4 s.
+The final real deployment passes onboarding and policy management in 6.7 s;
+executable CLI acceptance passes in 3.472 s. Remote CI/review remains pending. This is one complete management candidate, not a new PR per layer.
+Production evaluation is still gated by source/archive integration, shared
+maintenance-calculation adoption and the 100/200-policy release checks.
+
+Alert management continuation, 2026-11-15: the maintainer authorized merging
+[PR #121](https://github.com/dsolsona/almanac/pull/121) and continuing work. It is
+merged as `920b591`; main is pulled fast-forward. All four application CI gates
+pass on final `40c7680` (4m38s/5m06s/9m19s/9m25s), and CodeRabbit reports no new
+actionable comments with every thread resolved. [F4-T38](tasks/F4-T38.md) connects
+policy management and occurrence reads/actions to API/CLI. Public profile and
+architecture acceptance remain distinct from implementation authorization;
+calculator/maintenance/capacity gates still precede production activation.
+
 Foundation PR, 2026-11-14: ready [PR #121](https://github.com/dsolsona/almanac/pull/121)
 publishes the unwired foundations as one candidate. All four application CI gates
 pass on `6f89bdf`: unit 3m32s, browser 7m58s, end-to-end 9m09s and integration

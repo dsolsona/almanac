@@ -65,9 +65,9 @@ test('application shell preview keeps navigation available at each viewport and 
   const slos = navigation.getByRole('link', { name: 'SLOs' });
   await expect(slos).toHaveAttribute('href', '/slos');
   await expect(slos).not.toHaveAttribute('aria-disabled', 'true');
-  const plannedAlerts = navigation.locator('[aria-disabled="true"]').filter({ hasText: 'Alerts' });
-  await expect(plannedAlerts).toContainText('Not available yet');
-  await expect(plannedAlerts.getByRole('link')).toHaveCount(0);
+  const alerts = navigation.getByRole('link', { name: 'Alerts', exact: true });
+  await expect(alerts).toHaveAttribute('href', '/alerts');
+  await expect(alerts).not.toHaveAttribute('aria-disabled', 'true');
   await expect(navigation.getByRole('link', { name: 'SLIs' })).toHaveAttribute('href', '/slis');
   await expect(navigation.getByRole('link', { name: 'Datasources' })).toHaveAttribute('href', '/datasources');
   if (testInfo.project.name.startsWith('mobile')) {

@@ -4,6 +4,299 @@
  */
 
 export interface paths {
+    "/api/v1/alert-policies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List alert policy configuration, including policies without occurrences */
+        get: operations["listAlertPolicies"];
+        put?: never;
+        /**
+         * Create an alert policy (Editor or Administrator)
+         * @description Requires same-origin CSRF protection and a body no larger than 64 KiB. Replay reauthorizes the actor and returns the original committed result. Configuration does not itself fabricate an occurrence.
+         */
+        post: operations["createAlertPolicy"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/alert-policies/{policy_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                policy_id: components["parameters"]["AlertPolicyId"];
+            };
+            cookie?: never;
+        };
+        /** Read current alert policy configuration */
+        get: operations["getAlertPolicy"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update alert policy configuration (Editor or Administrator)
+         * @description Strict partial object, at most 64 KiB. Metadata changes preserve the evaluation revision; semantic changes supersede old work atomically. Omission preserves a field; null is not accepted.
+         */
+        patch: operations["updateAlertPolicy"];
+        trace?: never;
+    };
+    "/api/v1/alert-policies/{policy_id}/enable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                policy_id: components["parameters"]["AlertPolicyId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Enable with a fresh evaluation revision (Editor or Administrator)
+         * @description Requires same-origin CSRF protection and a body no larger than 64 KiB. Disabled time is not replayed.
+         */
+        post: operations["enableAlertPolicy"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/alert-policies/{policy_id}/disable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                policy_id: components["parameters"]["AlertPolicyId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Disable and terminate open occurrences (Editor or Administrator)
+         * @description Requires same-origin CSRF protection and a body no larger than 64 KiB. Disabling records administrative cancellation and preserves original evidence.
+         */
+        post: operations["disableAlertPolicy"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/alert-policies/{policy_id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                policy_id: components["parameters"]["AlertPolicyId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retry exhausted processing (Editor or Administrator)
+         * @description Requires same-origin CSRF protection and a body no larger than 64 KiB. Preserves the pending boundary and immutable history.
+         */
+        post: operations["retryAlertPolicy"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/alert-policies/{policy_id}/ranges": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                policy_id: components["parameters"]["AlertPolicyId"];
+            };
+            cookie?: never;
+        };
+        /** Read recorded ranges for an immutable policy revision */
+        get: operations["listAlertRanges"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/alerts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List alert occurrences with global filtered totals
+         * @description Stable filter-bound cursors over live pages, not a frozen cross-request snapshot. Group totals describe the complete filtered set for SLOs represented on the page.
+         */
+        get: operations["listAlerts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/alerts/{occurrence_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                occurrence_id: components["parameters"]["AlertOccurrenceId"];
+            };
+            cookie?: never;
+        };
+        /** Read lifecycle and original policy identity for an occurrence */
+        get: operations["getAlert"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/alerts/{occurrence_id}/acknowledge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                occurrence_id: components["parameters"]["AlertOccurrenceId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Acknowledge globally without expiry (Editor or Administrator)
+         * @description Requires same-origin CSRF protection. Body is an empty strict object, at most 64 KiB. Terminal occurrences conflict; acknowledgement never closes an occurrence. Replay preserves the original actor and timestamp.
+         */
+        post: operations["acknowledgeAlert"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/alerts/{occurrence_id}/evidence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                occurrence_id: components["parameters"]["AlertOccurrenceId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Read immutable firing or latest evaluation evidence
+         * @description Reads the retained decision, never recalculates it from current source facts.
+         */
+        get: operations["getAlertEvidence"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/alerts/{occurrence_id}/series": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                occurrence_id: components["parameters"]["AlertOccurrenceId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Read bounded immutable paired burn-window evaluations
+         * @description Actual retained evaluations on an inclusive effective-cutoff axis, at most 24 hours and 120 returned points. Defaults to two hours ending at the occurrence latest saved cutoff. Sampling preserves endpoints before exact extrema; omitted extrema and gaps are explicit. Scheduled ranges are provenance, never effective-cutoff exclusions. Oversized source history fails explicitly rather than truncating.
+         */
+        get: operations["getAlertSeries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/alerts/{occurrence_id}/transitions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                occurrence_id: components["parameters"]["AlertOccurrenceId"];
+            };
+            cookie?: never;
+        };
+        /** Read every retained lifecycle transition in sequence order */
+        get: operations["listAlertTransitions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/alert-processing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read processing health for one policy
+         * @description policy_id is required in this delivery. Aggregate processing is not provided. Processing health is separate from occurrence lifecycle and SLO truth.
+         */
+        get: operations["getAlertProcessing"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/alert-commands": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Reconcile a command for the current actor
+         * @description Committed results are replayable for 24 hours; retained expired identities cannot execute again. Unknown is not proof that the command failed. Never automatically replace an uncertain key.
+         */
+        get: operations["getAlertCommand"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/account": {
         parameters: {
             query?: never;
@@ -921,6 +1214,364 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @enum {string} */
+        AlertSeverity: "low" | "medium" | "high";
+        /** @enum {string} */
+        AlertLifecycle: "firing" | "acknowledged" | "resolved" | "disabled" | "superseded";
+        /** @description Exact positive decimal integer, no larger than signed int64 MaxInt64. */
+        AlertVersion: string;
+        /** @description Exact nonnegative decimal integer, no larger than signed int64 MaxInt64. */
+        AlertCounter: string;
+        /** @description Exact nonnegative decimal evidence, never a floating-point approximation. Absence is not zero. */
+        AlertExactDecimal: string;
+        /** @description Positive exact burn threshold; reachability is validated against the exact SLO target. */
+        AlertThreshold: string;
+        /**
+         * Format: int64
+         * @description Whole minutes expressed as integer seconds; must also align to source cadence. Short must not exceed long.
+         */
+        AlertWindowSeconds: number;
+        /**
+         * Format: date-time
+         * @description UTC timestamp with Z suffix.
+         */
+        AlertTimestamp: string;
+        AlertCondition: {
+            id: string;
+            short_window_seconds: components["schemas"]["AlertWindowSeconds"];
+            long_window_seconds: components["schemas"]["AlertWindowSeconds"];
+            threshold: components["schemas"]["AlertThreshold"];
+        };
+        /** @description Ordered conditions with unique stable IDs. AND within a condition, OR between conditions. */
+        AlertConditions: components["schemas"]["AlertCondition"][];
+        AlertPolicyWrite: {
+            /** @description Human-readable name, at most 1024 UTF-8 bytes, without control characters. */
+            name: string;
+            /** Format: uuid */
+            slo_id: string;
+            /** @default medium */
+            severity: components["schemas"]["AlertSeverity"];
+            /** @default true */
+            enabled: boolean;
+            /**
+             * @description Explicit confirmation when exact 30-day reference presets are used with another SLO period. This acknowledgement is not policy metadata.
+             * @default false
+             */
+            confirm_non_30_day_presets: boolean;
+            conditions: components["schemas"]["AlertConditions"];
+        };
+        AlertPolicyPatch: {
+            /**
+             * @description Explicit confirmation when exact 30-day reference presets are used with another SLO period. This acknowledgement is not policy metadata.
+             * @default false
+             */
+            confirm_non_30_day_presets: boolean;
+            /** @description At most 1024 UTF-8 bytes, without control characters. */
+            name?: string;
+            /** Format: uuid */
+            slo_id?: string;
+            severity?: components["schemas"]["AlertSeverity"];
+            conditions?: components["schemas"]["AlertConditions"];
+            reason?: string;
+        };
+        AlertPolicy: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** Format: uuid */
+            slo_id: string;
+            severity: components["schemas"]["AlertSeverity"];
+            enabled: boolean;
+            version: components["schemas"]["AlertVersion"];
+            evaluation_revision: components["schemas"]["AlertVersion"];
+            conditions: components["schemas"]["AlertConditions"];
+            created_at: components["schemas"]["AlertTimestamp"];
+            updated_at: components["schemas"]["AlertTimestamp"];
+        };
+        AlertPolicyCommand: {
+            reason?: string;
+        };
+        AlertAcknowledge: Record<string, never>;
+        /** @description Empty retry command. A human reason is not supported and is rejected rather than discarded. */
+        AlertRetry: Record<string, never>;
+        /** @enum {string} */
+        AlertOperation: "alert-policy.create" | "alert-policy.update" | "alert-policy.enable" | "alert-policy.disable" | "alert-policy.retry" | "alert.acknowledge";
+        /** @description The committed resource accompanies the operation. Policy commands may return both policy and an affected terminal alert; acknowledgement returns alert. */
+        AlertCommandResult: {
+            operation: components["schemas"]["AlertOperation"];
+            request_id: string;
+            policy?: components["schemas"]["AlertPolicy"];
+            alert?: components["schemas"]["AlertRecord"];
+        };
+        /** @description Result is present only for committed. Lookup is scoped to the authenticated actor. */
+        AlertCommandLookup: {
+            /** @enum {string} */
+            status: "committed" | "expired" | "unknown";
+            result?: components["schemas"]["AlertCommandResult"];
+        };
+        AlertSnapshotIdentity: {
+            /** Format: uuid */
+            slo_id: string;
+            slo_revision: components["schemas"]["AlertVersion"];
+            sli_revision: components["schemas"]["AlertVersion"];
+            source_generation: components["schemas"]["AlertCounter"];
+            exclusion_revision: components["schemas"]["AlertCounter"];
+            calculation_version: string;
+            cutoff: components["schemas"]["AlertTimestamp"];
+        };
+        AlertOriginalPolicy: {
+            name: string;
+            severity: components["schemas"]["AlertSeverity"];
+            slo_name: string;
+            service_name: string;
+            target: components["schemas"]["AlertExactDecimal"];
+            /** Format: int64 */
+            rolling_window_seconds: number;
+        };
+        AlertRecord: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            policy_id: string;
+            evaluation_revision: components["schemas"]["AlertVersion"];
+            state: components["schemas"]["AlertLifecycle"];
+            version: components["schemas"]["AlertVersion"];
+            sequence: components["schemas"]["AlertVersion"];
+            firing_snapshot: components["schemas"]["AlertSnapshotIdentity"];
+            latest_snapshot: components["schemas"]["AlertSnapshotIdentity"];
+            latest_breaching_snapshot: components["schemas"]["AlertSnapshotIdentity"];
+            opened_detected_at: components["schemas"]["AlertTimestamp"];
+            updated_at: components["schemas"]["AlertTimestamp"];
+            closed_at?: components["schemas"]["AlertTimestamp"];
+            /** Format: uuid */
+            acknowledged_by?: string;
+            acknowledged_at?: components["schemas"]["AlertTimestamp"];
+            original_policy: components["schemas"]["AlertOriginalPolicy"];
+        };
+        /** @enum {string} */
+        AlertQuality: "complete" | "missing" | "partial" | "stale" | "zero_traffic" | "warmup" | "expired" | "excluded" | "calculation_failed";
+        /** @enum {string} */
+        AlertTruth: "breaching" | "clear" | "indeterminate";
+        /** @enum {string} */
+        AlertConditionOutcome: "matching" | "not_matching" | "unavailable";
+        /** @description Requested full half-open window and immutable as-evaluated quality. Good and total are present exactly when saved paired numeric counts are available, including partial, stale or zero-traffic observations. Absent numeric counts are omitted, never replaced with zero. Numeric presence does not make the condition usable; quality and outcome remain authoritative. */
+        AlertWindowEvidence: {
+            snapshot: components["schemas"]["AlertSnapshotIdentity"];
+            start: components["schemas"]["AlertTimestamp"];
+            end: components["schemas"]["AlertTimestamp"];
+            quality: components["schemas"]["AlertQuality"];
+            good?: components["schemas"]["AlertExactDecimal"];
+            total?: components["schemas"]["AlertExactDecimal"];
+            /** @description Saved observed unsuccessful-event count */
+            bad?: components["schemas"]["AlertExactDecimal"];
+            /** @description Display fraction of observed unsuccessful events */
+            observed_error_rate?: components["schemas"]["AlertExactDecimal"];
+            /** @description Allowed error fraction from the immutable SLO target. */
+            allowed_error_rate?: components["schemas"]["AlertExactDecimal"];
+            /** @description Display burn from saved observed counts and target through the shared SLO calculator */
+            burn?: components["schemas"]["AlertExactDecimal"];
+            reason?: string;
+        };
+        AlertConditionResult: {
+            id: string;
+            threshold: components["schemas"]["AlertThreshold"];
+            outcome: components["schemas"]["AlertConditionOutcome"];
+            short: components["schemas"]["AlertWindowEvidence"];
+            long: components["schemas"]["AlertWindowEvidence"];
+        };
+        /** @description The last-breaching exclusion mask applied to the same present source facts; not a recalculation of the original firing decision. */
+        AlertRecoveryComparison: {
+            snapshot: components["schemas"]["AlertSnapshotIdentity"];
+            truth: components["schemas"]["AlertTruth"];
+            conditions: components["schemas"]["AlertConditionResult"][];
+        };
+        AlertEvaluation: {
+            /** Format: uuid */
+            policy_id: string;
+            evaluation_revision: components["schemas"]["AlertVersion"];
+            snapshot: components["schemas"]["AlertSnapshotIdentity"];
+            truth: components["schemas"]["AlertTruth"];
+            conditions: components["schemas"]["AlertConditionResult"][];
+            recovery_comparison?: components["schemas"]["AlertRecoveryComparison"];
+        };
+        AlertObjective: {
+            target: components["schemas"]["AlertExactDecimal"];
+            /** Format: int64 */
+            cadence_seconds: number;
+            definition_valid_from: components["schemas"]["AlertTimestamp"];
+            measurement_valid_from: components["schemas"]["AlertTimestamp"];
+            retention_start: components["schemas"]["AlertTimestamp"];
+        };
+        AlertEvidence: {
+            /** Format: uuid */
+            id: string;
+            scheduled_at: components["schemas"]["AlertTimestamp"];
+            committed_at: components["schemas"]["AlertTimestamp"];
+            evaluation: components["schemas"]["AlertEvaluation"];
+            objective: components["schemas"]["AlertObjective"];
+        };
+        AlertSeries: {
+            /** Format: uuid */
+            policy_id: string;
+            evaluation_revision: components["schemas"]["AlertVersion"];
+            objective: components["schemas"]["AlertObjective"];
+            condition: components["schemas"]["AlertCondition"];
+            start: components["schemas"]["AlertTimestamp"];
+            end: components["schemas"]["AlertTimestamp"];
+            points: components["schemas"]["AlertSeriesPoint"][];
+            gaps: components["schemas"]["AlertSeriesGap"][];
+            sampling: components["schemas"]["AlertSeriesSampling"];
+        };
+        AlertSeriesPoint: {
+            /** Format: uuid */
+            evaluation_id: string;
+            snapshot: components["schemas"]["AlertSnapshotIdentity"];
+            scheduled_at: components["schemas"]["AlertTimestamp"];
+            committed_at: components["schemas"]["AlertTimestamp"];
+            condition: components["schemas"]["AlertConditionResult"];
+        };
+        AlertSeriesGap: {
+            start: components["schemas"]["AlertTimestamp"];
+            end: components["schemas"]["AlertTimestamp"];
+            start_inclusive: boolean;
+            end_inclusive: boolean;
+            /** @enum {string} */
+            basis: "effective_cutoff" | "scheduled_boundary";
+            /** @enum {string} */
+            kind: "not_retained" | "unavailable" | "repeated_cutoff" | "unreconstructed_gap" | "administrative_cancellation" | "compacted_evaluations" | "outside_revision" | "pending";
+            reason: string;
+            /** Format: uuid */
+            range_id?: string;
+        };
+        AlertSeriesSampling: {
+            total: number;
+            returned: number;
+            reduced: boolean;
+            omitted_extrema: boolean;
+            /** @enum {string} */
+            method: "exact" | "extrema_priority";
+        };
+        AlertProcessing: {
+            /** Format: uuid */
+            policy_id: string;
+            revision: components["schemas"]["AlertVersion"];
+            schedulable: boolean;
+            exhausted: boolean;
+            next_boundary: components["schemas"]["AlertTimestamp"];
+            available_at: components["schemas"]["AlertTimestamp"];
+            pending_cutoff?: components["schemas"]["AlertTimestamp"];
+            last_cutoff?: components["schemas"]["AlertTimestamp"];
+            /** Format: uuid */
+            last_evaluation_id?: string;
+            waiting_reason?: string;
+            failure_attempts: number;
+            /** Format: int64 */
+            lag_seconds: number;
+        };
+        AlertPolicyCatalogItem: {
+            policy: components["schemas"]["AlertPolicy"];
+            slo_name: string;
+            /** Format: uuid */
+            open_occurrence_id?: string;
+            processing: components["schemas"]["AlertProcessing"];
+        };
+        AlertPolicyPage: {
+            items: components["schemas"]["AlertPolicyCatalogItem"][];
+            total: components["schemas"]["AlertCounter"];
+            next_cursor?: string;
+        };
+        AlertCatalogItem: {
+            alert: components["schemas"]["AlertRecord"];
+            policy_name: string;
+            severity: components["schemas"]["AlertSeverity"];
+            /** Format: uuid */
+            slo_id: string;
+            slo_name: string;
+            /** Format: uuid */
+            service_id: string;
+            service_name: string;
+            /** Format: uuid */
+            evaluation_id: string;
+            evaluation: components["schemas"]["AlertEvaluation"];
+            scheduled_at: components["schemas"]["AlertTimestamp"];
+            committed_at: components["schemas"]["AlertTimestamp"];
+            processing: components["schemas"]["AlertProcessing"];
+        };
+        AlertGroup: {
+            /** Format: uuid */
+            slo_id: string;
+            slo_name: string;
+            total: components["schemas"]["AlertCounter"];
+            /** @description Firing occurrences over the complete filtered group */
+            firing: components["schemas"]["AlertCounter"];
+        };
+        AlertPage: {
+            items: components["schemas"]["AlertCatalogItem"][];
+            groups: components["schemas"]["AlertGroup"][];
+            total: components["schemas"]["AlertCounter"];
+            next_cursor?: string;
+        };
+        AlertTransition: {
+            /** Format: uuid */
+            id: string;
+            from?: components["schemas"]["AlertLifecycle"];
+            to: components["schemas"]["AlertLifecycle"];
+            /** @enum {string} */
+            cause: "condition_matched" | "conditions_cleared" | "resolved_after_maintenance_change" | "evidence_updated" | "acknowledged" | "policy_disabled" | "definition_superseded" | "slo_archived";
+            /** Format: uuid */
+            actor_id?: string;
+            reason?: string;
+            /** Format: uuid */
+            evaluation_id?: string;
+            request_id: string;
+            sequence: components["schemas"]["AlertVersion"];
+            effective_at: components["schemas"]["AlertTimestamp"];
+            detected_at: components["schemas"]["AlertTimestamp"];
+        };
+        AlertTransitionPage: {
+            items: components["schemas"]["AlertTransition"][];
+            next_cursor?: string;
+        };
+        AlertConditionCompactionSummary: {
+            id: string;
+            threshold: components["schemas"]["AlertThreshold"];
+            outcome: components["schemas"]["AlertConditionOutcome"];
+            short_window_seconds: components["schemas"]["AlertWindowSeconds"];
+            long_window_seconds: components["schemas"]["AlertWindowSeconds"];
+            short_quality: components["schemas"]["AlertQuality"];
+            long_quality: components["schemas"]["AlertQuality"];
+            short_reason?: string;
+            long_reason?: string;
+        };
+        /** @description Unchanged condition outcomes and actual endpoint identities only. Compacted middle numeric evidence is unavailable. */
+        AlertCompactionSummary: {
+            first: components["schemas"]["AlertSnapshotIdentity"];
+            last: components["schemas"]["AlertSnapshotIdentity"];
+            truth: components["schemas"]["AlertTruth"];
+            conditions: components["schemas"]["AlertConditionCompactionSummary"][];
+        };
+        AlertRange: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            kind: "repeated_cutoff" | "unreconstructed_gap" | "administrative_cancellation" | "compacted_evaluations";
+            reason: string;
+            /** Format: uuid */
+            actor_id?: string;
+            request_id?: string;
+            /** Format: uuid */
+            evaluation_id?: string;
+            start: components["schemas"]["AlertTimestamp"];
+            end: components["schemas"]["AlertTimestamp"];
+            recorded_at: components["schemas"]["AlertTimestamp"];
+            /** Format: int64 */
+            cadence_seconds: number;
+            summary?: components["schemas"]["AlertCompactionSummary"];
+        };
+        AlertRangePage: {
+            items: components["schemas"]["AlertRange"][];
+            next_cursor?: string;
+        };
         /** @enum {string} */
         UserRole: "viewer" | "editor" | "administrator";
         ManagedUser: {
@@ -2187,6 +2838,15 @@ export interface components {
         };
     };
     responses: {
+        /** @description Safe alert request failure, including field validation, session denial, version or command conflict, expired receipt and processing unavailability. No credentials or raw internal errors are returned. */
+        AlertProblem: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
         /** @description Safe user request failure, with code invalid_request, unauthorized, forbidden, not_found, conflict, email_in_use, last_administrator, link_unavailable, password_policy, rate_limited or user_unavailable. No proof or password is returned. */
         UserProblem: {
             headers: {
@@ -2228,6 +2888,10 @@ export interface components {
         };
     };
     parameters: {
+        AlertPolicyId: string;
+        AlertOccurrenceId: string;
+        AlertLimit: number;
+        AlertCursor: string;
         UserId: string;
         /** @description Exact strong ETag of the target user returned by GET, in the form '"user-UUID-version"'. */
         UserIfMatch: string;
@@ -2236,7 +2900,7 @@ export interface components {
         SliId: string;
         ServiceId: string;
         SloId: string;
-        /** @description Strong tag formatted as "service:<id>:<version>" or "slo:<id>:<version>" for the resource. */
+        /** @description Strong tag formatted as "service:<id>:<version>", "slo:<id>:<version>", "alert-policy:<id>:<version>" or "alert-occurrence:<id>:<version>" for the resource. Alert commands use configuration or occurrence state versions respectively; weak tags, lists and wildcards are rejected. */
         ResourceIfMatch: string;
         DiagnosticId: string;
         /** @description Strong tag exactly formatted as "datasource:<canonical-uuid>:<positive-decimal-version>". */
@@ -2256,6 +2920,465 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    listAlertPolicies: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["AlertLimit"];
+                cursor?: components["parameters"]["AlertCursor"];
+                slo_id?: string;
+                severity?: components["schemas"]["AlertSeverity"];
+                enabled?: boolean;
+                q?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Live filter-bound policy page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertPolicyPage"];
+                };
+            };
+            default: components["responses"]["AlertProblem"];
+        };
+    };
+    createAlertPolicy: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlertPolicyWrite"];
+            };
+        };
+        responses: {
+            /** @description Policy created */
+            201: {
+                headers: {
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertCommandResult"];
+                };
+            };
+            default: components["responses"]["AlertProblem"];
+        };
+    };
+    getAlertPolicy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                policy_id: components["parameters"]["AlertPolicyId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Policy configuration */
+            200: {
+                headers: {
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertPolicy"];
+                };
+            };
+            default: components["responses"]["AlertProblem"];
+        };
+    };
+    updateAlertPolicy: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description Strong tag formatted as "service:<id>:<version>", "slo:<id>:<version>", "alert-policy:<id>:<version>" or "alert-occurrence:<id>:<version>" for the resource. Alert commands use configuration or occurrence state versions respectively; weak tags, lists and wildcards are rejected. */
+                "If-Match": components["parameters"]["ResourceIfMatch"];
+            };
+            path: {
+                policy_id: components["parameters"]["AlertPolicyId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlertPolicyPatch"];
+            };
+        };
+        responses: {
+            /** @description Committed update */
+            200: {
+                headers: {
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertCommandResult"];
+                };
+            };
+            default: components["responses"]["AlertProblem"];
+        };
+    };
+    enableAlertPolicy: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description Strong tag formatted as "service:<id>:<version>", "slo:<id>:<version>", "alert-policy:<id>:<version>" or "alert-occurrence:<id>:<version>" for the resource. Alert commands use configuration or occurrence state versions respectively; weak tags, lists and wildcards are rejected. */
+                "If-Match": components["parameters"]["ResourceIfMatch"];
+            };
+            path: {
+                policy_id: components["parameters"]["AlertPolicyId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlertPolicyCommand"];
+            };
+        };
+        responses: {
+            /** @description Committed enable */
+            200: {
+                headers: {
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertCommandResult"];
+                };
+            };
+            default: components["responses"]["AlertProblem"];
+        };
+    };
+    disableAlertPolicy: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description Strong tag formatted as "service:<id>:<version>", "slo:<id>:<version>", "alert-policy:<id>:<version>" or "alert-occurrence:<id>:<version>" for the resource. Alert commands use configuration or occurrence state versions respectively; weak tags, lists and wildcards are rejected. */
+                "If-Match": components["parameters"]["ResourceIfMatch"];
+            };
+            path: {
+                policy_id: components["parameters"]["AlertPolicyId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlertPolicyCommand"];
+            };
+        };
+        responses: {
+            /** @description Committed disable */
+            200: {
+                headers: {
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertCommandResult"];
+                };
+            };
+            default: components["responses"]["AlertProblem"];
+        };
+    };
+    retryAlertPolicy: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description Strong tag formatted as "service:<id>:<version>", "slo:<id>:<version>", "alert-policy:<id>:<version>" or "alert-occurrence:<id>:<version>" for the resource. Alert commands use configuration or occurrence state versions respectively; weak tags, lists and wildcards are rejected. */
+                "If-Match": components["parameters"]["ResourceIfMatch"];
+            };
+            path: {
+                policy_id: components["parameters"]["AlertPolicyId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlertRetry"];
+            };
+        };
+        responses: {
+            /** @description Committed retry */
+            200: {
+                headers: {
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertCommandResult"];
+                };
+            };
+            default: components["responses"]["AlertProblem"];
+        };
+    };
+    listAlertRanges: {
+        parameters: {
+            query: {
+                revision: components["schemas"]["AlertVersion"];
+                limit?: components["parameters"]["AlertLimit"];
+                cursor?: components["parameters"]["AlertCursor"];
+            };
+            header?: never;
+            path: {
+                policy_id: components["parameters"]["AlertPolicyId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Revision-bound history ranges */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertRangePage"];
+                };
+            };
+            default: components["responses"]["AlertProblem"];
+        };
+    };
+    listAlerts: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["AlertLimit"];
+                cursor?: components["parameters"]["AlertCursor"];
+                scope?: "active" | "history" | "all";
+                state?: components["schemas"]["AlertLifecycle"][];
+                severity?: components["schemas"]["AlertSeverity"][];
+                slo_id?: string;
+                service_id?: string;
+                q?: string;
+                group_by?: "none" | "slo";
+                sort?: "newest" | "severity";
+                /** @description Latest committed breach or indeterminate recovery evidence */
+                evidence?: "matching" | "unavailable" | "waiting";
+                /** @description Effective duration at least this many seconds; open occurrences use the request clock */
+                minimum_duration_seconds?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Occurrence page with exact stored evidence */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertPage"];
+                };
+            };
+            default: components["responses"]["AlertProblem"];
+        };
+    };
+    getAlert: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                occurrence_id: components["parameters"]["AlertOccurrenceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Stored occurrence */
+            200: {
+                headers: {
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertRecord"];
+                };
+            };
+            default: components["responses"]["AlertProblem"];
+        };
+    };
+    acknowledgeAlert: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description Strong tag formatted as "service:<id>:<version>", "slo:<id>:<version>", "alert-policy:<id>:<version>" or "alert-occurrence:<id>:<version>" for the resource. Alert commands use configuration or occurrence state versions respectively; weak tags, lists and wildcards are rejected. */
+                "If-Match": components["parameters"]["ResourceIfMatch"];
+            };
+            path: {
+                occurrence_id: components["parameters"]["AlertOccurrenceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlertAcknowledge"];
+            };
+        };
+        responses: {
+            /** @description Committed acknowledgement */
+            200: {
+                headers: {
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertCommandResult"];
+                };
+            };
+            default: components["responses"]["AlertProblem"];
+        };
+    };
+    getAlertEvidence: {
+        parameters: {
+            query?: {
+                selection?: "firing" | "latest";
+            };
+            header?: never;
+            path: {
+                occurrence_id: components["parameters"]["AlertOccurrenceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description As-evaluated evidence */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertEvidence"];
+                };
+            };
+            default: components["responses"]["AlertProblem"];
+        };
+    };
+    getAlertSeries: {
+        parameters: {
+            query: {
+                condition_id: string;
+                start?: string;
+                end?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                occurrence_id: components["parameters"]["AlertOccurrenceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Immutable paired evidence and honest gaps */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertSeries"];
+                };
+            };
+            default: components["responses"]["AlertProblem"];
+        };
+    };
+    listAlertTransitions: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["AlertLimit"];
+                cursor?: components["parameters"]["AlertCursor"];
+            };
+            header?: never;
+            path: {
+                occurrence_id: components["parameters"]["AlertOccurrenceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Transition page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertTransitionPage"];
+                };
+            };
+            default: components["responses"]["AlertProblem"];
+        };
+    };
+    getAlertProcessing: {
+        parameters: {
+            query: {
+                policy_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Policy processing state */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertProcessing"];
+                };
+            };
+            default: components["responses"]["AlertProblem"];
+        };
+    };
+    getAlertCommand: {
+        parameters: {
+            query: {
+                operation: components["schemas"]["AlertOperation"];
+                idempotency_key: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Actor-scoped command result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertCommandLookup"];
+                };
+            };
+            default: components["responses"]["AlertProblem"];
+        };
+    };
     getAccount: {
         parameters: {
             query?: never;
@@ -4180,7 +5303,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Strong tag formatted as "service:<id>:<version>" or "slo:<id>:<version>" for the resource. */
+                /** @description Strong tag formatted as "service:<id>:<version>", "slo:<id>:<version>", "alert-policy:<id>:<version>" or "alert-occurrence:<id>:<version>" for the resource. Alert commands use configuration or occurrence state versions respectively; weak tags, lists and wildcards are rejected. */
                 "If-Match": components["parameters"]["ResourceIfMatch"];
             };
             path: {
@@ -4212,7 +5335,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Strong tag formatted as "service:<id>:<version>" or "slo:<id>:<version>" for the resource. */
+                /** @description Strong tag formatted as "service:<id>:<version>", "slo:<id>:<version>", "alert-policy:<id>:<version>" or "alert-occurrence:<id>:<version>" for the resource. Alert commands use configuration or occurrence state versions respectively; weak tags, lists and wildcards are rejected. */
                 "If-Match": components["parameters"]["ResourceIfMatch"];
             };
             path: {
@@ -4788,7 +5911,7 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
-                /** @description Strong tag formatted as "service:<id>:<version>" or "slo:<id>:<version>" for the resource. */
+                /** @description Strong tag formatted as "service:<id>:<version>", "slo:<id>:<version>", "alert-policy:<id>:<version>" or "alert-occurrence:<id>:<version>" for the resource. Alert commands use configuration or occurrence state versions respectively; weak tags, lists and wildcards are rejected. */
                 "If-Match": components["parameters"]["ResourceIfMatch"];
             };
             path: {

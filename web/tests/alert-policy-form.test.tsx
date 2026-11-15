@@ -129,3 +129,29 @@ describe('approved alert policy form', () => {
     expect(screen.getByLabelText('Alert policy name')).toHaveFocus();
   });
 });
+
+it('opens a saved policy with its exact defaults and medium severity for new policies', async () => {
+  const save = vi.fn(), user = userEvent.setup();
+  const draft = { name:'Saved policy', sloId:'checkout', severity:'low' as const, conditions:[{id:'preserved',shortSeconds:600,longSeconds:7200,threshold:'8'}],confirmNonThirtyDayPresets:false };
+  render(<AlertPolicyForm slos={slos} initialDraft={draft} onSave={save} onCancel={()=>undefined} />);
+  expect(screen.getByLabelText('Alert policy name')).toHaveValue('Saved policy');
+  expect(screen.getByRole('radio',{name:'Low'})).toHaveAttribute('aria-checked','true');
+  await user.click(screen.getByRole('button',{name:'Save changes'}));
+  expect(save).toHaveBeenCalledWith(draft);
+});
+
+it('does not reconfirm unchanged non-30-day conditions for a metadata edit',async()=>{
+ const save=vi.fn(),user=userEvent.setup(),initialDraft={name:'Seven day policy',sloId:'checkout',severity:'medium' as const,conditions:[{id:'fast',threshold:'14.4',shortSeconds:300,longSeconds:3600}],confirmNonThirtyDayPresets:false};
+ render(<AlertPolicyForm slos={[{...slos[0]!,windowSeconds:604800}]} initialDraft={initialDraft} onSave={save} onCancel={()=>undefined}/>);
+ await user.type(screen.getByLabelText('Alert policy name'),' renamed');
+ expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+ await user.click(screen.getByRole('button',{name:'Save changes'}));expect(save).toHaveBeenCalledWith({...initialDraft,name:'Seven day policy renamed'});
+});
+it('retains a selected SLO when remote search results change',async()=>{
+ const save=vi.fn(),user=userEvent.setup();
+ const {rerender}=render(<AlertPolicyForm slos={slos} onSave={save} onCancel={()=>undefined}/>);
+ await fillIdentity(user);
+ rerender(<AlertPolicyForm slos={[]} onSave={save} onCancel={()=>undefined}/>);
+ expect(screen.getByText('Checkout availability')).toBeVisible();
+ await user.click(screen.getByRole('button',{name:'Create alert policy'}));expect(save).toHaveBeenCalledOnce();
+});

@@ -14,14 +14,16 @@ import (
 )
 
 var (
-	ErrAlertKeyConflict    = errors.New("storage: alert command key body conflict")
-	ErrAlertReceiptExpired = errors.New("storage: alert command result expired")
-	ErrAlertNotFound       = errors.New("storage: alert resource not found")
-	ErrAlertNameConflict   = errors.New("storage: alert policy name already exists")
+	ErrAlertKeyConflict        = errors.New("storage: alert command key body conflict")
+	ErrAlertReceiptExpired     = errors.New("storage: alert command result expired")
+	ErrAlertNotFound           = errors.New("storage: alert resource not found")
+	ErrAlertNameConflict       = errors.New("storage: alert policy name already exists")
+	ErrAlertPresetConfirmation = errors.New("storage: confirm standard burn preset for a non-30-day SLO")
 )
 
-// These storage inputs remain unwired. Public activation/admission/replay
-// defaults are not chosen by the management foundation.
+// Admission and receipt lifetimes remain explicit caller settings. Management
+// samples authoritative command time after resource locks; internal callers may
+// still supply explicit activation/cancellation boundaries.
 type AlertCommandInput struct {
 	Runtime                   *Runtime
 	Proof                     DatasourceProof
@@ -32,10 +34,33 @@ type AlertCommandInput struct {
 
 type CreateAlertPolicyInput struct {
 	AlertCommandInput
-	Name, SLOID, Severity string
-	Conditions            []alert.Condition
-	FirstBoundary         time.Time
-	Limits                alert.Limits
+	Name, SLOID, Severity  string
+	Conditions             []alert.Condition
+	FirstBoundary          time.Time
+	Limits                 alert.Limits
+	Enabled                *bool
+	ConfirmNon30DayPresets bool
+}
+
+type UpdateAlertPolicyInput struct {
+	AlertCommandInput
+	ID                     string
+	ExpectedVersion        int64
+	Name, Severity, SLOID  *string
+	Conditions             *[]alert.Condition
+	Reason                 string
+	FirstBoundary          time.Time
+	Limits                 alert.Limits
+	ConfirmNon30DayPresets bool
+}
+
+type EnableAlertPolicyInput struct {
+	AlertCommandInput
+	ID              string
+	ExpectedVersion int64
+	Reason          string
+	FirstBoundary   time.Time
+	Limits          alert.Limits
 }
 
 type AcknowledgeAlertInput struct {
@@ -85,7 +110,7 @@ type AlertCommandResult struct {
 
 func validAlertOperation(operation string) bool {
 	switch operation {
-	case "alert-policy.create", "alert.acknowledge", "alert-policy.disable", "alert-policy.retry":
+	case "alert-policy.create", "alert.acknowledge", "alert-policy.disable", "alert-policy.retry", "alert-policy.update", "alert-policy.enable":
 		return true
 	default:
 		return false
@@ -168,13 +193,15 @@ func executeAlertCommand(ctx context.Context, databaseURL string, input AlertCom
 
 func CreateAlertPolicy(ctx context.Context, databaseURL string, input CreateAlertPolicyInput) (AlertCommandResult, error) {
 	request := struct {
-		Name, SLOID, Severity string
-		Conditions            []alert.Condition
-		FirstBoundary         time.Time
-	}{input.Name, input.SLOID, input.Severity, input.Conditions, input.FirstBoundary}
+		Name, SLOID, Severity  string
+		Conditions             []alert.Condition
+		FirstBoundary          time.Time
+		Enabled                *bool
+		ConfirmNon30DayPresets bool
+	}{input.Name, input.SLOID, input.Severity, input.Conditions, input.FirstBoundary, input.Enabled, input.ConfirmNon30DayPresets}
 	return executeAlertCommand(ctx, databaseURL, input.AlertCommandInput, "alert-policy.create", request, func(ctx context.Context, tx pgx.Tx, q *dbgen.Queries, actor string) (AlertCommandResult, error) {
 		id := newAlertID().String()
-		if err := registerAlertPolicy(ctx, tx, alertRegistration{Policy: alert.PolicyRevision{ID: id, Revision: 1, Conditions: input.Conditions}, SLOID: input.SLOID, Name: input.Name, Severity: input.Severity, FirstBoundary: input.FirstBoundary, Now: normalizedAgentNow(input.Now), Limits: input.Limits}); err != nil {
+		if err := registerAlertPolicy(ctx, tx, alertRegistration{Policy: alert.PolicyRevision{ID: id, Revision: 1, Conditions: input.Conditions}, SLOID: input.SLOID, Name: input.Name, Severity: input.Severity, FirstBoundary: input.FirstBoundary, Clock: input.Now, Limits: input.Limits, Enabled: input.Enabled, PresetConfirmation: &input.ConfirmNon30DayPresets}); err != nil {
 			return AlertCommandResult{}, err
 		}
 		pgID, _ := canonicalUUID(id)

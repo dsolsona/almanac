@@ -1,5 +1,11 @@
 # Implementation tasks
 
+[F4-T39](F4-T39.md) connects the selected alert UI to persisted API operations,
+server-filtered evidence/groups and immutable chart data.
+
+[F4-T38](F4-T38.md) connects merged alert management storage to authenticated
+API/CLI operations while production calculation/activation gates remain open.
+
 [F4-T37](F4-T37.md) specifies the bounded shared maintenance-population candidate;
 adoption and numerical resource limits remain proposed.
 

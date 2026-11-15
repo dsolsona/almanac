@@ -1,10 +1,10 @@
 -- Internal backend journal; not a public or remote-worker API.
 -- name: InsertAlertPolicy :exec
-INSERT INTO public.almanac_alert_policies(id,name,slo_id,evaluation_revision,severity,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6,$6);
+INSERT INTO public.almanac_alert_policies(id,name,slo_id,evaluation_revision,severity,created_at,updated_at,enabled) VALUES($1,$2,$3,$4,$5,$6,$6,$7);
 -- name: InsertAlertPolicyRevision :exec
 INSERT INTO public.almanac_alert_policy_revisions(policy_id,revision,slo_id,definition_revision,calculation_version,conditions,created_at) VALUES($1,$2,$3,$4,$5,$6,$7);
 -- name: InsertAlertCursor :exec
-INSERT INTO public.almanac_alert_cursors(policy_id,revision,origin_at,next_scheduled_at,available_at) VALUES($1,$2,$3,$3,$3);
+INSERT INTO public.almanac_alert_cursors(policy_id,revision,origin_at,next_scheduled_at,available_at,schedulable) VALUES($1,$2,$3,$3,$3,$4);
 -- name: ClaimAlertCursors :many
 WITH candidates AS (
  SELECT c.policy_id,c.revision FROM public.almanac_alert_cursors c JOIN public.almanac_alert_policies p ON p.id=c.policy_id
@@ -58,5 +58,8 @@ INSERT INTO public.almanac_alert_ranges(id,policy_id,revision,starts_at,ends_at,
 -- name: DisableAlertPolicyIdentity :execrows
 UPDATE public.almanac_alert_policies SET enabled=false,version=version+1,updated_at=$3 WHERE id=$1 AND version=$2 AND enabled;
 -- name: CancelAlertCursor :execrows
-UPDATE public.almanac_alert_cursors SET schedulable=false,next_scheduled_at=$3,available_at=$3,version=version+1,epoch=epoch+1,pending_cutoff=NULL,claim_token=NULL,claim_until=NULL,open_occurrence_id=NULL,waiting_reason='policy_disabled'
+UPDATE public.almanac_alert_cursors SET schedulable=false,next_scheduled_at=$3,available_at=$3,version=version+1,epoch=epoch+1,pending_cutoff=NULL,claim_token=NULL,claim_until=NULL,open_occurrence_id=NULL,waiting_reason=$5
 WHERE policy_id=$1 AND revision=$2 AND version=$4;
+-- name: UpdateAlertPolicyIdentity :execrows
+UPDATE public.almanac_alert_policies SET name=$3,severity=$4,slo_id=$5,evaluation_revision=$6,enabled=$7,version=version+1,updated_at=$8
+WHERE id=$1 AND version=$2;

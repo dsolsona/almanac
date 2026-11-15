@@ -47,6 +47,12 @@ func TestOperationalAndEmbeddedRoutes(t *testing.T) {
 		{"/slos/new", "text/html"},
 		{"/slos/b13e0739-3c86-4a7f-b7e5-c15e9626e71c", "text/html"},
 		{"/services/b13e0739-3c86-4a7f-b7e5-c15e9626e71c", "text/html"},
+		{"/alerts", "text/html"},
+		{"/alerts?view=history", "text/html"},
+		{"/alerts/policies", "text/html"},
+		{"/alerts/policies/new", "text/html"},
+		{"/alerts/policies/b13e0739-3c86-4a7f-b7e5-c15e9626e71c", "text/html"},
+		{"/alerts/b13e0739-3c86-4a7f-b7e5-c15e9626e71c", "text/html"},
 	} {
 		response, err := testHTTPClient.Get(frontend.URL + tc.path)
 		if err != nil {

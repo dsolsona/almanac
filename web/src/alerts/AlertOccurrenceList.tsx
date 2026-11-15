@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type MouseEvent } from 'react';
-import { Button, Dialog, PageHeader, Pager, RefreshButton, SearchField, SelectField, StatusChip, TextField, Toolbar, ToolbarSpacer, resourceRowClick } from '../components/ui/index.ts';
+import { Button, Combobox, Dialog, PageHeader, Pager, RefreshButton, SearchField, SelectField, StatusChip, TextField, Toolbar, ToolbarSpacer, resourceRowClick } from '../components/ui/index.ts';
 import './occurrence-list.css';
 
 export type AlertLifecycle = 'firing' | 'acknowledged' | 'resolved' | 'disabled' | 'superseded';
@@ -10,7 +10,7 @@ export type AlertOccurrenceRow = {
   state: AlertLifecycle; severity: 'low' | 'medium' | 'high'; openedAt: string; detectedAt: string;
   closedAt?: string; terminalCause?: string; reconstructed?: boolean; detectedAfterRecovery?: boolean;
   acknowledged?: { actor: string; at: string };
-  evidence: { at: string; matches: AlertMatch[]; unavailableReason?: string };
+  evidence: { at: string; matches: AlertMatch[]; explanation?: string; unavailableReason?: string };
   processing: { state: 'current' } | { state: 'waiting' | 'behind'; dueAt: string; reason: string };
 };
 type PageBounds = { total: number; start: number; end: number; hasPrevious: boolean; hasNext: boolean };
@@ -23,7 +23,7 @@ export const emptyAlertListFilters = (): AlertListFilters => ({ policyName: '', 
 type FilterSection = 'all' | 'alert' | 'slo' | 'state' | 'evidence' | 'age';
 type Props = {
   page: AlertListPage; pageSize: number; filters: AlertListFilters; view: 'active' | 'history'; grouped: boolean; now: string;
-  slos: { id: string; label: string }[]; canAcknowledge: boolean; newPolicyHref: string;
+  slos: { id: string; label: string }[]; onSloSearch?: (term:string)=>void; canAcknowledge: boolean; newPolicyHref: string; canCreate?: boolean;
   onFiltersChange: (filters: AlertListFilters) => void; onGroupChange: (grouped: boolean) => void;
   onPageSizeChange: (size: number) => void; onPrevious: () => void; onNext: () => void; onRefresh: () => void;
   onOpen: (href: string) => void; onAcknowledge: (id: string, expectedVersion: string) => void;
@@ -57,6 +57,7 @@ export function AlertOccurrenceList(props: Props) {
   const { page, filters, acknowledgement, view } = props;
   const id = useId();
   const trigger = useRef<HTMLElement>(null);
+  const [rememberedSlo,setRememberedSlo]=useState<{id:string;label:string}|undefined>(undefined);
   const search = useRef<HTMLInputElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const viewLinks = useRef(new Map<string, HTMLAnchorElement>());
@@ -86,7 +87,7 @@ export function AlertOccurrenceList(props: Props) {
   function row(item: AlertOccurrenceRow) {
     const action = acknowledgement?.id === item.id ? acknowledgement : undefined;
     return <tr key={item.id} onClick={event => resourceRowClick(event, () => props.onOpen(item.href))}>
-      <td><a href={item.href} data-app-route className="alert-name">{item.policyName}</a><span className={`alert-severity alert-severity--${item.severity}`}>{item.severity[0]!.toUpperCase() + item.severity.slice(1)} severity</span></td>
+      <td><a href={item.href} data-app-route className="alert-name">{item.policyName}</a><span className={`alert-severity alert-severity--${item.severity}`}>{item.severity[0]!.toUpperCase() + item.severity.slice(1)} severity</span><span className="alert-mobile-summary" aria-hidden="true"><strong>{labels[item.state]}</strong>{item.evidence.matches[0] ? <span>{item.evidence.matches[0].name}: {item.evidence.matches[0].shortBurn}× / {item.evidence.matches[0].longBurn}× · threshold {item.evidence.matches[0].threshold}×</span> : item.evidence.unavailableReason ? <span>Recovery evidence unavailable</span> : item.evidence.explanation ? <span>{item.evidence.explanation}</span> : null}</span></td>
       <td><a href={item.slo.href} data-app-route>{item.slo.name}</a><span className="alert-secondary">{item.slo.service}</span></td>
       <td><StatusChip tone={item.state === 'firing' ? 'breached' : item.state === 'acknowledged' ? 'stale' : item.state === 'resolved' ? 'healthy' : 'none'} label={labels[item.state]} />
         {item.acknowledged && <span className="alert-secondary" title={`Acknowledged ${fullTime(item.acknowledged.at)}`}>{item.acknowledged.actor}</span>}
@@ -94,6 +95,7 @@ export function AlertOccurrenceList(props: Props) {
       </td>
       <td className="alert-evidence">{item.evidence.matches[0] && <Match match={item.evidence.matches[0]} />}
         {item.evidence.matches.length > 1 && <details className="alert-other-matches" onClick={event => event.stopPropagation()}><summary>{item.evidence.matches.length - 1} more matching {item.evidence.matches.length === 2 ? 'condition' : 'conditions'}</summary>{item.evidence.matches.slice(1).map(match => <Match key={match.id} match={match} />)}</details>}
+        {item.evidence.explanation && <span className="alert-secondary">{item.evidence.explanation}</span>}
         {item.evidence.unavailableReason && <span className="alert-evidence-warning">{item.evidence.unavailableReason}</span>}
         {item.processing.state !== 'current' && <span className="alert-processing"><strong>{item.processing.reason}</strong><span title={fullTime(item.processing.dueAt)}>Evaluation due {clock(item.processing.dueAt)}</span></span>}
         {(item.processing.state !== 'current' || item.evidence.unavailableReason) && <span className="alert-secondary" title={fullTime(item.evidence.at)}>Last evaluated {clock(item.evidence.at)}</span>}
@@ -110,7 +112,7 @@ export function AlertOccurrenceList(props: Props) {
   const includes = (part: FilterSection) => section === 'all' || section === part;
   const field = (key: keyof AlertListFilters, value: string) => setDraft(previous => ({ ...previous, [key]: value }));
   return <div className="alert-occurrence-list">
-    <PageHeader headingRef={heading} title={view === 'active' ? 'Alerts' : 'Alert history'} actions={<a className="ui-button ui-button--primary" href={props.newPolicyHref} data-app-route>New alert policy</a>} />
+    <PageHeader headingRef={heading} title={view === 'active' ? 'Alerts' : 'Alert history'} actions={props.canCreate === false ? undefined : <a className="ui-button ui-button--primary" href={props.newPolicyHref} data-app-route>New alert policy</a>} />
     <Toolbar>
       <SearchField inputRef={search} id={`${id}-search`} label="Search alerts" placeholder="Search alerts…" value={filters.policyName} onChange={event => props.onFiltersChange({ ...filters, policyName: event.target.value })} />
       <ToolbarSpacer /><Button variant={filterCount ? 'selected' : 'ghost'} aria-haspopup="dialog" onClick={event => openFilter(event, 'all')}>Filters{filterCount > 0 ? ` · ${filterCount}` : ''}</Button>
@@ -126,7 +128,7 @@ export function AlertOccurrenceList(props: Props) {
       </tr></thead>
       {hasRows ? page.kind === 'flat' ? <tbody>{page.items.map(row)}</tbody> : page.groups.map(group => <tbody key={group.slo.id}>
         <tr className="alert-group"><th colSpan={6} scope="rowgroup"><a href={group.slo.href} data-app-route>{group.slo.name}</a><span>{group.total} {group.total === 1 ? 'alert' : 'alerts'} · {group.firing} firing</span></th></tr>{group.items.map(row)}
-      </tbody>) : <tbody><tr><td colSpan={6} className="alert-empty">{props.busy ? 'Loading alerts…' : props.error ? 'Alerts could not be loaded. Refresh to try again.' : filterCount ? 'No alerts match these filters.' : view === 'active' ? 'No active alerts.' : 'No alert occurrences in this history.'}</td></tr></tbody>}
+      </tbody>) : <tbody><tr><td colSpan={6} className="alert-empty">{props.busy ? <span className="sr-only" role="status">Opening alerts</span> : props.error ? 'Alerts could not be loaded. Refresh to try again.' : filterCount ? 'No alerts match these filters.' : view === 'active' ? 'No active alerts.' : 'No alert occurrences in this history.'}</td></tr></tbody>}
       </table>
     </div>
     <Pager id={`${id}-page-size`} label="Alert pages" position={`${page.total ? `${page.start}–${page.end}` : '0'} of ${page.total} ${page.total === 1 ? 'alert' : 'alerts'}`} pageSize={props.pageSize} onPageSizeChange={props.onPageSizeChange} hasPrevious={page.hasPrevious} hasNext={page.hasNext} onPrevious={props.onPrevious} onNext={props.onNext} busy={props.busy} />
@@ -134,7 +136,7 @@ export function AlertOccurrenceList(props: Props) {
       <form className="alert-filter-fields" onSubmit={event => { event.preventDefault(); props.onFiltersChange(draft); setSection(null); }}>
         <div className="alert-filter-controls">
         {includes('alert') && <><TextField id={`${id}-name`} label="Alert name" value={draft.policyName} onChange={event => field('policyName', event.target.value)} /><SelectField id={`${id}-severity`} label="Severity" value={draft.severity} options={[{ value: '', label: 'All severities' }, ...['high', 'medium', 'low'].map(value => ({ value, label: value[0]!.toUpperCase() + value.slice(1) }))]} onChange={event => field('severity', event.target.value)} /></>}
-        {includes('slo') && <SelectField id={`${id}-slo`} label="SLO" value={draft.sloId} options={[{ value: '', label: 'All SLOs' }, ...props.slos.map(slo => ({ value: slo.id, label: slo.label }))]} onChange={event => field('sloId', event.target.value)} />}
+        {includes('slo') && <Combobox id={`${id}-slo`} label="SLO" value={draft.sloId||null} options={rememberedSlo && rememberedSlo.id===draft.sloId && !props.slos.some(slo=>slo.id===rememberedSlo.id) ? [rememberedSlo,...props.slos] : props.slos} placeholder="Search SLOs…" onSearch={props.onSloSearch} onChange={value=>{setRememberedSlo(props.slos.find(slo=>slo.id===value));field('sloId',value??'');}} noMatch={{text:()=> 'No SLOs found.'}} />}
         {includes('state') && <SelectField id={`${id}-state`} label="State" value={draft.state} options={[{ value: '', label: 'All states' }, ...Object.entries(labels).filter(([value]) => view === 'active' ? ['firing', 'acknowledged'].includes(value) : !['firing', 'acknowledged'].includes(value)).map(([value, label]) => ({ value, label }))]} onChange={event => field('state', event.target.value)} />}
         {includes('evidence') && <SelectField id={`${id}-evidence`} label="Evidence" value={draft.evidence} options={[{ value: '', label: 'All evidence' }, { value: 'matching', label: 'Matching conditions' }, { value: 'unavailable', label: 'Unavailable recovery evidence' }, { value: 'waiting', label: 'Waiting for calculation' }]} onChange={event => field('evidence', event.target.value)} />}
         {includes('age') && <SelectField id={`${id}-age`} label="Minimum duration" value={draft.minimumAge} options={[{ value: '', label: 'Any duration' }, { value: '900', label: '15 minutes' }, { value: '1800', label: '30 minutes' }, { value: '3600', label: '1 hour' }]} onChange={event => field('minimumAge', event.target.value)} />}

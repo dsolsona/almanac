@@ -79,6 +79,9 @@ export function telemetrySession(value: { csrf_token: string; session: unknown }
 }
 
 export function routeName(path: string): string {
+  if (path === '/alerts') return 'alert.list';
+  if (/^\/alerts\/policies(?:\/new|\/[0-9a-f-]{36})?$/.test(path)) return 'alert.policy';
+  if (/^\/alerts\/[0-9a-f-]{36}$/.test(path)) return 'alert.detail';
   if (path === '/slos') return 'slo.list';
   if (/^\/slos\/[0-9a-f-]{36}$/.test(path)) return 'slo.detail';
   if (path === '/slis') return 'sli.list';
@@ -90,7 +93,7 @@ function apiRoute(path: string): string {
   if (!/^\/api\/(?:v1|agent\/v1)\//.test(path)) return 'unmatched';
   const parts = path.split('/').filter(Boolean);
   if (parts.length > 8) return 'unmatched';
-  const allowed = new Set(['api', 'v1', 'agent', 'auth', 'context', 'login', 'logout', 'password', 'account', 'users', 'activation', 'enable', 'disable', 'delete', 'reset-password', 'cancel-password-reset', 'replace-setup-link', 'agents', 'providers', 'datasources', 'diagnostics', 'slis', 'slos', 'services', 'overview', 'operational', 'status', 'history', 'values', 'preparation', 'retry', 'evaluation', 'observations', 'configuration', 'connect', 'result']);
+  const allowed = new Set(['alerts','alert-policies','alert-processing','alert-commands','evidence','series','transitions','ranges','acknowledge','api', 'v1', 'agent', 'auth', 'context', 'login', 'logout', 'password', 'account', 'users', 'activation', 'enable', 'disable', 'delete', 'reset-password', 'cancel-password-reset', 'replace-setup-link', 'agents', 'providers', 'datasources', 'diagnostics', 'slis', 'slos', 'services', 'overview', 'operational', 'status', 'history', 'values', 'preparation', 'retry', 'evaluation', 'observations', 'configuration', 'connect', 'result']);
   return '/' + parts.map(part => /^[0-9a-f-]{36}$/.test(part) ? '{id}' : allowed.has(part) ? part : '{value}').join('/');
 }
 
@@ -124,7 +127,7 @@ function endJourney(journey: Journey, result: 'ready' | 'cancelled' | 'timeout' 
 }
 
 function completeAfterPaint(journey: Journey) {
-  if (journey.paintQueued || !journey.content || (journey.route === 'slo.detail' && !journey.chart)) return;
+  if (journey.paintQueued || !journey.content || ((journey.route === 'slo.detail' || journey.route === 'alert.detail') && !journey.chart)) return;
   journey.paintQueued = true;
   if (enabled) journey.paint = tracer().startSpan('ui.fonts.wait', { startTime: traceTime() }, journey.context);
   void (document.fonts?.ready ?? Promise.resolve()).then(() => {

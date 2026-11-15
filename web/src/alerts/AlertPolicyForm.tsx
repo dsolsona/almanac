@@ -7,20 +7,21 @@ import './policy-form.css';
 export type AlertSloOption = ComboboxOption & { target: string; cadenceSeconds: number; windowSeconds: number };
 type RawCondition = AlertConditionDraft & { shortText: string; longText: string };
 type Field = 'short' | 'long' | 'threshold';
-type Props = { slos: AlertSloOption[]; onSearch?: (term: string) => void; onSave: (draft: AlertPolicyDraft) => void; onCancel: () => void; pending?: boolean; error?: string };
+type Props = { slos: AlertSloOption[]; onSearch?: (term: string) => void; onSave: (draft: AlertPolicyDraft) => void; onCancel: () => void; pending?: boolean; error?: string; initialDraft?: AlertPolicyDraft; submitLabel?: string };
 const fields: Field[] = ['short', 'long', 'threshold'];
 const fieldLabels = { short: 'Short window', long: 'Long window', threshold: 'Burn threshold' };
 const rawCondition = (condition: AlertConditionDraft): RawCondition => ({ ...condition, shortText: condition.shortSeconds ? formatAlertDuration(condition.shortSeconds) : '', longText: condition.longSeconds ? formatAlertDuration(condition.longSeconds) : '' });
 
-export function AlertPolicyForm({ slos, onSearch, onSave, onCancel, pending = false, error }: Props) {
+export function AlertPolicyForm({ slos, onSearch, onSave, onCancel, pending = false, error, initialDraft, submitLabel }: Props) {
   const prefix = useId();
-  const [name, setName] = useState(''), [sloId, setSloId] = useState<string | null>(null), [severity, setSeverity] = useState<AlertSeverity>('high');
-  const [conditions, setConditions] = useState(() => defaultAlertConditions().map(rawCondition));
+  const [name, setName] = useState(initialDraft?.name ?? ''), [sloId, setSloId] = useState<string | null>(initialDraft?.sloId ?? null), [severity, setSeverity] = useState<AlertSeverity>(initialDraft?.severity ?? 'medium');
+  const [conditions, setConditions] = useState(() => (initialDraft?.conditions ?? defaultAlertConditions()).map(rawCondition));
   const [active, setActive] = useState<string | null>(null), [errors, setErrors] = useState<Record<string, string>>({});
   const [menuOpen, setMenuOpen] = useState(false), [confirmed, setConfirmed] = useState(false);
   const form = useRef<HTMLFormElement>(null), addButton = useRef<HTMLButtonElement>(null), menu = useRef<HTMLDivElement>(null);
   const errorSummary = useRef<HTMLParagraphElement>(null);
-  const selected = slos.find(slo => slo.id === sloId), cadence = selected?.cadenceSeconds ?? 60;
+  const [remembered,setRemembered] = useState<AlertSloOption | undefined>(()=>slos.find(slo=>slo.id===initialDraft?.sloId));
+  const selected = slos.find(slo => slo.id === sloId) ?? (remembered?.id === sloId ? remembered : undefined), cadence = selected?.cadenceSeconds ?? 60;
   const key = (condition: RawCondition, field: Field) => `${condition.id}-${field}`;
   const durationError = `Use whole minutes from 1 min to 30 d${cadence === 60 ? '' : `, aligned to the ${cadence}-second source cadence`}.`;
   function parsed(condition: RawCondition, grid = cadence): AlertConditionDraft | null {
@@ -30,7 +31,8 @@ export function AlertPolicyForm({ slos, onSearch, onSave, onCancel, pending = fa
     return shortSeconds && longSeconds && threshold ? { id: condition.id, shortSeconds, longSeconds, threshold } : null;
   }
   const kind = (condition: RawCondition) => { const value = parsed(condition, 60); return value ? conditionPreset(value) : 'custom'; };
-  const nonThirtyDayPresets = selected && selected.windowSeconds !== 2592000 && conditions.some(condition => kind(condition) !== 'custom');
+  const sameDefinition = initialDraft?.sloId === sloId && initialDraft.conditions.length === conditions.length && initialDraft.conditions.every((original,index)=>{const current=parsed(conditions[index]!);return current?.id===original.id && current.shortSeconds===original.shortSeconds && current.longSeconds===original.longSeconds && normalizeAlertThreshold(current.threshold)===normalizeAlertThreshold(original.threshold);});
+  const nonThirtyDayPresets = !sameDefinition && selected && selected.windowSeconds !== 2592000 && conditions.some(condition => kind(condition) !== 'custom');
 
   useEffect(() => { if (error) errorSummary.current?.focus(); }, [error]);
 
@@ -67,6 +69,7 @@ export function AlertPolicyForm({ slos, onSearch, onSave, onCancel, pending = fa
     event.preventDefault(); if (pending) return;
     const problems: Record<string, string> = {}, values: AlertConditionDraft[] = [];
     if (!name.trim()) problems.name = 'Enter an alert policy name.';
+    else if ([...name.trim()].length > 256 || new TextEncoder().encode(name.trim()).length > 1024 || /\p{Cc}/u.test(name)) problems.name = 'Use at most 256 characters without control characters.';
     if (!selected || selected.disabled) problems.slo = 'Choose a supported SLO.';
     for (const condition of conditions) {
       if (!parseAlertDuration(condition.shortText, condition.shortSeconds || 60, cadence)) problems[key(condition, 'short')] = durationError;
@@ -90,6 +93,7 @@ export function AlertPolicyForm({ slos, onSearch, onSave, onCancel, pending = fa
     onSave({ name: name.trim(), sloId: selected!.id, severity, conditions: values, confirmNonThirtyDayPresets: Boolean(nonThirtyDayPresets && confirmed) });
   }
   function addCondition(preset: AlertConditionPreset) {
+    if (conditions.length >= 8) return;
     const value = preset === 'custom' ? { id: crypto.randomUUID(), shortSeconds: 0, longSeconds: 0, threshold: '' } : defaultAlertConditions()[preset === 'fast' ? 0 : 1]!;
     setConditions(current => [...current, rawCondition(value)]); setMenuOpen(false);
     if (preset === 'custom') setActive(`${value.id}-short`);
@@ -101,7 +105,7 @@ export function AlertPolicyForm({ slos, onSearch, onSave, onCancel, pending = fa
       <FormSection step={1} title="Policy">
         <div className="alert-policy-identity">
           <TextField id={`${prefix}-name`} label="Alert policy name" value={name} onChange={event => setName(event.target.value)} error={errors.name} autoComplete="off" />
-          <Combobox id={`${prefix}-slo`} label="SLO" options={slos} value={sloId} onChange={id => { setSloId(id); setConfirmed(false); }} onSearch={onSearch}
+          <Combobox id={`${prefix}-slo`} label="SLO" options={selected && !slos.some(slo=>slo.id===selected.id) ? [selected,...slos] : slos} value={sloId} onChange={id => { setRemembered(slos.find(slo=>slo.id===id)); setSloId(id); setConfirmed(false); }} onSearch={onSearch}
             selectionPresentation="compact" placeholder="Search SLOs…" hint={selected?.detail ?? 'Select an SLO to view its target.'} error={errors.slo}
             noMatch={{ text: () => 'No SLOs found.' }} />
           <div className="ui-field"><span className="ui-label">Severity</span><SegmentedControl label="Severity" value={severity} onChange={setSeverity}
@@ -131,7 +135,7 @@ export function AlertPolicyForm({ slos, onSearch, onSave, onCancel, pending = fa
           </div>;
         })}</div>
         <div className="alert-condition-add">
-          <Button ref={addButton} variant="outline" aria-label="Add condition" aria-haspopup="dialog" aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)}>＋ Add condition</Button>
+          <Button ref={addButton} variant="outline" disabled={conditions.length >= 8} aria-label="Add condition" aria-haspopup="dialog" aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)}>＋ Add condition</Button>
           {menuOpen && <div ref={menu} className="alert-condition-menu" role="dialog" aria-label="Add a condition"
             onBlur={event => { if (event.relatedTarget instanceof Node && !event.currentTarget.contains(event.relatedTarget) && !addButton.current?.contains(event.relatedTarget)) setMenuOpen(false); }}
             onKeyDown={event => { if (event.key === 'Escape') { event.preventDefault(); setMenuOpen(false); addButton.current?.focus(); } }}>
@@ -147,6 +151,6 @@ export function AlertPolicyForm({ slos, onSearch, onSave, onCancel, pending = fa
       </FormSection>
       <FormSection step={3} title="Alert destinations"><div className="alert-destination"><div><strong>In Almanac</strong><p>Email, Slack and PagerDuty are planned for a later phase.</p></div><span>Always on</span></div></FormSection>
     </fieldset>
-    <FormActions><Button variant="outline" disabled={pending} onClick={onCancel}>Cancel</Button><Button type="submit" pending={pending}>Create alert policy</Button></FormActions>
+    <FormActions><Button variant="outline" disabled={pending} onClick={onCancel}>Cancel</Button><Button type="submit" pending={pending}>{submitLabel ?? (initialDraft ? 'Save changes' : 'Create alert policy')}</Button></FormActions>
   </form>;
 }

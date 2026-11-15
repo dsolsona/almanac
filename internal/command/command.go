@@ -83,6 +83,8 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer, info Buil
 		return agentsCommand(ctx, args[1:], stdout, stderr)
 	case "datasources", "providers", "slis":
 		return datasourceCommand(ctx, args, stdout, stderr)
+	case "alert-policies", "alerts":
+		return alertsCommand(ctx, args[0], args[1:], stdout, stderr)
 	case "services", "slos":
 		return objectivesCommand(ctx, args[0], args[1:], stdout, stderr)
 	case "secrets":
@@ -133,6 +135,8 @@ func printHelp(w io.Writer) {
   almanac slis update --profile-file=FILE --sli-id=UUID --if-match=ETAG --input-file=FILE
   almanac slis observations --profile-file=FILE --sli-id=UUID [--limit=50] [--cursor=CURSOR]
   almanac slis test --profile-file=FILE --datasource-id=UUID --query=PROMQL [--wait] [--cancel-on-timeout]
+  almanac alert-policies list|create|get|update|enable|disable|retry|ranges --profile-file=FILE [--policy-id=UUID] [--input-file=FILE] [--if-match=ETAG] [--idempotency-key=KEY] [--output=text|json]
+  almanac alerts list|get|evidence|series|transitions|acknowledge|processing|command-result --profile-file=FILE [--alert-id=UUID] [--policy-id=UUID] [--operation=OPERATION] [--idempotency-key=KEY] [--condition-id=ID] [--start=UTC] [--end=UTC] [--evidence=matching|unavailable|waiting] [--minimum-duration-seconds=N] [--output=text|json]
   almanac services list --profile-file=FILE [--limit=50] [--cursor=CURSOR] [--q=TEXT] [--owner=OWNER] [--coverage=all|with|without]
   almanac services get --profile-file=FILE --service-id=UUID
   almanac services create --profile-file=FILE --input-file=FILE --idempotency-key=KEY

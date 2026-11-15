@@ -19,6 +19,8 @@ import (
 type AlertFilter struct {
 	Scope, SLOID, ServiceID, Search string
 	States, Severities              []string
+	Evidence                        string
+	MinimumDurationSeconds          int64
 }
 type ListAlertsInput struct {
 	Runtime               *Runtime
@@ -38,6 +40,7 @@ type AlertCatalogItem struct {
 type AlertGroup struct {
 	SLOID, SLOName string
 	Total          int64
+	Firing         int64
 }
 type AlertPage struct {
 	Items      []AlertCatalogItem
@@ -87,6 +90,11 @@ func alertCatalogFilter(input ListAlertsInput) (dbgen.CountAlertCatalogParams, s
 	if input.Limit < 1 || input.Limit > 200 || (input.GroupBy != "none" && input.GroupBy != "slo") || (input.Sort != "newest" && input.Sort != "severity") {
 		return result, "", ErrAlertInvalid
 	}
+	if input.Filter.MinimumDurationSeconds < 0 || !slices.Contains([]string{"", "matching", "unavailable", "waiting"}, input.Filter.Evidence) {
+		return result, "", ErrAlertInvalid
+	}
+	result.EvidenceFilter = input.Filter.Evidence
+	result.MinimumDurationSeconds = input.Filter.MinimumDurationSeconds
 	allowed := []string{"firing", "acknowledged", "resolved", "disabled", "superseded"}
 	switch input.Filter.Scope {
 	case "active":
@@ -134,6 +142,8 @@ func alertCatalogFilter(input ListAlertsInput) (dbgen.CountAlertCatalogParams, s
 		}
 	}
 	result.Search = strings.ToLower(strings.TrimSpace(input.Filter.Search))
+	// ReadAsOf remains unset in the cursor identity: later live pages may have a
+	// newer request clock, while all user-selected filters remain bound.
 	encoded, err := json.Marshal(struct {
 		Filter             dbgen.CountAlertCatalogParams
 		Group, Sort, Scope string
@@ -163,12 +173,17 @@ func ListAlerts(ctx context.Context, databaseURL string, input ListAlertsInput) 
 		return page, fmt.Errorf("storage: alert catalogue cursor values: %w", ErrAlertInvalid)
 	}
 	err = alertReadTransaction(ctx, databaseURL, input.Runtime, input.Proof, input.Now, func(q *dbgen.Queries, _ string) error {
+		readAsOf := normalizedAgentNow(input.Now)
+		if readAsOf.IsZero() {
+			return ErrAlertInvalid
+		}
+		filter.ReadAsOf = timestamp(readAsOf)
 		var err error
 		page.Total, err = q.CountAlertCatalog(ctx, filter)
 		if err != nil {
 			return err
 		}
-		rows, err := q.ListAlertCatalog(ctx, dbgen.ListAlertCatalogParams{GroupSlo: input.GroupBy == "slo", SortSeverity: input.Sort == "severity", States: filter.States, Severities: filter.Severities, SloID: filter.SloID, ServiceID: filter.ServiceID, Search: filter.Search, HasCursor: input.Cursor != "", AfterGroup: uuidOrZero(cursor.Group), AfterPriority: cursor.Priority, AfterTime: cursor.Time, AfterID: uuidOrZero(cursor.ID), PageLimit: int32(input.Limit + 1)})
+		rows, err := q.ListAlertCatalog(ctx, dbgen.ListAlertCatalogParams{GroupSlo: input.GroupBy == "slo", SortSeverity: input.Sort == "severity", States: filter.States, Severities: filter.Severities, SloID: filter.SloID, ServiceID: filter.ServiceID, Search: filter.Search, EvidenceFilter: filter.EvidenceFilter, MinimumDurationSeconds: filter.MinimumDurationSeconds, ReadAsOf: filter.ReadAsOf, HasCursor: input.Cursor != "", AfterGroup: uuidOrZero(cursor.Group), AfterPriority: cursor.Priority, AfterTime: cursor.Time, AfterID: uuidOrZero(cursor.ID), PageLimit: int32(input.Limit + 1)})
 		if err != nil {
 			return err
 		}
@@ -195,19 +210,19 @@ func ListAlerts(ctx context.Context, databaseURL string, input ListAlertsInput) 
 			if saved.FormatVersion != 1 || saved.Evaluation.PolicyID != occurrence.PolicyID || saved.Evaluation.Revision != occurrence.Revision || saved.Evaluation.Snapshot != occurrence.LatestSnapshot {
 				return fmt.Errorf("storage: alert catalogue evidence identity mismatch: %w", ErrAlertInvalid)
 			}
-			processing := alertProcessingRecord(dbgen.AlmanacAlertCursor{PolicyID: row.PolicyID, Revision: row.Revision, Schedulable: row.Schedulable, NextScheduledAt: row.NextScheduledAt, AvailableAt: row.AvailableAt, PendingCutoff: row.PendingCutoff, LastCutoff: row.LastCutoff, LastEvaluationID: row.LastEvaluationID, WaitingReason: row.WaitingReason, FailureAttempts: row.FailureAttempts, Exhausted: row.Exhausted}, normalizedAgentNow(input.Now))
+			processing := alertProcessingRecord(dbgen.AlmanacAlertCursor{PolicyID: row.PolicyID, Revision: row.Revision, Schedulable: row.Schedulable, NextScheduledAt: row.NextScheduledAt, AvailableAt: row.AvailableAt, PendingCutoff: row.PendingCutoff, LastCutoff: row.LastCutoff, LastEvaluationID: row.LastEvaluationID, WaitingReason: row.WaitingReason, FailureAttempts: row.FailureAttempts, Exhausted: row.Exhausted}, readAsOf)
 			page.Items = append(page.Items, AlertCatalogItem{Alert: AlertRecord{Occurrence: occurrence, Version: row.Version, Sequence: row.TransitionSequence, OriginalPolicy: original}, PolicyName: row.PolicyName, Severity: row.Severity, SLOID: row.SloID.String(), SLOName: row.SloName, ServiceID: row.ServiceID.String(), ServiceName: row.ServiceName, EvaluationID: row.EvaluationID.String(), Evaluation: saved.Evaluation, ScheduledAt: row.ScheduledAt.Time.UTC(), CommittedAt: row.CommittedAt.Time.UTC(), Processing: processing})
 			if !slices.Contains(groupIDs, row.SloID) {
 				groupIDs = append(groupIDs, row.SloID)
 			}
 		}
 		if input.GroupBy == "slo" && len(groupIDs) > 0 {
-			groups, err := q.GroupAlertCatalog(ctx, dbgen.GroupAlertCatalogParams{States: filter.States, Severities: filter.Severities, SloID: filter.SloID, ServiceID: filter.ServiceID, Search: filter.Search, PageSlos: groupIDs})
+			groups, err := q.GroupAlertCatalog(ctx, dbgen.GroupAlertCatalogParams{States: filter.States, Severities: filter.Severities, SloID: filter.SloID, ServiceID: filter.ServiceID, Search: filter.Search, EvidenceFilter: filter.EvidenceFilter, MinimumDurationSeconds: filter.MinimumDurationSeconds, ReadAsOf: filter.ReadAsOf, PageSlos: groupIDs})
 			if err != nil {
 				return err
 			}
 			for _, group := range groups {
-				page.Groups = append(page.Groups, AlertGroup{SLOID: group.SloID.String(), SLOName: group.SloName, Total: group.Total})
+				page.Groups = append(page.Groups, AlertGroup{SLOID: group.SloID.String(), SLOName: group.SloName, Total: group.Total, Firing: group.Firing})
 			}
 		}
 		if len(rows) > input.Limit {

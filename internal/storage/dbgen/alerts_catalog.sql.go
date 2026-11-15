@@ -29,22 +29,37 @@ func (q *Queries) AlertPolicyRevisionExists(ctx context.Context, arg AlertPolicy
 
 const countAlertCatalog = `-- name: CountAlertCatalog :one
 SELECT count(*)::bigint FROM public.almanac_alert_catalog c
-WHERE c.state=ANY($1::text[]) AND c.severity=ANY($2::text[])
-AND ($3::uuid IS NULL OR c.slo_id=$3)
-AND ($4::uuid IS NULL OR c.service_id=$4)
-AND ($5::text='' OR strpos(lower(c.policy_name||' '||c.slo_name||' '||c.service_name),$5)>0)
+ JOIN public.almanac_alert_occurrences o ON o.id=c.id
+ JOIN public.almanac_alert_evaluations e ON e.id=o.latest_evaluation_id
+ JOIN public.almanac_alert_cursors w ON (w.policy_id,w.revision)=(o.policy_id,o.revision)
+WHERE ($1::text=''
+ OR ($1='matching' AND e.truth='breaching')
+ OR ($1='unavailable' AND e.truth='indeterminate')
+ OR ($1='waiting' AND o.state IN ('firing','acknowledged')
+     AND w.schedulable AND NOT w.exhausted AND w.waiting_reason<>''))
+ AND extract(epoch FROM (coalesce(o.terminal_at,$2::timestamptz)-o.opened_at)) >= $3::bigint
+ AND c.state=ANY($4::text[]) AND c.severity=ANY($5::text[])
+AND ($6::uuid IS NULL OR c.slo_id=$6)
+AND ($7::uuid IS NULL OR c.service_id=$7)
+AND ($8::text='' OR strpos(lower(c.policy_name||' '||c.slo_name||' '||c.service_name),$8)>0)
 `
 
 type CountAlertCatalogParams struct {
-	States     []string    `json:"states"`
-	Severities []string    `json:"severities"`
-	SloID      pgtype.UUID `json:"slo_id"`
-	ServiceID  pgtype.UUID `json:"service_id"`
-	Search     string      `json:"search"`
+	EvidenceFilter         string             `json:"evidence_filter"`
+	ReadAsOf               pgtype.Timestamptz `json:"read_as_of"`
+	MinimumDurationSeconds int64              `json:"minimum_duration_seconds"`
+	States                 []string           `json:"states"`
+	Severities             []string           `json:"severities"`
+	SloID                  pgtype.UUID        `json:"slo_id"`
+	ServiceID              pgtype.UUID        `json:"service_id"`
+	Search                 string             `json:"search"`
 }
 
 func (q *Queries) CountAlertCatalog(ctx context.Context, arg CountAlertCatalogParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countAlertCatalog,
+		arg.EvidenceFilter,
+		arg.ReadAsOf,
+		arg.MinimumDurationSeconds,
 		arg.States,
 		arg.Severities,
 		arg.SloID,
@@ -57,32 +72,48 @@ func (q *Queries) CountAlertCatalog(ctx context.Context, arg CountAlertCatalogPa
 }
 
 const groupAlertCatalog = `-- name: GroupAlertCatalog :many
-SELECT c.slo_id,c.slo_name,count(*)::bigint AS total FROM public.almanac_alert_catalog c
-WHERE c.state=ANY($1::text[]) AND c.severity=ANY($2::text[])
-AND ($3::uuid IS NULL OR c.slo_id=$3)
-AND ($4::uuid IS NULL OR c.service_id=$4)
-AND ($5::text='' OR strpos(lower(c.policy_name||' '||c.slo_name||' '||c.service_name),$5)>0)
-AND c.slo_id=ANY($6::uuid[])
+SELECT c.slo_id,c.slo_name,count(*)::bigint AS total,count(*) FILTER (WHERE c.state='firing')::bigint AS firing FROM public.almanac_alert_catalog c
+ JOIN public.almanac_alert_occurrences o ON o.id=c.id
+ JOIN public.almanac_alert_evaluations e ON e.id=o.latest_evaluation_id
+ JOIN public.almanac_alert_cursors w ON (w.policy_id,w.revision)=(o.policy_id,o.revision)
+WHERE ($1::text=''
+ OR ($1='matching' AND e.truth='breaching')
+ OR ($1='unavailable' AND e.truth='indeterminate')
+ OR ($1='waiting' AND o.state IN ('firing','acknowledged')
+     AND w.schedulable AND NOT w.exhausted AND w.waiting_reason<>''))
+ AND extract(epoch FROM (coalesce(o.terminal_at,$2::timestamptz)-o.opened_at)) >= $3::bigint
+ AND c.state=ANY($4::text[]) AND c.severity=ANY($5::text[])
+AND ($6::uuid IS NULL OR c.slo_id=$6)
+AND ($7::uuid IS NULL OR c.service_id=$7)
+AND ($8::text='' OR strpos(lower(c.policy_name||' '||c.slo_name||' '||c.service_name),$8)>0)
+AND c.slo_id=ANY($9::uuid[])
 GROUP BY c.slo_id,c.slo_name ORDER BY c.slo_id
 `
 
 type GroupAlertCatalogParams struct {
-	States     []string      `json:"states"`
-	Severities []string      `json:"severities"`
-	SloID      pgtype.UUID   `json:"slo_id"`
-	ServiceID  pgtype.UUID   `json:"service_id"`
-	Search     string        `json:"search"`
-	PageSlos   []pgtype.UUID `json:"page_slos"`
+	EvidenceFilter         string             `json:"evidence_filter"`
+	ReadAsOf               pgtype.Timestamptz `json:"read_as_of"`
+	MinimumDurationSeconds int64              `json:"minimum_duration_seconds"`
+	States                 []string           `json:"states"`
+	Severities             []string           `json:"severities"`
+	SloID                  pgtype.UUID        `json:"slo_id"`
+	ServiceID              pgtype.UUID        `json:"service_id"`
+	Search                 string             `json:"search"`
+	PageSlos               []pgtype.UUID      `json:"page_slos"`
 }
 
 type GroupAlertCatalogRow struct {
 	SloID   pgtype.UUID `json:"slo_id"`
 	SloName string      `json:"slo_name"`
 	Total   int64       `json:"total"`
+	Firing  int64       `json:"firing"`
 }
 
 func (q *Queries) GroupAlertCatalog(ctx context.Context, arg GroupAlertCatalogParams) ([]GroupAlertCatalogRow, error) {
 	rows, err := q.db.Query(ctx, groupAlertCatalog,
+		arg.EvidenceFilter,
+		arg.ReadAsOf,
+		arg.MinimumDurationSeconds,
 		arg.States,
 		arg.Severities,
 		arg.SloID,
@@ -97,7 +128,12 @@ func (q *Queries) GroupAlertCatalog(ctx context.Context, arg GroupAlertCatalogPa
 	items := []GroupAlertCatalogRow{}
 	for rows.Next() {
 		var i GroupAlertCatalogRow
-		if err := rows.Scan(&i.SloID, &i.SloName, &i.Total); err != nil {
+		if err := rows.Scan(
+			&i.SloID,
+			&i.SloName,
+			&i.Total,
+			&i.Firing,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -115,14 +151,23 @@ WITH filtered AS (
  CASE WHEN NOT $2::boolean THEN 0 WHEN c.severity='high' THEN 0 WHEN c.severity='medium' THEN 1 ELSE 2 END::integer AS priority_key,
  (-extract(epoch FROM c.opened_at)*1000000)::bigint AS time_key
  FROM public.almanac_alert_catalog c
- WHERE c.state=ANY($3::text[]) AND c.severity=ANY($4::text[])
- AND ($5::uuid IS NULL OR c.slo_id=$5)
- AND ($6::uuid IS NULL OR c.service_id=$6)
- AND ($7::text='' OR strpos(lower(c.policy_name||' '||c.slo_name||' '||c.service_name),$7)>0)
+ JOIN public.almanac_alert_occurrences o ON o.id=c.id
+ JOIN public.almanac_alert_evaluations e ON e.id=o.latest_evaluation_id
+ JOIN public.almanac_alert_cursors w ON (w.policy_id,w.revision)=(o.policy_id,o.revision)
+ WHERE ($3::text=''
+ OR ($3='matching' AND e.truth='breaching')
+ OR ($3='unavailable' AND e.truth='indeterminate')
+ OR ($3='waiting' AND o.state IN ('firing','acknowledged')
+     AND w.schedulable AND NOT w.exhausted AND w.waiting_reason<>''))
+ AND extract(epoch FROM (coalesce(o.terminal_at,$4::timestamptz)-o.opened_at)) >= $5::bigint
+ AND c.state=ANY($6::text[]) AND c.severity=ANY($7::text[])
+ AND ($8::uuid IS NULL OR c.slo_id=$8)
+ AND ($9::uuid IS NULL OR c.service_id=$9)
+ AND ($10::text='' OR strpos(lower(c.policy_name||' '||c.slo_name||' '||c.service_name),$10)>0)
 ), page AS (
- SELECT id, policy_id, revision, state, opened_at, policy_name, severity, slo_id, slo_name, service_id, service_name, group_key, priority_key, time_key FROM filtered WHERE NOT $8::boolean OR
- (group_key,priority_key,time_key,id)>($9::uuid,$10::integer,$11::bigint,$12::uuid)
- ORDER BY group_key,priority_key,time_key,id LIMIT $13
+ SELECT id, policy_id, revision, state, opened_at, policy_name, severity, slo_id, slo_name, service_id, service_name, group_key, priority_key, time_key FROM filtered WHERE NOT $11::boolean OR
+ (group_key,priority_key,time_key,id)>($12::uuid,$13::integer,$14::bigint,$15::uuid)
+ ORDER BY group_key,priority_key,time_key,id LIMIT $16
 )
 SELECT page.id, page.policy_id, page.revision, page.state, page.opened_at, page.policy_name, page.severity, page.slo_id, page.slo_name, page.service_id, page.service_name, page.group_key, page.priority_key, page.time_key,o.version,o.transition_sequence,o.payload,o.policy_snapshot,
  e.id AS evaluation_id,e.evidence,e.scheduled_at,e.committed_at,
@@ -134,19 +179,22 @@ ORDER BY page.group_key,page.priority_key,page.time_key,page.id
 `
 
 type ListAlertCatalogParams struct {
-	GroupSlo      bool        `json:"group_slo"`
-	SortSeverity  bool        `json:"sort_severity"`
-	States        []string    `json:"states"`
-	Severities    []string    `json:"severities"`
-	SloID         pgtype.UUID `json:"slo_id"`
-	ServiceID     pgtype.UUID `json:"service_id"`
-	Search        string      `json:"search"`
-	HasCursor     bool        `json:"has_cursor"`
-	AfterGroup    pgtype.UUID `json:"after_group"`
-	AfterPriority int32       `json:"after_priority"`
-	AfterTime     int64       `json:"after_time"`
-	AfterID       pgtype.UUID `json:"after_id"`
-	PageLimit     int32       `json:"page_limit"`
+	GroupSlo               bool               `json:"group_slo"`
+	SortSeverity           bool               `json:"sort_severity"`
+	EvidenceFilter         string             `json:"evidence_filter"`
+	ReadAsOf               pgtype.Timestamptz `json:"read_as_of"`
+	MinimumDurationSeconds int64              `json:"minimum_duration_seconds"`
+	States                 []string           `json:"states"`
+	Severities             []string           `json:"severities"`
+	SloID                  pgtype.UUID        `json:"slo_id"`
+	ServiceID              pgtype.UUID        `json:"service_id"`
+	Search                 string             `json:"search"`
+	HasCursor              bool               `json:"has_cursor"`
+	AfterGroup             pgtype.UUID        `json:"after_group"`
+	AfterPriority          int32              `json:"after_priority"`
+	AfterTime              int64              `json:"after_time"`
+	AfterID                pgtype.UUID        `json:"after_id"`
+	PageLimit              int32              `json:"page_limit"`
 }
 
 type ListAlertCatalogRow struct {
@@ -187,6 +235,9 @@ func (q *Queries) ListAlertCatalog(ctx context.Context, arg ListAlertCatalogPara
 	rows, err := q.db.Query(ctx, listAlertCatalog,
 		arg.GroupSlo,
 		arg.SortSeverity,
+		arg.EvidenceFilter,
+		arg.ReadAsOf,
+		arg.MinimumDurationSeconds,
 		arg.States,
 		arg.Severities,
 		arg.SloID,

@@ -184,7 +184,8 @@ describe('authentication page', () => {
     expect(screen.getByRole('heading', { name: 'Operations' })).toBeVisible();
     expect(screen.getByRole('heading', { name: 'Administration' })).toBeVisible();
     expect(screen.getByRole('link', { name: 'Agents' })).toHaveAttribute('aria-current', 'page');
-    expect(screen.getByText('Alerts').closest('[aria-disabled="true"]')).toHaveTextContent('Not available yet');
+    expect(screen.getByRole('link', { name: /^Alerts$/ })).toHaveAttribute('href', '/alerts');
+    expect(screen.getByRole('link', { name: /^Alerts$/ })).not.toHaveAttribute('aria-disabled');
     expect(screen.getByRole('link', { name: 'SLOs' })).toHaveAttribute('href', '/slos');
     expect(screen.getByRole('link', { name: 'SLIs' })).toHaveAttribute('href', '/slis');
     expect(screen.getByRole('link', { name: 'Datasources' })).toHaveAttribute('href', '/datasources');

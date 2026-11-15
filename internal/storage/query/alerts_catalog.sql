@@ -5,7 +5,16 @@ WITH filtered AS (
  CASE WHEN NOT sqlc.arg(sort_severity)::boolean THEN 0 WHEN c.severity='high' THEN 0 WHEN c.severity='medium' THEN 1 ELSE 2 END::integer AS priority_key,
  (-extract(epoch FROM c.opened_at)*1000000)::bigint AS time_key
  FROM public.almanac_alert_catalog c
- WHERE c.state=ANY(sqlc.arg(states)::text[]) AND c.severity=ANY(sqlc.arg(severities)::text[])
+ JOIN public.almanac_alert_occurrences o ON o.id=c.id
+ JOIN public.almanac_alert_evaluations e ON e.id=o.latest_evaluation_id
+ JOIN public.almanac_alert_cursors w ON (w.policy_id,w.revision)=(o.policy_id,o.revision)
+ WHERE (sqlc.arg(evidence_filter)::text=''
+ OR (sqlc.arg(evidence_filter)='matching' AND e.truth='breaching')
+ OR (sqlc.arg(evidence_filter)='unavailable' AND e.truth='indeterminate')
+ OR (sqlc.arg(evidence_filter)='waiting' AND o.state IN ('firing','acknowledged')
+     AND w.schedulable AND NOT w.exhausted AND w.waiting_reason<>''))
+ AND extract(epoch FROM (coalesce(o.terminal_at,sqlc.arg(read_as_of)::timestamptz)-o.opened_at)) >= sqlc.arg(minimum_duration_seconds)::bigint
+ AND c.state=ANY(sqlc.arg(states)::text[]) AND c.severity=ANY(sqlc.arg(severities)::text[])
  AND (sqlc.narg(slo_id)::uuid IS NULL OR c.slo_id=sqlc.narg(slo_id))
  AND (sqlc.narg(service_id)::uuid IS NULL OR c.service_id=sqlc.narg(service_id))
  AND (sqlc.arg(search)::text='' OR strpos(lower(c.policy_name||' '||c.slo_name||' '||c.service_name),sqlc.arg(search))>0)
@@ -24,14 +33,32 @@ ORDER BY page.group_key,page.priority_key,page.time_key,page.id;
 
 -- name: CountAlertCatalog :one
 SELECT count(*)::bigint FROM public.almanac_alert_catalog c
-WHERE c.state=ANY(sqlc.arg(states)::text[]) AND c.severity=ANY(sqlc.arg(severities)::text[])
+ JOIN public.almanac_alert_occurrences o ON o.id=c.id
+ JOIN public.almanac_alert_evaluations e ON e.id=o.latest_evaluation_id
+ JOIN public.almanac_alert_cursors w ON (w.policy_id,w.revision)=(o.policy_id,o.revision)
+WHERE (sqlc.arg(evidence_filter)::text=''
+ OR (sqlc.arg(evidence_filter)='matching' AND e.truth='breaching')
+ OR (sqlc.arg(evidence_filter)='unavailable' AND e.truth='indeterminate')
+ OR (sqlc.arg(evidence_filter)='waiting' AND o.state IN ('firing','acknowledged')
+     AND w.schedulable AND NOT w.exhausted AND w.waiting_reason<>''))
+ AND extract(epoch FROM (coalesce(o.terminal_at,sqlc.arg(read_as_of)::timestamptz)-o.opened_at)) >= sqlc.arg(minimum_duration_seconds)::bigint
+ AND c.state=ANY(sqlc.arg(states)::text[]) AND c.severity=ANY(sqlc.arg(severities)::text[])
 AND (sqlc.narg(slo_id)::uuid IS NULL OR c.slo_id=sqlc.narg(slo_id))
 AND (sqlc.narg(service_id)::uuid IS NULL OR c.service_id=sqlc.narg(service_id))
 AND (sqlc.arg(search)::text='' OR strpos(lower(c.policy_name||' '||c.slo_name||' '||c.service_name),sqlc.arg(search))>0);
 
 -- name: GroupAlertCatalog :many
-SELECT c.slo_id,c.slo_name,count(*)::bigint AS total FROM public.almanac_alert_catalog c
-WHERE c.state=ANY(sqlc.arg(states)::text[]) AND c.severity=ANY(sqlc.arg(severities)::text[])
+SELECT c.slo_id,c.slo_name,count(*)::bigint AS total,count(*) FILTER (WHERE c.state='firing')::bigint AS firing FROM public.almanac_alert_catalog c
+ JOIN public.almanac_alert_occurrences o ON o.id=c.id
+ JOIN public.almanac_alert_evaluations e ON e.id=o.latest_evaluation_id
+ JOIN public.almanac_alert_cursors w ON (w.policy_id,w.revision)=(o.policy_id,o.revision)
+WHERE (sqlc.arg(evidence_filter)::text=''
+ OR (sqlc.arg(evidence_filter)='matching' AND e.truth='breaching')
+ OR (sqlc.arg(evidence_filter)='unavailable' AND e.truth='indeterminate')
+ OR (sqlc.arg(evidence_filter)='waiting' AND o.state IN ('firing','acknowledged')
+     AND w.schedulable AND NOT w.exhausted AND w.waiting_reason<>''))
+ AND extract(epoch FROM (coalesce(o.terminal_at,sqlc.arg(read_as_of)::timestamptz)-o.opened_at)) >= sqlc.arg(minimum_duration_seconds)::bigint
+ AND c.state=ANY(sqlc.arg(states)::text[]) AND c.severity=ANY(sqlc.arg(severities)::text[])
 AND (sqlc.narg(slo_id)::uuid IS NULL OR c.slo_id=sqlc.narg(slo_id))
 AND (sqlc.narg(service_id)::uuid IS NULL OR c.service_id=sqlc.narg(service_id))
 AND (sqlc.arg(search)::text='' OR strpos(lower(c.policy_name||' '||c.slo_name||' '||c.service_name),sqlc.arg(search))>0)

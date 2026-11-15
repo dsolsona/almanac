@@ -12,7 +12,7 @@ test('selected alert list evidence, grouping and keyboard filters @matrix', asyn
   const example = page.locator('#alert-occurrences'), list = example.locator('.alert-occurrence-list');
   const records = list.getByRole('region', { name: 'Alert records' });
   await list.scrollIntoViewIfNeeded();
-  await expect(list.getByText('22.8×')).toHaveCount(2);
+  await expect(list.locator('.alert-match__windows').getByText('22.8×', { exact: true })).toHaveCount(2);
   await expect(list.getByText('Waiting for calculation')).toBeVisible();
   await expect(list.getByText('Missing observations prevent recovery')).toBeVisible();
   const unavailable = list.getByRole('row').filter({ hasText: 'Missing observations prevent recovery' });
@@ -59,11 +59,11 @@ test('acknowledgement conflicts preserve lifecycle and history distinguishes rec
   const checkout = table.getByRole('row').filter({ has: page.getByRole('link', { name: 'Checkout burn', exact: true }) });
   await checkout.getByRole('button', { name: 'Acknowledge Checkout burn', exact: true }).click();
   await expect(checkout.getByRole('alert')).toContainText('The alert changed');
-  await expect(checkout.getByText('Firing', { exact: true })).toBeVisible();
+  await expect(checkout.locator('.ui-status-chip').filter({ hasText: /^Firing$/ })).toBeVisible();
   await expect(example.getByRole('status')).toHaveText('');
   await example.getByRole('button', { name: 'Conflict on acknowledgement', exact: true }).click();
   await checkout.getByRole('button', { name: 'Acknowledge Checkout burn', exact: true }).click();
-  await expect(checkout.getByText('Acknowledged', { exact: true })).toBeVisible();
+  await expect(checkout.locator('.ui-status-chip').filter({ hasText: /^Acknowledged$/ })).toBeVisible();
   await expect(checkout.getByText('Alex Rivera')).toBeVisible();
   await expect(checkout.getByRole('link', { name: 'View Checkout burn', exact: true })).toBeFocused();
   await checkout.getByText('High severity').click();
@@ -95,7 +95,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
       const button = list.getByRole('button', { name: 'Acknowledge Checkout burn', exact: true });
       await button.scrollIntoViewIfNeeded(); expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44);
       await button.tap(); await expect(button).toBeDisabled();
-      await expect(list.getByText('Firing', { exact: true })).toBeVisible();
+      await expect(list.locator('.ui-status-chip').filter({ hasText: /^Firing$/ })).toBeVisible();
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
       await capture(page, example.locator('.alert-list-example'), `../.local/alert-list-touch-${colorScheme}.png`);
     } finally { await context.close(); }

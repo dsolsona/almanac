@@ -306,6 +306,318 @@ func (e AgentSLICollectionMeasurementKind) Valid() bool {
 	}
 }
 
+// Defines values for AlertCommandLookupStatus.
+const (
+	AlertCommandLookupStatusCommitted AlertCommandLookupStatus = "committed"
+	AlertCommandLookupStatusExpired   AlertCommandLookupStatus = "expired"
+	AlertCommandLookupStatusUnknown   AlertCommandLookupStatus = "unknown"
+)
+
+// Valid indicates whether the value is a known member of the AlertCommandLookupStatus enum.
+func (e AlertCommandLookupStatus) Valid() bool {
+	switch e {
+	case AlertCommandLookupStatusCommitted:
+		return true
+	case AlertCommandLookupStatusExpired:
+		return true
+	case AlertCommandLookupStatusUnknown:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AlertConditionOutcome.
+const (
+	AlertConditionOutcomeMatching    AlertConditionOutcome = "matching"
+	AlertConditionOutcomeNotMatching AlertConditionOutcome = "not_matching"
+	AlertConditionOutcomeUnavailable AlertConditionOutcome = "unavailable"
+)
+
+// Valid indicates whether the value is a known member of the AlertConditionOutcome enum.
+func (e AlertConditionOutcome) Valid() bool {
+	switch e {
+	case AlertConditionOutcomeMatching:
+		return true
+	case AlertConditionOutcomeNotMatching:
+		return true
+	case AlertConditionOutcomeUnavailable:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AlertLifecycle.
+const (
+	AlertLifecycleAcknowledged AlertLifecycle = "acknowledged"
+	AlertLifecycleDisabled     AlertLifecycle = "disabled"
+	AlertLifecycleFiring       AlertLifecycle = "firing"
+	AlertLifecycleResolved     AlertLifecycle = "resolved"
+	AlertLifecycleSuperseded   AlertLifecycle = "superseded"
+)
+
+// Valid indicates whether the value is a known member of the AlertLifecycle enum.
+func (e AlertLifecycle) Valid() bool {
+	switch e {
+	case AlertLifecycleAcknowledged:
+		return true
+	case AlertLifecycleDisabled:
+		return true
+	case AlertLifecycleFiring:
+		return true
+	case AlertLifecycleResolved:
+		return true
+	case AlertLifecycleSuperseded:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AlertOperation.
+const (
+	AlertOperationAlertAcknowledge   AlertOperation = "alert.acknowledge"
+	AlertOperationAlertPolicyCreate  AlertOperation = "alert-policy.create"
+	AlertOperationAlertPolicyDisable AlertOperation = "alert-policy.disable"
+	AlertOperationAlertPolicyEnable  AlertOperation = "alert-policy.enable"
+	AlertOperationAlertPolicyRetry   AlertOperation = "alert-policy.retry"
+	AlertOperationAlertPolicyUpdate  AlertOperation = "alert-policy.update"
+)
+
+// Valid indicates whether the value is a known member of the AlertOperation enum.
+func (e AlertOperation) Valid() bool {
+	switch e {
+	case AlertOperationAlertAcknowledge:
+		return true
+	case AlertOperationAlertPolicyCreate:
+		return true
+	case AlertOperationAlertPolicyDisable:
+		return true
+	case AlertOperationAlertPolicyEnable:
+		return true
+	case AlertOperationAlertPolicyRetry:
+		return true
+	case AlertOperationAlertPolicyUpdate:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AlertQuality.
+const (
+	AlertQualityCalculationFailed AlertQuality = "calculation_failed"
+	AlertQualityComplete          AlertQuality = "complete"
+	AlertQualityExcluded          AlertQuality = "excluded"
+	AlertQualityExpired           AlertQuality = "expired"
+	AlertQualityMissing           AlertQuality = "missing"
+	AlertQualityPartial           AlertQuality = "partial"
+	AlertQualityStale             AlertQuality = "stale"
+	AlertQualityWarmup            AlertQuality = "warmup"
+	AlertQualityZeroTraffic       AlertQuality = "zero_traffic"
+)
+
+// Valid indicates whether the value is a known member of the AlertQuality enum.
+func (e AlertQuality) Valid() bool {
+	switch e {
+	case AlertQualityCalculationFailed:
+		return true
+	case AlertQualityComplete:
+		return true
+	case AlertQualityExcluded:
+		return true
+	case AlertQualityExpired:
+		return true
+	case AlertQualityMissing:
+		return true
+	case AlertQualityPartial:
+		return true
+	case AlertQualityStale:
+		return true
+	case AlertQualityWarmup:
+		return true
+	case AlertQualityZeroTraffic:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AlertRangeKind.
+const (
+	AlertRangeKindAdministrativeCancellation AlertRangeKind = "administrative_cancellation"
+	AlertRangeKindCompactedEvaluations       AlertRangeKind = "compacted_evaluations"
+	AlertRangeKindRepeatedCutoff             AlertRangeKind = "repeated_cutoff"
+	AlertRangeKindUnreconstructedGap         AlertRangeKind = "unreconstructed_gap"
+)
+
+// Valid indicates whether the value is a known member of the AlertRangeKind enum.
+func (e AlertRangeKind) Valid() bool {
+	switch e {
+	case AlertRangeKindAdministrativeCancellation:
+		return true
+	case AlertRangeKindCompactedEvaluations:
+		return true
+	case AlertRangeKindRepeatedCutoff:
+		return true
+	case AlertRangeKindUnreconstructedGap:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AlertSeriesGapBasis.
+const (
+	EffectiveCutoff   AlertSeriesGapBasis = "effective_cutoff"
+	ScheduledBoundary AlertSeriesGapBasis = "scheduled_boundary"
+)
+
+// Valid indicates whether the value is a known member of the AlertSeriesGapBasis enum.
+func (e AlertSeriesGapBasis) Valid() bool {
+	switch e {
+	case EffectiveCutoff:
+		return true
+	case ScheduledBoundary:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AlertSeriesGapKind.
+const (
+	AlertSeriesGapKindAdministrativeCancellation AlertSeriesGapKind = "administrative_cancellation"
+	AlertSeriesGapKindCompactedEvaluations       AlertSeriesGapKind = "compacted_evaluations"
+	AlertSeriesGapKindNotRetained                AlertSeriesGapKind = "not_retained"
+	AlertSeriesGapKindOutsideRevision            AlertSeriesGapKind = "outside_revision"
+	AlertSeriesGapKindPending                    AlertSeriesGapKind = "pending"
+	AlertSeriesGapKindRepeatedCutoff             AlertSeriesGapKind = "repeated_cutoff"
+	AlertSeriesGapKindUnavailable                AlertSeriesGapKind = "unavailable"
+	AlertSeriesGapKindUnreconstructedGap         AlertSeriesGapKind = "unreconstructed_gap"
+)
+
+// Valid indicates whether the value is a known member of the AlertSeriesGapKind enum.
+func (e AlertSeriesGapKind) Valid() bool {
+	switch e {
+	case AlertSeriesGapKindAdministrativeCancellation:
+		return true
+	case AlertSeriesGapKindCompactedEvaluations:
+		return true
+	case AlertSeriesGapKindNotRetained:
+		return true
+	case AlertSeriesGapKindOutsideRevision:
+		return true
+	case AlertSeriesGapKindPending:
+		return true
+	case AlertSeriesGapKindRepeatedCutoff:
+		return true
+	case AlertSeriesGapKindUnavailable:
+		return true
+	case AlertSeriesGapKindUnreconstructedGap:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AlertSeriesSamplingMethod.
+const (
+	Exact           AlertSeriesSamplingMethod = "exact"
+	ExtremaPriority AlertSeriesSamplingMethod = "extrema_priority"
+)
+
+// Valid indicates whether the value is a known member of the AlertSeriesSamplingMethod enum.
+func (e AlertSeriesSamplingMethod) Valid() bool {
+	switch e {
+	case Exact:
+		return true
+	case ExtremaPriority:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AlertSeverity.
+const (
+	High   AlertSeverity = "high"
+	Low    AlertSeverity = "low"
+	Medium AlertSeverity = "medium"
+)
+
+// Valid indicates whether the value is a known member of the AlertSeverity enum.
+func (e AlertSeverity) Valid() bool {
+	switch e {
+	case High:
+		return true
+	case Low:
+		return true
+	case Medium:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AlertTransitionCause.
+const (
+	AlertTransitionCauseAcknowledged                   AlertTransitionCause = "acknowledged"
+	AlertTransitionCauseConditionMatched               AlertTransitionCause = "condition_matched"
+	AlertTransitionCauseConditionsCleared              AlertTransitionCause = "conditions_cleared"
+	AlertTransitionCauseDefinitionSuperseded           AlertTransitionCause = "definition_superseded"
+	AlertTransitionCauseEvidenceUpdated                AlertTransitionCause = "evidence_updated"
+	AlertTransitionCausePolicyDisabled                 AlertTransitionCause = "policy_disabled"
+	AlertTransitionCauseResolvedAfterMaintenanceChange AlertTransitionCause = "resolved_after_maintenance_change"
+	AlertTransitionCauseSloArchived                    AlertTransitionCause = "slo_archived"
+)
+
+// Valid indicates whether the value is a known member of the AlertTransitionCause enum.
+func (e AlertTransitionCause) Valid() bool {
+	switch e {
+	case AlertTransitionCauseAcknowledged:
+		return true
+	case AlertTransitionCauseConditionMatched:
+		return true
+	case AlertTransitionCauseConditionsCleared:
+		return true
+	case AlertTransitionCauseDefinitionSuperseded:
+		return true
+	case AlertTransitionCauseEvidenceUpdated:
+		return true
+	case AlertTransitionCausePolicyDisabled:
+		return true
+	case AlertTransitionCauseResolvedAfterMaintenanceChange:
+		return true
+	case AlertTransitionCauseSloArchived:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AlertTruth.
+const (
+	AlertTruthBreaching     AlertTruth = "breaching"
+	AlertTruthClear         AlertTruth = "clear"
+	AlertTruthIndeterminate AlertTruth = "indeterminate"
+)
+
+// Valid indicates whether the value is a known member of the AlertTruth enum.
+func (e AlertTruth) Valid() bool {
+	switch e {
+	case AlertTruthBreaching:
+		return true
+	case AlertTruthClear:
+		return true
+	case AlertTruthIndeterminate:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for CompleteEmptyOutcomeState.
 const (
 	CompleteEmptyOutcomeStateCompleteEmpty CompleteEmptyOutcomeState = "complete_empty"
@@ -1181,19 +1493,19 @@ func (e RotationIssuanceReplaySecretState) Valid() bool {
 
 // Defines values for SecretActionAction.
 const (
-	Clear   SecretActionAction = "clear"
-	Replace SecretActionAction = "replace"
-	Retain  SecretActionAction = "retain"
+	SecretActionActionClear   SecretActionAction = "clear"
+	SecretActionActionReplace SecretActionAction = "replace"
+	SecretActionActionRetain  SecretActionAction = "retain"
 )
 
 // Valid indicates whether the value is a known member of the SecretActionAction enum.
 func (e SecretActionAction) Valid() bool {
 	switch e {
-	case Clear:
+	case SecretActionActionClear:
 		return true
-	case Replace:
+	case SecretActionActionReplace:
 		return true
-	case Retain:
+	case SecretActionActionRetain:
 		return true
 	default:
 		return false
@@ -2325,21 +2637,117 @@ func (e UserRole) Valid() bool {
 	}
 }
 
+// Defines values for ListAlertsParamsScope.
+const (
+	ListAlertsParamsScopeActive  ListAlertsParamsScope = "active"
+	ListAlertsParamsScopeAll     ListAlertsParamsScope = "all"
+	ListAlertsParamsScopeHistory ListAlertsParamsScope = "history"
+)
+
+// Valid indicates whether the value is a known member of the ListAlertsParamsScope enum.
+func (e ListAlertsParamsScope) Valid() bool {
+	switch e {
+	case ListAlertsParamsScopeActive:
+		return true
+	case ListAlertsParamsScopeAll:
+		return true
+	case ListAlertsParamsScopeHistory:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListAlertsParamsGroupBy.
+const (
+	ListAlertsParamsGroupByNone ListAlertsParamsGroupBy = "none"
+	ListAlertsParamsGroupBySlo  ListAlertsParamsGroupBy = "slo"
+)
+
+// Valid indicates whether the value is a known member of the ListAlertsParamsGroupBy enum.
+func (e ListAlertsParamsGroupBy) Valid() bool {
+	switch e {
+	case ListAlertsParamsGroupByNone:
+		return true
+	case ListAlertsParamsGroupBySlo:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListAlertsParamsSort.
+const (
+	Newest   ListAlertsParamsSort = "newest"
+	Severity ListAlertsParamsSort = "severity"
+)
+
+// Valid indicates whether the value is a known member of the ListAlertsParamsSort enum.
+func (e ListAlertsParamsSort) Valid() bool {
+	switch e {
+	case Newest:
+		return true
+	case Severity:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListAlertsParamsEvidence.
+const (
+	ListAlertsParamsEvidenceMatching    ListAlertsParamsEvidence = "matching"
+	ListAlertsParamsEvidenceUnavailable ListAlertsParamsEvidence = "unavailable"
+	ListAlertsParamsEvidenceWaiting     ListAlertsParamsEvidence = "waiting"
+)
+
+// Valid indicates whether the value is a known member of the ListAlertsParamsEvidence enum.
+func (e ListAlertsParamsEvidence) Valid() bool {
+	switch e {
+	case ListAlertsParamsEvidenceMatching:
+		return true
+	case ListAlertsParamsEvidenceUnavailable:
+		return true
+	case ListAlertsParamsEvidenceWaiting:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GetAlertEvidenceParamsSelection.
+const (
+	GetAlertEvidenceParamsSelectionFiring GetAlertEvidenceParamsSelection = "firing"
+	GetAlertEvidenceParamsSelectionLatest GetAlertEvidenceParamsSelection = "latest"
+)
+
+// Valid indicates whether the value is a known member of the GetAlertEvidenceParamsSelection enum.
+func (e GetAlertEvidenceParamsSelection) Valid() bool {
+	switch e {
+	case GetAlertEvidenceParamsSelectionFiring:
+		return true
+	case GetAlertEvidenceParamsSelectionLatest:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ListServicesParamsCoverage.
 const (
-	All     ListServicesParamsCoverage = "all"
-	With    ListServicesParamsCoverage = "with"
-	Without ListServicesParamsCoverage = "without"
+	ListServicesParamsCoverageAll     ListServicesParamsCoverage = "all"
+	ListServicesParamsCoverageWith    ListServicesParamsCoverage = "with"
+	ListServicesParamsCoverageWithout ListServicesParamsCoverage = "without"
 )
 
 // Valid indicates whether the value is a known member of the ListServicesParamsCoverage enum.
 func (e ListServicesParamsCoverage) Valid() bool {
 	switch e {
-	case All:
+	case ListServicesParamsCoverageAll:
 		return true
-	case With:
+	case ListServicesParamsCoverageWith:
 		return true
-	case Without:
+	case ListServicesParamsCoverageWithout:
 		return true
 	default:
 		return false
@@ -2691,6 +3099,538 @@ type AgentSLICollectionComponentMode string
 
 // AgentSLICollectionMeasurementKind defines model for AgentSLICollection.MeasurementKind.
 type AgentSLICollectionMeasurementKind string
+
+// AlertAcknowledge defines model for AlertAcknowledge.
+type AlertAcknowledge = struct{}
+
+// AlertCatalogItem defines model for AlertCatalogItem.
+type AlertCatalogItem struct {
+	Alert AlertRecord `json:"alert"`
+
+	// CommittedAt UTC timestamp with Z suffix.
+	CommittedAt  AlertTimestamp     `json:"committed_at"`
+	Evaluation   AlertEvaluation    `json:"evaluation"`
+	EvaluationId openapi_types.UUID `json:"evaluation_id"`
+	PolicyName   string             `json:"policy_name"`
+	Processing   AlertProcessing    `json:"processing"`
+
+	// ScheduledAt UTC timestamp with Z suffix.
+	ScheduledAt AlertTimestamp     `json:"scheduled_at"`
+	ServiceId   openapi_types.UUID `json:"service_id"`
+	ServiceName string             `json:"service_name"`
+	Severity    AlertSeverity      `json:"severity"`
+	SloId       openapi_types.UUID `json:"slo_id"`
+	SloName     string             `json:"slo_name"`
+}
+
+// AlertCommandLookup Result is present only for committed. Lookup is scoped to the authenticated actor.
+type AlertCommandLookup struct {
+	// Result The committed resource accompanies the operation. Policy commands may return both policy and an affected terminal alert; acknowledgement returns alert.
+	Result *AlertCommandResult      `json:"result,omitempty"`
+	Status AlertCommandLookupStatus `json:"status"`
+}
+
+// AlertCommandLookupStatus defines model for AlertCommandLookup.Status.
+type AlertCommandLookupStatus string
+
+// AlertCommandResult The committed resource accompanies the operation. Policy commands may return both policy and an affected terminal alert; acknowledgement returns alert.
+type AlertCommandResult struct {
+	Alert     *AlertRecord   `json:"alert,omitempty"`
+	Operation AlertOperation `json:"operation"`
+	Policy    *AlertPolicy   `json:"policy,omitempty"`
+	RequestId string         `json:"request_id"`
+}
+
+// AlertCompactionSummary Unchanged condition outcomes and actual endpoint identities only. Compacted middle numeric evidence is unavailable.
+type AlertCompactionSummary struct {
+	Conditions []AlertConditionCompactionSummary `json:"conditions"`
+	First      AlertSnapshotIdentity             `json:"first"`
+	Last       AlertSnapshotIdentity             `json:"last"`
+	Truth      AlertTruth                        `json:"truth"`
+}
+
+// AlertCondition defines model for AlertCondition.
+type AlertCondition struct {
+	Id string `json:"id"`
+
+	// LongWindowSeconds Whole minutes expressed as integer seconds; must also align to source cadence. Short must not exceed long.
+	LongWindowSeconds AlertWindowSeconds `json:"long_window_seconds"`
+
+	// ShortWindowSeconds Whole minutes expressed as integer seconds; must also align to source cadence. Short must not exceed long.
+	ShortWindowSeconds AlertWindowSeconds `json:"short_window_seconds"`
+
+	// Threshold Positive exact burn threshold; reachability is validated against the exact SLO target.
+	Threshold AlertThreshold `json:"threshold"`
+}
+
+// AlertConditionCompactionSummary defines model for AlertConditionCompactionSummary.
+type AlertConditionCompactionSummary struct {
+	Id          string       `json:"id"`
+	LongQuality AlertQuality `json:"long_quality"`
+	LongReason  *string      `json:"long_reason,omitempty"`
+
+	// LongWindowSeconds Whole minutes expressed as integer seconds; must also align to source cadence. Short must not exceed long.
+	LongWindowSeconds AlertWindowSeconds    `json:"long_window_seconds"`
+	Outcome           AlertConditionOutcome `json:"outcome"`
+	ShortQuality      AlertQuality          `json:"short_quality"`
+	ShortReason       *string               `json:"short_reason,omitempty"`
+
+	// ShortWindowSeconds Whole minutes expressed as integer seconds; must also align to source cadence. Short must not exceed long.
+	ShortWindowSeconds AlertWindowSeconds `json:"short_window_seconds"`
+
+	// Threshold Positive exact burn threshold; reachability is validated against the exact SLO target.
+	Threshold AlertThreshold `json:"threshold"`
+}
+
+// AlertConditionOutcome defines model for AlertConditionOutcome.
+type AlertConditionOutcome string
+
+// AlertConditionResult defines model for AlertConditionResult.
+type AlertConditionResult struct {
+	Id string `json:"id"`
+
+	// Long Requested full half-open window and immutable as-evaluated quality. Good and total are present exactly when saved paired numeric counts are available, including partial, stale or zero-traffic observations. Absent numeric counts are omitted, never replaced with zero. Numeric presence does not make the condition usable; quality and outcome remain authoritative.
+	Long    AlertWindowEvidence   `json:"long"`
+	Outcome AlertConditionOutcome `json:"outcome"`
+
+	// Short Requested full half-open window and immutable as-evaluated quality. Good and total are present exactly when saved paired numeric counts are available, including partial, stale or zero-traffic observations. Absent numeric counts are omitted, never replaced with zero. Numeric presence does not make the condition usable; quality and outcome remain authoritative.
+	Short AlertWindowEvidence `json:"short"`
+
+	// Threshold Positive exact burn threshold; reachability is validated against the exact SLO target.
+	Threshold AlertThreshold `json:"threshold"`
+}
+
+// AlertConditions Ordered conditions with unique stable IDs. AND within a condition, OR between conditions.
+type AlertConditions = []AlertCondition
+
+// AlertCounter Exact nonnegative decimal integer, no larger than signed int64 MaxInt64.
+type AlertCounter = string
+
+// AlertEvaluation defines model for AlertEvaluation.
+type AlertEvaluation struct {
+	Conditions []AlertConditionResult `json:"conditions"`
+
+	// EvaluationRevision Exact positive decimal integer, no larger than signed int64 MaxInt64.
+	EvaluationRevision AlertVersion       `json:"evaluation_revision"`
+	PolicyId           openapi_types.UUID `json:"policy_id"`
+
+	// RecoveryComparison The last-breaching exclusion mask applied to the same present source facts; not a recalculation of the original firing decision.
+	RecoveryComparison *AlertRecoveryComparison `json:"recovery_comparison,omitempty"`
+	Snapshot           AlertSnapshotIdentity    `json:"snapshot"`
+	Truth              AlertTruth               `json:"truth"`
+}
+
+// AlertEvidence defines model for AlertEvidence.
+type AlertEvidence struct {
+	// CommittedAt UTC timestamp with Z suffix.
+	CommittedAt AlertTimestamp     `json:"committed_at"`
+	Evaluation  AlertEvaluation    `json:"evaluation"`
+	Id          openapi_types.UUID `json:"id"`
+	Objective   AlertObjective     `json:"objective"`
+
+	// ScheduledAt UTC timestamp with Z suffix.
+	ScheduledAt AlertTimestamp `json:"scheduled_at"`
+}
+
+// AlertExactDecimal Exact nonnegative decimal evidence, never a floating-point approximation. Absence is not zero.
+type AlertExactDecimal = string
+
+// AlertGroup defines model for AlertGroup.
+type AlertGroup struct {
+	// Firing Firing occurrences over the complete filtered group
+	Firing  AlertCounter       `json:"firing"`
+	SloId   openapi_types.UUID `json:"slo_id"`
+	SloName string             `json:"slo_name"`
+
+	// Total Exact nonnegative decimal integer, no larger than signed int64 MaxInt64.
+	Total AlertCounter `json:"total"`
+}
+
+// AlertLifecycle defines model for AlertLifecycle.
+type AlertLifecycle string
+
+// AlertObjective defines model for AlertObjective.
+type AlertObjective struct {
+	CadenceSeconds int64 `json:"cadence_seconds"`
+
+	// DefinitionValidFrom UTC timestamp with Z suffix.
+	DefinitionValidFrom AlertTimestamp `json:"definition_valid_from"`
+
+	// MeasurementValidFrom UTC timestamp with Z suffix.
+	MeasurementValidFrom AlertTimestamp `json:"measurement_valid_from"`
+
+	// RetentionStart UTC timestamp with Z suffix.
+	RetentionStart AlertTimestamp `json:"retention_start"`
+
+	// Target Exact nonnegative decimal evidence, never a floating-point approximation. Absence is not zero.
+	Target AlertExactDecimal `json:"target"`
+}
+
+// AlertOperation defines model for AlertOperation.
+type AlertOperation string
+
+// AlertOriginalPolicy defines model for AlertOriginalPolicy.
+type AlertOriginalPolicy struct {
+	Name                 string        `json:"name"`
+	RollingWindowSeconds int64         `json:"rolling_window_seconds"`
+	ServiceName          string        `json:"service_name"`
+	Severity             AlertSeverity `json:"severity"`
+	SloName              string        `json:"slo_name"`
+
+	// Target Exact nonnegative decimal evidence, never a floating-point approximation. Absence is not zero.
+	Target AlertExactDecimal `json:"target"`
+}
+
+// AlertPage defines model for AlertPage.
+type AlertPage struct {
+	Groups     []AlertGroup       `json:"groups"`
+	Items      []AlertCatalogItem `json:"items"`
+	NextCursor *string            `json:"next_cursor,omitempty"`
+
+	// Total Exact nonnegative decimal integer, no larger than signed int64 MaxInt64.
+	Total AlertCounter `json:"total"`
+}
+
+// AlertPolicy defines model for AlertPolicy.
+type AlertPolicy struct {
+	// Conditions Ordered conditions with unique stable IDs. AND within a condition, OR between conditions.
+	Conditions AlertConditions `json:"conditions"`
+
+	// CreatedAt UTC timestamp with Z suffix.
+	CreatedAt AlertTimestamp `json:"created_at"`
+	Enabled   bool           `json:"enabled"`
+
+	// EvaluationRevision Exact positive decimal integer, no larger than signed int64 MaxInt64.
+	EvaluationRevision AlertVersion       `json:"evaluation_revision"`
+	Id                 openapi_types.UUID `json:"id"`
+	Name               string             `json:"name"`
+	Severity           AlertSeverity      `json:"severity"`
+	SloId              openapi_types.UUID `json:"slo_id"`
+
+	// UpdatedAt UTC timestamp with Z suffix.
+	UpdatedAt AlertTimestamp `json:"updated_at"`
+
+	// Version Exact positive decimal integer, no larger than signed int64 MaxInt64.
+	Version AlertVersion `json:"version"`
+}
+
+// AlertPolicyCatalogItem defines model for AlertPolicyCatalogItem.
+type AlertPolicyCatalogItem struct {
+	OpenOccurrenceId *openapi_types.UUID `json:"open_occurrence_id,omitempty"`
+	Policy           AlertPolicy         `json:"policy"`
+	Processing       AlertProcessing     `json:"processing"`
+	SloName          string              `json:"slo_name"`
+}
+
+// AlertPolicyCommand defines model for AlertPolicyCommand.
+type AlertPolicyCommand struct {
+	Reason *string `json:"reason,omitempty"`
+}
+
+// AlertPolicyPage defines model for AlertPolicyPage.
+type AlertPolicyPage struct {
+	Items      []AlertPolicyCatalogItem `json:"items"`
+	NextCursor *string                  `json:"next_cursor,omitempty"`
+
+	// Total Exact nonnegative decimal integer, no larger than signed int64 MaxInt64.
+	Total AlertCounter `json:"total"`
+}
+
+// AlertPolicyPatch defines model for AlertPolicyPatch.
+type AlertPolicyPatch struct {
+	// Conditions Ordered conditions with unique stable IDs. AND within a condition, OR between conditions.
+	Conditions *AlertConditions `json:"conditions,omitempty"`
+
+	// ConfirmNon30DayPresets Explicit confirmation when exact 30-day reference presets are used with another SLO period. This acknowledgement is not policy metadata.
+	ConfirmNon30DayPresets *bool `json:"confirm_non_30_day_presets,omitempty"`
+
+	// Name At most 1024 UTF-8 bytes, without control characters.
+	Name     *string             `json:"name,omitempty"`
+	Reason   *string             `json:"reason,omitempty"`
+	Severity *AlertSeverity      `json:"severity,omitempty"`
+	SloId    *openapi_types.UUID `json:"slo_id,omitempty"`
+}
+
+// AlertPolicyWrite defines model for AlertPolicyWrite.
+type AlertPolicyWrite struct {
+	// Conditions Ordered conditions with unique stable IDs. AND within a condition, OR between conditions.
+	Conditions AlertConditions `json:"conditions"`
+
+	// ConfirmNon30DayPresets Explicit confirmation when exact 30-day reference presets are used with another SLO period. This acknowledgement is not policy metadata.
+	ConfirmNon30DayPresets *bool `json:"confirm_non_30_day_presets,omitempty"`
+	Enabled                *bool `json:"enabled,omitempty"`
+
+	// Name Human-readable name, at most 1024 UTF-8 bytes, without control characters.
+	Name     string             `json:"name"`
+	Severity *AlertSeverity     `json:"severity,omitempty"`
+	SloId    openapi_types.UUID `json:"slo_id"`
+}
+
+// AlertProcessing defines model for AlertProcessing.
+type AlertProcessing struct {
+	// AvailableAt UTC timestamp with Z suffix.
+	AvailableAt     AlertTimestamp `json:"available_at"`
+	Exhausted       bool           `json:"exhausted"`
+	FailureAttempts int            `json:"failure_attempts"`
+	LagSeconds      int64          `json:"lag_seconds"`
+
+	// LastCutoff UTC timestamp with Z suffix.
+	LastCutoff       *AlertTimestamp     `json:"last_cutoff,omitempty"`
+	LastEvaluationId *openapi_types.UUID `json:"last_evaluation_id,omitempty"`
+
+	// NextBoundary UTC timestamp with Z suffix.
+	NextBoundary AlertTimestamp `json:"next_boundary"`
+
+	// PendingCutoff UTC timestamp with Z suffix.
+	PendingCutoff *AlertTimestamp    `json:"pending_cutoff,omitempty"`
+	PolicyId      openapi_types.UUID `json:"policy_id"`
+
+	// Revision Exact positive decimal integer, no larger than signed int64 MaxInt64.
+	Revision      AlertVersion `json:"revision"`
+	Schedulable   bool         `json:"schedulable"`
+	WaitingReason *string      `json:"waiting_reason,omitempty"`
+}
+
+// AlertQuality defines model for AlertQuality.
+type AlertQuality string
+
+// AlertRange defines model for AlertRange.
+type AlertRange struct {
+	ActorId        *openapi_types.UUID `json:"actor_id,omitempty"`
+	CadenceSeconds int64               `json:"cadence_seconds"`
+
+	// End UTC timestamp with Z suffix.
+	End          AlertTimestamp      `json:"end"`
+	EvaluationId *openapi_types.UUID `json:"evaluation_id,omitempty"`
+	Id           openapi_types.UUID  `json:"id"`
+	Kind         AlertRangeKind      `json:"kind"`
+	Reason       string              `json:"reason"`
+
+	// RecordedAt UTC timestamp with Z suffix.
+	RecordedAt AlertTimestamp `json:"recorded_at"`
+	RequestId  *string        `json:"request_id,omitempty"`
+
+	// Start UTC timestamp with Z suffix.
+	Start AlertTimestamp `json:"start"`
+
+	// Summary Unchanged condition outcomes and actual endpoint identities only. Compacted middle numeric evidence is unavailable.
+	Summary *AlertCompactionSummary `json:"summary,omitempty"`
+}
+
+// AlertRangeKind defines model for AlertRange.Kind.
+type AlertRangeKind string
+
+// AlertRangePage defines model for AlertRangePage.
+type AlertRangePage struct {
+	Items      []AlertRange `json:"items"`
+	NextCursor *string      `json:"next_cursor,omitempty"`
+}
+
+// AlertRecord defines model for AlertRecord.
+type AlertRecord struct {
+	// AcknowledgedAt UTC timestamp with Z suffix.
+	AcknowledgedAt *AlertTimestamp     `json:"acknowledged_at,omitempty"`
+	AcknowledgedBy *openapi_types.UUID `json:"acknowledged_by,omitempty"`
+
+	// ClosedAt UTC timestamp with Z suffix.
+	ClosedAt *AlertTimestamp `json:"closed_at,omitempty"`
+
+	// EvaluationRevision Exact positive decimal integer, no larger than signed int64 MaxInt64.
+	EvaluationRevision      AlertVersion          `json:"evaluation_revision"`
+	FiringSnapshot          AlertSnapshotIdentity `json:"firing_snapshot"`
+	Id                      openapi_types.UUID    `json:"id"`
+	LatestBreachingSnapshot AlertSnapshotIdentity `json:"latest_breaching_snapshot"`
+	LatestSnapshot          AlertSnapshotIdentity `json:"latest_snapshot"`
+
+	// OpenedDetectedAt UTC timestamp with Z suffix.
+	OpenedDetectedAt AlertTimestamp      `json:"opened_detected_at"`
+	OriginalPolicy   AlertOriginalPolicy `json:"original_policy"`
+	PolicyId         openapi_types.UUID  `json:"policy_id"`
+
+	// Sequence Exact positive decimal integer, no larger than signed int64 MaxInt64.
+	Sequence AlertVersion   `json:"sequence"`
+	State    AlertLifecycle `json:"state"`
+
+	// UpdatedAt UTC timestamp with Z suffix.
+	UpdatedAt AlertTimestamp `json:"updated_at"`
+
+	// Version Exact positive decimal integer, no larger than signed int64 MaxInt64.
+	Version AlertVersion `json:"version"`
+}
+
+// AlertRecoveryComparison The last-breaching exclusion mask applied to the same present source facts; not a recalculation of the original firing decision.
+type AlertRecoveryComparison struct {
+	Conditions []AlertConditionResult `json:"conditions"`
+	Snapshot   AlertSnapshotIdentity  `json:"snapshot"`
+	Truth      AlertTruth             `json:"truth"`
+}
+
+// AlertRetry Empty retry command. A human reason is not supported and is rejected rather than discarded.
+type AlertRetry = struct{}
+
+// AlertSeries defines model for AlertSeries.
+type AlertSeries struct {
+	Condition AlertCondition `json:"condition"`
+
+	// End UTC timestamp with Z suffix.
+	End AlertTimestamp `json:"end"`
+
+	// EvaluationRevision Exact positive decimal integer, no larger than signed int64 MaxInt64.
+	EvaluationRevision AlertVersion        `json:"evaluation_revision"`
+	Gaps               []AlertSeriesGap    `json:"gaps"`
+	Objective          AlertObjective      `json:"objective"`
+	Points             []AlertSeriesPoint  `json:"points"`
+	PolicyId           openapi_types.UUID  `json:"policy_id"`
+	Sampling           AlertSeriesSampling `json:"sampling"`
+
+	// Start UTC timestamp with Z suffix.
+	Start AlertTimestamp `json:"start"`
+}
+
+// AlertSeriesGap defines model for AlertSeriesGap.
+type AlertSeriesGap struct {
+	Basis AlertSeriesGapBasis `json:"basis"`
+
+	// End UTC timestamp with Z suffix.
+	End          AlertTimestamp      `json:"end"`
+	EndInclusive bool                `json:"end_inclusive"`
+	Kind         AlertSeriesGapKind  `json:"kind"`
+	RangeId      *openapi_types.UUID `json:"range_id,omitempty"`
+	Reason       string              `json:"reason"`
+
+	// Start UTC timestamp with Z suffix.
+	Start          AlertTimestamp `json:"start"`
+	StartInclusive bool           `json:"start_inclusive"`
+}
+
+// AlertSeriesGapBasis defines model for AlertSeriesGap.Basis.
+type AlertSeriesGapBasis string
+
+// AlertSeriesGapKind defines model for AlertSeriesGap.Kind.
+type AlertSeriesGapKind string
+
+// AlertSeriesPoint defines model for AlertSeriesPoint.
+type AlertSeriesPoint struct {
+	// CommittedAt UTC timestamp with Z suffix.
+	CommittedAt  AlertTimestamp       `json:"committed_at"`
+	Condition    AlertConditionResult `json:"condition"`
+	EvaluationId openapi_types.UUID   `json:"evaluation_id"`
+
+	// ScheduledAt UTC timestamp with Z suffix.
+	ScheduledAt AlertTimestamp        `json:"scheduled_at"`
+	Snapshot    AlertSnapshotIdentity `json:"snapshot"`
+}
+
+// AlertSeriesSampling defines model for AlertSeriesSampling.
+type AlertSeriesSampling struct {
+	Method         AlertSeriesSamplingMethod `json:"method"`
+	OmittedExtrema bool                      `json:"omitted_extrema"`
+	Reduced        bool                      `json:"reduced"`
+	Returned       int                       `json:"returned"`
+	Total          int                       `json:"total"`
+}
+
+// AlertSeriesSamplingMethod defines model for AlertSeriesSampling.Method.
+type AlertSeriesSamplingMethod string
+
+// AlertSeverity defines model for AlertSeverity.
+type AlertSeverity string
+
+// AlertSnapshotIdentity defines model for AlertSnapshotIdentity.
+type AlertSnapshotIdentity struct {
+	CalculationVersion string `json:"calculation_version"`
+
+	// Cutoff UTC timestamp with Z suffix.
+	Cutoff AlertTimestamp `json:"cutoff"`
+
+	// ExclusionRevision Exact nonnegative decimal integer, no larger than signed int64 MaxInt64.
+	ExclusionRevision AlertCounter `json:"exclusion_revision"`
+
+	// SliRevision Exact positive decimal integer, no larger than signed int64 MaxInt64.
+	SliRevision AlertVersion       `json:"sli_revision"`
+	SloId       openapi_types.UUID `json:"slo_id"`
+
+	// SloRevision Exact positive decimal integer, no larger than signed int64 MaxInt64.
+	SloRevision AlertVersion `json:"slo_revision"`
+
+	// SourceGeneration Exact nonnegative decimal integer, no larger than signed int64 MaxInt64.
+	SourceGeneration AlertCounter `json:"source_generation"`
+}
+
+// AlertThreshold Positive exact burn threshold; reachability is validated against the exact SLO target.
+type AlertThreshold = string
+
+// AlertTimestamp UTC timestamp with Z suffix.
+type AlertTimestamp = time.Time
+
+// AlertTransition defines model for AlertTransition.
+type AlertTransition struct {
+	ActorId *openapi_types.UUID  `json:"actor_id,omitempty"`
+	Cause   AlertTransitionCause `json:"cause"`
+
+	// DetectedAt UTC timestamp with Z suffix.
+	DetectedAt AlertTimestamp `json:"detected_at"`
+
+	// EffectiveAt UTC timestamp with Z suffix.
+	EffectiveAt  AlertTimestamp      `json:"effective_at"`
+	EvaluationId *openapi_types.UUID `json:"evaluation_id,omitempty"`
+	From         *AlertLifecycle     `json:"from,omitempty"`
+	Id           openapi_types.UUID  `json:"id"`
+	Reason       *string             `json:"reason,omitempty"`
+	RequestId    string              `json:"request_id"`
+
+	// Sequence Exact positive decimal integer, no larger than signed int64 MaxInt64.
+	Sequence AlertVersion   `json:"sequence"`
+	To       AlertLifecycle `json:"to"`
+}
+
+// AlertTransitionCause defines model for AlertTransition.Cause.
+type AlertTransitionCause string
+
+// AlertTransitionPage defines model for AlertTransitionPage.
+type AlertTransitionPage struct {
+	Items      []AlertTransition `json:"items"`
+	NextCursor *string           `json:"next_cursor,omitempty"`
+}
+
+// AlertTruth defines model for AlertTruth.
+type AlertTruth string
+
+// AlertVersion Exact positive decimal integer, no larger than signed int64 MaxInt64.
+type AlertVersion = string
+
+// AlertWindowEvidence Requested full half-open window and immutable as-evaluated quality. Good and total are present exactly when saved paired numeric counts are available, including partial, stale or zero-traffic observations. Absent numeric counts are omitted, never replaced with zero. Numeric presence does not make the condition usable; quality and outcome remain authoritative.
+type AlertWindowEvidence struct {
+	// AllowedErrorRate Allowed error fraction from the immutable SLO target.
+	AllowedErrorRate *AlertExactDecimal `json:"allowed_error_rate,omitempty"`
+
+	// Bad Saved observed unsuccessful-event count
+	Bad *AlertExactDecimal `json:"bad,omitempty"`
+
+	// Burn Display burn from saved observed counts and target through the shared SLO calculator
+	Burn *AlertExactDecimal `json:"burn,omitempty"`
+
+	// End UTC timestamp with Z suffix.
+	End AlertTimestamp `json:"end"`
+
+	// Good Exact nonnegative decimal evidence, never a floating-point approximation. Absence is not zero.
+	Good *AlertExactDecimal `json:"good,omitempty"`
+
+	// ObservedErrorRate Display fraction of observed unsuccessful events
+	ObservedErrorRate *AlertExactDecimal    `json:"observed_error_rate,omitempty"`
+	Quality           AlertQuality          `json:"quality"`
+	Reason            *string               `json:"reason,omitempty"`
+	Snapshot          AlertSnapshotIdentity `json:"snapshot"`
+
+	// Start UTC timestamp with Z suffix.
+	Start AlertTimestamp `json:"start"`
+
+	// Total Exact nonnegative decimal evidence, never a floating-point approximation. Absence is not zero.
+	Total *AlertExactDecimal `json:"total,omitempty"`
+}
+
+// AlertWindowSeconds Whole minutes expressed as integer seconds; must also align to source cadence. Short must not exceed long.
+type AlertWindowSeconds = int64
 
 // AuthResponse defines model for AuthResponse.
 type AuthResponse struct {
@@ -4010,6 +4950,18 @@ type UserWriteRequest struct {
 // AgentId defines model for AgentId.
 type AgentId = openapi_types.UUID
 
+// AlertCursor defines model for AlertCursor.
+type AlertCursor = string
+
+// AlertLimit defines model for AlertLimit.
+type AlertLimit = int
+
+// AlertOccurrenceId defines model for AlertOccurrenceId.
+type AlertOccurrenceId = openapi_types.UUID
+
+// AlertPolicyId defines model for AlertPolicyId.
+type AlertPolicyId = openapi_types.UUID
+
 // DatasourceId defines model for DatasourceId.
 type DatasourceId = openapi_types.UUID
 
@@ -4051,6 +5003,9 @@ type UserId = openapi_types.UUID
 
 // UserIfMatch defines model for UserIfMatch.
 type UserIfMatch = string
+
+// AlertProblem defines model for AlertProblem.
+type AlertProblem = Problem
 
 // AuthenticationMethodNotAllowed defines model for AuthenticationMethodNotAllowed.
 type AuthenticationMethodNotAllowed = Problem
@@ -4144,6 +5099,139 @@ type PostAgentDisableParams struct {
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
+// GetAlertCommandParams defines parameters for GetAlertCommand.
+type GetAlertCommandParams struct {
+	Operation      AlertOperation `form:"operation" json:"operation"`
+	IdempotencyKey string         `form:"idempotency_key" json:"idempotency_key"`
+}
+
+// ListAlertPoliciesParams defines parameters for ListAlertPolicies.
+type ListAlertPoliciesParams struct {
+	Limit    *AlertLimit         `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor   *AlertCursor        `form:"cursor,omitempty" json:"cursor,omitempty"`
+	SloId    *openapi_types.UUID `form:"slo_id,omitempty" json:"slo_id,omitempty"`
+	Severity *AlertSeverity      `form:"severity,omitempty" json:"severity,omitempty"`
+	Enabled  *bool               `form:"enabled,omitempty" json:"enabled,omitempty"`
+	Q        *string             `form:"q,omitempty" json:"q,omitempty"`
+}
+
+// CreateAlertPolicyParams defines parameters for CreateAlertPolicy.
+type CreateAlertPolicyParams struct {
+	// IdempotencyKey One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// UpdateAlertPolicyParams defines parameters for UpdateAlertPolicy.
+type UpdateAlertPolicyParams struct {
+	// IdempotencyKey One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+
+	// IfMatch Strong tag formatted as "service:<id>:<version>", "slo:<id>:<version>", "alert-policy:<id>:<version>" or "alert-occurrence:<id>:<version>" for the resource. Alert commands use configuration or occurrence state versions respectively; weak tags, lists and wildcards are rejected.
+	IfMatch ResourceIfMatch `json:"If-Match"`
+}
+
+// DisableAlertPolicyParams defines parameters for DisableAlertPolicy.
+type DisableAlertPolicyParams struct {
+	// IdempotencyKey One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+
+	// IfMatch Strong tag formatted as "service:<id>:<version>", "slo:<id>:<version>", "alert-policy:<id>:<version>" or "alert-occurrence:<id>:<version>" for the resource. Alert commands use configuration or occurrence state versions respectively; weak tags, lists and wildcards are rejected.
+	IfMatch ResourceIfMatch `json:"If-Match"`
+}
+
+// EnableAlertPolicyParams defines parameters for EnableAlertPolicy.
+type EnableAlertPolicyParams struct {
+	// IdempotencyKey One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+
+	// IfMatch Strong tag formatted as "service:<id>:<version>", "slo:<id>:<version>", "alert-policy:<id>:<version>" or "alert-occurrence:<id>:<version>" for the resource. Alert commands use configuration or occurrence state versions respectively; weak tags, lists and wildcards are rejected.
+	IfMatch ResourceIfMatch `json:"If-Match"`
+}
+
+// ListAlertRangesParams defines parameters for ListAlertRanges.
+type ListAlertRangesParams struct {
+	Revision AlertVersion `form:"revision" json:"revision"`
+	Limit    *AlertLimit  `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor   *AlertCursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// RetryAlertPolicyParams defines parameters for RetryAlertPolicy.
+type RetryAlertPolicyParams struct {
+	// IdempotencyKey One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+
+	// IfMatch Strong tag formatted as "service:<id>:<version>", "slo:<id>:<version>", "alert-policy:<id>:<version>" or "alert-occurrence:<id>:<version>" for the resource. Alert commands use configuration or occurrence state versions respectively; weak tags, lists and wildcards are rejected.
+	IfMatch ResourceIfMatch `json:"If-Match"`
+}
+
+// GetAlertProcessingParams defines parameters for GetAlertProcessing.
+type GetAlertProcessingParams struct {
+	PolicyId openapi_types.UUID `form:"policy_id" json:"policy_id"`
+}
+
+// ListAlertsParams defines parameters for ListAlerts.
+type ListAlertsParams struct {
+	Limit     *AlertLimit              `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor    *AlertCursor             `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Scope     *ListAlertsParamsScope   `form:"scope,omitempty" json:"scope,omitempty"`
+	State     *[]AlertLifecycle        `form:"state,omitempty" json:"state,omitempty"`
+	Severity  *[]AlertSeverity         `form:"severity,omitempty" json:"severity,omitempty"`
+	SloId     *openapi_types.UUID      `form:"slo_id,omitempty" json:"slo_id,omitempty"`
+	ServiceId *openapi_types.UUID      `form:"service_id,omitempty" json:"service_id,omitempty"`
+	Q         *string                  `form:"q,omitempty" json:"q,omitempty"`
+	GroupBy   *ListAlertsParamsGroupBy `form:"group_by,omitempty" json:"group_by,omitempty"`
+	Sort      *ListAlertsParamsSort    `form:"sort,omitempty" json:"sort,omitempty"`
+
+	// Evidence Latest committed breach or indeterminate recovery evidence
+	Evidence *ListAlertsParamsEvidence `form:"evidence,omitempty" json:"evidence,omitempty"`
+
+	// MinimumDurationSeconds Effective duration at least this many seconds; open occurrences use the request clock
+	MinimumDurationSeconds *int64 `form:"minimum_duration_seconds,omitempty" json:"minimum_duration_seconds,omitempty"`
+}
+
+// ListAlertsParamsScope defines parameters for ListAlerts.
+type ListAlertsParamsScope string
+
+// ListAlertsParamsGroupBy defines parameters for ListAlerts.
+type ListAlertsParamsGroupBy string
+
+// ListAlertsParamsSort defines parameters for ListAlerts.
+type ListAlertsParamsSort string
+
+// ListAlertsParamsEvidence defines parameters for ListAlerts.
+type ListAlertsParamsEvidence string
+
+// AcknowledgeAlertParams defines parameters for AcknowledgeAlert.
+type AcknowledgeAlertParams struct {
+	// IdempotencyKey One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+
+	// IfMatch Strong tag formatted as "service:<id>:<version>", "slo:<id>:<version>", "alert-policy:<id>:<version>" or "alert-occurrence:<id>:<version>" for the resource. Alert commands use configuration or occurrence state versions respectively; weak tags, lists and wildcards are rejected.
+	IfMatch ResourceIfMatch `json:"If-Match"`
+}
+
+// GetAlertEvidenceParams defines parameters for GetAlertEvidence.
+type GetAlertEvidenceParams struct {
+	Selection *GetAlertEvidenceParamsSelection `form:"selection,omitempty" json:"selection,omitempty"`
+}
+
+// GetAlertEvidenceParamsSelection defines parameters for GetAlertEvidence.
+type GetAlertEvidenceParamsSelection string
+
+// GetAlertSeriesParams defines parameters for GetAlertSeries.
+type GetAlertSeriesParams struct {
+	ConditionId string     `form:"condition_id" json:"condition_id"`
+	Start       *time.Time `form:"start,omitempty" json:"start,omitempty"`
+	End         *time.Time `form:"end,omitempty" json:"end,omitempty"`
+	Limit       *int       `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// ListAlertTransitionsParams defines parameters for ListAlertTransitions.
+type ListAlertTransitionsParams struct {
+	Limit  *AlertLimit  `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor *AlertCursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
 // GetDatasourcesParams defines parameters for GetDatasources.
 type GetDatasourcesParams struct {
 	Limit  *int    `form:"limit,omitempty" json:"limit,omitempty"`
@@ -4208,13 +5296,13 @@ type CreateServiceParams struct {
 
 // ArchiveServiceParams defines parameters for ArchiveService.
 type ArchiveServiceParams struct {
-	// IfMatch Strong tag formatted as "service:<id>:<version>" or "slo:<id>:<version>" for the resource.
+	// IfMatch Strong tag formatted as "service:<id>:<version>", "slo:<id>:<version>", "alert-policy:<id>:<version>" or "alert-occurrence:<id>:<version>" for the resource. Alert commands use configuration or occurrence state versions respectively; weak tags, lists and wildcards are rejected.
 	IfMatch ResourceIfMatch `json:"If-Match"`
 }
 
 // PatchServiceMetadataParams defines parameters for PatchServiceMetadata.
 type PatchServiceMetadataParams struct {
-	// IfMatch Strong tag formatted as "service:<id>:<version>" or "slo:<id>:<version>" for the resource.
+	// IfMatch Strong tag formatted as "service:<id>:<version>", "slo:<id>:<version>", "alert-policy:<id>:<version>" or "alert-occurrence:<id>:<version>" for the resource. Alert commands use configuration or occurrence state versions respectively; weak tags, lists and wildcards are rejected.
 	IfMatch ResourceIfMatch `json:"If-Match"`
 }
 
@@ -4275,7 +5363,7 @@ type GetSloOperationalOverviewParamsUrgency string
 
 // PatchSloMetadataParams defines parameters for PatchSloMetadata.
 type PatchSloMetadataParams struct {
-	// IfMatch Strong tag formatted as "service:<id>:<version>" or "slo:<id>:<version>" for the resource.
+	// IfMatch Strong tag formatted as "service:<id>:<version>", "slo:<id>:<version>", "alert-policy:<id>:<version>" or "alert-occurrence:<id>:<version>" for the resource. Alert commands use configuration or occurrence state versions respectively; weak tags, lists and wildcards are rejected.
 	IfMatch ResourceIfMatch `json:"If-Match"`
 }
 
@@ -4388,6 +5476,24 @@ type PostAgentCredentialRevokeJSONRequestBody = AgentLifecycleRequest
 
 // PostAgentDisableJSONRequestBody defines body for PostAgentDisable for application/json ContentType.
 type PostAgentDisableJSONRequestBody = AgentLifecycleRequest
+
+// CreateAlertPolicyJSONRequestBody defines body for CreateAlertPolicy for application/json ContentType.
+type CreateAlertPolicyJSONRequestBody = AlertPolicyWrite
+
+// UpdateAlertPolicyJSONRequestBody defines body for UpdateAlertPolicy for application/json ContentType.
+type UpdateAlertPolicyJSONRequestBody = AlertPolicyPatch
+
+// DisableAlertPolicyJSONRequestBody defines body for DisableAlertPolicy for application/json ContentType.
+type DisableAlertPolicyJSONRequestBody = AlertPolicyCommand
+
+// EnableAlertPolicyJSONRequestBody defines body for EnableAlertPolicy for application/json ContentType.
+type EnableAlertPolicyJSONRequestBody = AlertPolicyCommand
+
+// RetryAlertPolicyJSONRequestBody defines body for RetryAlertPolicy for application/json ContentType.
+type RetryAlertPolicyJSONRequestBody = AlertRetry
+
+// AcknowledgeAlertJSONRequestBody defines body for AcknowledgeAlert for application/json ContentType.
+type AcknowledgeAlertJSONRequestBody = AlertAcknowledge
 
 // PostAuthContextJSONRequestBody defines body for PostAuthContext for application/json ContentType.
 type PostAuthContextJSONRequestBody = EmptyAuthRequest
@@ -4974,6 +6080,174 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /api/v1/agents/{agent_id}/disable (the `PostAgentDisable` operationId).
 	PostAgentDisable(ctx context.Context, agentId AgentId, params *PostAgentDisableParams, body PostAgentDisableJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetAlertCommand Reconcile a command for the current actor
+	//
+	// Committed results are replayable for 24 hours; retained expired identities cannot execute again. Unknown is not proof that the command failed. Never automatically replace an uncertain key.
+	//
+	// Corresponds with GET /api/v1/alert-commands (the `GetAlertCommand` operationId).
+	GetAlertCommand(ctx context.Context, params *GetAlertCommandParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListAlertPolicies List alert policy configuration, including policies without occurrences
+	//
+	// Corresponds with GET /api/v1/alert-policies (the `ListAlertPolicies` operationId).
+	ListAlertPolicies(ctx context.Context, params *ListAlertPoliciesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateAlertPolicyWithBody Create an alert policy (Editor or Administrator)
+	//
+	// Requires same-origin CSRF protection and a body no larger than 64 KiB. Replay reauthorizes the actor and returns the original committed result. Configuration does not itself fabricate an occurrence.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /api/v1/alert-policies (the `CreateAlertPolicy` operationId).
+	CreateAlertPolicyWithBody(ctx context.Context, params *CreateAlertPolicyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateAlertPolicy Create an alert policy (Editor or Administrator)
+	//
+	// Requires same-origin CSRF protection and a body no larger than 64 KiB. Replay reauthorizes the actor and returns the original committed result. Configuration does not itself fabricate an occurrence.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /api/v1/alert-policies (the `CreateAlertPolicy` operationId).
+	CreateAlertPolicy(ctx context.Context, params *CreateAlertPolicyParams, body CreateAlertPolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetAlertPolicy Read current alert policy configuration
+	//
+	// Corresponds with GET /api/v1/alert-policies/{policy_id} (the `GetAlertPolicy` operationId).
+	GetAlertPolicy(ctx context.Context, policyId AlertPolicyId, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UpdateAlertPolicyWithBody Update alert policy configuration (Editor or Administrator)
+	//
+	// Strict partial object, at most 64 KiB. Metadata changes preserve the evaluation revision; semantic changes supersede old work atomically. Omission preserves a field; null is not accepted.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PATCH /api/v1/alert-policies/{policy_id} (the `UpdateAlertPolicy` operationId).
+	UpdateAlertPolicyWithBody(ctx context.Context, policyId AlertPolicyId, params *UpdateAlertPolicyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UpdateAlertPolicy Update alert policy configuration (Editor or Administrator)
+	//
+	// Strict partial object, at most 64 KiB. Metadata changes preserve the evaluation revision; semantic changes supersede old work atomically. Omission preserves a field; null is not accepted.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PATCH /api/v1/alert-policies/{policy_id} (the `UpdateAlertPolicy` operationId).
+	UpdateAlertPolicy(ctx context.Context, policyId AlertPolicyId, params *UpdateAlertPolicyParams, body UpdateAlertPolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DisableAlertPolicyWithBody Disable and terminate open occurrences (Editor or Administrator)
+	//
+	// Requires same-origin CSRF protection and a body no larger than 64 KiB. Disabling records administrative cancellation and preserves original evidence.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /api/v1/alert-policies/{policy_id}/disable (the `DisableAlertPolicy` operationId).
+	DisableAlertPolicyWithBody(ctx context.Context, policyId AlertPolicyId, params *DisableAlertPolicyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DisableAlertPolicy Disable and terminate open occurrences (Editor or Administrator)
+	//
+	// Requires same-origin CSRF protection and a body no larger than 64 KiB. Disabling records administrative cancellation and preserves original evidence.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /api/v1/alert-policies/{policy_id}/disable (the `DisableAlertPolicy` operationId).
+	DisableAlertPolicy(ctx context.Context, policyId AlertPolicyId, params *DisableAlertPolicyParams, body DisableAlertPolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// EnableAlertPolicyWithBody Enable with a fresh evaluation revision (Editor or Administrator)
+	//
+	// Requires same-origin CSRF protection and a body no larger than 64 KiB. Disabled time is not replayed.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /api/v1/alert-policies/{policy_id}/enable (the `EnableAlertPolicy` operationId).
+	EnableAlertPolicyWithBody(ctx context.Context, policyId AlertPolicyId, params *EnableAlertPolicyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// EnableAlertPolicy Enable with a fresh evaluation revision (Editor or Administrator)
+	//
+	// Requires same-origin CSRF protection and a body no larger than 64 KiB. Disabled time is not replayed.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /api/v1/alert-policies/{policy_id}/enable (the `EnableAlertPolicy` operationId).
+	EnableAlertPolicy(ctx context.Context, policyId AlertPolicyId, params *EnableAlertPolicyParams, body EnableAlertPolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListAlertRanges Read recorded ranges for an immutable policy revision
+	//
+	// Corresponds with GET /api/v1/alert-policies/{policy_id}/ranges (the `ListAlertRanges` operationId).
+	ListAlertRanges(ctx context.Context, policyId AlertPolicyId, params *ListAlertRangesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RetryAlertPolicyWithBody Retry exhausted processing (Editor or Administrator)
+	//
+	// Requires same-origin CSRF protection and a body no larger than 64 KiB. Preserves the pending boundary and immutable history.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /api/v1/alert-policies/{policy_id}/retry (the `RetryAlertPolicy` operationId).
+	RetryAlertPolicyWithBody(ctx context.Context, policyId AlertPolicyId, params *RetryAlertPolicyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RetryAlertPolicy Retry exhausted processing (Editor or Administrator)
+	//
+	// Requires same-origin CSRF protection and a body no larger than 64 KiB. Preserves the pending boundary and immutable history.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /api/v1/alert-policies/{policy_id}/retry (the `RetryAlertPolicy` operationId).
+	RetryAlertPolicy(ctx context.Context, policyId AlertPolicyId, params *RetryAlertPolicyParams, body RetryAlertPolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetAlertProcessing Read processing health for one policy
+	//
+	// policy_id is required in this delivery. Aggregate processing is not provided. Processing health is separate from occurrence lifecycle and SLO truth.
+	//
+	// Corresponds with GET /api/v1/alert-processing (the `GetAlertProcessing` operationId).
+	GetAlertProcessing(ctx context.Context, params *GetAlertProcessingParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListAlerts List alert occurrences with global filtered totals
+	//
+	// Stable filter-bound cursors over live pages, not a frozen cross-request snapshot. Group totals describe the complete filtered set for SLOs represented on the page.
+	//
+	// Corresponds with GET /api/v1/alerts (the `ListAlerts` operationId).
+	ListAlerts(ctx context.Context, params *ListAlertsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetAlert Read lifecycle and original policy identity for an occurrence
+	//
+	// Corresponds with GET /api/v1/alerts/{occurrence_id} (the `GetAlert` operationId).
+	GetAlert(ctx context.Context, occurrenceId AlertOccurrenceId, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AcknowledgeAlertWithBody Acknowledge globally without expiry (Editor or Administrator)
+	//
+	// Requires same-origin CSRF protection. Body is an empty strict object, at most 64 KiB. Terminal occurrences conflict; acknowledgement never closes an occurrence. Replay preserves the original actor and timestamp.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /api/v1/alerts/{occurrence_id}/acknowledge (the `AcknowledgeAlert` operationId).
+	AcknowledgeAlertWithBody(ctx context.Context, occurrenceId AlertOccurrenceId, params *AcknowledgeAlertParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AcknowledgeAlert Acknowledge globally without expiry (Editor or Administrator)
+	//
+	// Requires same-origin CSRF protection. Body is an empty strict object, at most 64 KiB. Terminal occurrences conflict; acknowledgement never closes an occurrence. Replay preserves the original actor and timestamp.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /api/v1/alerts/{occurrence_id}/acknowledge (the `AcknowledgeAlert` operationId).
+	AcknowledgeAlert(ctx context.Context, occurrenceId AlertOccurrenceId, params *AcknowledgeAlertParams, body AcknowledgeAlertJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetAlertEvidence Read immutable firing or latest evaluation evidence
+	//
+	// Reads the retained decision, never recalculates it from current source facts.
+	//
+	// Corresponds with GET /api/v1/alerts/{occurrence_id}/evidence (the `GetAlertEvidence` operationId).
+	GetAlertEvidence(ctx context.Context, occurrenceId AlertOccurrenceId, params *GetAlertEvidenceParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetAlertSeries Read bounded immutable paired burn-window evaluations
+	//
+	// Actual retained evaluations on an inclusive effective-cutoff axis, at most 24 hours and 120 returned points. Defaults to two hours ending at the occurrence latest saved cutoff. Sampling preserves endpoints before exact extrema; omitted extrema and gaps are explicit. Scheduled ranges are provenance, never effective-cutoff exclusions. Oversized source history fails explicitly rather than truncating.
+	//
+	// Corresponds with GET /api/v1/alerts/{occurrence_id}/series (the `GetAlertSeries` operationId).
+	GetAlertSeries(ctx context.Context, occurrenceId AlertOccurrenceId, params *GetAlertSeriesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListAlertTransitions Read every retained lifecycle transition in sequence order
+	//
+	// Corresponds with GET /api/v1/alerts/{occurrence_id}/transitions (the `ListAlertTransitions` operationId).
+	ListAlertTransitions(ctx context.Context, occurrenceId AlertOccurrenceId, params *ListAlertTransitionsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostAuthContextWithBody Read the current authentication context
 	//
@@ -5930,6 +7204,394 @@ func (c *Client) PostAgentDisableWithBody(ctx context.Context, agentId AgentId, 
 // Corresponds with POST /api/v1/agents/{agent_id}/disable (the `PostAgentDisable` operationId).
 func (c *Client) PostAgentDisable(ctx context.Context, agentId AgentId, params *PostAgentDisableParams, body PostAgentDisableJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPostAgentDisableRequest(c.Server, agentId, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetAlertCommand Reconcile a command for the current actor
+//
+// Committed results are replayable for 24 hours; retained expired identities cannot execute again. Unknown is not proof that the command failed. Never automatically replace an uncertain key.
+//
+// Corresponds with GET /api/v1/alert-commands (the `GetAlertCommand` operationId).
+func (c *Client) GetAlertCommand(ctx context.Context, params *GetAlertCommandParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetAlertCommandRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ListAlertPolicies List alert policy configuration, including policies without occurrences
+//
+// Corresponds with GET /api/v1/alert-policies (the `ListAlertPolicies` operationId).
+func (c *Client) ListAlertPolicies(ctx context.Context, params *ListAlertPoliciesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListAlertPoliciesRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateAlertPolicyWithBody Create an alert policy (Editor or Administrator)
+//
+// Requires same-origin CSRF protection and a body no larger than 64 KiB. Replay reauthorizes the actor and returns the original committed result. Configuration does not itself fabricate an occurrence.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /api/v1/alert-policies (the `CreateAlertPolicy` operationId).
+func (c *Client) CreateAlertPolicyWithBody(ctx context.Context, params *CreateAlertPolicyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateAlertPolicyRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateAlertPolicy Create an alert policy (Editor or Administrator)
+//
+// Requires same-origin CSRF protection and a body no larger than 64 KiB. Replay reauthorizes the actor and returns the original committed result. Configuration does not itself fabricate an occurrence.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /api/v1/alert-policies (the `CreateAlertPolicy` operationId).
+func (c *Client) CreateAlertPolicy(ctx context.Context, params *CreateAlertPolicyParams, body CreateAlertPolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateAlertPolicyRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetAlertPolicy Read current alert policy configuration
+//
+// Corresponds with GET /api/v1/alert-policies/{policy_id} (the `GetAlertPolicy` operationId).
+func (c *Client) GetAlertPolicy(ctx context.Context, policyId AlertPolicyId, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetAlertPolicyRequest(c.Server, policyId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// UpdateAlertPolicyWithBody Update alert policy configuration (Editor or Administrator)
+//
+// Strict partial object, at most 64 KiB. Metadata changes preserve the evaluation revision; semantic changes supersede old work atomically. Omission preserves a field; null is not accepted.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PATCH /api/v1/alert-policies/{policy_id} (the `UpdateAlertPolicy` operationId).
+func (c *Client) UpdateAlertPolicyWithBody(ctx context.Context, policyId AlertPolicyId, params *UpdateAlertPolicyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateAlertPolicyRequestWithBody(c.Server, policyId, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// UpdateAlertPolicy Update alert policy configuration (Editor or Administrator)
+//
+// Strict partial object, at most 64 KiB. Metadata changes preserve the evaluation revision; semantic changes supersede old work atomically. Omission preserves a field; null is not accepted.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PATCH /api/v1/alert-policies/{policy_id} (the `UpdateAlertPolicy` operationId).
+func (c *Client) UpdateAlertPolicy(ctx context.Context, policyId AlertPolicyId, params *UpdateAlertPolicyParams, body UpdateAlertPolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUpdateAlertPolicyRequest(c.Server, policyId, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// DisableAlertPolicyWithBody Disable and terminate open occurrences (Editor or Administrator)
+//
+// Requires same-origin CSRF protection and a body no larger than 64 KiB. Disabling records administrative cancellation and preserves original evidence.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /api/v1/alert-policies/{policy_id}/disable (the `DisableAlertPolicy` operationId).
+func (c *Client) DisableAlertPolicyWithBody(ctx context.Context, policyId AlertPolicyId, params *DisableAlertPolicyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDisableAlertPolicyRequestWithBody(c.Server, policyId, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// DisableAlertPolicy Disable and terminate open occurrences (Editor or Administrator)
+//
+// Requires same-origin CSRF protection and a body no larger than 64 KiB. Disabling records administrative cancellation and preserves original evidence.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /api/v1/alert-policies/{policy_id}/disable (the `DisableAlertPolicy` operationId).
+func (c *Client) DisableAlertPolicy(ctx context.Context, policyId AlertPolicyId, params *DisableAlertPolicyParams, body DisableAlertPolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDisableAlertPolicyRequest(c.Server, policyId, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// EnableAlertPolicyWithBody Enable with a fresh evaluation revision (Editor or Administrator)
+//
+// Requires same-origin CSRF protection and a body no larger than 64 KiB. Disabled time is not replayed.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /api/v1/alert-policies/{policy_id}/enable (the `EnableAlertPolicy` operationId).
+func (c *Client) EnableAlertPolicyWithBody(ctx context.Context, policyId AlertPolicyId, params *EnableAlertPolicyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewEnableAlertPolicyRequestWithBody(c.Server, policyId, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// EnableAlertPolicy Enable with a fresh evaluation revision (Editor or Administrator)
+//
+// Requires same-origin CSRF protection and a body no larger than 64 KiB. Disabled time is not replayed.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /api/v1/alert-policies/{policy_id}/enable (the `EnableAlertPolicy` operationId).
+func (c *Client) EnableAlertPolicy(ctx context.Context, policyId AlertPolicyId, params *EnableAlertPolicyParams, body EnableAlertPolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewEnableAlertPolicyRequest(c.Server, policyId, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ListAlertRanges Read recorded ranges for an immutable policy revision
+//
+// Corresponds with GET /api/v1/alert-policies/{policy_id}/ranges (the `ListAlertRanges` operationId).
+func (c *Client) ListAlertRanges(ctx context.Context, policyId AlertPolicyId, params *ListAlertRangesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListAlertRangesRequest(c.Server, policyId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RetryAlertPolicyWithBody Retry exhausted processing (Editor or Administrator)
+//
+// Requires same-origin CSRF protection and a body no larger than 64 KiB. Preserves the pending boundary and immutable history.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /api/v1/alert-policies/{policy_id}/retry (the `RetryAlertPolicy` operationId).
+func (c *Client) RetryAlertPolicyWithBody(ctx context.Context, policyId AlertPolicyId, params *RetryAlertPolicyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRetryAlertPolicyRequestWithBody(c.Server, policyId, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RetryAlertPolicy Retry exhausted processing (Editor or Administrator)
+//
+// Requires same-origin CSRF protection and a body no larger than 64 KiB. Preserves the pending boundary and immutable history.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /api/v1/alert-policies/{policy_id}/retry (the `RetryAlertPolicy` operationId).
+func (c *Client) RetryAlertPolicy(ctx context.Context, policyId AlertPolicyId, params *RetryAlertPolicyParams, body RetryAlertPolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRetryAlertPolicyRequest(c.Server, policyId, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetAlertProcessing Read processing health for one policy
+//
+// policy_id is required in this delivery. Aggregate processing is not provided. Processing health is separate from occurrence lifecycle and SLO truth.
+//
+// Corresponds with GET /api/v1/alert-processing (the `GetAlertProcessing` operationId).
+func (c *Client) GetAlertProcessing(ctx context.Context, params *GetAlertProcessingParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetAlertProcessingRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ListAlerts List alert occurrences with global filtered totals
+//
+// Stable filter-bound cursors over live pages, not a frozen cross-request snapshot. Group totals describe the complete filtered set for SLOs represented on the page.
+//
+// Corresponds with GET /api/v1/alerts (the `ListAlerts` operationId).
+func (c *Client) ListAlerts(ctx context.Context, params *ListAlertsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListAlertsRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetAlert Read lifecycle and original policy identity for an occurrence
+//
+// Corresponds with GET /api/v1/alerts/{occurrence_id} (the `GetAlert` operationId).
+func (c *Client) GetAlert(ctx context.Context, occurrenceId AlertOccurrenceId, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetAlertRequest(c.Server, occurrenceId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// AcknowledgeAlertWithBody Acknowledge globally without expiry (Editor or Administrator)
+//
+// Requires same-origin CSRF protection. Body is an empty strict object, at most 64 KiB. Terminal occurrences conflict; acknowledgement never closes an occurrence. Replay preserves the original actor and timestamp.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /api/v1/alerts/{occurrence_id}/acknowledge (the `AcknowledgeAlert` operationId).
+func (c *Client) AcknowledgeAlertWithBody(ctx context.Context, occurrenceId AlertOccurrenceId, params *AcknowledgeAlertParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAcknowledgeAlertRequestWithBody(c.Server, occurrenceId, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// AcknowledgeAlert Acknowledge globally without expiry (Editor or Administrator)
+//
+// Requires same-origin CSRF protection. Body is an empty strict object, at most 64 KiB. Terminal occurrences conflict; acknowledgement never closes an occurrence. Replay preserves the original actor and timestamp.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /api/v1/alerts/{occurrence_id}/acknowledge (the `AcknowledgeAlert` operationId).
+func (c *Client) AcknowledgeAlert(ctx context.Context, occurrenceId AlertOccurrenceId, params *AcknowledgeAlertParams, body AcknowledgeAlertJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAcknowledgeAlertRequest(c.Server, occurrenceId, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetAlertEvidence Read immutable firing or latest evaluation evidence
+//
+// Reads the retained decision, never recalculates it from current source facts.
+//
+// Corresponds with GET /api/v1/alerts/{occurrence_id}/evidence (the `GetAlertEvidence` operationId).
+func (c *Client) GetAlertEvidence(ctx context.Context, occurrenceId AlertOccurrenceId, params *GetAlertEvidenceParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetAlertEvidenceRequest(c.Server, occurrenceId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetAlertSeries Read bounded immutable paired burn-window evaluations
+//
+// Actual retained evaluations on an inclusive effective-cutoff axis, at most 24 hours and 120 returned points. Defaults to two hours ending at the occurrence latest saved cutoff. Sampling preserves endpoints before exact extrema; omitted extrema and gaps are explicit. Scheduled ranges are provenance, never effective-cutoff exclusions. Oversized source history fails explicitly rather than truncating.
+//
+// Corresponds with GET /api/v1/alerts/{occurrence_id}/series (the `GetAlertSeries` operationId).
+func (c *Client) GetAlertSeries(ctx context.Context, occurrenceId AlertOccurrenceId, params *GetAlertSeriesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetAlertSeriesRequest(c.Server, occurrenceId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ListAlertTransitions Read every retained lifecycle transition in sequence order
+//
+// Corresponds with GET /api/v1/alerts/{occurrence_id}/transitions (the `ListAlertTransitions` operationId).
+func (c *Client) ListAlertTransitions(ctx context.Context, occurrenceId AlertOccurrenceId, params *ListAlertTransitionsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListAlertTransitionsRequest(c.Server, occurrenceId, params)
 	if err != nil {
 		return nil, err
 	}
@@ -7978,6 +9640,1188 @@ func NewPostAgentDisableRequestWithBody(server string, agentId AgentId, params *
 
 		req.Header.Set("Idempotency-Key", headerParam1)
 
+	}
+
+	return req, nil
+}
+
+// NewGetAlertCommandRequest constructs an http.Request for the GetAlertCommand method
+func NewGetAlertCommandRequest(server string, params *GetAlertCommandParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/alert-commands")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "operation", params.Operation, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "idempotency_key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewListAlertPoliciesRequest constructs an http.Request for the ListAlertPolicies method
+func NewListAlertPoliciesRequest(server string, params *ListAlertPoliciesParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/alert-policies")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.SloId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "slo_id", *params.SloId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "uuid"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Severity != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "severity", *params.Severity, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Enabled != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "enabled", *params.Enabled, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "boolean", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Q != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "q", *params.Q, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCreateAlertPolicyRequest calls the generic CreateAlertPolicy builder with application/json body
+func NewCreateAlertPolicyRequest(server string, params *CreateAlertPolicyParams, body CreateAlertPolicyJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCreateAlertPolicyRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewCreateAlertPolicyRequestWithBody constructs an http.Request for the CreateAlertPolicy method, with any body, and a specified content type
+func NewCreateAlertPolicyRequestWithBody(server string, params *CreateAlertPolicyParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/alert-policies")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewGetAlertPolicyRequest constructs an http.Request for the GetAlertPolicy method
+func NewGetAlertPolicyRequest(server string, policyId AlertPolicyId) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "policy_id", policyId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/alert-policies/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewUpdateAlertPolicyRequest calls the generic UpdateAlertPolicy builder with application/json body
+func NewUpdateAlertPolicyRequest(server string, policyId AlertPolicyId, params *UpdateAlertPolicyParams, body UpdateAlertPolicyJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewUpdateAlertPolicyRequestWithBody(server, policyId, params, "application/json", bodyReader)
+}
+
+// NewUpdateAlertPolicyRequestWithBody constructs an http.Request for the UpdateAlertPolicy method, with any body, and a specified content type
+func NewUpdateAlertPolicyRequestWithBody(server string, policyId AlertPolicyId, params *UpdateAlertPolicyParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "policy_id", policyId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/alert-policies/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPatch, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+		var headerParam1 string
+
+		headerParam1, err = runtime.StyleParamWithOptions("simple", false, "If-Match", params.IfMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam1)
+
+	}
+
+	return req, nil
+}
+
+// NewDisableAlertPolicyRequest calls the generic DisableAlertPolicy builder with application/json body
+func NewDisableAlertPolicyRequest(server string, policyId AlertPolicyId, params *DisableAlertPolicyParams, body DisableAlertPolicyJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewDisableAlertPolicyRequestWithBody(server, policyId, params, "application/json", bodyReader)
+}
+
+// NewDisableAlertPolicyRequestWithBody constructs an http.Request for the DisableAlertPolicy method, with any body, and a specified content type
+func NewDisableAlertPolicyRequestWithBody(server string, policyId AlertPolicyId, params *DisableAlertPolicyParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "policy_id", policyId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/alert-policies/%s/disable", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+		var headerParam1 string
+
+		headerParam1, err = runtime.StyleParamWithOptions("simple", false, "If-Match", params.IfMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam1)
+
+	}
+
+	return req, nil
+}
+
+// NewEnableAlertPolicyRequest calls the generic EnableAlertPolicy builder with application/json body
+func NewEnableAlertPolicyRequest(server string, policyId AlertPolicyId, params *EnableAlertPolicyParams, body EnableAlertPolicyJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewEnableAlertPolicyRequestWithBody(server, policyId, params, "application/json", bodyReader)
+}
+
+// NewEnableAlertPolicyRequestWithBody constructs an http.Request for the EnableAlertPolicy method, with any body, and a specified content type
+func NewEnableAlertPolicyRequestWithBody(server string, policyId AlertPolicyId, params *EnableAlertPolicyParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "policy_id", policyId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/alert-policies/%s/enable", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+		var headerParam1 string
+
+		headerParam1, err = runtime.StyleParamWithOptions("simple", false, "If-Match", params.IfMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam1)
+
+	}
+
+	return req, nil
+}
+
+// NewListAlertRangesRequest constructs an http.Request for the ListAlertRanges method
+func NewListAlertRangesRequest(server string, policyId AlertPolicyId, params *ListAlertRangesParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "policy_id", policyId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/alert-policies/%s/ranges", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "revision", params.Revision, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewRetryAlertPolicyRequest calls the generic RetryAlertPolicy builder with application/json body
+func NewRetryAlertPolicyRequest(server string, policyId AlertPolicyId, params *RetryAlertPolicyParams, body RetryAlertPolicyJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewRetryAlertPolicyRequestWithBody(server, policyId, params, "application/json", bodyReader)
+}
+
+// NewRetryAlertPolicyRequestWithBody constructs an http.Request for the RetryAlertPolicy method, with any body, and a specified content type
+func NewRetryAlertPolicyRequestWithBody(server string, policyId AlertPolicyId, params *RetryAlertPolicyParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "policy_id", policyId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/alert-policies/%s/retry", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+		var headerParam1 string
+
+		headerParam1, err = runtime.StyleParamWithOptions("simple", false, "If-Match", params.IfMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam1)
+
+	}
+
+	return req, nil
+}
+
+// NewGetAlertProcessingRequest constructs an http.Request for the GetAlertProcessing method
+func NewGetAlertProcessingRequest(server string, params *GetAlertProcessingParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/alert-processing")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "policy_id", params.PolicyId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "uuid"}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewListAlertsRequest constructs an http.Request for the ListAlerts method
+func NewListAlertsRequest(server string, params *ListAlertsParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/alerts")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Scope != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "scope", *params.Scope, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.State != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "state", *params.State, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "array", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Severity != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", false, "severity", *params.Severity, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "array", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.SloId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "slo_id", *params.SloId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "uuid"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.ServiceId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "service_id", *params.ServiceId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "uuid"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Q != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "q", *params.Q, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.GroupBy != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "group_by", *params.GroupBy, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Sort != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "sort", *params.Sort, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Evidence != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "evidence", *params.Evidence, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.MinimumDurationSeconds != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "minimum_duration_seconds", *params.MinimumDurationSeconds, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetAlertRequest constructs an http.Request for the GetAlert method
+func NewGetAlertRequest(server string, occurrenceId AlertOccurrenceId) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "occurrence_id", occurrenceId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/alerts/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewAcknowledgeAlertRequest calls the generic AcknowledgeAlert builder with application/json body
+func NewAcknowledgeAlertRequest(server string, occurrenceId AlertOccurrenceId, params *AcknowledgeAlertParams, body AcknowledgeAlertJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewAcknowledgeAlertRequestWithBody(server, occurrenceId, params, "application/json", bodyReader)
+}
+
+// NewAcknowledgeAlertRequestWithBody constructs an http.Request for the AcknowledgeAlert method, with any body, and a specified content type
+func NewAcknowledgeAlertRequestWithBody(server string, occurrenceId AlertOccurrenceId, params *AcknowledgeAlertParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "occurrence_id", occurrenceId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/alerts/%s/acknowledge", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+		var headerParam1 string
+
+		headerParam1, err = runtime.StyleParamWithOptions("simple", false, "If-Match", params.IfMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam1)
+
+	}
+
+	return req, nil
+}
+
+// NewGetAlertEvidenceRequest constructs an http.Request for the GetAlertEvidence method
+func NewGetAlertEvidenceRequest(server string, occurrenceId AlertOccurrenceId, params *GetAlertEvidenceParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "occurrence_id", occurrenceId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/alerts/%s/evidence", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Selection != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "selection", *params.Selection, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetAlertSeriesRequest constructs an http.Request for the GetAlertSeries method
+func NewGetAlertSeriesRequest(server string, occurrenceId AlertOccurrenceId, params *GetAlertSeriesParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "occurrence_id", occurrenceId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/alerts/%s/series", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "condition_id", params.ConditionId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if params.Start != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "start", *params.Start, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "date-time"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.End != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "end", *params.End, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "date-time"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewListAlertTransitionsRequest constructs an http.Request for the ListAlertTransitions method
+func NewListAlertTransitionsRequest(server string, occurrenceId AlertOccurrenceId, params *ListAlertTransitionsParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "occurrence_id", occurrenceId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/alerts/%s/transitions", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
 	}
 
 	return req, nil
@@ -10773,6 +13617,194 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /api/v1/agents/{agent_id}/disable (the `PostAgentDisable` operationId).
 	PostAgentDisableWithResponse(ctx context.Context, agentId AgentId, params *PostAgentDisableParams, body PostAgentDisableJSONRequestBody, reqEditors ...RequestEditorFn) (*PostAgentDisableResponse, error)
 
+	// GetAlertCommandWithResponse Reconcile a command for the current actor
+	//
+	// Committed results are replayable for 24 hours; retained expired identities cannot execute again. Unknown is not proof that the command failed. Never automatically replace an uncertain key.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/alert-commands (the `GetAlertCommand` operationId).
+	GetAlertCommandWithResponse(ctx context.Context, params *GetAlertCommandParams, reqEditors ...RequestEditorFn) (*GetAlertCommandResponse, error)
+
+	// ListAlertPoliciesWithResponse List alert policy configuration, including policies without occurrences
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/alert-policies (the `ListAlertPolicies` operationId).
+	ListAlertPoliciesWithResponse(ctx context.Context, params *ListAlertPoliciesParams, reqEditors ...RequestEditorFn) (*ListAlertPoliciesResponse, error)
+
+	// CreateAlertPolicyWithBodyWithResponse Create an alert policy (Editor or Administrator)
+	//
+	// Requires same-origin CSRF protection and a body no larger than 64 KiB. Replay reauthorizes the actor and returns the original committed result. Configuration does not itself fabricate an occurrence.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/alert-policies (the `CreateAlertPolicy` operationId).
+	CreateAlertPolicyWithBodyWithResponse(ctx context.Context, params *CreateAlertPolicyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateAlertPolicyResponse, error)
+
+	// CreateAlertPolicyWithResponse Create an alert policy (Editor or Administrator)
+	//
+	// Requires same-origin CSRF protection and a body no larger than 64 KiB. Replay reauthorizes the actor and returns the original committed result. Configuration does not itself fabricate an occurrence.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/alert-policies (the `CreateAlertPolicy` operationId).
+	CreateAlertPolicyWithResponse(ctx context.Context, params *CreateAlertPolicyParams, body CreateAlertPolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateAlertPolicyResponse, error)
+
+	// GetAlertPolicyWithResponse Read current alert policy configuration
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/alert-policies/{policy_id} (the `GetAlertPolicy` operationId).
+	GetAlertPolicyWithResponse(ctx context.Context, policyId AlertPolicyId, reqEditors ...RequestEditorFn) (*GetAlertPolicyResponse, error)
+
+	// UpdateAlertPolicyWithBodyWithResponse Update alert policy configuration (Editor or Administrator)
+	//
+	// Strict partial object, at most 64 KiB. Metadata changes preserve the evaluation revision; semantic changes supersede old work atomically. Omission preserves a field; null is not accepted.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /api/v1/alert-policies/{policy_id} (the `UpdateAlertPolicy` operationId).
+	UpdateAlertPolicyWithBodyWithResponse(ctx context.Context, policyId AlertPolicyId, params *UpdateAlertPolicyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateAlertPolicyResponse, error)
+
+	// UpdateAlertPolicyWithResponse Update alert policy configuration (Editor or Administrator)
+	//
+	// Strict partial object, at most 64 KiB. Metadata changes preserve the evaluation revision; semantic changes supersede old work atomically. Omission preserves a field; null is not accepted.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PATCH /api/v1/alert-policies/{policy_id} (the `UpdateAlertPolicy` operationId).
+	UpdateAlertPolicyWithResponse(ctx context.Context, policyId AlertPolicyId, params *UpdateAlertPolicyParams, body UpdateAlertPolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateAlertPolicyResponse, error)
+
+	// DisableAlertPolicyWithBodyWithResponse Disable and terminate open occurrences (Editor or Administrator)
+	//
+	// Requires same-origin CSRF protection and a body no larger than 64 KiB. Disabling records administrative cancellation and preserves original evidence.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/alert-policies/{policy_id}/disable (the `DisableAlertPolicy` operationId).
+	DisableAlertPolicyWithBodyWithResponse(ctx context.Context, policyId AlertPolicyId, params *DisableAlertPolicyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DisableAlertPolicyResponse, error)
+
+	// DisableAlertPolicyWithResponse Disable and terminate open occurrences (Editor or Administrator)
+	//
+	// Requires same-origin CSRF protection and a body no larger than 64 KiB. Disabling records administrative cancellation and preserves original evidence.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/alert-policies/{policy_id}/disable (the `DisableAlertPolicy` operationId).
+	DisableAlertPolicyWithResponse(ctx context.Context, policyId AlertPolicyId, params *DisableAlertPolicyParams, body DisableAlertPolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*DisableAlertPolicyResponse, error)
+
+	// EnableAlertPolicyWithBodyWithResponse Enable with a fresh evaluation revision (Editor or Administrator)
+	//
+	// Requires same-origin CSRF protection and a body no larger than 64 KiB. Disabled time is not replayed.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/alert-policies/{policy_id}/enable (the `EnableAlertPolicy` operationId).
+	EnableAlertPolicyWithBodyWithResponse(ctx context.Context, policyId AlertPolicyId, params *EnableAlertPolicyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*EnableAlertPolicyResponse, error)
+
+	// EnableAlertPolicyWithResponse Enable with a fresh evaluation revision (Editor or Administrator)
+	//
+	// Requires same-origin CSRF protection and a body no larger than 64 KiB. Disabled time is not replayed.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/alert-policies/{policy_id}/enable (the `EnableAlertPolicy` operationId).
+	EnableAlertPolicyWithResponse(ctx context.Context, policyId AlertPolicyId, params *EnableAlertPolicyParams, body EnableAlertPolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*EnableAlertPolicyResponse, error)
+
+	// ListAlertRangesWithResponse Read recorded ranges for an immutable policy revision
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/alert-policies/{policy_id}/ranges (the `ListAlertRanges` operationId).
+	ListAlertRangesWithResponse(ctx context.Context, policyId AlertPolicyId, params *ListAlertRangesParams, reqEditors ...RequestEditorFn) (*ListAlertRangesResponse, error)
+
+	// RetryAlertPolicyWithBodyWithResponse Retry exhausted processing (Editor or Administrator)
+	//
+	// Requires same-origin CSRF protection and a body no larger than 64 KiB. Preserves the pending boundary and immutable history.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/alert-policies/{policy_id}/retry (the `RetryAlertPolicy` operationId).
+	RetryAlertPolicyWithBodyWithResponse(ctx context.Context, policyId AlertPolicyId, params *RetryAlertPolicyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RetryAlertPolicyResponse, error)
+
+	// RetryAlertPolicyWithResponse Retry exhausted processing (Editor or Administrator)
+	//
+	// Requires same-origin CSRF protection and a body no larger than 64 KiB. Preserves the pending boundary and immutable history.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/alert-policies/{policy_id}/retry (the `RetryAlertPolicy` operationId).
+	RetryAlertPolicyWithResponse(ctx context.Context, policyId AlertPolicyId, params *RetryAlertPolicyParams, body RetryAlertPolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*RetryAlertPolicyResponse, error)
+
+	// GetAlertProcessingWithResponse Read processing health for one policy
+	//
+	// policy_id is required in this delivery. Aggregate processing is not provided. Processing health is separate from occurrence lifecycle and SLO truth.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/alert-processing (the `GetAlertProcessing` operationId).
+	GetAlertProcessingWithResponse(ctx context.Context, params *GetAlertProcessingParams, reqEditors ...RequestEditorFn) (*GetAlertProcessingResponse, error)
+
+	// ListAlertsWithResponse List alert occurrences with global filtered totals
+	//
+	// Stable filter-bound cursors over live pages, not a frozen cross-request snapshot. Group totals describe the complete filtered set for SLOs represented on the page.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/alerts (the `ListAlerts` operationId).
+	ListAlertsWithResponse(ctx context.Context, params *ListAlertsParams, reqEditors ...RequestEditorFn) (*ListAlertsResponse, error)
+
+	// GetAlertWithResponse Read lifecycle and original policy identity for an occurrence
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/alerts/{occurrence_id} (the `GetAlert` operationId).
+	GetAlertWithResponse(ctx context.Context, occurrenceId AlertOccurrenceId, reqEditors ...RequestEditorFn) (*GetAlertResponse, error)
+
+	// AcknowledgeAlertWithBodyWithResponse Acknowledge globally without expiry (Editor or Administrator)
+	//
+	// Requires same-origin CSRF protection. Body is an empty strict object, at most 64 KiB. Terminal occurrences conflict; acknowledgement never closes an occurrence. Replay preserves the original actor and timestamp.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/alerts/{occurrence_id}/acknowledge (the `AcknowledgeAlert` operationId).
+	AcknowledgeAlertWithBodyWithResponse(ctx context.Context, occurrenceId AlertOccurrenceId, params *AcknowledgeAlertParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AcknowledgeAlertResponse, error)
+
+	// AcknowledgeAlertWithResponse Acknowledge globally without expiry (Editor or Administrator)
+	//
+	// Requires same-origin CSRF protection. Body is an empty strict object, at most 64 KiB. Terminal occurrences conflict; acknowledgement never closes an occurrence. Replay preserves the original actor and timestamp.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/alerts/{occurrence_id}/acknowledge (the `AcknowledgeAlert` operationId).
+	AcknowledgeAlertWithResponse(ctx context.Context, occurrenceId AlertOccurrenceId, params *AcknowledgeAlertParams, body AcknowledgeAlertJSONRequestBody, reqEditors ...RequestEditorFn) (*AcknowledgeAlertResponse, error)
+
+	// GetAlertEvidenceWithResponse Read immutable firing or latest evaluation evidence
+	//
+	// Reads the retained decision, never recalculates it from current source facts.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/alerts/{occurrence_id}/evidence (the `GetAlertEvidence` operationId).
+	GetAlertEvidenceWithResponse(ctx context.Context, occurrenceId AlertOccurrenceId, params *GetAlertEvidenceParams, reqEditors ...RequestEditorFn) (*GetAlertEvidenceResponse, error)
+
+	// GetAlertSeriesWithResponse Read bounded immutable paired burn-window evaluations
+	//
+	// Actual retained evaluations on an inclusive effective-cutoff axis, at most 24 hours and 120 returned points. Defaults to two hours ending at the occurrence latest saved cutoff. Sampling preserves endpoints before exact extrema; omitted extrema and gaps are explicit. Scheduled ranges are provenance, never effective-cutoff exclusions. Oversized source history fails explicitly rather than truncating.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/alerts/{occurrence_id}/series (the `GetAlertSeries` operationId).
+	GetAlertSeriesWithResponse(ctx context.Context, occurrenceId AlertOccurrenceId, params *GetAlertSeriesParams, reqEditors ...RequestEditorFn) (*GetAlertSeriesResponse, error)
+
+	// ListAlertTransitionsWithResponse Read every retained lifecycle transition in sequence order
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/alerts/{occurrence_id}/transitions (the `ListAlertTransitions` operationId).
+	ListAlertTransitionsWithResponse(ctx context.Context, occurrenceId AlertOccurrenceId, params *ListAlertTransitionsParams, reqEditors ...RequestEditorFn) (*ListAlertTransitionsResponse, error)
+
 	// PostAuthContextWithBodyWithResponse Read the current authentication context
 	//
 	// Requires one Origin header equal to the configured public HTTPS origin and a secure TLS request (or correctly trusted proxy forwarding). Authentication cookies are optional on context: without a valid session, context creates or reuses the __Host-almanac-preauth cookie and returns a tab-specific CSRF token for login; with a valid session, it returns a session-bound CSRF token. Both cookies are Secure, HttpOnly, SameSite=Lax, Path=/, and have no Domain. Authentication operations intentionally do not support Idempotency-Key; a supplied key is rejected with 501 capability_unavailable.
@@ -12151,6 +15183,830 @@ func (r PostAgentDisableResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r PostAgentDisableResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetAlertCommandResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *AlertCommandLookup
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *AlertProblem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetAlertCommandResponse) GetJSON200() *AlertCommandLookup {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetAlertCommandResponse) GetApplicationproblemJSONDefault() *AlertProblem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetAlertCommandResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetAlertCommandResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetAlertCommandResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetAlertCommandResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ListAlertPoliciesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *AlertPolicyPage
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *AlertProblem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListAlertPoliciesResponse) GetJSON200() *AlertPolicyPage {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListAlertPoliciesResponse) GetApplicationproblemJSONDefault() *AlertProblem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListAlertPoliciesResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListAlertPoliciesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListAlertPoliciesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListAlertPoliciesResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// CreateAlertPolicyResponse201Headers the declared response headers of an HTTP 201 response for CreateAlertPolicy
+type CreateAlertPolicyResponse201Headers struct {
+	ETag *string
+}
+
+type CreateAlertPolicyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *AlertCommandResult
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *AlertProblem
+	// Headers201 the parsed response headers for an HTTP 201 response
+	Headers201 *CreateAlertPolicyResponse201Headers
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r CreateAlertPolicyResponse) GetJSON201() *AlertCommandResult {
+	return r.JSON201
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r CreateAlertPolicyResponse) GetApplicationproblemJSONDefault() *AlertProblem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r CreateAlertPolicyResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r CreateAlertPolicyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CreateAlertPolicyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r CreateAlertPolicyResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// GetAlertPolicyResponse200Headers the declared response headers of an HTTP 200 response for GetAlertPolicy
+type GetAlertPolicyResponse200Headers struct {
+	ETag *string
+}
+
+type GetAlertPolicyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *AlertPolicy
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *AlertProblem
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *GetAlertPolicyResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetAlertPolicyResponse) GetJSON200() *AlertPolicy {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetAlertPolicyResponse) GetApplicationproblemJSONDefault() *AlertProblem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetAlertPolicyResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetAlertPolicyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetAlertPolicyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetAlertPolicyResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// UpdateAlertPolicyResponse200Headers the declared response headers of an HTTP 200 response for UpdateAlertPolicy
+type UpdateAlertPolicyResponse200Headers struct {
+	ETag *string
+}
+
+type UpdateAlertPolicyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *AlertCommandResult
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *AlertProblem
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *UpdateAlertPolicyResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r UpdateAlertPolicyResponse) GetJSON200() *AlertCommandResult {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r UpdateAlertPolicyResponse) GetApplicationproblemJSONDefault() *AlertProblem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r UpdateAlertPolicyResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r UpdateAlertPolicyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r UpdateAlertPolicyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r UpdateAlertPolicyResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// DisableAlertPolicyResponse200Headers the declared response headers of an HTTP 200 response for DisableAlertPolicy
+type DisableAlertPolicyResponse200Headers struct {
+	ETag *string
+}
+
+type DisableAlertPolicyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *AlertCommandResult
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *AlertProblem
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *DisableAlertPolicyResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r DisableAlertPolicyResponse) GetJSON200() *AlertCommandResult {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r DisableAlertPolicyResponse) GetApplicationproblemJSONDefault() *AlertProblem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r DisableAlertPolicyResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r DisableAlertPolicyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DisableAlertPolicyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r DisableAlertPolicyResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// EnableAlertPolicyResponse200Headers the declared response headers of an HTTP 200 response for EnableAlertPolicy
+type EnableAlertPolicyResponse200Headers struct {
+	ETag *string
+}
+
+type EnableAlertPolicyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *AlertCommandResult
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *AlertProblem
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *EnableAlertPolicyResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r EnableAlertPolicyResponse) GetJSON200() *AlertCommandResult {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r EnableAlertPolicyResponse) GetApplicationproblemJSONDefault() *AlertProblem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r EnableAlertPolicyResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r EnableAlertPolicyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r EnableAlertPolicyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r EnableAlertPolicyResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ListAlertRangesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *AlertRangePage
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *AlertProblem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListAlertRangesResponse) GetJSON200() *AlertRangePage {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListAlertRangesResponse) GetApplicationproblemJSONDefault() *AlertProblem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListAlertRangesResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListAlertRangesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListAlertRangesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListAlertRangesResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// RetryAlertPolicyResponse200Headers the declared response headers of an HTTP 200 response for RetryAlertPolicy
+type RetryAlertPolicyResponse200Headers struct {
+	ETag *string
+}
+
+type RetryAlertPolicyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *AlertCommandResult
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *AlertProblem
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *RetryAlertPolicyResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r RetryAlertPolicyResponse) GetJSON200() *AlertCommandResult {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r RetryAlertPolicyResponse) GetApplicationproblemJSONDefault() *AlertProblem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r RetryAlertPolicyResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RetryAlertPolicyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RetryAlertPolicyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RetryAlertPolicyResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetAlertProcessingResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *AlertProcessing
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *AlertProblem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetAlertProcessingResponse) GetJSON200() *AlertProcessing {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetAlertProcessingResponse) GetApplicationproblemJSONDefault() *AlertProblem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetAlertProcessingResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetAlertProcessingResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetAlertProcessingResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetAlertProcessingResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ListAlertsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *AlertPage
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *AlertProblem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListAlertsResponse) GetJSON200() *AlertPage {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListAlertsResponse) GetApplicationproblemJSONDefault() *AlertProblem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListAlertsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListAlertsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListAlertsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListAlertsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// GetAlertResponse200Headers the declared response headers of an HTTP 200 response for GetAlert
+type GetAlertResponse200Headers struct {
+	ETag *string
+}
+
+type GetAlertResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *AlertRecord
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *AlertProblem
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *GetAlertResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetAlertResponse) GetJSON200() *AlertRecord {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetAlertResponse) GetApplicationproblemJSONDefault() *AlertProblem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetAlertResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetAlertResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetAlertResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetAlertResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// AcknowledgeAlertResponse200Headers the declared response headers of an HTTP 200 response for AcknowledgeAlert
+type AcknowledgeAlertResponse200Headers struct {
+	ETag *string
+}
+
+type AcknowledgeAlertResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *AlertCommandResult
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *AlertProblem
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *AcknowledgeAlertResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r AcknowledgeAlertResponse) GetJSON200() *AlertCommandResult {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r AcknowledgeAlertResponse) GetApplicationproblemJSONDefault() *AlertProblem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r AcknowledgeAlertResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r AcknowledgeAlertResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AcknowledgeAlertResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r AcknowledgeAlertResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetAlertEvidenceResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *AlertEvidence
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *AlertProblem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetAlertEvidenceResponse) GetJSON200() *AlertEvidence {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetAlertEvidenceResponse) GetApplicationproblemJSONDefault() *AlertProblem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetAlertEvidenceResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetAlertEvidenceResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetAlertEvidenceResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetAlertEvidenceResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetAlertSeriesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *AlertSeries
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *AlertProblem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetAlertSeriesResponse) GetJSON200() *AlertSeries {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetAlertSeriesResponse) GetApplicationproblemJSONDefault() *AlertProblem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetAlertSeriesResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetAlertSeriesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetAlertSeriesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetAlertSeriesResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ListAlertTransitionsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *AlertTransitionPage
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *AlertProblem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListAlertTransitionsResponse) GetJSON200() *AlertTransitionPage {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListAlertTransitionsResponse) GetApplicationproblemJSONDefault() *AlertProblem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListAlertTransitionsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListAlertTransitionsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListAlertTransitionsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListAlertTransitionsResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -15329,6 +19185,326 @@ func (c *ClientWithResponses) PostAgentDisableWithResponse(ctx context.Context, 
 	return ParsePostAgentDisableResponse(rsp)
 }
 
+// GetAlertCommandWithResponse Reconcile a command for the current actor
+//
+// Committed results are replayable for 24 hours; retained expired identities cannot execute again. Unknown is not proof that the command failed. Never automatically replace an uncertain key.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/alert-commands (the `GetAlertCommand` operationId).
+func (c *ClientWithResponses) GetAlertCommandWithResponse(ctx context.Context, params *GetAlertCommandParams, reqEditors ...RequestEditorFn) (*GetAlertCommandResponse, error) {
+	rsp, err := c.GetAlertCommand(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetAlertCommandResponse(rsp)
+}
+
+// ListAlertPoliciesWithResponse List alert policy configuration, including policies without occurrences
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/alert-policies (the `ListAlertPolicies` operationId).
+func (c *ClientWithResponses) ListAlertPoliciesWithResponse(ctx context.Context, params *ListAlertPoliciesParams, reqEditors ...RequestEditorFn) (*ListAlertPoliciesResponse, error) {
+	rsp, err := c.ListAlertPolicies(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListAlertPoliciesResponse(rsp)
+}
+
+// CreateAlertPolicyWithBodyWithResponse Create an alert policy (Editor or Administrator)
+//
+// Requires same-origin CSRF protection and a body no larger than 64 KiB. Replay reauthorizes the actor and returns the original committed result. Configuration does not itself fabricate an occurrence.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/alert-policies (the `CreateAlertPolicy` operationId).
+func (c *ClientWithResponses) CreateAlertPolicyWithBodyWithResponse(ctx context.Context, params *CreateAlertPolicyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateAlertPolicyResponse, error) {
+	rsp, err := c.CreateAlertPolicyWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateAlertPolicyResponse(rsp)
+}
+
+// CreateAlertPolicyWithResponse Create an alert policy (Editor or Administrator)
+//
+// Requires same-origin CSRF protection and a body no larger than 64 KiB. Replay reauthorizes the actor and returns the original committed result. Configuration does not itself fabricate an occurrence.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/alert-policies (the `CreateAlertPolicy` operationId).
+func (c *ClientWithResponses) CreateAlertPolicyWithResponse(ctx context.Context, params *CreateAlertPolicyParams, body CreateAlertPolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateAlertPolicyResponse, error) {
+	rsp, err := c.CreateAlertPolicy(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateAlertPolicyResponse(rsp)
+}
+
+// GetAlertPolicyWithResponse Read current alert policy configuration
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/alert-policies/{policy_id} (the `GetAlertPolicy` operationId).
+func (c *ClientWithResponses) GetAlertPolicyWithResponse(ctx context.Context, policyId AlertPolicyId, reqEditors ...RequestEditorFn) (*GetAlertPolicyResponse, error) {
+	rsp, err := c.GetAlertPolicy(ctx, policyId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetAlertPolicyResponse(rsp)
+}
+
+// UpdateAlertPolicyWithBodyWithResponse Update alert policy configuration (Editor or Administrator)
+//
+// Strict partial object, at most 64 KiB. Metadata changes preserve the evaluation revision; semantic changes supersede old work atomically. Omission preserves a field; null is not accepted.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /api/v1/alert-policies/{policy_id} (the `UpdateAlertPolicy` operationId).
+func (c *ClientWithResponses) UpdateAlertPolicyWithBodyWithResponse(ctx context.Context, policyId AlertPolicyId, params *UpdateAlertPolicyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UpdateAlertPolicyResponse, error) {
+	rsp, err := c.UpdateAlertPolicyWithBody(ctx, policyId, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateAlertPolicyResponse(rsp)
+}
+
+// UpdateAlertPolicyWithResponse Update alert policy configuration (Editor or Administrator)
+//
+// Strict partial object, at most 64 KiB. Metadata changes preserve the evaluation revision; semantic changes supersede old work atomically. Omission preserves a field; null is not accepted.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PATCH /api/v1/alert-policies/{policy_id} (the `UpdateAlertPolicy` operationId).
+func (c *ClientWithResponses) UpdateAlertPolicyWithResponse(ctx context.Context, policyId AlertPolicyId, params *UpdateAlertPolicyParams, body UpdateAlertPolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateAlertPolicyResponse, error) {
+	rsp, err := c.UpdateAlertPolicy(ctx, policyId, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUpdateAlertPolicyResponse(rsp)
+}
+
+// DisableAlertPolicyWithBodyWithResponse Disable and terminate open occurrences (Editor or Administrator)
+//
+// Requires same-origin CSRF protection and a body no larger than 64 KiB. Disabling records administrative cancellation and preserves original evidence.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/alert-policies/{policy_id}/disable (the `DisableAlertPolicy` operationId).
+func (c *ClientWithResponses) DisableAlertPolicyWithBodyWithResponse(ctx context.Context, policyId AlertPolicyId, params *DisableAlertPolicyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*DisableAlertPolicyResponse, error) {
+	rsp, err := c.DisableAlertPolicyWithBody(ctx, policyId, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDisableAlertPolicyResponse(rsp)
+}
+
+// DisableAlertPolicyWithResponse Disable and terminate open occurrences (Editor or Administrator)
+//
+// Requires same-origin CSRF protection and a body no larger than 64 KiB. Disabling records administrative cancellation and preserves original evidence.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/alert-policies/{policy_id}/disable (the `DisableAlertPolicy` operationId).
+func (c *ClientWithResponses) DisableAlertPolicyWithResponse(ctx context.Context, policyId AlertPolicyId, params *DisableAlertPolicyParams, body DisableAlertPolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*DisableAlertPolicyResponse, error) {
+	rsp, err := c.DisableAlertPolicy(ctx, policyId, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDisableAlertPolicyResponse(rsp)
+}
+
+// EnableAlertPolicyWithBodyWithResponse Enable with a fresh evaluation revision (Editor or Administrator)
+//
+// Requires same-origin CSRF protection and a body no larger than 64 KiB. Disabled time is not replayed.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/alert-policies/{policy_id}/enable (the `EnableAlertPolicy` operationId).
+func (c *ClientWithResponses) EnableAlertPolicyWithBodyWithResponse(ctx context.Context, policyId AlertPolicyId, params *EnableAlertPolicyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*EnableAlertPolicyResponse, error) {
+	rsp, err := c.EnableAlertPolicyWithBody(ctx, policyId, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseEnableAlertPolicyResponse(rsp)
+}
+
+// EnableAlertPolicyWithResponse Enable with a fresh evaluation revision (Editor or Administrator)
+//
+// Requires same-origin CSRF protection and a body no larger than 64 KiB. Disabled time is not replayed.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/alert-policies/{policy_id}/enable (the `EnableAlertPolicy` operationId).
+func (c *ClientWithResponses) EnableAlertPolicyWithResponse(ctx context.Context, policyId AlertPolicyId, params *EnableAlertPolicyParams, body EnableAlertPolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*EnableAlertPolicyResponse, error) {
+	rsp, err := c.EnableAlertPolicy(ctx, policyId, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseEnableAlertPolicyResponse(rsp)
+}
+
+// ListAlertRangesWithResponse Read recorded ranges for an immutable policy revision
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/alert-policies/{policy_id}/ranges (the `ListAlertRanges` operationId).
+func (c *ClientWithResponses) ListAlertRangesWithResponse(ctx context.Context, policyId AlertPolicyId, params *ListAlertRangesParams, reqEditors ...RequestEditorFn) (*ListAlertRangesResponse, error) {
+	rsp, err := c.ListAlertRanges(ctx, policyId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListAlertRangesResponse(rsp)
+}
+
+// RetryAlertPolicyWithBodyWithResponse Retry exhausted processing (Editor or Administrator)
+//
+// Requires same-origin CSRF protection and a body no larger than 64 KiB. Preserves the pending boundary and immutable history.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/alert-policies/{policy_id}/retry (the `RetryAlertPolicy` operationId).
+func (c *ClientWithResponses) RetryAlertPolicyWithBodyWithResponse(ctx context.Context, policyId AlertPolicyId, params *RetryAlertPolicyParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RetryAlertPolicyResponse, error) {
+	rsp, err := c.RetryAlertPolicyWithBody(ctx, policyId, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRetryAlertPolicyResponse(rsp)
+}
+
+// RetryAlertPolicyWithResponse Retry exhausted processing (Editor or Administrator)
+//
+// Requires same-origin CSRF protection and a body no larger than 64 KiB. Preserves the pending boundary and immutable history.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/alert-policies/{policy_id}/retry (the `RetryAlertPolicy` operationId).
+func (c *ClientWithResponses) RetryAlertPolicyWithResponse(ctx context.Context, policyId AlertPolicyId, params *RetryAlertPolicyParams, body RetryAlertPolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*RetryAlertPolicyResponse, error) {
+	rsp, err := c.RetryAlertPolicy(ctx, policyId, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRetryAlertPolicyResponse(rsp)
+}
+
+// GetAlertProcessingWithResponse Read processing health for one policy
+//
+// policy_id is required in this delivery. Aggregate processing is not provided. Processing health is separate from occurrence lifecycle and SLO truth.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/alert-processing (the `GetAlertProcessing` operationId).
+func (c *ClientWithResponses) GetAlertProcessingWithResponse(ctx context.Context, params *GetAlertProcessingParams, reqEditors ...RequestEditorFn) (*GetAlertProcessingResponse, error) {
+	rsp, err := c.GetAlertProcessing(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetAlertProcessingResponse(rsp)
+}
+
+// ListAlertsWithResponse List alert occurrences with global filtered totals
+//
+// Stable filter-bound cursors over live pages, not a frozen cross-request snapshot. Group totals describe the complete filtered set for SLOs represented on the page.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/alerts (the `ListAlerts` operationId).
+func (c *ClientWithResponses) ListAlertsWithResponse(ctx context.Context, params *ListAlertsParams, reqEditors ...RequestEditorFn) (*ListAlertsResponse, error) {
+	rsp, err := c.ListAlerts(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListAlertsResponse(rsp)
+}
+
+// GetAlertWithResponse Read lifecycle and original policy identity for an occurrence
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/alerts/{occurrence_id} (the `GetAlert` operationId).
+func (c *ClientWithResponses) GetAlertWithResponse(ctx context.Context, occurrenceId AlertOccurrenceId, reqEditors ...RequestEditorFn) (*GetAlertResponse, error) {
+	rsp, err := c.GetAlert(ctx, occurrenceId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetAlertResponse(rsp)
+}
+
+// AcknowledgeAlertWithBodyWithResponse Acknowledge globally without expiry (Editor or Administrator)
+//
+// Requires same-origin CSRF protection. Body is an empty strict object, at most 64 KiB. Terminal occurrences conflict; acknowledgement never closes an occurrence. Replay preserves the original actor and timestamp.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/alerts/{occurrence_id}/acknowledge (the `AcknowledgeAlert` operationId).
+func (c *ClientWithResponses) AcknowledgeAlertWithBodyWithResponse(ctx context.Context, occurrenceId AlertOccurrenceId, params *AcknowledgeAlertParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AcknowledgeAlertResponse, error) {
+	rsp, err := c.AcknowledgeAlertWithBody(ctx, occurrenceId, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAcknowledgeAlertResponse(rsp)
+}
+
+// AcknowledgeAlertWithResponse Acknowledge globally without expiry (Editor or Administrator)
+//
+// Requires same-origin CSRF protection. Body is an empty strict object, at most 64 KiB. Terminal occurrences conflict; acknowledgement never closes an occurrence. Replay preserves the original actor and timestamp.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/alerts/{occurrence_id}/acknowledge (the `AcknowledgeAlert` operationId).
+func (c *ClientWithResponses) AcknowledgeAlertWithResponse(ctx context.Context, occurrenceId AlertOccurrenceId, params *AcknowledgeAlertParams, body AcknowledgeAlertJSONRequestBody, reqEditors ...RequestEditorFn) (*AcknowledgeAlertResponse, error) {
+	rsp, err := c.AcknowledgeAlert(ctx, occurrenceId, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAcknowledgeAlertResponse(rsp)
+}
+
+// GetAlertEvidenceWithResponse Read immutable firing or latest evaluation evidence
+//
+// Reads the retained decision, never recalculates it from current source facts.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/alerts/{occurrence_id}/evidence (the `GetAlertEvidence` operationId).
+func (c *ClientWithResponses) GetAlertEvidenceWithResponse(ctx context.Context, occurrenceId AlertOccurrenceId, params *GetAlertEvidenceParams, reqEditors ...RequestEditorFn) (*GetAlertEvidenceResponse, error) {
+	rsp, err := c.GetAlertEvidence(ctx, occurrenceId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetAlertEvidenceResponse(rsp)
+}
+
+// GetAlertSeriesWithResponse Read bounded immutable paired burn-window evaluations
+//
+// Actual retained evaluations on an inclusive effective-cutoff axis, at most 24 hours and 120 returned points. Defaults to two hours ending at the occurrence latest saved cutoff. Sampling preserves endpoints before exact extrema; omitted extrema and gaps are explicit. Scheduled ranges are provenance, never effective-cutoff exclusions. Oversized source history fails explicitly rather than truncating.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/alerts/{occurrence_id}/series (the `GetAlertSeries` operationId).
+func (c *ClientWithResponses) GetAlertSeriesWithResponse(ctx context.Context, occurrenceId AlertOccurrenceId, params *GetAlertSeriesParams, reqEditors ...RequestEditorFn) (*GetAlertSeriesResponse, error) {
+	rsp, err := c.GetAlertSeries(ctx, occurrenceId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetAlertSeriesResponse(rsp)
+}
+
+// ListAlertTransitionsWithResponse Read every retained lifecycle transition in sequence order
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/alerts/{occurrence_id}/transitions (the `ListAlertTransitions` operationId).
+func (c *ClientWithResponses) ListAlertTransitionsWithResponse(ctx context.Context, occurrenceId AlertOccurrenceId, params *ListAlertTransitionsParams, reqEditors ...RequestEditorFn) (*ListAlertTransitionsResponse, error) {
+	rsp, err := c.ListAlertTransitions(ctx, occurrenceId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListAlertTransitionsResponse(rsp)
+}
+
 // PostAuthContextWithBodyWithResponse Read the current authentication context
 //
 // Requires one Origin header equal to the configured public HTTPS origin and a secure TLS request (or correctly trusted proxy forwarding). Authentication cookies are optional on context: without a valid session, context creates or reuses the __Host-almanac-preauth cookie and returns a tab-specific CSRF token for login; with a valid session, it returns a session-bound CSRF token. Both cookies are Secure, HttpOnly, SameSite=Lax, Path=/, and have no Domain. Authentication operations intentionally do not support Idempotency-Key; a supplied key is rejected with 501 capability_unavailable.
@@ -16892,6 +21068,638 @@ func ParsePostAgentDisableResponse(rsp *http.Response) (*PostAgentDisableRespons
 			return nil, err
 		}
 		response.JSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetAlertCommandResponse parses an HTTP response from a GetAlertCommandWithResponse call
+func ParseGetAlertCommandResponse(rsp *http.Response) (*GetAlertCommandResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetAlertCommandResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AlertCommandLookup
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest AlertProblem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListAlertPoliciesResponse parses an HTTP response from a ListAlertPoliciesWithResponse call
+func ParseListAlertPoliciesResponse(rsp *http.Response) (*ListAlertPoliciesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListAlertPoliciesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AlertPolicyPage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest AlertProblem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCreateAlertPolicyResponse parses an HTTP response from a CreateAlertPolicyWithResponse call
+func ParseCreateAlertPolicyResponse(rsp *http.Response) (*CreateAlertPolicyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CreateAlertPolicyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest AlertCommandResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest AlertProblem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 201:
+		var headers CreateAlertPolicyResponse201Headers
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers201 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseGetAlertPolicyResponse parses an HTTP response from a GetAlertPolicyWithResponse call
+func ParseGetAlertPolicyResponse(rsp *http.Response) (*GetAlertPolicyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetAlertPolicyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AlertPolicy
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest AlertProblem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers GetAlertPolicyResponse200Headers
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseUpdateAlertPolicyResponse parses an HTTP response from a UpdateAlertPolicyWithResponse call
+func ParseUpdateAlertPolicyResponse(rsp *http.Response) (*UpdateAlertPolicyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &UpdateAlertPolicyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AlertCommandResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest AlertProblem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers UpdateAlertPolicyResponse200Headers
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseDisableAlertPolicyResponse parses an HTTP response from a DisableAlertPolicyWithResponse call
+func ParseDisableAlertPolicyResponse(rsp *http.Response) (*DisableAlertPolicyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DisableAlertPolicyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AlertCommandResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest AlertProblem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers DisableAlertPolicyResponse200Headers
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseEnableAlertPolicyResponse parses an HTTP response from a EnableAlertPolicyWithResponse call
+func ParseEnableAlertPolicyResponse(rsp *http.Response) (*EnableAlertPolicyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &EnableAlertPolicyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AlertCommandResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest AlertProblem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers EnableAlertPolicyResponse200Headers
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseListAlertRangesResponse parses an HTTP response from a ListAlertRangesWithResponse call
+func ParseListAlertRangesResponse(rsp *http.Response) (*ListAlertRangesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListAlertRangesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AlertRangePage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest AlertProblem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseRetryAlertPolicyResponse parses an HTTP response from a RetryAlertPolicyWithResponse call
+func ParseRetryAlertPolicyResponse(rsp *http.Response) (*RetryAlertPolicyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RetryAlertPolicyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AlertCommandResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest AlertProblem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers RetryAlertPolicyResponse200Headers
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseGetAlertProcessingResponse parses an HTTP response from a GetAlertProcessingWithResponse call
+func ParseGetAlertProcessingResponse(rsp *http.Response) (*GetAlertProcessingResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetAlertProcessingResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AlertProcessing
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest AlertProblem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListAlertsResponse parses an HTTP response from a ListAlertsWithResponse call
+func ParseListAlertsResponse(rsp *http.Response) (*ListAlertsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListAlertsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AlertPage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest AlertProblem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetAlertResponse parses an HTTP response from a GetAlertWithResponse call
+func ParseGetAlertResponse(rsp *http.Response) (*GetAlertResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetAlertResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AlertRecord
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest AlertProblem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers GetAlertResponse200Headers
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseAcknowledgeAlertResponse parses an HTTP response from a AcknowledgeAlertWithResponse call
+func ParseAcknowledgeAlertResponse(rsp *http.Response) (*AcknowledgeAlertResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AcknowledgeAlertResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AlertCommandResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest AlertProblem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers AcknowledgeAlertResponse200Headers
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseGetAlertEvidenceResponse parses an HTTP response from a GetAlertEvidenceWithResponse call
+func ParseGetAlertEvidenceResponse(rsp *http.Response) (*GetAlertEvidenceResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetAlertEvidenceResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AlertEvidence
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest AlertProblem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetAlertSeriesResponse parses an HTTP response from a GetAlertSeriesWithResponse call
+func ParseGetAlertSeriesResponse(rsp *http.Response) (*GetAlertSeriesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetAlertSeriesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AlertSeries
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest AlertProblem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListAlertTransitionsResponse parses an HTTP response from a ListAlertTransitionsWithResponse call
+func ParseListAlertTransitionsResponse(rsp *http.Response) (*ListAlertTransitionsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListAlertTransitionsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AlertTransitionPage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest AlertProblem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
 
 	}
 
@@ -19231,6 +24039,54 @@ type ServerInterface interface {
 	// PostAgentDisable Disable an agent
 	// (POST /api/v1/agents/{agent_id}/disable)
 	PostAgentDisable(w http.ResponseWriter, r *http.Request, agentId AgentId, params PostAgentDisableParams)
+	// GetAlertCommand Reconcile a command for the current actor
+	// (GET /api/v1/alert-commands)
+	GetAlertCommand(w http.ResponseWriter, r *http.Request, params GetAlertCommandParams)
+	// ListAlertPolicies List alert policy configuration, including policies without occurrences
+	// (GET /api/v1/alert-policies)
+	ListAlertPolicies(w http.ResponseWriter, r *http.Request, params ListAlertPoliciesParams)
+	// CreateAlertPolicy Create an alert policy (Editor or Administrator)
+	// (POST /api/v1/alert-policies)
+	CreateAlertPolicy(w http.ResponseWriter, r *http.Request, params CreateAlertPolicyParams)
+	// GetAlertPolicy Read current alert policy configuration
+	// (GET /api/v1/alert-policies/{policy_id})
+	GetAlertPolicy(w http.ResponseWriter, r *http.Request, policyId AlertPolicyId)
+	// UpdateAlertPolicy Update alert policy configuration (Editor or Administrator)
+	// (PATCH /api/v1/alert-policies/{policy_id})
+	UpdateAlertPolicy(w http.ResponseWriter, r *http.Request, policyId AlertPolicyId, params UpdateAlertPolicyParams)
+	// DisableAlertPolicy Disable and terminate open occurrences (Editor or Administrator)
+	// (POST /api/v1/alert-policies/{policy_id}/disable)
+	DisableAlertPolicy(w http.ResponseWriter, r *http.Request, policyId AlertPolicyId, params DisableAlertPolicyParams)
+	// EnableAlertPolicy Enable with a fresh evaluation revision (Editor or Administrator)
+	// (POST /api/v1/alert-policies/{policy_id}/enable)
+	EnableAlertPolicy(w http.ResponseWriter, r *http.Request, policyId AlertPolicyId, params EnableAlertPolicyParams)
+	// ListAlertRanges Read recorded ranges for an immutable policy revision
+	// (GET /api/v1/alert-policies/{policy_id}/ranges)
+	ListAlertRanges(w http.ResponseWriter, r *http.Request, policyId AlertPolicyId, params ListAlertRangesParams)
+	// RetryAlertPolicy Retry exhausted processing (Editor or Administrator)
+	// (POST /api/v1/alert-policies/{policy_id}/retry)
+	RetryAlertPolicy(w http.ResponseWriter, r *http.Request, policyId AlertPolicyId, params RetryAlertPolicyParams)
+	// GetAlertProcessing Read processing health for one policy
+	// (GET /api/v1/alert-processing)
+	GetAlertProcessing(w http.ResponseWriter, r *http.Request, params GetAlertProcessingParams)
+	// ListAlerts List alert occurrences with global filtered totals
+	// (GET /api/v1/alerts)
+	ListAlerts(w http.ResponseWriter, r *http.Request, params ListAlertsParams)
+	// GetAlert Read lifecycle and original policy identity for an occurrence
+	// (GET /api/v1/alerts/{occurrence_id})
+	GetAlert(w http.ResponseWriter, r *http.Request, occurrenceId AlertOccurrenceId)
+	// AcknowledgeAlert Acknowledge globally without expiry (Editor or Administrator)
+	// (POST /api/v1/alerts/{occurrence_id}/acknowledge)
+	AcknowledgeAlert(w http.ResponseWriter, r *http.Request, occurrenceId AlertOccurrenceId, params AcknowledgeAlertParams)
+	// GetAlertEvidence Read immutable firing or latest evaluation evidence
+	// (GET /api/v1/alerts/{occurrence_id}/evidence)
+	GetAlertEvidence(w http.ResponseWriter, r *http.Request, occurrenceId AlertOccurrenceId, params GetAlertEvidenceParams)
+	// GetAlertSeries Read bounded immutable paired burn-window evaluations
+	// (GET /api/v1/alerts/{occurrence_id}/series)
+	GetAlertSeries(w http.ResponseWriter, r *http.Request, occurrenceId AlertOccurrenceId, params GetAlertSeriesParams)
+	// ListAlertTransitions Read every retained lifecycle transition in sequence order
+	// (GET /api/v1/alerts/{occurrence_id}/transitions)
+	ListAlertTransitions(w http.ResponseWriter, r *http.Request, occurrenceId AlertOccurrenceId, params ListAlertTransitionsParams)
 	// PostAuthContext Read the current authentication context
 	// (POST /api/v1/auth/context)
 	PostAuthContext(w http.ResponseWriter, r *http.Request)
@@ -20131,6 +24987,1087 @@ func (siw *ServerInterfaceWrapper) PostAgentDisable(w http.ResponseWriter, r *ht
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.PostAgentDisable(w, r, agentId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAlertCommand operation middleware
+func (siw *ServerInterfaceWrapper) GetAlertCommand(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAlertCommandParams
+
+	// ------------- Required query parameter "operation" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "operation", r.URL.Query(), &params.Operation, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "operation"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "operation", Err: err})
+		}
+		return
+	}
+
+	// ------------- Required query parameter "idempotency_key" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "idempotency_key", r.URL.Query(), &params.IdempotencyKey, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "idempotency_key"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "idempotency_key", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAlertCommand(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListAlertPolicies operation middleware
+func (siw *ServerInterfaceWrapper) ListAlertPolicies(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListAlertPoliciesParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "slo_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "slo_id", r.URL.Query(), &params.SloId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "slo_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "slo_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "severity" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "severity", r.URL.Query(), &params.Severity, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "severity"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "severity", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "enabled" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "enabled", r.URL.Query(), &params.Enabled, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "enabled"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "enabled", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "q" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "q", r.URL.Query(), &params.Q, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "q"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAlertPolicies(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateAlertPolicy operation middleware
+func (siw *ServerInterfaceWrapper) CreateAlertPolicy(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateAlertPolicyParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateAlertPolicy(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAlertPolicy operation middleware
+func (siw *ServerInterfaceWrapper) GetAlertPolicy(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "policy_id" -------------
+	var policyId AlertPolicyId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "policy_id", r.PathValue("policy_id"), &policyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "policy_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAlertPolicy(w, r, policyId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateAlertPolicy operation middleware
+func (siw *ServerInterfaceWrapper) UpdateAlertPolicy(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "policy_id" -------------
+	var policyId AlertPolicyId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "policy_id", r.PathValue("policy_id"), &policyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "policy_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UpdateAlertPolicyParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	// ------------- Required header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch ResourceIfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = IfMatch
+
+	} else {
+		err := fmt.Errorf("Header parameter If-Match is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateAlertPolicy(w, r, policyId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DisableAlertPolicy operation middleware
+func (siw *ServerInterfaceWrapper) DisableAlertPolicy(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "policy_id" -------------
+	var policyId AlertPolicyId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "policy_id", r.PathValue("policy_id"), &policyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "policy_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DisableAlertPolicyParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	// ------------- Required header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch ResourceIfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = IfMatch
+
+	} else {
+		err := fmt.Errorf("Header parameter If-Match is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DisableAlertPolicy(w, r, policyId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// EnableAlertPolicy operation middleware
+func (siw *ServerInterfaceWrapper) EnableAlertPolicy(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "policy_id" -------------
+	var policyId AlertPolicyId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "policy_id", r.PathValue("policy_id"), &policyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "policy_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params EnableAlertPolicyParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	// ------------- Required header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch ResourceIfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = IfMatch
+
+	} else {
+		err := fmt.Errorf("Header parameter If-Match is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.EnableAlertPolicy(w, r, policyId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListAlertRanges operation middleware
+func (siw *ServerInterfaceWrapper) ListAlertRanges(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "policy_id" -------------
+	var policyId AlertPolicyId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "policy_id", r.PathValue("policy_id"), &policyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "policy_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListAlertRangesParams
+
+	// ------------- Required query parameter "revision" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "revision", r.URL.Query(), &params.Revision, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "revision"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "revision", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAlertRanges(w, r, policyId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RetryAlertPolicy operation middleware
+func (siw *ServerInterfaceWrapper) RetryAlertPolicy(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "policy_id" -------------
+	var policyId AlertPolicyId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "policy_id", r.PathValue("policy_id"), &policyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "policy_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params RetryAlertPolicyParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	// ------------- Required header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch ResourceIfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = IfMatch
+
+	} else {
+		err := fmt.Errorf("Header parameter If-Match is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RetryAlertPolicy(w, r, policyId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAlertProcessing operation middleware
+func (siw *ServerInterfaceWrapper) GetAlertProcessing(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAlertProcessingParams
+
+	// ------------- Required query parameter "policy_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "policy_id", r.URL.Query(), &params.PolicyId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "policy_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "policy_id", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAlertProcessing(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListAlerts operation middleware
+func (siw *ServerInterfaceWrapper) ListAlerts(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListAlertsParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "scope" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "scope", r.URL.Query(), &params.Scope, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "scope"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "scope", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "state" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", false, false, "state", r.URL.Query(), &params.State, runtime.BindQueryParameterOptions{Type: "array", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "state"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "state", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "severity" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", false, false, "severity", r.URL.Query(), &params.Severity, runtime.BindQueryParameterOptions{Type: "array", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "severity"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "severity", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "slo_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "slo_id", r.URL.Query(), &params.SloId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "slo_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "slo_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "service_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "service_id", r.URL.Query(), &params.ServiceId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "service_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "service_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "q" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "q", r.URL.Query(), &params.Q, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "q"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "q", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "group_by" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "group_by", r.URL.Query(), &params.GroupBy, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "group_by"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "group_by", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "sort" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "sort", r.URL.Query(), &params.Sort, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "sort"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "evidence" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "evidence", r.URL.Query(), &params.Evidence, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "evidence"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "evidence", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "minimum_duration_seconds" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "minimum_duration_seconds", r.URL.Query(), &params.MinimumDurationSeconds, runtime.BindQueryParameterOptions{Type: "integer", Format: "int64"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "minimum_duration_seconds"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "minimum_duration_seconds", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAlerts(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAlert operation middleware
+func (siw *ServerInterfaceWrapper) GetAlert(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "occurrence_id" -------------
+	var occurrenceId AlertOccurrenceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "occurrence_id", r.PathValue("occurrence_id"), &occurrenceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "occurrence_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAlert(w, r, occurrenceId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AcknowledgeAlert operation middleware
+func (siw *ServerInterfaceWrapper) AcknowledgeAlert(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "occurrence_id" -------------
+	var occurrenceId AlertOccurrenceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "occurrence_id", r.PathValue("occurrence_id"), &occurrenceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "occurrence_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params AcknowledgeAlertParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	// ------------- Required header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch ResourceIfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = IfMatch
+
+	} else {
+		err := fmt.Errorf("Header parameter If-Match is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AcknowledgeAlert(w, r, occurrenceId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAlertEvidence operation middleware
+func (siw *ServerInterfaceWrapper) GetAlertEvidence(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "occurrence_id" -------------
+	var occurrenceId AlertOccurrenceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "occurrence_id", r.PathValue("occurrence_id"), &occurrenceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "occurrence_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAlertEvidenceParams
+
+	// ------------- Optional query parameter "selection" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "selection", r.URL.Query(), &params.Selection, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "selection"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "selection", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAlertEvidence(w, r, occurrenceId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAlertSeries operation middleware
+func (siw *ServerInterfaceWrapper) GetAlertSeries(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "occurrence_id" -------------
+	var occurrenceId AlertOccurrenceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "occurrence_id", r.PathValue("occurrence_id"), &occurrenceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "occurrence_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAlertSeriesParams
+
+	// ------------- Required query parameter "condition_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "condition_id", r.URL.Query(), &params.ConditionId, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "condition_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "condition_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "start" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "start", r.URL.Query(), &params.Start, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "start"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "start", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "end" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "end", r.URL.Query(), &params.End, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "end"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "end", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAlertSeries(w, r, occurrenceId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListAlertTransitions operation middleware
+func (siw *ServerInterfaceWrapper) ListAlertTransitions(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "occurrence_id" -------------
+	var occurrenceId AlertOccurrenceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "occurrence_id", r.PathValue("occurrence_id"), &occurrenceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "occurrence_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListAlertTransitionsParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAlertTransitions(w, r, occurrenceId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -22246,6 +28183,22 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 		ErrorHandlerFunc:   options.ErrorHandlerFunc,
 	}
 
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/alert-policies", wrapper.ListAlertPolicies)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/alert-policies", wrapper.CreateAlertPolicy)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/alert-policies/{policy_id}", wrapper.GetAlertPolicy)
+	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/api/v1/alert-policies/{policy_id}", wrapper.UpdateAlertPolicy)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/alert-policies/{policy_id}/enable", wrapper.EnableAlertPolicy)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/alert-policies/{policy_id}/disable", wrapper.DisableAlertPolicy)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/alert-policies/{policy_id}/retry", wrapper.RetryAlertPolicy)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/alert-policies/{policy_id}/ranges", wrapper.ListAlertRanges)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/alerts", wrapper.ListAlerts)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/alerts/{occurrence_id}", wrapper.GetAlert)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/alerts/{occurrence_id}/acknowledge", wrapper.AcknowledgeAlert)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/alerts/{occurrence_id}/evidence", wrapper.GetAlertEvidence)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/alerts/{occurrence_id}/series", wrapper.GetAlertSeries)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/alerts/{occurrence_id}/transitions", wrapper.ListAlertTransitions)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/alert-processing", wrapper.GetAlertProcessing)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/alert-commands", wrapper.GetAlertCommand)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/account", wrapper.GetAccount)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/api/v1/account", wrapper.UpdateAccount)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/account/activation", wrapper.RedeemUserChallenge)

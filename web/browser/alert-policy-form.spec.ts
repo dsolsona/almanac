@@ -40,7 +40,7 @@ test('approved policy form geometry and keyboard editing @matrix', async ({ page
   await threshold.fill('20'); await threshold.press('Tab');
   await expect(form.getByRole('button', { name: 'Edit burn threshold for Custom condition' })).toHaveText('20×');
   await form.getByRole('button', { name: 'Create alert policy' }).click();
-  await expect(example.getByRole('status')).toContainText('Local draft: Checkout sustained burn, 2 conditions, high severity.');
+  await expect(example.getByRole('status')).toContainText('Local draft: Checkout sustained burn, 2 conditions, medium severity.');
   await expect(form.getByRole('combobox', { name: /unit/i })).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await captureForm(page, example.locator('.alert-policy-example'), `../.local/alert-policy-form-${testInfo.project.name}.png`);

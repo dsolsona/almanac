@@ -6,7 +6,7 @@ import { AgentsPage } from '../src/agents/AgentsPage.tsx';
 import { DatasourcesPage } from '../src/datasources/DatasourcesPage.tsx';
 import { resourceFromAttributes } from '@opentelemetry/resources';
 import { BrowserTraceOutbox } from '../src/telemetry/outbox.ts';
-import { installTelemetry, telemetrySession, journeyContentReady, traceChartRender, traceJSON, flushTelemetry } from '../src/telemetry/client.ts';
+import { installTelemetry, telemetrySession, journeyContentReady, traceChartRender, traceJSON, flushTelemetry, routeName } from '../src/telemetry/client.ts';
 
 const exported = vi.hoisted(() => ({ bodies: [] as string[], failures: [] as unknown[], hold: false, release: [] as (() => void)[] }));
 vi.mock('@opentelemetry/exporter-trace-otlp-http', async () => {
@@ -266,4 +266,20 @@ it('exports a completed list root and its fetch/parse spans after a response wit
   expect(spans.filter(span => span.name === 'http.GET /api/v1/slis')).toHaveLength(1);
   expect(spans.filter(span => span.name === 'ui.json.parse')).toHaveLength(2);
   expect(new Set(spans.map(span => span.traceId)).size).toBe(1);
+});
+
+it('names bounded alert routes and waits for actual detail chart paint', async()=>{
+ expect(routeName('/alerts')).toBe('alert.list');
+ expect(routeName('/alerts/policies/new')).toBe('alert.policy');
+ expect(routeName('/alerts/11111111-1111-4111-8111-111111111111')).toBe('alert.detail');
+ history.replaceState({},'', '/alerts/11111111-1111-4111-8111-111111111111');
+ vi.stubGlobal('requestAnimationFrame',(callback:FrameRequestCallback)=>setTimeout(()=>callback(performance.now()),0));
+ vi.stubGlobal('fetch',vi.fn(async()=>new Response('{}',{headers:{'X-Almanac-Tracing':'1'}})));
+ stop=installTelemetry();telemetrySession({csrf_token:'csrf',session:{user_id:'fixture-user',login:'owner',role:'administrator',restricted:false}});
+ const completed=vi.fn();window.addEventListener('almanac:journey',completed);
+ try {
+  journeyContentReady('alert.detail');await new Promise(resolve=>setTimeout(resolve,20));expect(completed).not.toHaveBeenCalled();
+  await expectReadyJourney(()=>traceChartRender(()=>{}));
+  expect(completed.mock.calls[0]![0].detail.journey).toBe('alert.detail');
+ }finally{window.removeEventListener('almanac:journey',completed);}
 });
