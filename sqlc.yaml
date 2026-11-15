@@ -59,6 +59,10 @@ sql:
       - internal/storage/migrations/0053_projection_validity_scalar.sql
       - internal/storage/migrations/0054_maintenance_authority.sql
       - internal/storage/migrations/0055_projection_performance_integrity.sql
+      - internal/storage/migrations/0056_alert_journal.sql
+      - internal/storage/migrations/0057_alert_processing_failures.sql
+      - internal/storage/migrations/0058_alert_catalog.sql
+      - internal/storage/migrations/0059_alert_evidence_retention.sql
     gen:
       go:
         package: dbgen

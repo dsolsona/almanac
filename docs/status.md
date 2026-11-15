@@ -1,15 +1,65 @@
-Review consolidation, 2026-11-14: [F4-T28](tasks/F4-T28.md) closes validated
-review findings and the failed integration/collection checks before integrating
-the existing alerting stack. All 26 stack PRs are ready and their initial reviews
-have completed. New optimization work is paused. The maintainer authorized fixing
-valid feedback, refreshing reviews, merging the stack and resuming alerting delivery.
-This authorization does not itself adopt the experimental calculator or complete
-the production alert lifecycle. All four application CI gates pass on cumulative
-head `29035f2`. Its fresh CodeRabbit review identified additional maintenance,
-focus, documentation and diagnostic-evidence corrections; those are integrated
-and receive focused verification plus current-head CI before merge. The proposed
-extra migration lock is already supplied by its foreign keys; readiness evidence
-is recorded without imposing an incompatible ready-only HTTP gate.
+Foundation PR, 2026-11-14: ready [PR #121](https://github.com/dsolsona/almanac/pull/121)
+publishes the unwired foundations as one candidate. All four application CI gates
+pass on `6f89bdf`: unit 3m32s, browser 7m58s, end-to-end 9m09s and integration
+9m44s. Initial CodeRabbit review completes with three valid findings; corrections
+add semantic timestamp comparison, a minimum two-row retention batch and explicit
+chart-sampling priority. Further inspection also fixes pairs stranded across scan
+pages with a bounded one-row overlap. Integrated focused race checks pass 46 domain
+cases in 1.019 s and 18 PostgreSQL retention/upgrade cases in 6.364 s; refreshed
+remote checks remain required after publication. Final local verification passes 156 focused
+storage/race/upgrade cases in 28.879 s and 117 domain cases in 1.026 s. SQLC
+regeneration is clean; documentation checks cover 287 files/2,181 local links.
+Retention now protects active and last-breaching evidence, exposes compacted
+outcome/provenance summaries and uses bounded durable scan checkpoints; populated
+0058→0059 upgrade preserves journal history and terminal immutability. These
+results establish the unwired foundation candidate, not public/production or
+capacity acceptance. The public profile remains pending maintainer review;
+[ADR-0052](adr/0052-compiled-maintenance-populations.md) is the proposed shared
+maintenance-calculation candidate for the remaining nonzero-mask gate.
+Its independent review now requires a fixed finite compiler input fence and
+explicit reconciliation of pre-existing canonical/raw receipt metadata before
+claiming full calculator equivalence. Neither the proposal nor these checks
+authorize production activation or new public defaults.
+
+Alert foundations, 2026-11-14: the maintainer explicitly approved building the
+unwired state machine/storage first, retaining calculator adoption, activation and
+release gates. [F4-T29](tasks/F4-T29.md) implements exact conditions/global lifecycle;
+[F4-T30](tasks/F4-T30.md) adds durable claims, atomic evidence/occurrences and
+catch-up ranges, with independent review's timing races reproduced and fixed.
+[F4-T31](tasks/F4-T31.md) connects canonical empty-mask counts and durable pending
+cutoffs; its combined focused race/migration selection passes in 11.184 s.
+These remain one unmerged feature candidate. No production alert worker/API/UI is
+registered yet, nonzero maintenance calculations remain explicit pending, and the
+failed fallback/capacity evidence has not been adopted.
+[F4-T32](tasks/F4-T32.md) now connects bounded unwired processor turns with durable
+retry/exhaustion, audited retry and cancellation recovery. [F4-T33](tasks/F4-T33.md)
+adds authenticated create/acknowledge/disable/retry, actor-scoped replay lookup
+and immutable firing/latest evidence reads. The integrated focused selection
+passes 47 cases under race in 17.414 s, including terminal-window failure alongside
+a healthy matching condition. Public routes and sustained acceptance remain open.
+[F4-T34](tasks/F4-T34.md) adds paginated alert/policy reads, complete filtered/SLO
+totals, latest condition evidence, transition/range history and separate processing
+status. The integrated focused race/upgrade selection passes 60 cases in 16.943 s.
+These unregistered foundations remain one local feature candidate; public
+activation/default contracts, maintenance calculations and API/CLI/UI delivery
+remain explicit next work.
+Independent foundation review corrections now include post-lock acknowledgement
+time, exact pin preservation and safe database-backpressure deferral without
+failure-budget consumption. The integrated focused storage race/upgrade selection
+passes 116 cases in 24.186 s. [F4-T35](tasks/F4-T35.md) presents the concrete
+[public contract proposal](design/alerting-public-contract.md) for the remaining
+activation/default/chart decisions; it does not accept the failed calculation
+profile or activate production workers.
+
+Review consolidation, 2026-11-14: [F4-T28](tasks/F4-T28.md) is integrated into main
+as `412d397` through PR #120. All 26 original stack heads and Merged PR states are
+verified. All four application CI gates pass on final candidate `ab58ecd`
+(3m49s/9m17s/7m12s/9m34s); CodeRabbit's incremental review completes successfully
+before merge, and final comments have corrections or concrete dispositions.
+Both task worktrees have pulled main. Separate documentation PR #84 remains open.
+New optimization work is paused. The checkpoint delivers reviewed pipeline,
+calculation, maintenance-authority and selected UI foundations; it does not adopt
+experimental fallback/capacity or complete the production alert lifecycle.
 
 Writer attribution, 2026-11-14: [F4-T26](tasks/F4-T26.md) exposes the existing
 explicit omission mode in the CPU-control workflow. Default complete controls

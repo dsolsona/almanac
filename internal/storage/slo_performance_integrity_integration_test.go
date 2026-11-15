@@ -126,19 +126,21 @@ func TestIntegrationProjectionPerformanceUpgrade(t *testing.T) {
 		}
 		before[id] = value
 	}
+	dropAlertJournalFixture(t, s.conn)
+	latest := latestTestSchemaVersion(t)
 	tag, err := s.conn.Exec(t.Context(), `
 ALTER TABLE public.almanac_slo_current_projections DROP COLUMN performance_complete;
 DROP FUNCTION public.almanac_projection_performance_complete(jsonb);
-DELETE FROM public.almanac_schema_migrations WHERE version=55;`)
-	if err != nil || tag.RowsAffected() != 1 {
+DELETE FROM public.almanac_schema_migrations WHERE version>=55;`)
+	if err != nil || tag.RowsAffected() != int64(latest-54) {
 		t.Fatalf("prepare populated 0054 fixture: removed=%d err=%v", tag.RowsAffected(), err)
 	}
 	if state, err := CheckCompatibility(t.Context(), s.f.databaseURL); err != nil || state != CompatibilityPending {
 		t.Fatalf("0054 compatibility = %v: %v", state, err)
 	}
 	upgraded, err := Upgrade(t.Context(), s.f.databaseURL)
-	if err != nil || upgraded.Applied != 1 || upgraded.DatabaseSchemaVersion != 55 {
-		t.Fatalf("populated 0054 to 0055 upgrade: %+v %v", upgraded, err)
+	if err != nil || upgraded.Applied != latest-54 || upgraded.DatabaseSchemaVersion != latest {
+		t.Fatalf("populated 0054 to current upgrade: %+v %v", upgraded, err)
 	}
 	for _, id := range []string{valid, invalid} {
 		var value publication

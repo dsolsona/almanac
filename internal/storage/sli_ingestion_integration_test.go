@@ -745,6 +745,7 @@ WHERE slo_id IN (SELECT slo_id FROM public.almanac_slo_definitions WHERE sli_id=
 	}
 	// Recreate the pre-0016 schema in this disposable fixture, then verify that
 	// upgrading existing history backfills the cursor without changing coverage.
+	dropAlertJournalFixture(t, conn)
 	if _, err := conn.Exec(t.Context(), `DROP TABLE public.almanac_session_policy;
 ALTER TABLE public.almanac_sessions DROP COLUMN idle_minutes`); err != nil {
 		t.Fatal(err)

@@ -1,5 +1,32 @@
 # Implementation tasks
 
+[F4-T37](F4-T37.md) specifies the bounded shared maintenance-population candidate;
+adoption and numerical resource limits remain proposed.
+
+[F4-T36](F4-T36.md) protects active/last-breaching evidence and adds bounded,
+restartable compaction/retention without production cleanup registration.
+
+[F4-T35](F4-T35.md) prepares concrete public defaults, activation and replay
+contracts for maintainer review before public wiring.
+
+[F4-T34](F4-T34.md) adds server-side alert/policy pagination, global SLO group
+totals, immutable history and processing-health reads for the selected UI.
+
+[F4-T33](F4-T33.md) adds authenticated alert commands, replay reconciliation and
+immutable evidence reads before public API/CLI integration.
+
+[F4-T32](F4-T32.md) connects bounded processor turns to durable evaluation,
+pending/failure handling and audited retry; runtime registration remains gated.
+
+[F4-T31](F4-T31.md) connects canonical SLO counts to alert evidence and persists
+pending cutoffs across retries/restart; production activation remains gated.
+
+[F4-T30](F4-T30.md) builds durable alert claims and atomic occurrence/evidence
+journaling against the exact core; production activation remains gated.
+
+[F4-T29](F4-T29.md) implements the unwired exact alert domain increment under the
+maintainer's implementation ownership direction; calculation adoption remains gated.
+
 [F4-T28](F4-T28.md) closes valid alerting-stack review findings, diagnoses required
 check failures and integrates the authorized checkpoint before engine delivery resumes.
 

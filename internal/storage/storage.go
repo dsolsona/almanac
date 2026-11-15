@@ -28,7 +28,15 @@ var (
 	ErrNewerSchema         = errors.New("storage: database schema is newer than this binary")
 	ErrInconsistentHistory = errors.New("storage: database migration history is inconsistent")
 	ErrCancelled           = errors.New("storage: operation cancelled or timed out")
+	errDatabaseConflict    = errors.New("storage: retryable database transaction conflict")
 )
+
+// Keep the existing public-safe message while retaining only a retry class.
+// Never retain the original PgError: it may contain queries or private values.
+type databaseConflictError struct{ message string }
+
+func (e databaseConflictError) Error() string { return e.message }
+func (e databaseConflictError) Unwrap() error { return errDatabaseConflict }
 
 type UpgradeResult struct {
 	DatabaseSchemaVersion int `json:"database_schema_version"`
@@ -220,6 +228,9 @@ func operationError(ctx context.Context, message string, cause error) error {
 	}
 	if pgErr, ok := errors.AsType[*pgconn.PgError](cause); ok && (pgErr.Code == "57014" || pgErr.Code == "55P03") {
 		return errors.Join(errors.New(message), ErrCancelled)
+	}
+	if pgErr, ok := errors.AsType[*pgconn.PgError](cause); ok && (pgErr.Code == "40001" || pgErr.Code == "40P01") {
+		return databaseConflictError{message: message}
 	}
 	return errors.New(message)
 }

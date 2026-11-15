@@ -77,3 +77,4 @@ well as benefits. Do not invent alternatives or measurements to justify a choice
 | [ADR-0049](0049-slo-budget-in-context-detail.md) | SLO budget in context detail | accepted |
 | [ADR-0050](0050-dedicated-firecracker-tern-client-key.md) | A dedicated Firecracker Tern client key | accepted |
 | [ADR-0051](0051-durable-alert-policy-state-machine.md) | Durable alert policy state machine | proposed |
+| [ADR-0052](0052-compiled-maintenance-populations.md) | Compile scoped maintenance populations for the shared calculator | proposed |

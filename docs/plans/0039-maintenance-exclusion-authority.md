@@ -263,6 +263,11 @@ and validate the newly activated grid before committing.
 
 ### B. Fence actual derived and alert consumers
 
+The concrete [ADR-0052 candidate](../adr/0052-compiled-maintenance-populations.md)
+addresses the fragmentation and old-range compatibility prerequisites below. It
+remains proposed; implementation/adoption cannot silently replace the accepted
+source path or adopt failed fallback limits.
+
 - [ ] Integrate F4-T05; implement the bounded storage population strategy only
   after resolving the fragmentation/admission dependency above.
 - [ ] Add forward exclusion-aware extrema/generation schema changes and update
