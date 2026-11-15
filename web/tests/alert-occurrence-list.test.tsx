@@ -84,14 +84,14 @@ describe('selected alert occurrence list', () => {
   });
   it('preserves firing state and the original due time while calculation waits', () => {
     render(<AlertOccurrenceList {...props()} page={{ ...page, items: [{ ...occurrence, processing: { state: 'waiting', dueAt: '2026-11-12T10:38:00Z', reason: 'Waiting for calculation' } }] }} />);
-    expect(screen.getByText('Firing')).toBeVisible(); expect(screen.getByText('Waiting for calculation')).toBeVisible();
+    expect(screen.getByText('Firing', {selector:'.ui-status-chip'})).toBeVisible(); expect(screen.getByText('Waiting for calculation')).toBeVisible();
     expect(screen.getByText(/due 10:38 UTC/)).toBeVisible(); expect(screen.getByText(/last evaluated 10:41 UTC/i)).toBeVisible();
     expect(screen.queryByText('Normal')).not.toBeInTheDocument();
   });
   it('does not fabricate matching conditions when unavailable evidence prevents recovery', () => {
     render(<AlertOccurrenceList {...props()} page={{ ...page, items: [{ ...occurrence, state: 'acknowledged',
       acknowledged: { actor: 'Jamie Morgan', at: '2026-11-12T10:20:00Z' }, evidence: { at: '2026-11-12T10:41:00Z', matches: [], unavailableReason: 'Missing observations prevent recovery' } }] }} />);
-    expect(screen.getByText('Acknowledged')).toBeVisible(); expect(screen.getByText('Jamie Morgan')).toBeVisible();
+    expect(screen.getByText('Acknowledged', {selector:'.ui-status-chip'})).toBeVisible(); expect(screen.getByText('Jamie Morgan')).toBeVisible();
     expect(screen.getByText('Missing observations prevent recovery')).toBeVisible();
     expect(screen.queryByText(/Both ≥/)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Acknowledge Checkout/ })).not.toBeInTheDocument();
@@ -124,7 +124,7 @@ describe('selected alert occurrence list', () => {
     render(<AlertOccurrenceList {...props()} acknowledgement={{ id: occurrence.id, pending: true, error: 'The alert changed. Refresh its current state.' }} />);
     expect(screen.getByRole('button', { name: 'Acknowledge Checkout burn' })).toBeDisabled();
     expect(screen.getByRole('alert')).toHaveTextContent('The alert changed. Refresh its current state.');
-    expect(screen.getByText('Firing')).toBeVisible();
+    expect(screen.getByText('Firing', {selector:'.ui-status-chip'})).toBeVisible();
   });
   it('preserves a pending command when another row can be acknowledged', () => {
     render(<AlertOccurrenceList {...props()} page={{ ...page, items: [occurrence, { ...occurrence, id: 'another', policyName: 'Payment burn' }] }} acknowledgement={{ id: occurrence.id, pending: true }} />);
@@ -154,7 +154,7 @@ describe('selected alert occurrence list', () => {
   it('keeps loading and failed reads distinct from an empty successful page', () => {
     const input = props(), empty: AlertListPage = { ...page, items: [], total: 0, start: 0, end: 0, hasNext: false };
     const { rerender } = render(<AlertOccurrenceList {...input} page={empty} busy />);
-    expect(screen.getByText('Loading alerts…')).toBeVisible();
+    expect(screen.getByRole('status')).toHaveClass('sr-only');
     expect(screen.queryByText('No active alerts.')).not.toBeInTheDocument();
     rerender(<AlertOccurrenceList {...input} page={empty} error="Unable to read alerts." />);
     expect(screen.getByRole('alert')).toHaveTextContent('Unable to read alerts.');

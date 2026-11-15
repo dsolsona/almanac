@@ -41,18 +41,18 @@ func conditionDTO(value alert.Condition) api.AlertCondition {
 	return api.AlertCondition{Id: value.ID, ShortWindowSeconds: int64(value.Short / time.Second), LongWindowSeconds: int64(value.Long / time.Second), Threshold: value.Threshold}
 }
 
-func conditionResultsDTO(values []alert.ConditionResult) []api.AlertConditionResult {
+func conditionResultsDTO(values []alert.ConditionResult, target string) []api.AlertConditionResult {
 	result := make([]api.AlertConditionResult, 0, len(values))
 	for _, value := range values {
-		result = append(result, api.AlertConditionResult{Id: value.ID, Threshold: value.Threshold, Outcome: api.AlertConditionOutcome(value.Outcome), Short: windowDTO(value.Short), Long: windowDTO(value.Long)})
+		result = append(result, api.AlertConditionResult{Id: value.ID, Threshold: value.Threshold, Outcome: api.AlertConditionOutcome(value.Outcome), Short: windowRatesDTO(value.Short, target), Long: windowRatesDTO(value.Long, target)})
 	}
 	return result
 }
 
-func evaluationDTO(value alert.Evaluation) api.AlertEvaluation {
-	result := api.AlertEvaluation{PolicyId: wireID(value.PolicyID), EvaluationRevision: strconv.FormatInt(value.Revision, 10), Snapshot: snapshotDTO(value.Snapshot), Truth: api.AlertTruth(value.Truth), Conditions: conditionResultsDTO(value.Conditions)}
+func evaluationDTO(value alert.Evaluation, target string) api.AlertEvaluation {
+	result := api.AlertEvaluation{PolicyId: wireID(value.PolicyID), EvaluationRevision: strconv.FormatInt(value.Revision, 10), Snapshot: snapshotDTO(value.Snapshot), Truth: api.AlertTruth(value.Truth), Conditions: conditionResultsDTO(value.Conditions, target)}
 	if value.RecoveryComparison != nil {
-		result.RecoveryComparison = &api.AlertRecoveryComparison{Snapshot: snapshotDTO(value.RecoveryComparison.Snapshot), Truth: api.AlertTruth(value.RecoveryComparison.Truth), Conditions: conditionResultsDTO(value.RecoveryComparison.Conditions)}
+		result.RecoveryComparison = &api.AlertRecoveryComparison{Snapshot: snapshotDTO(value.RecoveryComparison.Snapshot), Truth: api.AlertTruth(value.RecoveryComparison.Truth), Conditions: conditionResultsDTO(value.RecoveryComparison.Conditions, target)}
 	}
 	return result
 }
@@ -79,7 +79,7 @@ func recordDTO(value storage.AlertRecord) api.AlertRecord {
 
 func evidenceDTO(value storage.AlertEvidenceRecord) api.AlertEvidence {
 	objective := value.Input.Objective
-	return api.AlertEvidence{Id: wireID(value.ID), ScheduledAt: value.ScheduledAt.UTC(), CommittedAt: value.CommittedAt.UTC(), Evaluation: evaluationDTO(value.Evaluation), Objective: api.AlertObjective{Target: objective.Target, CadenceSeconds: int64(objective.Cadence / time.Second), DefinitionValidFrom: objective.DefinitionValidFrom.UTC(), MeasurementValidFrom: objective.MeasurementValidFrom.UTC(), RetentionStart: objective.RetentionStart.UTC()}}
+	return api.AlertEvidence{Id: wireID(value.ID), ScheduledAt: value.ScheduledAt.UTC(), CommittedAt: value.CommittedAt.UTC(), Evaluation: evaluationDTO(value.Evaluation, objective.Target), Objective: api.AlertObjective{Target: objective.Target, CadenceSeconds: int64(objective.Cadence / time.Second), DefinitionValidFrom: objective.DefinitionValidFrom.UTC(), MeasurementValidFrom: objective.MeasurementValidFrom.UTC(), RetentionStart: objective.RetentionStart.UTC()}}
 }
 
 func processingDTO(value storage.AlertProcessingRecord) api.AlertProcessing {
@@ -108,10 +108,10 @@ func policyPageDTO(value storage.AlertPolicyPage) api.AlertPolicyPage {
 func alertPageDTO(value storage.AlertPage) api.AlertPage {
 	result := api.AlertPage{Items: make([]api.AlertCatalogItem, 0, len(value.Items)), Groups: make([]api.AlertGroup, 0, len(value.Groups)), Total: strconv.FormatInt(value.Total, 10), NextCursor: optionalString(value.NextCursor)}
 	for _, item := range value.Items {
-		result.Items = append(result.Items, api.AlertCatalogItem{Alert: recordDTO(item.Alert), PolicyName: item.PolicyName, Severity: api.AlertSeverity(item.Severity), SloId: wireID(item.SLOID), SloName: item.SLOName, ServiceId: wireID(item.ServiceID), ServiceName: item.ServiceName, EvaluationId: wireID(item.EvaluationID), Evaluation: evaluationDTO(item.Evaluation), ScheduledAt: item.ScheduledAt.UTC(), CommittedAt: item.CommittedAt.UTC(), Processing: processingDTO(item.Processing)})
+		result.Items = append(result.Items, api.AlertCatalogItem{Alert: recordDTO(item.Alert), PolicyName: item.PolicyName, Severity: api.AlertSeverity(item.Severity), SloId: wireID(item.SLOID), SloName: item.SLOName, ServiceId: wireID(item.ServiceID), ServiceName: item.ServiceName, EvaluationId: wireID(item.EvaluationID), Evaluation: evaluationDTO(item.Evaluation, item.Alert.OriginalPolicy.Target), ScheduledAt: item.ScheduledAt.UTC(), CommittedAt: item.CommittedAt.UTC(), Processing: processingDTO(item.Processing)})
 	}
 	for _, group := range value.Groups {
-		result.Groups = append(result.Groups, api.AlertGroup{SloId: wireID(group.SLOID), SloName: group.SLOName, Total: strconv.FormatInt(group.Total, 10)})
+		result.Groups = append(result.Groups, api.AlertGroup{SloId: wireID(group.SLOID), SloName: group.SLOName, Total: strconv.FormatInt(group.Total, 10), Firing: strconv.FormatInt(group.Firing, 10)})
 	}
 	return result
 }

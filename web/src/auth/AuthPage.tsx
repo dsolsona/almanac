@@ -3,10 +3,12 @@ import { AuthFailure, createAuthClient, type AuthContext } from './client.ts';
 import { ApplicationShell, Button, Panel, TextField, ThemeToggle } from '../components/ui/index.ts';
 import type { AgentCreateIntent, AgentLifecycleIntent, AgentSafeDraft, SessionRecheck } from '../agents/AgentsPage.tsx';
 import './auth.css';
+import { useAlertCommands } from '../alerts/useAlertCommands.ts';
 import { journeyContentReady, routeName, telemetrySession } from '../telemetry/client.ts';
 import { ModuleView, preloadModule } from '../components/ModuleView.tsx';
 import type { CommandResult, ManagedUser } from '../settings/client.ts';
 
+const loadAlertsPage=()=>import('../alerts/AlertsPage.tsx').then(module=>({default:module.AlertsPage}));
 const loadServicesPage=()=>import('../services/ServicesPage.tsx').then(module=>({default:module.ServicesPage}));
 const loadSettingsPage = () => import('../settings/SettingsPage.tsx').then(module => ({ default:module.SettingsPage }));
 const LazyAccountLinkDialog = lazy(() => import('../settings/SettingsPage.tsx').then(module => ({ default:module.AccountLinkDialog })));
@@ -19,7 +21,8 @@ const loadSlosPage = () => import('../slos/SlosPage.tsx').then((module) => ({ de
 
 // Fetch public route code while checking the session; protected data still waits
 // for authorization, and the screen boundary handles an actual module failure.
-if (location.pathname.startsWith('/slis')) void preloadModule(loadSlisPage).catch(() => {});
+if (location.pathname.startsWith('/alerts')) void preloadModule(loadAlertsPage).catch(()=>{});
+else if (location.pathname.startsWith('/slis')) void preloadModule(loadSlisPage).catch(() => {});
 else if(location.pathname.startsWith('/services'))void preloadModule(loadServicesPage).catch(()=>{});
 else if (location.pathname.startsWith('/slos')) void preloadModule(loadSlosPage).catch(() => {});
 else if (location.pathname.startsWith('/datasources')) void preloadModule(loadDatasourcesPage).catch(() => {});
@@ -76,6 +79,7 @@ export function AuthPage({ client = defaultClient }: { client?: Client }) {
   const [agentTitleSlot, setAgentTitleSlot] = useState<HTMLDivElement | null>(null);
   const [agentDetailRoute, setAgentDetailRoute] = useState(() => Boolean(new URLSearchParams(window.location.search).get('agent')));
   const [context, setContextState] = useState<AuthContext | null>(null);
+  const alertCommands=useAlertCommands(context);
   const [profile,setProfile] = useState<ManagedUser|null>(null);
   const [accountLink,setAccountLink] = useState<CommandResult|null>(null);
   const [unavailable, setUnavailable] = useState(false);
@@ -383,7 +387,8 @@ export function AuthPage({ client = defaultClient }: { client?: Client }) {
   if (pathname==='/activate'&&!unavailable) return withAccountLink(context?<Suspense fallback={<span className="sr-only" role="status">Opening password setup</span>}><LazyActivationPage context={context}/></Suspense>:<span className="sr-only" role="status">Checking account setup</span>);
 
   if (operational && context?.session) return withAccountLink(<ApplicationShell login={profile?.id===context.session.user_id?profile.full_name:context.session.login} role={context.session.role} pending={pending} showCheckSession={showCheckSession} onCheckSession={() => void checkSession(true)} onSignOut={() => void signOut()}>
-    {pathname.startsWith('/settings')?<ScreenBoundary screen="Settings" key={`settings:${context.session.user_id}`}><ModuleView load={loadSettingsPage} componentProps={{client:authClient,context,onIssuedLink:setAccountLink,onProfileChange:setProfile,onSessionChange:setContext,onAuthFailure:(error:AuthFailure)=>handleFailure(error,'password'),onCheckSession:()=>void checkSession(true)}} fallback={<span className="sr-only" role="status">Opening settings</span>}/></ScreenBoundary>:pathname.startsWith('/services')?<ScreenBoundary screen="Services" key={`services:${context.session.user_id}`}><ModuleView load={loadServicesPage} componentProps={{context}} fallback={<><h1 className="app-page-heading">Services</h1><span className="sr-only" role="status">Opening services</span></>}/></ScreenBoundary>:pathname.startsWith('/slos') ? <ScreenBoundary screen="SLO" key={`slos:${context.session.user_id}`}><ModuleView load={loadSlosPage} componentProps={{context}} fallback={<><h1 className="app-page-heading">SLOs</h1><span className="sr-only" role="status">Opening SLOs</span></>}/></ScreenBoundary>
+    {!pathname.startsWith('/alerts') && alertCommands.state.intent && ['sending','uncertain','expired','committed'].includes(alertCommands.state.status) && <Panel heading={alertCommands.state.status==='sending'?'Alert command in progress':'Alert command needs review'}><p>An alert command is retained for reconciliation. <a href="/alerts" data-app-route>Review alert command</a></p></Panel>}
+    {pathname.startsWith('/settings')?<ScreenBoundary screen="Settings" key={`settings:${context.session.user_id}`}><ModuleView load={loadSettingsPage} componentProps={{client:authClient,context,onIssuedLink:setAccountLink,onProfileChange:setProfile,onSessionChange:setContext,onAuthFailure:(error:AuthFailure)=>handleFailure(error,'password'),onCheckSession:()=>void checkSession(true)}} fallback={<span className="sr-only" role="status">Opening settings</span>}/></ScreenBoundary>:pathname.startsWith('/alerts')?<ScreenBoundary screen="Alerts" key={`alerts:${context.session.user_id}`}><ModuleView load={loadAlertsPage} componentProps={{context,commands:alertCommands}} fallback={<><h1 className="app-page-heading">Alerts</h1><span className="sr-only" role="status">Opening alerts</span></>}/></ScreenBoundary>:pathname.startsWith('/services')?<ScreenBoundary screen="Services" key={`services:${context.session.user_id}`}><ModuleView load={loadServicesPage} componentProps={{context}} fallback={<><h1 className="app-page-heading">Services</h1><span className="sr-only" role="status">Opening services</span></>}/></ScreenBoundary>:pathname.startsWith('/slos') ? <ScreenBoundary screen="SLO" key={`slos:${context.session.user_id}`}><ModuleView load={loadSlosPage} componentProps={{context}} fallback={<><h1 className="app-page-heading">SLOs</h1><span className="sr-only" role="status">Opening SLOs</span></>}/></ScreenBoundary>
       : pathname.startsWith('/datasources') ? <ScreenBoundary screen="Datasource" key={`datasources:${context.session.user_id}`}><ModuleView load={loadDatasourcesPage} componentProps={{context}} fallback={<><nav className="app-breadcrumbs" aria-label="Breadcrumb">{pathname === '/datasources' ? <span aria-current="page">Datasources</span> : <><a href="/datasources" data-app-route>Datasources</a><span aria-hidden="true">/</span><span aria-current="page">{pathname === '/datasources/new' ? 'Add datasource' : 'Datasource'}</span></>}</nav><h1 className="app-page-heading">Datasources</h1><span className="sr-only" role="status">Opening datasources</span></>}/></ScreenBoundary>
       : pathname.startsWith('/slis') ? <ScreenBoundary screen="SLI" key={`slis:${context.session.user_id}`}><ModuleView load={loadSlisPage} componentProps={{context}} fallback={<><nav className="app-breadcrumbs" aria-label="Breadcrumb">{pathname === '/slis' ? <span aria-current="page">SLIs</span> : <><a href="/slis" data-app-route>SLIs</a><span aria-hidden="true">/</span><span aria-current="page">{pathname === '/slis/new' ? 'Create SLI' : 'SLI details'}</span></>}</nav><h1 className="app-page-heading">SLIs</h1><span className="sr-only" role="status">Opening SLIs</span></>} /></ScreenBoundary> : <>
     {agentDetailRoute && <nav className="app-breadcrumbs" aria-label="Breadcrumb"><a href="/agents" data-app-route>Agents</a><span aria-hidden="true">/</span><span aria-current="page">{agentCrumb?.id === new URLSearchParams(window.location.search).get('agent') ? agentCrumb.name : 'Agent details'}</span></nav>}

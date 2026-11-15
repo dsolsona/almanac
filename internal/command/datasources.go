@@ -450,7 +450,7 @@ func validSecretActionInput(data jsontext.Value) bool {
 	if json.Unmarshal(data, &value) != nil || !value.Action.Valid() || json.Unmarshal(data, &fields) != nil {
 		return false
 	}
-	if value.Action == api.Replace {
+	if value.Action == api.SecretActionActionReplace {
 		return exactFields(fields, "action", "value") && value.Value != nil && *value.Value != ""
 	}
 	return exactFields(fields, "action") && value.Value == nil

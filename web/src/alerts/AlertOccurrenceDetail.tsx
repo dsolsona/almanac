@@ -10,7 +10,7 @@ import './occurrence-detail.css';
 export type AlertEvidenceWindow = {
   label: string; seconds: number; start: string; end: string;
   bad: string | null; total: string | null; observedErrorRate: string | null;
-  allowedErrorRate: string; burn: string | null; reason?: string;
+  allowedErrorRate: string | null; quality?: string; burn: string | null; reason?: string;
 };
 export type AlertConditionEvidence = {
   id: string; name: string; outcome: 'matching' | 'not_matching' | 'unavailable';
@@ -63,6 +63,7 @@ function Windows({ condition, bounds = false }: { condition: AlertConditionEvide
     <strong className={condition.outcome === 'matching' && window.burn !== null ? 'is-matching' : undefined}>{window.burn === null ? 'Unavailable' : `${exactDecimal(window.burn)}×`}</strong>
     <span>Threshold ≥ {exactDecimal(condition.threshold)}×</span>
     <small>{window.bad !== null && window.total !== null ? `${countExact(window.bad)} / ${countExact(window.total)} unsuccessful events` : window.reason ?? 'Event counts unavailable'}</small>
+    {window.quality && window.quality !== 'complete' && <small>{window.quality.replaceAll('_', ' ')}</small>}
     {bounds && <small>Observed error {percentExact(window.observedErrorRate)} · Allowed error {percentExact(window.allowedErrorRate)}</small>}
     {bounds && <small className="alert-detail-bounds">[<Time value={window.start} />, <Time value={window.end} />)</small>}
   </div>)}</div>;
@@ -125,6 +126,7 @@ export function AlertOccurrenceDetail({ data, now, backHref, canAcknowledge, onA
       {selected ? <>
         <Windows condition={selected} />
         <div className="alert-detail-chart-title"><h2>Burn rate</h2><Time value={data.latest.evaluatedAt} /></div>
+        <p className="sr-only">{selected.chart.summary}</p>
         <TimelineChartView chart={selected.chart} showHeader={false} generation={`${data.version}:${data.latest.evaluatedAt}:${selected.id}`} inspection />
         <div className="alert-detail-legend" aria-label="Chart series">{selected.chart.lanes.flatMap(lane => lane.series).map((series, index) => <span key={series.id}><i className={`alert-detail-series--${series.color === 'critical' ? 'critical' : series.color === 'primary' ? 0 : index}`} aria-hidden="true" />{series.label}</span>)}</div>
         <p className="alert-detail-condition-outcome">{data.latest.conditions.length === 1 && <strong>{outcomes[selected.outcome]} · </strong>}{selected.explanation}</p>

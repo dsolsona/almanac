@@ -16,6 +16,10 @@ describe('alert policy draft values', () => {
     expect(parseAlertDuration('5 min', 420, 70)).toBeNull();
     expect(parseAlertDuration('7 min', 420, 70)).toBe(420);
   });
+  it('bounds numeric drafts before arbitrary precision parsing', () => {
+    expect(validateAlertThreshold('1'.repeat(33))).toBeTruthy();
+    expect(parseAlertDuration('1'.repeat(1000) + ' min', 300, 60)).toBeNull();
+  });
   it('formats canonical editable units', () => {
     expect([300, 3600, 21600, 172800].map(formatAlertDuration)).toEqual(['5 min', '1 h', '6 h', '2 d']);
   });

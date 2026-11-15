@@ -4,19 +4,19 @@ export type AlertSeverity = 'low' | 'medium' | 'high';
 export type AlertPolicyDraft = { name: string; sloId: string; severity: AlertSeverity; conditions: AlertConditionDraft[]; confirmNonThirtyDayPresets: boolean };
 
 function decimal(value: string): { numerator: bigint; denominator: bigint } | null {
-  if (!/^\d+(?:\.\d+)?$/.test(value)) return null;
+  if (value.length > 96 || !/^\d+(?:\.\d+)?$/.test(value)) return null;
   const [whole, fraction = ''] = value.split('.');
   return { numerator: BigInt(whole! + fraction), denominator: 10n ** BigInt(fraction.length) };
 }
 export function normalizeAlertThreshold(value: string): string | null {
-  const trimmed = value.trim(), parts = decimal(trimmed);
+  const trimmed = value.trim(), parts = trimmed.length <= 32 ? decimal(trimmed) : null;
   if (!parts || parts.numerator <= 0n) return null;
   const [whole, fraction = ''] = trimmed.split('.');
   const tail = fraction.replace(/0+$/, '');
   return `${BigInt(whole!)}${tail ? `.${tail}` : ''}`;
 }
 export function validateAlertThreshold(value: string, target?: string): string | undefined {
-  const threshold = decimal(value.trim());
+  const threshold = value.trim().length <= 32 ? decimal(value.trim()) : null;
   if (!threshold || threshold.numerator <= 0n) return 'Enter a positive burn threshold, such as 14.4.';
   if (target !== undefined) {
     const objective = decimal(target);
@@ -34,6 +34,7 @@ export function formatAlertDuration(seconds: number): string {
   return `${seconds / unit} ${unit === 86400 ? 'd' : unit === 3600 ? 'h' : 'min'}`;
 }
 export function parseAlertDuration(text: string, previousSeconds: number, cadenceSeconds: number): number | null {
+  if (text.length > 64) return null;
   const match = text.trim().match(/^(\d+(?:\.\d+)?)\s*(m|min(?:ute)?s?|h|hours?|hrs?|d|days?)?$/i);
   if (!match || !Number.isSafeInteger(cadenceSeconds) || cadenceSeconds <= 0) return null;
   const amount = decimal(match[1]!)!;

@@ -69,3 +69,34 @@ func TestAlertPolicyWireUsesExplicitUnitsAndVersions(t *testing.T) {
 		t.Fatalf("wrong units: %s", body)
 	}
 }
+
+func TestAlertEvidenceRatesUseSavedCountsAndTarget(t *testing.T) {
+	id := "11111111-1111-4111-8111-111111111111"
+	at := time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC)
+	snapshot := alert.SnapshotIdentity{SLOID: id, SLORevision: 1, SLIRevision: 1, CalculationVersion: "v1", Cutoff: at}
+	window := alert.WindowEvidence{Snapshot: snapshot, Start: at.Add(-time.Hour), End: at, Quality: alert.Complete, Good: "9856", Total: "10000"}
+	value := storage.AlertEvidenceRecord{ID: id, Input: alert.Input{Objective: alert.Objective{Target: "0.999"}}, Evaluation: alert.Evaluation{PolicyID: id, Revision: 1, Snapshot: snapshot, Truth: alert.Breaching, Conditions: []alert.ConditionResult{{ID: "fast", Threshold: "14.4", Outcome: alert.Matching, Short: window, Long: window}}}}
+	body, err := json.Marshal(evidenceDTO(value))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var data map[string]any
+	if json.Unmarshal(body, &data) != nil {
+		t.Fatal("invalid JSON")
+	}
+	short := data["evaluation"].(map[string]any)["conditions"].([]any)[0].(map[string]any)["short"].(map[string]any)
+	for key, want := range map[string]string{"bad": "144", "observed_error_rate": "0.0144", "allowed_error_rate": "0.001", "burn": "14.4"} {
+		if short[key] != want {
+			t.Fatalf("%s=%v want%s in %s", key, short[key], want, body)
+		}
+	}
+	// The display burn can round to the threshold while the exact saved
+	// outcome stays not_matching. Presentation must not re-evaluate truth.
+	value.Evaluation.Truth = alert.Clear
+	value.Evaluation.Conditions[0].Outcome = alert.NotMatching
+	value.Evaluation.Conditions[0].Short.Good = "9856.000000000001"
+	wire := evidenceDTO(value)
+	if wire.Evaluation.Truth != "clear" || wire.Evaluation.Conditions[0].Outcome != "not_matching" {
+		t.Fatal("display calculations changed decision truth")
+	}
+}

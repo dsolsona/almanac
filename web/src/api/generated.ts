@@ -216,6 +216,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/alerts/{occurrence_id}/series": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                occurrence_id: components["parameters"]["AlertOccurrenceId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Read bounded immutable paired burn-window evaluations
+         * @description Actual retained evaluations on an inclusive effective-cutoff axis, at most 24 hours and 120 returned points. Defaults to two hours ending at the occurrence latest saved cutoff. Sampling preserves endpoints before exact extrema; omitted extrema and gaps are explicit. Scheduled ranges are provenance, never effective-cutoff exclusions. Oversized source history fails explicitly rather than truncating.
+         */
+        get: operations["getAlertSeries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/alerts/{occurrence_id}/transitions": {
         parameters: {
             query?: never;
@@ -1270,6 +1292,8 @@ export interface components {
             reason?: string;
         };
         AlertAcknowledge: Record<string, never>;
+        /** @description Empty retry command. A human reason is not supported and is rejected rather than discarded. */
+        AlertRetry: Record<string, never>;
         /** @enum {string} */
         AlertOperation: "alert-policy.create" | "alert-policy.update" | "alert-policy.enable" | "alert-policy.disable" | "alert-policy.retry" | "alert.acknowledge";
         /** @description The committed resource accompanies the operation. Policy commands may return both policy and an affected terminal alert; acknowledgement returns alert. */
@@ -1338,6 +1362,14 @@ export interface components {
             quality: components["schemas"]["AlertQuality"];
             good?: components["schemas"]["AlertExactDecimal"];
             total?: components["schemas"]["AlertExactDecimal"];
+            /** @description Saved observed unsuccessful-event count */
+            bad?: components["schemas"]["AlertExactDecimal"];
+            /** @description Display fraction of observed unsuccessful events */
+            observed_error_rate?: components["schemas"]["AlertExactDecimal"];
+            /** @description Allowed error fraction from the immutable SLO target. */
+            allowed_error_rate?: components["schemas"]["AlertExactDecimal"];
+            /** @description Display burn from saved observed counts and target through the shared SLO calculator */
+            burn?: components["schemas"]["AlertExactDecimal"];
             reason?: string;
         };
         AlertConditionResult: {
@@ -1377,6 +1409,47 @@ export interface components {
             committed_at: components["schemas"]["AlertTimestamp"];
             evaluation: components["schemas"]["AlertEvaluation"];
             objective: components["schemas"]["AlertObjective"];
+        };
+        AlertSeries: {
+            /** Format: uuid */
+            policy_id: string;
+            evaluation_revision: components["schemas"]["AlertVersion"];
+            objective: components["schemas"]["AlertObjective"];
+            condition: components["schemas"]["AlertCondition"];
+            start: components["schemas"]["AlertTimestamp"];
+            end: components["schemas"]["AlertTimestamp"];
+            points: components["schemas"]["AlertSeriesPoint"][];
+            gaps: components["schemas"]["AlertSeriesGap"][];
+            sampling: components["schemas"]["AlertSeriesSampling"];
+        };
+        AlertSeriesPoint: {
+            /** Format: uuid */
+            evaluation_id: string;
+            snapshot: components["schemas"]["AlertSnapshotIdentity"];
+            scheduled_at: components["schemas"]["AlertTimestamp"];
+            committed_at: components["schemas"]["AlertTimestamp"];
+            condition: components["schemas"]["AlertConditionResult"];
+        };
+        AlertSeriesGap: {
+            start: components["schemas"]["AlertTimestamp"];
+            end: components["schemas"]["AlertTimestamp"];
+            start_inclusive: boolean;
+            end_inclusive: boolean;
+            /** @enum {string} */
+            basis: "effective_cutoff" | "scheduled_boundary";
+            /** @enum {string} */
+            kind: "not_retained" | "unavailable" | "repeated_cutoff" | "unreconstructed_gap" | "administrative_cancellation" | "compacted_evaluations" | "outside_revision" | "pending";
+            reason: string;
+            /** Format: uuid */
+            range_id?: string;
+        };
+        AlertSeriesSampling: {
+            total: number;
+            returned: number;
+            reduced: boolean;
+            omitted_extrema: boolean;
+            /** @enum {string} */
+            method: "exact" | "extrema_priority";
         };
         AlertProcessing: {
             /** Format: uuid */
@@ -1429,6 +1502,8 @@ export interface components {
             slo_id: string;
             slo_name: string;
             total: components["schemas"]["AlertCounter"];
+            /** @description Firing occurrences over the complete filtered group */
+            firing: components["schemas"]["AlertCounter"];
         };
         AlertPage: {
             items: components["schemas"]["AlertCatalogItem"][];
@@ -3041,7 +3116,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["AlertPolicyCommand"];
+                "application/json": components["schemas"]["AlertRetry"];
             };
         };
         responses: {
@@ -3098,6 +3173,10 @@ export interface operations {
                 q?: string;
                 group_by?: "none" | "slo";
                 sort?: "newest" | "severity";
+                /** @description Latest committed breach or indeterminate recovery evidence */
+                evidence?: "matching" | "unavailable" | "waiting";
+                /** @description Effective duration at least this many seconds; open occurrences use the request clock */
+                minimum_duration_seconds?: number;
             };
             header?: never;
             path?: never;
@@ -3194,6 +3273,34 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AlertEvidence"];
+                };
+            };
+            default: components["responses"]["AlertProblem"];
+        };
+    };
+    getAlertSeries: {
+        parameters: {
+            query: {
+                condition_id: string;
+                start?: string;
+                end?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                occurrence_id: components["parameters"]["AlertOccurrenceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Immutable paired evidence and honest gaps */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertSeries"];
                 };
             };
             default: components["responses"]["AlertProblem"];

@@ -32,6 +32,7 @@ type alertHTTPFixture struct {
 	databaseURL, baseURL, secret, csrf, sloID string
 	verifier                                  [32]byte
 	client                                    *http.Client
+	now                                       time.Time
 }
 
 func newAlertHTTPFixture(t *testing.T) alertHTTPFixture {
@@ -122,7 +123,7 @@ func newAlertHTTPFixture(t *testing.T) alertHTTPFixture {
 	client := server.Client() // Trusts this fixture's certificate; TLS verification remains enabled.
 	client.Timeout = 10 * time.Second
 	t.Cleanup(client.CloseIdleConnections)
-	f := alertHTTPFixture{databaseURL: databaseURL, baseURL: server.URL, secret: normal.Secret, sloID: objective.ID, verifier: verifier, client: client}
+	f := alertHTTPFixture{databaseURL: databaseURL, baseURL: server.URL, secret: normal.Secret, sloID: objective.ID, verifier: verifier, client: client, now: now}
 	body, _ := f.call(t, http.MethodPost, "/api/v1/auth/context", "{}", "", "", http.StatusOK)
 	var context api.AuthResponse
 	if err := json.Unmarshal(body, &context); err != nil || context.CsrfToken == "" {
@@ -232,6 +233,28 @@ func TestIntegrationAlertHTTPPolicyJourney(t *testing.T) {
 	enabled := decodeAlertHTTPCommand(t, body)
 	if !enabled.Policy.Enabled || enabled.Policy.Version != "5" || enabled.Policy.EvaluationRevision != "3" {
 		t.Fatal("enable did not start a fresh evaluation revision")
+	}
+	// Retry accepts an empty command, not a reason which storage would discard.
+	// Prepare the durable exhausted state in this disposable API fixture; the
+	// processor's failure transition has separate real-storage coverage.
+	retryDB := testpostgres.Connect(t, f.databaseURL)
+	if _, err := retryDB.Exec(t.Context(), `UPDATE almanac_alert_cursors SET exhausted=true,failure_attempts=5,failure_since=$2,last_failure_at=$2,waiting_reason='evaluation_failed' WHERE policy_id=$1 AND revision=3`, policy.Id.String(), f.now); err != nil {
+		t.Fatal(err)
+	}
+	currentTag := fmt.Sprintf(`"alert-policy:%s:5"`, policy.Id)
+	f.call(t, http.MethodPost, path+"/retry", `{"reason":"Source restored"}`, "retry-invalid", currentTag, 400)
+	retryBody, _ := f.call(t, http.MethodPost, path+"/retry", `{}`, "retry", currentTag, 200)
+	retried := decodeAlertHTTPCommand(t, retryBody)
+	retryBody, _ = f.call(t, http.MethodPost, path+"/retry", `{}`, "retry", currentTag, 200)
+	if decodeAlertHTTPCommand(t, retryBody).RequestId != retried.RequestId {
+		t.Fatal("retry replay lost original receipt")
+	}
+	f.call(t, http.MethodPost, path+"/retry", `{"reason":"Changed reason"}`, "retry", currentTag, 400)
+	f.call(t, http.MethodPost, path+"/retry", `{}`, "retry", originalETag, 409)
+	processingBody, _ := f.call(t, http.MethodGet, "/api/v1/alert-processing?policy_id="+policy.Id.String(), "", "", "", 200)
+	var processing api.AlertProcessing
+	if json.Unmarshal(processingBody, &processing) != nil || processing.Exhausted || processing.FailureAttempts != 0 {
+		t.Fatal("retry did not restore durable processing health")
 	}
 	// A replay precedes current-version validation and returns its old result,
 	// without reverting the current configuration.

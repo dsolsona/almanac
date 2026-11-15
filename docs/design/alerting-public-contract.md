@@ -2,6 +2,9 @@
 
 Status: proposed for maintainer review, 2026-11-14. The approved unwired foundation
 sequence does not accept these public defaults or enable production alerting.
+On 2026-11-15 the maintainer authorized continued implementation using this
+reviewed profile as its baseline. This is implementation authorization; formal
+proposal acceptance and production activation remain separate gates.
 This closes the concrete API/activation questions in
 [plan 0037](../plans/0037-alert-engine-persistence-and-api.md); it does not waive
 the calculator, maintenance or 100/200-policy acceptance gates.
@@ -172,3 +175,12 @@ The proposed ready-to-commit targets remain p99 <=60 seconds and maximum
 no target yet: report it, aggregate wait and oldest pending age separately. This
 proposal does not accept failed fallback/capacity results or promise a total
 detection bound that has not been demonstrated.
+
+Chart input validation rejects an explicit all-zero Go timestamp
+(`0001-01-01T00:00:00Z`) rather than interpreting it as an omitted bound.
+Scheduled work ranges accompany retained endpoint evidence as provenance; their
+axis must never be treated as an effective-cutoff gap. If retained endpoints
+cannot establish a compaction interval within a bounded read, disclose
+`not_retained` rather than guessing the cause or scanning unbounded history.
+The immutable journal and lifecycle remain authoritative independently of chart
+sampling and these read bounds.

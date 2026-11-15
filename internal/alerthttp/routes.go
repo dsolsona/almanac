@@ -16,6 +16,7 @@ func (h *Handler) registerRoutes() {
 	h.mux.HandleFunc("POST /api/v1/alerts/{occurrence_id}/acknowledge", h.acknowledge)
 	h.mux.HandleFunc("GET /api/v1/alerts/{occurrence_id}/evidence", h.evidence)
 	h.mux.HandleFunc("GET /api/v1/alerts/{occurrence_id}/transitions", h.transitions)
+	h.mux.HandleFunc("GET /api/v1/alerts/{occurrence_id}/series", h.series)
 	h.mux.HandleFunc("GET /api/v1/alert-processing", h.processing)
 	h.mux.HandleFunc("GET /api/v1/alert-commands", h.commandResult)
 }

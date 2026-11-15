@@ -80,7 +80,7 @@ paths:
       description: Requires same-origin CSRF protection and a body no larger than 64 KiB. Preserves the pending boundary and immutable history.
       security: [{SessionCookie: [], CsrfToken: []}]
       parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/ResourceIfMatch'}]
-      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AlertPolicyCommand'}}}}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AlertRetry'}}}}
       responses:
         '200': {description: Committed retry, headers: {ETag: {schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/AlertCommandResult'}}}}
         default: {$ref: '#/components/responses/AlertProblem'}
@@ -114,6 +114,8 @@ paths:
         - {name: q, in: query, schema: {type: string, maxLength: 256}}
         - {name: group_by, in: query, schema: {type: string, enum: [none, slo], default: none}}
         - {name: sort, in: query, schema: {type: string, enum: [newest, severity], default: newest}}
+        - {name: evidence, in: query, schema: {type: string, enum: [matching, unavailable, waiting]}, description: Latest committed breach or indeterminate recovery evidence, or explicitly deferred open work.}
+        - {name: minimum_duration_seconds, in: query, schema: {type: integer, format: int64, minimum: 0}, description: Effective duration at least this many seconds; open occurrences use the request clock, terminal occurrences retain their effective duration.}
       responses:
         '200': {description: Occurrence page with exact stored evidence, content: {application/json: {schema: {$ref: '#/components/schemas/AlertPage'}}}}
         default: {$ref: '#/components/responses/AlertProblem'}
@@ -149,6 +151,21 @@ paths:
         - {name: selection, in: query, schema: {type: string, enum: [firing, latest], default: latest}}
       responses:
         '200': {description: As-evaluated evidence, content: {application/json: {schema: {$ref: '#/components/schemas/AlertEvidence'}}}}
+        default: {$ref: '#/components/responses/AlertProblem'}
+  /api/v1/alerts/{occurrence_id}/series:
+    parameters: [{$ref: '#/components/parameters/AlertOccurrenceId'}]
+    get:
+      operationId: getAlertSeries
+      summary: Read bounded immutable paired burn-window evaluations
+      description: Actual retained evaluations on an inclusive effective-cutoff axis, at most 24 hours and 120 returned points. Defaults to two hours ending at the occurrence latest saved cutoff. Sampling preserves endpoints before exact extrema; omitted extrema and gaps are explicit. Scheduled ranges are provenance, never effective-cutoff exclusions. Oversized source history fails explicitly rather than truncating.
+      security: [{SessionCookie: []}]
+      parameters:
+        - {name: condition_id, in: query, required: true, schema: {type: string, minLength: 1, maxLength: 64}}
+        - {name: start, in: query, schema: {type: string, format: date-time}}
+        - {name: end, in: query, schema: {type: string, format: date-time}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 2, maximum: 120, default: 120}}
+      responses:
+        '200': {description: Immutable paired evidence and honest gaps, content: {application/json: {schema: {$ref: '#/components/schemas/AlertSeries'}}}}
         default: {$ref: '#/components/responses/AlertProblem'}
   /api/v1/alerts/{occurrence_id}/transitions:
     parameters: [{$ref: '#/components/parameters/AlertOccurrenceId'}]
@@ -1402,6 +1419,11 @@ components:
       type: object
       additionalProperties: false
       x-go-type: 'struct{}'
+    AlertRetry:
+      type: object
+      additionalProperties: false
+      x-go-type: 'struct{}'
+      description: Empty retry command. A human reason is not supported and is rejected rather than discarded.
     AlertOperation:
       type: string
       enum: [alert-policy.create, alert-policy.update, alert-policy.enable, alert-policy.disable, alert-policy.retry, alert.acknowledge]
@@ -1487,6 +1509,10 @@ components:
         quality: {$ref: '#/components/schemas/AlertQuality'}
         good: {$ref: '#/components/schemas/AlertExactDecimal'}
         total: {$ref: '#/components/schemas/AlertExactDecimal'}
+        bad: {allOf: [{$ref: '#/components/schemas/AlertExactDecimal'}], description: Saved observed unsuccessful-event count, derived without rounding from good/total.}
+        observed_error_rate: {allOf: [{$ref: '#/components/schemas/AlertExactDecimal'}], description: Display fraction of observed unsuccessful events, rounded to 12 decimal places; absent without nonzero observed traffic.}
+        allowed_error_rate: {allOf: [{$ref: '#/components/schemas/AlertExactDecimal'}], description: Allowed error fraction from the immutable SLO target.}
+        burn: {allOf: [{$ref: '#/components/schemas/AlertExactDecimal'}], description: Display burn from saved observed counts and target through the shared SLO calculator, rounded to 12 decimal places. Stored outcome/truth remains authoritative.}
         reason: {type: string}
     AlertConditionResult:
       type: object
@@ -1538,6 +1564,49 @@ components:
         committed_at: {$ref: '#/components/schemas/AlertTimestamp'}
         evaluation: {$ref: '#/components/schemas/AlertEvaluation'}
         objective: {$ref: '#/components/schemas/AlertObjective'}
+    AlertSeries:
+      type: object
+      required: [policy_id, evaluation_revision, objective, condition, start, end, points, gaps, sampling]
+      properties:
+        policy_id: {type: string, format: uuid}
+        evaluation_revision: {$ref: '#/components/schemas/AlertVersion'}
+        objective: {$ref: '#/components/schemas/AlertObjective'}
+        condition: {$ref: '#/components/schemas/AlertCondition'}
+        start: {$ref: '#/components/schemas/AlertTimestamp'}
+        end: {$ref: '#/components/schemas/AlertTimestamp'}
+        points: {type: array, maxItems: 120, items: {$ref: '#/components/schemas/AlertSeriesPoint'}}
+        gaps: {type: array, items: {$ref: '#/components/schemas/AlertSeriesGap'}}
+        sampling: {$ref: '#/components/schemas/AlertSeriesSampling'}
+    AlertSeriesPoint:
+      type: object
+      required: [evaluation_id, snapshot, scheduled_at, committed_at, condition]
+      properties:
+        evaluation_id: {type: string, format: uuid}
+        snapshot: {$ref: '#/components/schemas/AlertSnapshotIdentity'}
+        scheduled_at: {$ref: '#/components/schemas/AlertTimestamp'}
+        committed_at: {$ref: '#/components/schemas/AlertTimestamp'}
+        condition: {$ref: '#/components/schemas/AlertConditionResult'}
+    AlertSeriesGap:
+      type: object
+      required: [start, end, start_inclusive, end_inclusive, basis, kind, reason]
+      properties:
+        start: {$ref: '#/components/schemas/AlertTimestamp'}
+        end: {$ref: '#/components/schemas/AlertTimestamp'}
+        start_inclusive: {type: boolean}
+        end_inclusive: {type: boolean}
+        basis: {type: string, enum: [effective_cutoff, scheduled_boundary]}
+        kind: {type: string, enum: [not_retained, unavailable, repeated_cutoff, unreconstructed_gap, administrative_cancellation, compacted_evaluations, outside_revision, pending]}
+        reason: {type: string}
+        range_id: {type: string, format: uuid}
+    AlertSeriesSampling:
+      type: object
+      required: [total, returned, reduced, omitted_extrema, method]
+      properties:
+        total: {type: integer, minimum: 0, maximum: 1441}
+        returned: {type: integer, minimum: 0, maximum: 120}
+        reduced: {type: boolean}
+        omitted_extrema: {type: boolean}
+        method: {type: string, enum: [exact, extrema_priority]}
     AlertProcessing:
       type: object
       additionalProperties: false
@@ -1592,11 +1661,12 @@ components:
     AlertGroup:
       type: object
       additionalProperties: false
-      required: [slo_id, slo_name, total]
+      required: [slo_id, slo_name, total, firing]
       properties:
         slo_id: {type: string, format: uuid}
         slo_name: {type: string}
         total: {$ref: '#/components/schemas/AlertCounter'}
+        firing: {allOf: [{$ref: '#/components/schemas/AlertCounter'}], description: Firing occurrences over the complete filtered group, including rows beyond this page.}
     AlertPage:
       type: object
       additionalProperties: false

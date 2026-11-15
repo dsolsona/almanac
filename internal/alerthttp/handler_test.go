@@ -147,6 +147,7 @@ func TestAlertVersionAndQueryBoundary(t *testing.T) {
 	for _, query := range []url.Values{
 		{"limit": {"0"}}, {"limit": {"201"}}, {"limit": {"020"}}, {"limit": {"20", "20"}},
 		{"cursor": {strings.Repeat("x", 1025)}}, {"q": {""}}, {"q": {strings.Repeat("x", 257)}}, {"unknown": {"x"}},
+		{"q": {string(rune(0))}},
 	} {
 		if _, _, valid := pageQuery(query, "q"); valid {
 			t.Fatalf("invalid query accepted: %v", query)

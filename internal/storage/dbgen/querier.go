@@ -219,6 +219,15 @@ type Querier interface {
 	ListAlertCatalog(ctx context.Context, arg ListAlertCatalogParams) ([]ListAlertCatalogRow, error)
 	ListAlertPolicies(ctx context.Context, arg ListAlertPoliciesParams) ([]ListAlertPoliciesRow, error)
 	ListAlertRangeHistory(ctx context.Context, arg ListAlertRangeHistoryParams) ([]AlmanacAlertRange, error)
+	// Series only reads immutable evidence. Effective-cutoff index bounds the scan;
+	// one extra row detects unsupported density rather than silently truncating it.
+	ListAlertSeriesEvaluations(ctx context.Context, arg ListAlertSeriesEvaluationsParams) ([]AlmanacAlertEvaluation, error)
+	// Scheduled ranges are disjoint within a policy revision. At most one range
+	// beginning before the requested interval can overlap it; the existing unique
+	// (policy_id,revision,starts_at) index supports that predecessor and scoped scan.
+	// Do not interpret these bounds as effective cutoffs. Unknown cutoff absence is
+	// reported as not retained, not inferred from unrelated historical work ranges.
+	ListAlertSeriesRanges(ctx context.Context, arg ListAlertSeriesRangesParams) ([]ListAlertSeriesRangesRow, error)
 	ListAlertTransitionHistory(ctx context.Context, arg ListAlertTransitionHistoryParams) ([]AlmanacAlertTransition, error)
 	ListAuthorizedMeasurementGrantsForAgent(ctx context.Context, arg ListAuthorizedMeasurementGrantsForAgentParams) ([]ListAuthorizedMeasurementGrantsForAgentRow, error)
 	ListCanonicalRetentionPartitions(ctx context.Context) ([]ListCanonicalRetentionPartitionsRow, error)
@@ -307,6 +316,7 @@ type Querier interface {
 	ReadAlertEvaluation(ctx context.Context, id pgtype.UUID) (AlmanacAlertEvaluation, error)
 	ReadAlertOccurrence(ctx context.Context, id pgtype.UUID) (AlmanacAlertOccurrence, error)
 	ReadAlertPolicy(ctx context.Context, id pgtype.UUID) (ReadAlertPolicyRow, error)
+	ReadAlertSeriesRevision(ctx context.Context, arg ReadAlertSeriesRevisionParams) (AlmanacAlertPolicyRevision, error)
 	// Read publication text once per projection, not once per retained hour.
 	// Keep timestamp parsing in its conditional predicate so unrelated due/backoff
 	// branches retain their existing behavior for malformed cache metadata.

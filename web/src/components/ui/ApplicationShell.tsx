@@ -40,6 +40,7 @@ export function ApplicationShell({ login, role, pending, showCheckSession, onChe
   const serviceCurrent=pathname.startsWith('/services');
   const agentCurrent = embedded || pathname === '/' || pathname.startsWith('/agents');
   const settingsCurrent = pathname.startsWith('/settings');
+  const alertCurrent = pathname.startsWith('/alerts');
 
   useEffect(() => {
     const changed = () => setPathname(window.location.pathname);
@@ -79,7 +80,7 @@ export function ApplicationShell({ login, role, pending, showCheckSession, onChe
       return;
     }
     const next = new URL(anchor.href, window.location.href);
-    if (next.origin !== window.location.origin || !(/^\/(?:agents|settings(?:\/account|\/password|\/sessions|\/users(?:\/new|\/[0-9a-f-]{36})?)?|datasources(?:\/new|\/[0-9a-f-]{36})?|slis(?:\/new|\/[0-9a-f-]{36})?|slos(?:\/new|\/[0-9a-f-]{36})?|services(?:\/new|\/dependencies|\/[0-9a-f-]{36}(?:\/edit)?)?)?$/.test(next.pathname))) return;
+    if (next.origin !== window.location.origin || !(/^\/(?:agents|settings(?:\/account|\/password|\/sessions|\/users(?:\/new|\/[0-9a-f-]{36})?)?|datasources(?:\/new|\/[0-9a-f-]{36})?|slis(?:\/new|\/[0-9a-f-]{36})?|slos(?:\/new|\/[0-9a-f-]{36})?|alerts(?:\/policies(?:\/new|\/[0-9a-f-]{36})?|\/[0-9a-f-]{36})?|services(?:\/new|\/dependencies|\/[0-9a-f-]{36}(?:\/edit)?)?)?$/.test(next.pathname))) return;
     event.preventDefault();
     const query = new URLSearchParams(next.search);
     const path = `${next.pathname === '/' ? '/agents' : next.pathname}${query.size ? `?${query}` : ''}${next.hash}`;
@@ -131,7 +132,7 @@ export function ApplicationShell({ login, role, pending, showCheckSession, onChe
           </div>
         </div>
         <div className="app-navigation__group"><h2>Operations</h2>
-          <div className="app-navigation__items"><div className="app-navigation__planned" aria-disabled="true"><span><NavIcon name="alerts"/>Alerts</span><small>Not available yet</small></div></div>
+          <div className="app-navigation__items"><a ref={alertCurrent ? currentDestination : undefined} className={alertCurrent ? 'app-navigation__current' : ''} href="/alerts" aria-current={alertCurrent ? 'page' : undefined} onClick={navigate}><NavIcon name="alerts"/>Alerts</a></div>
         </div>
         <div className="app-navigation__group"><h2>Administration</h2>
           <div className="app-navigation__items">

@@ -146,9 +146,17 @@ func (h *Handler) policyCommand(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body api.AlertPolicyCommand
-	if status := decodeBody(r, &body); status != 0 {
-		problem(w, status, "invalid_request", info.id)
-		return
+	if r.PathValue("action") == "retry" {
+		var empty api.AlertRetry
+		if status := decodeBody(r, &empty); status != 0 {
+			problem(w, status, "invalid_request", info.id)
+			return
+		}
+	} else {
+		if status := decodeBody(r, &body); status != 0 {
+			problem(w, status, "invalid_request", info.id)
+			return
+		}
 	}
 	reason := ""
 	if body.Reason != nil {

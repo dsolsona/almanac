@@ -82,12 +82,21 @@ func (h *Handler) getPolicy(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) listAlerts(w http.ResponseWriter, r *http.Request) {
 	info := requestInfo(r)
-	limit, cursor, valid := pageQuery(info.query, "q", "slo_id", "service_id", "severity", "state", "scope", "group_by", "sort")
+	limit, cursor, valid := pageQuery(info.query, "q", "slo_id", "service_id", "severity", "state", "scope", "group_by", "sort", "evidence", "minimum_duration_seconds")
 	if !valid || !noReadBody(r) {
 		problem(w, 400, "invalid_request", info.id)
 		return
 	}
 	input := storage.ListAlertsInput{Runtime: h.options.Runtime, Proof: info.proof, Now: h.options.Now, Limit: limit, Cursor: cursor, GroupBy: cmp.Or(info.query.Get("group_by"), "none"), Sort: cmp.Or(info.query.Get("sort"), "newest"), Filter: storage.AlertFilter{Scope: cmp.Or(info.query.Get("scope"), "active"), SLOID: info.query.Get("slo_id"), ServiceID: info.query.Get("service_id"), Search: info.query.Get("q")}}
+	input.Filter.Evidence = info.query.Get("evidence")
+	if info.query.Has("minimum_duration_seconds") {
+		value, err := strconv.ParseInt(info.query.Get("minimum_duration_seconds"), 10, 64)
+		if err != nil || value < 0 || strconv.FormatInt(value, 10) != info.query.Get("minimum_duration_seconds") {
+			problem(w, 400, "invalid_request", info.id)
+			return
+		}
+		input.Filter.MinimumDurationSeconds = value
+	}
 	if info.query.Has("severity") {
 		input.Filter.Severities = strings.Split(info.query.Get("severity"), ",")
 	}

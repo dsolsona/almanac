@@ -446,22 +446,94 @@ func (e AlertQuality) Valid() bool {
 
 // Defines values for AlertRangeKind.
 const (
-	AdministrativeCancellation AlertRangeKind = "administrative_cancellation"
-	CompactedEvaluations       AlertRangeKind = "compacted_evaluations"
-	RepeatedCutoff             AlertRangeKind = "repeated_cutoff"
-	UnreconstructedGap         AlertRangeKind = "unreconstructed_gap"
+	AlertRangeKindAdministrativeCancellation AlertRangeKind = "administrative_cancellation"
+	AlertRangeKindCompactedEvaluations       AlertRangeKind = "compacted_evaluations"
+	AlertRangeKindRepeatedCutoff             AlertRangeKind = "repeated_cutoff"
+	AlertRangeKindUnreconstructedGap         AlertRangeKind = "unreconstructed_gap"
 )
 
 // Valid indicates whether the value is a known member of the AlertRangeKind enum.
 func (e AlertRangeKind) Valid() bool {
 	switch e {
-	case AdministrativeCancellation:
+	case AlertRangeKindAdministrativeCancellation:
 		return true
-	case CompactedEvaluations:
+	case AlertRangeKindCompactedEvaluations:
 		return true
-	case RepeatedCutoff:
+	case AlertRangeKindRepeatedCutoff:
 		return true
-	case UnreconstructedGap:
+	case AlertRangeKindUnreconstructedGap:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AlertSeriesGapBasis.
+const (
+	EffectiveCutoff   AlertSeriesGapBasis = "effective_cutoff"
+	ScheduledBoundary AlertSeriesGapBasis = "scheduled_boundary"
+)
+
+// Valid indicates whether the value is a known member of the AlertSeriesGapBasis enum.
+func (e AlertSeriesGapBasis) Valid() bool {
+	switch e {
+	case EffectiveCutoff:
+		return true
+	case ScheduledBoundary:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AlertSeriesGapKind.
+const (
+	AlertSeriesGapKindAdministrativeCancellation AlertSeriesGapKind = "administrative_cancellation"
+	AlertSeriesGapKindCompactedEvaluations       AlertSeriesGapKind = "compacted_evaluations"
+	AlertSeriesGapKindNotRetained                AlertSeriesGapKind = "not_retained"
+	AlertSeriesGapKindOutsideRevision            AlertSeriesGapKind = "outside_revision"
+	AlertSeriesGapKindPending                    AlertSeriesGapKind = "pending"
+	AlertSeriesGapKindRepeatedCutoff             AlertSeriesGapKind = "repeated_cutoff"
+	AlertSeriesGapKindUnavailable                AlertSeriesGapKind = "unavailable"
+	AlertSeriesGapKindUnreconstructedGap         AlertSeriesGapKind = "unreconstructed_gap"
+)
+
+// Valid indicates whether the value is a known member of the AlertSeriesGapKind enum.
+func (e AlertSeriesGapKind) Valid() bool {
+	switch e {
+	case AlertSeriesGapKindAdministrativeCancellation:
+		return true
+	case AlertSeriesGapKindCompactedEvaluations:
+		return true
+	case AlertSeriesGapKindNotRetained:
+		return true
+	case AlertSeriesGapKindOutsideRevision:
+		return true
+	case AlertSeriesGapKindPending:
+		return true
+	case AlertSeriesGapKindRepeatedCutoff:
+		return true
+	case AlertSeriesGapKindUnavailable:
+		return true
+	case AlertSeriesGapKindUnreconstructedGap:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AlertSeriesSamplingMethod.
+const (
+	Exact           AlertSeriesSamplingMethod = "exact"
+	ExtremaPriority AlertSeriesSamplingMethod = "extrema_priority"
+)
+
+// Valid indicates whether the value is a known member of the AlertSeriesSamplingMethod enum.
+func (e AlertSeriesSamplingMethod) Valid() bool {
+	switch e {
+	case Exact:
+		return true
+	case ExtremaPriority:
 		return true
 	default:
 		return false
@@ -2622,6 +2694,27 @@ func (e ListAlertsParamsSort) Valid() bool {
 	}
 }
 
+// Defines values for ListAlertsParamsEvidence.
+const (
+	ListAlertsParamsEvidenceMatching    ListAlertsParamsEvidence = "matching"
+	ListAlertsParamsEvidenceUnavailable ListAlertsParamsEvidence = "unavailable"
+	ListAlertsParamsEvidenceWaiting     ListAlertsParamsEvidence = "waiting"
+)
+
+// Valid indicates whether the value is a known member of the ListAlertsParamsEvidence enum.
+func (e ListAlertsParamsEvidence) Valid() bool {
+	switch e {
+	case ListAlertsParamsEvidenceMatching:
+		return true
+	case ListAlertsParamsEvidenceUnavailable:
+		return true
+	case ListAlertsParamsEvidenceWaiting:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for GetAlertEvidenceParamsSelection.
 const (
 	GetAlertEvidenceParamsSelectionFiring GetAlertEvidenceParamsSelection = "firing"
@@ -3144,6 +3237,8 @@ type AlertExactDecimal = string
 
 // AlertGroup defines model for AlertGroup.
 type AlertGroup struct {
+	// Firing Firing occurrences over the complete filtered group
+	Firing  AlertCounter       `json:"firing"`
 	SloId   openapi_types.UUID `json:"slo_id"`
 	SloName string             `json:"slo_name"`
 
@@ -3370,6 +3465,74 @@ type AlertRecoveryComparison struct {
 	Truth      AlertTruth             `json:"truth"`
 }
 
+// AlertRetry Empty retry command. A human reason is not supported and is rejected rather than discarded.
+type AlertRetry = struct{}
+
+// AlertSeries defines model for AlertSeries.
+type AlertSeries struct {
+	Condition AlertCondition `json:"condition"`
+
+	// End UTC timestamp with Z suffix.
+	End AlertTimestamp `json:"end"`
+
+	// EvaluationRevision Exact positive decimal integer, no larger than signed int64 MaxInt64.
+	EvaluationRevision AlertVersion        `json:"evaluation_revision"`
+	Gaps               []AlertSeriesGap    `json:"gaps"`
+	Objective          AlertObjective      `json:"objective"`
+	Points             []AlertSeriesPoint  `json:"points"`
+	PolicyId           openapi_types.UUID  `json:"policy_id"`
+	Sampling           AlertSeriesSampling `json:"sampling"`
+
+	// Start UTC timestamp with Z suffix.
+	Start AlertTimestamp `json:"start"`
+}
+
+// AlertSeriesGap defines model for AlertSeriesGap.
+type AlertSeriesGap struct {
+	Basis AlertSeriesGapBasis `json:"basis"`
+
+	// End UTC timestamp with Z suffix.
+	End          AlertTimestamp      `json:"end"`
+	EndInclusive bool                `json:"end_inclusive"`
+	Kind         AlertSeriesGapKind  `json:"kind"`
+	RangeId      *openapi_types.UUID `json:"range_id,omitempty"`
+	Reason       string              `json:"reason"`
+
+	// Start UTC timestamp with Z suffix.
+	Start          AlertTimestamp `json:"start"`
+	StartInclusive bool           `json:"start_inclusive"`
+}
+
+// AlertSeriesGapBasis defines model for AlertSeriesGap.Basis.
+type AlertSeriesGapBasis string
+
+// AlertSeriesGapKind defines model for AlertSeriesGap.Kind.
+type AlertSeriesGapKind string
+
+// AlertSeriesPoint defines model for AlertSeriesPoint.
+type AlertSeriesPoint struct {
+	// CommittedAt UTC timestamp with Z suffix.
+	CommittedAt  AlertTimestamp       `json:"committed_at"`
+	Condition    AlertConditionResult `json:"condition"`
+	EvaluationId openapi_types.UUID   `json:"evaluation_id"`
+
+	// ScheduledAt UTC timestamp with Z suffix.
+	ScheduledAt AlertTimestamp        `json:"scheduled_at"`
+	Snapshot    AlertSnapshotIdentity `json:"snapshot"`
+}
+
+// AlertSeriesSampling defines model for AlertSeriesSampling.
+type AlertSeriesSampling struct {
+	Method         AlertSeriesSamplingMethod `json:"method"`
+	OmittedExtrema bool                      `json:"omitted_extrema"`
+	Reduced        bool                      `json:"reduced"`
+	Returned       int                       `json:"returned"`
+	Total          int                       `json:"total"`
+}
+
+// AlertSeriesSamplingMethod defines model for AlertSeriesSampling.Method.
+type AlertSeriesSamplingMethod string
+
 // AlertSeverity defines model for AlertSeverity.
 type AlertSeverity string
 
@@ -3438,14 +3601,26 @@ type AlertVersion = string
 
 // AlertWindowEvidence Requested full half-open window and immutable as-evaluated quality. Good and total are present exactly when saved paired numeric counts are available, including partial, stale or zero-traffic observations. Absent numeric counts are omitted, never replaced with zero. Numeric presence does not make the condition usable; quality and outcome remain authoritative.
 type AlertWindowEvidence struct {
+	// AllowedErrorRate Allowed error fraction from the immutable SLO target.
+	AllowedErrorRate *AlertExactDecimal `json:"allowed_error_rate,omitempty"`
+
+	// Bad Saved observed unsuccessful-event count
+	Bad *AlertExactDecimal `json:"bad,omitempty"`
+
+	// Burn Display burn from saved observed counts and target through the shared SLO calculator
+	Burn *AlertExactDecimal `json:"burn,omitempty"`
+
 	// End UTC timestamp with Z suffix.
 	End AlertTimestamp `json:"end"`
 
 	// Good Exact nonnegative decimal evidence, never a floating-point approximation. Absence is not zero.
-	Good     *AlertExactDecimal    `json:"good,omitempty"`
-	Quality  AlertQuality          `json:"quality"`
-	Reason   *string               `json:"reason,omitempty"`
-	Snapshot AlertSnapshotIdentity `json:"snapshot"`
+	Good *AlertExactDecimal `json:"good,omitempty"`
+
+	// ObservedErrorRate Display fraction of observed unsuccessful events
+	ObservedErrorRate *AlertExactDecimal    `json:"observed_error_rate,omitempty"`
+	Quality           AlertQuality          `json:"quality"`
+	Reason            *string               `json:"reason,omitempty"`
+	Snapshot          AlertSnapshotIdentity `json:"snapshot"`
 
 	// Start UTC timestamp with Z suffix.
 	Start AlertTimestamp `json:"start"`
@@ -5006,6 +5181,12 @@ type ListAlertsParams struct {
 	Q         *string                  `form:"q,omitempty" json:"q,omitempty"`
 	GroupBy   *ListAlertsParamsGroupBy `form:"group_by,omitempty" json:"group_by,omitempty"`
 	Sort      *ListAlertsParamsSort    `form:"sort,omitempty" json:"sort,omitempty"`
+
+	// Evidence Latest committed breach or indeterminate recovery evidence
+	Evidence *ListAlertsParamsEvidence `form:"evidence,omitempty" json:"evidence,omitempty"`
+
+	// MinimumDurationSeconds Effective duration at least this many seconds; open occurrences use the request clock
+	MinimumDurationSeconds *int64 `form:"minimum_duration_seconds,omitempty" json:"minimum_duration_seconds,omitempty"`
 }
 
 // ListAlertsParamsScope defines parameters for ListAlerts.
@@ -5016,6 +5197,9 @@ type ListAlertsParamsGroupBy string
 
 // ListAlertsParamsSort defines parameters for ListAlerts.
 type ListAlertsParamsSort string
+
+// ListAlertsParamsEvidence defines parameters for ListAlerts.
+type ListAlertsParamsEvidence string
 
 // AcknowledgeAlertParams defines parameters for AcknowledgeAlert.
 type AcknowledgeAlertParams struct {
@@ -5033,6 +5217,14 @@ type GetAlertEvidenceParams struct {
 
 // GetAlertEvidenceParamsSelection defines parameters for GetAlertEvidence.
 type GetAlertEvidenceParamsSelection string
+
+// GetAlertSeriesParams defines parameters for GetAlertSeries.
+type GetAlertSeriesParams struct {
+	ConditionId string     `form:"condition_id" json:"condition_id"`
+	Start       *time.Time `form:"start,omitempty" json:"start,omitempty"`
+	End         *time.Time `form:"end,omitempty" json:"end,omitempty"`
+	Limit       *int       `form:"limit,omitempty" json:"limit,omitempty"`
+}
 
 // ListAlertTransitionsParams defines parameters for ListAlertTransitions.
 type ListAlertTransitionsParams struct {
@@ -5298,7 +5490,7 @@ type DisableAlertPolicyJSONRequestBody = AlertPolicyCommand
 type EnableAlertPolicyJSONRequestBody = AlertPolicyCommand
 
 // RetryAlertPolicyJSONRequestBody defines body for RetryAlertPolicy for application/json ContentType.
-type RetryAlertPolicyJSONRequestBody = AlertPolicyCommand
+type RetryAlertPolicyJSONRequestBody = AlertRetry
 
 // AcknowledgeAlertJSONRequestBody defines body for AcknowledgeAlert for application/json ContentType.
 type AcknowledgeAlertJSONRequestBody = AlertAcknowledge
@@ -6044,6 +6236,13 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /api/v1/alerts/{occurrence_id}/evidence (the `GetAlertEvidence` operationId).
 	GetAlertEvidence(ctx context.Context, occurrenceId AlertOccurrenceId, params *GetAlertEvidenceParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetAlertSeries Read bounded immutable paired burn-window evaluations
+	//
+	// Actual retained evaluations on an inclusive effective-cutoff axis, at most 24 hours and 120 returned points. Defaults to two hours ending at the occurrence latest saved cutoff. Sampling preserves endpoints before exact extrema; omitted extrema and gaps are explicit. Scheduled ranges are provenance, never effective-cutoff exclusions. Oversized source history fails explicitly rather than truncating.
+	//
+	// Corresponds with GET /api/v1/alerts/{occurrence_id}/series (the `GetAlertSeries` operationId).
+	GetAlertSeries(ctx context.Context, occurrenceId AlertOccurrenceId, params *GetAlertSeriesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListAlertTransitions Read every retained lifecycle transition in sequence order
 	//
@@ -7361,6 +7560,23 @@ func (c *Client) AcknowledgeAlert(ctx context.Context, occurrenceId AlertOccurre
 // Corresponds with GET /api/v1/alerts/{occurrence_id}/evidence (the `GetAlertEvidence` operationId).
 func (c *Client) GetAlertEvidence(ctx context.Context, occurrenceId AlertOccurrenceId, params *GetAlertEvidenceParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetAlertEvidenceRequest(c.Server, occurrenceId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetAlertSeries Read bounded immutable paired burn-window evaluations
+//
+// Actual retained evaluations on an inclusive effective-cutoff axis, at most 24 hours and 120 returned points. Defaults to two hours ending at the occurrence latest saved cutoff. Sampling preserves endpoints before exact extrema; omitted extrema and gaps are explicit. Scheduled ranges are provenance, never effective-cutoff exclusions. Oversized source history fails explicitly rather than truncating.
+//
+// Corresponds with GET /api/v1/alerts/{occurrence_id}/series (the `GetAlertSeries` operationId).
+func (c *Client) GetAlertSeries(ctx context.Context, occurrenceId AlertOccurrenceId, params *GetAlertSeriesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetAlertSeriesRequest(c.Server, occurrenceId, params)
 	if err != nil {
 		return nil, err
 	}
@@ -10243,6 +10459,30 @@ func NewListAlertsRequest(server string, params *ListAlertsParams) (*http.Reques
 
 		}
 
+		if params.Evidence != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "evidence", *params.Evidence, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.MinimumDurationSeconds != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "minimum_duration_seconds", *params.MinimumDurationSeconds, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
 		if encoded := queryValues.Encode(); encoded != "" {
 			rawQueryFragments = append(rawQueryFragments, encoded)
 		}
@@ -10398,6 +10638,99 @@ func NewGetAlertEvidenceRequest(server string, occurrenceId AlertOccurrenceId, p
 		if params.Selection != nil {
 
 			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "selection", *params.Selection, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetAlertSeriesRequest constructs an http.Request for the GetAlertSeries method
+func NewGetAlertSeriesRequest(server string, occurrenceId AlertOccurrenceId, params *GetAlertSeriesParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "occurrence_id", occurrenceId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/alerts/%s/series", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "condition_id", params.ConditionId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if params.Start != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "start", *params.Start, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "date-time"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.End != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "end", *params.End, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "date-time"}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
 				return nil, err
 			} else {
 				for _, qp := range strings.Split(queryFrag, "&") {
@@ -13456,6 +13789,15 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /api/v1/alerts/{occurrence_id}/evidence (the `GetAlertEvidence` operationId).
 	GetAlertEvidenceWithResponse(ctx context.Context, occurrenceId AlertOccurrenceId, params *GetAlertEvidenceParams, reqEditors ...RequestEditorFn) (*GetAlertEvidenceResponse, error)
 
+	// GetAlertSeriesWithResponse Read bounded immutable paired burn-window evaluations
+	//
+	// Actual retained evaluations on an inclusive effective-cutoff axis, at most 24 hours and 120 returned points. Defaults to two hours ending at the occurrence latest saved cutoff. Sampling preserves endpoints before exact extrema; omitted extrema and gaps are explicit. Scheduled ranges are provenance, never effective-cutoff exclusions. Oversized source history fails explicitly rather than truncating.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/alerts/{occurrence_id}/series (the `GetAlertSeries` operationId).
+	GetAlertSeriesWithResponse(ctx context.Context, occurrenceId AlertOccurrenceId, params *GetAlertSeriesParams, reqEditors ...RequestEditorFn) (*GetAlertSeriesResponse, error)
+
 	// ListAlertTransitionsWithResponse Read every retained lifecycle transition in sequence order
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -15569,6 +15911,54 @@ func (r GetAlertEvidenceResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r GetAlertEvidenceResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetAlertSeriesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *AlertSeries
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *AlertProblem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetAlertSeriesResponse) GetJSON200() *AlertSeries {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetAlertSeriesResponse) GetApplicationproblemJSONDefault() *AlertProblem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetAlertSeriesResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetAlertSeriesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetAlertSeriesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetAlertSeriesResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -19087,6 +19477,21 @@ func (c *ClientWithResponses) GetAlertEvidenceWithResponse(ctx context.Context, 
 	return ParseGetAlertEvidenceResponse(rsp)
 }
 
+// GetAlertSeriesWithResponse Read bounded immutable paired burn-window evaluations
+//
+// Actual retained evaluations on an inclusive effective-cutoff axis, at most 24 hours and 120 returned points. Defaults to two hours ending at the occurrence latest saved cutoff. Sampling preserves endpoints before exact extrema; omitted extrema and gaps are explicit. Scheduled ranges are provenance, never effective-cutoff exclusions. Oversized source history fails explicitly rather than truncating.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/alerts/{occurrence_id}/series (the `GetAlertSeries` operationId).
+func (c *ClientWithResponses) GetAlertSeriesWithResponse(ctx context.Context, occurrenceId AlertOccurrenceId, params *GetAlertSeriesParams, reqEditors ...RequestEditorFn) (*GetAlertSeriesResponse, error) {
+	rsp, err := c.GetAlertSeries(ctx, occurrenceId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetAlertSeriesResponse(rsp)
+}
+
 // ListAlertTransitionsWithResponse Read every retained lifecycle transition in sequence order
 //
 // Returns a wrapper object for the known response body format(s).
@@ -21218,6 +21623,39 @@ func ParseGetAlertEvidenceResponse(rsp *http.Response) (*GetAlertEvidenceRespons
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest AlertEvidence
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest AlertProblem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetAlertSeriesResponse parses an HTTP response from a GetAlertSeriesWithResponse call
+func ParseGetAlertSeriesResponse(rsp *http.Response) (*GetAlertSeriesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetAlertSeriesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AlertSeries
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -23643,6 +24081,9 @@ type ServerInterface interface {
 	// GetAlertEvidence Read immutable firing or latest evaluation evidence
 	// (GET /api/v1/alerts/{occurrence_id}/evidence)
 	GetAlertEvidence(w http.ResponseWriter, r *http.Request, occurrenceId AlertOccurrenceId, params GetAlertEvidenceParams)
+	// GetAlertSeries Read bounded immutable paired burn-window evaluations
+	// (GET /api/v1/alerts/{occurrence_id}/series)
+	GetAlertSeries(w http.ResponseWriter, r *http.Request, occurrenceId AlertOccurrenceId, params GetAlertSeriesParams)
 	// ListAlertTransitions Read every retained lifecycle transition in sequence order
 	// (GET /api/v1/alerts/{occurrence_id}/transitions)
 	ListAlertTransitions(w http.ResponseWriter, r *http.Request, occurrenceId AlertOccurrenceId, params ListAlertTransitionsParams)
@@ -25318,6 +25759,32 @@ func (siw *ServerInterfaceWrapper) ListAlerts(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	// ------------- Optional query parameter "evidence" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "evidence", r.URL.Query(), &params.Evidence, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "evidence"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "evidence", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "minimum_duration_seconds" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "minimum_duration_seconds", r.URL.Query(), &params.MinimumDurationSeconds, runtime.BindQueryParameterOptions{Type: "integer", Format: "int64"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "minimum_duration_seconds"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "minimum_duration_seconds", Err: err})
+		}
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ListAlerts(w, r, params)
 	}))
@@ -25465,6 +25932,87 @@ func (siw *ServerInterfaceWrapper) GetAlertEvidence(w http.ResponseWriter, r *ht
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetAlertEvidence(w, r, occurrenceId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetAlertSeries operation middleware
+func (siw *ServerInterfaceWrapper) GetAlertSeries(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "occurrence_id" -------------
+	var occurrenceId AlertOccurrenceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "occurrence_id", r.PathValue("occurrence_id"), &occurrenceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "occurrence_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAlertSeriesParams
+
+	// ------------- Required query parameter "condition_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "condition_id", r.URL.Query(), &params.ConditionId, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "condition_id"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "condition_id", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "start" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "start", r.URL.Query(), &params.Start, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "start"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "start", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "end" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "end", r.URL.Query(), &params.End, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "end"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "end", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetAlertSeries(w, r, occurrenceId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -27647,6 +28195,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/alerts/{occurrence_id}", wrapper.GetAlert)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/alerts/{occurrence_id}/acknowledge", wrapper.AcknowledgeAlert)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/alerts/{occurrence_id}/evidence", wrapper.GetAlertEvidence)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/alerts/{occurrence_id}/series", wrapper.GetAlertSeries)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/alerts/{occurrence_id}/transitions", wrapper.ListAlertTransitions)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/alert-processing", wrapper.GetAlertProcessing)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/alert-commands", wrapper.GetAlertCommand)

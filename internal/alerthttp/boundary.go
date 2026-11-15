@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -85,7 +86,7 @@ func printableHeader(r *http.Request, name string) bool {
 func pageQuery(query url.Values, allowed ...string) (int, string, bool) {
 	limit, cursor := 20, ""
 	for key, values := range query {
-		if len(values) != 1 || values[0] == "" || !utf8.ValidString(values[0]) {
+		if len(values) != 1 || values[0] == "" || !utf8.ValidString(values[0]) || strings.ContainsFunc(values[0], unicode.IsControl) {
 			return 0, "", false
 		}
 		switch key {
