@@ -1,0 +1,95 @@
+{
+  "kind": "interim_diagnostic_not_acceptance",
+  "candidate": "c03f402",
+  "size": 100,
+  "live_start": "2026-11-16T21:05:07.530Z",
+  "trace_window_end": "2026-11-16T21:23:00Z",
+  "server_http_ms": {
+    "overview": {
+      "count": 1128,
+      "p50": 82.55,
+      "p95": 237.79,
+      "max": 523.3
+    },
+    "status": {
+      "count": 1128,
+      "p50": 5.46,
+      "p95": 42.43,
+      "max": 164.93
+    },
+    "history": {
+      "count": 1094,
+      "p50": 65.0,
+      "p95": 179.29,
+      "max": 348.48
+    },
+    "ingestion": {
+      "count": 1334,
+      "p50": 8.46,
+      "p95": 32.84,
+      "max": 291.16
+    }
+  },
+  "source": "Uncapped VictoriaTraces server spans in bounded three-minute pages; ingestion histogram remains the acceptance measurement.",
+  "diagnosis": {
+    "overview_trace": {
+      "trace_id": "07c1d4aa84b038f173f4a7a7a228d33a",
+      "http_ms": 335.01,
+      "service_ms": 323.199,
+      "page_query_ms": 144.195,
+      "count_query_ms": 10.631,
+      "response_encode_ms": 9.014,
+      "pool_acquire_ms": 2.215
+    },
+    "cold_browser_trace": {
+      "trace_id": "fc4b957e09acf1b7c1b220ad39df82f6",
+      "journey_ms": 1485.9,
+      "first_auth_request_offset_ms": 511.4,
+      "overview_fetch_ms": 109.1,
+      "overview_server_ms": 91.52,
+      "overview_json_parse_ms": 26.3,
+      "observation": "A substantial portion of this cold journey is outside the overview HTTP request; decoder improvements alone cannot certify browser acceptance."
+    },
+    "postgres_wait_sample": {
+      "start": "2026-11-16T21:18:24.235072Z",
+      "samples": 150,
+      "period_seconds": 0.1,
+      "max_ungranted_locks": 0,
+      "observed_active_waits": {
+        "none": 22
+      },
+      "limitation": "Short sampling interval cannot exclude contention outside the sampled period."
+    },
+    "codec_hypothesis": "Receipt registries are reconstructed recursively per sample/quality object. CPU share is unmeasured; a focused profile is pending.",
+    "payload_size_limitation": "pg_column_size measurements are JSONB expression sizes, not HTTP response bytes."
+  },
+  "gates": {
+    "sustained_100": "running",
+    "sustained_200": "not_run",
+    "production_activated": false,
+    "complete": false
+  },
+  "preserved_failures": [
+    "cold SLO list exceeds 1000ms",
+    "overview server p95 exceeds 200ms in the recorded partial interval",
+    "ingestion exceeds the matched-baseline 1.25 ratio in early histogram samples"
+  ],
+  "remaining_scenarios": [
+    "backend restart",
+    "healthy recovery and preserved missing cohort",
+    "hourly source pause and late data",
+    "final raw oracle and chronological continuity"
+  ],
+  "test_harness_finding": "The current source-pause marker can be installed after rollover because a ten-second scenario poll checks a deadline only five seconds before the hour; quiescence is not acknowledged. The next candidate must schedule and confirm pause before rollover. Do not claim the current scenario without checking the actual timing.",
+  "subsequent_outcome": {
+    "result": "interrupted_after_confirmed_failures",
+    "backend_restart": {
+      "began_at": "2026-11-16T21:25:14.150Z",
+      "completed_at": "2026-11-16T21:25:20.508Z"
+    },
+    "isolated_load_stopped": true,
+    "database_volumes_preserved": true,
+    "capacity_accepted": false,
+    "corrections": "Receipt registry reuse and acknowledged pre-rollover source pause are integrated afterward; focused checks do not establish deployed capacity."
+  }
+}

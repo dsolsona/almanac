@@ -34,6 +34,7 @@ func TestReceiptMetadataContainers(t *testing.T) {
 	}
 	for name, original := range fixtures {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			certified, err := marshalReceiptMetadata(original)
 			if err != nil {
 				t.Fatal(err)
@@ -47,6 +48,7 @@ func TestReceiptMetadataContainers(t *testing.T) {
 			}
 			for _, version := range []string{"current", "legacy", "1", "3", "null", `"2"`, `[]`, `{}`} {
 				t.Run(version, func(t *testing.T) {
+					t.Parallel()
 					raw := certified
 					if version == "legacy" {
 						raw = legacy

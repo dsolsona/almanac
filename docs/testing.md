@@ -128,7 +128,11 @@ result selects production defaults or waives the release gates.
 
 The private `pause` marker stops evaluation only. `pause-source` stops the source/
 current calculation loop; collection, ingestion and independent processors remain
-running. Fresh fixture startup clears both markers. Existing queues and immutable
+running. The rollover scenario requests its source pause 60 seconds before the
+boundary and requires the normal source loop's between-turn acknowledgement within
+30 seconds and before rollover. Late or unconfirmed pauses fail with retained
+request/failure events; installing a marker alone does not certify quiescence.
+Fresh fixture startup clears both markers. Existing queues and immutable
 journals remain the evidence for resumed work; controls cannot advance cursors or
 rewrite calculations. Keep failure artifacts private and publish only allowlisted
 fixture IDs, numerical evidence, timings and source/image identities.

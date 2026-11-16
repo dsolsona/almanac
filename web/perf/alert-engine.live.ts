@@ -7,6 +7,7 @@ import {compose, psql, restartApp, startAgent, stopAgent} from '../e2e/support/s
 import {ingestionDelta, ingestionMetrics} from './alert-calculation.metrics.ts';
 import {resourceDelta, resourceSnapshot} from './resources.ts';
 import {calculationEvidence} from './alert-status-evidence.ts';
+import {pauseSourceBeforeRollover} from './alert-engine.pause.ts';
 
 const minute = 60_000;
 const liveDuration = 60 * minute;
@@ -250,6 +251,7 @@ export async function runAlertEngineLive(page: Page, browser: Browser, size: num
   const failures: string[] = [];
   const plannedOutages: {start: number; end: number}[] = [];
   let stopped = false, missingStopped = false, background: Promise<unknown>[] = [];
+  const sourcePauseControl = new AbortController();
   let segmentStart = ingestionMetrics();
   const segments: unknown[] = [];
   const checkpoint = () => {save('live-progress', {beganAt, size, phaseEpoch, fleet, events, failures, healthSamples, ingestionSamples, journeys, apiSamples, segments, readyToCommitLatency: {available: false, reason: 'No authoritative per-boundary prerequisite-ready timestamp is recorded; scheduled/committed delay is reported separately.'}, productionActivated: false});};
@@ -337,8 +339,9 @@ COMMIT;`);
     const image = compose('images', '--quiet', 'app').trim(), database = psql('SELECT version()');
     const liveStart = Date.now(), liveEnd = liveStart + liveDuration;
     const rollover = Math.ceil(liveStart / (60 * minute)) * 60 * minute;
-    const sourcePauseAt = rollover - 5000, sourceResumeAt = rollover + 4 * minute;
+    const sourceResumeAt = rollover + 4 * minute;
     let handedOff = false, restarted = false, sourcePaused = false, sourceResumed = false, lateInserted = false;
+    let sourcePauseFailure = '';
     segmentStart = ingestionMetrics();
     save('live-profile', {beganAt, liveStart: new Date(liveStart).toISOString(), fixedLiveMinutes: 60, fixedOutageMinutes: size === 200 ? 30 : 0, catchupBudgetMinutes: 5,
       size, distinctSLIs: new Set(fleet.map(item => item.sli)).size, distinctSLOs: new Set(fleet.map(item => item.slo)).size, conditions: 2 * size,
@@ -347,8 +350,27 @@ COMMIT;`);
       cpu: cpus()[0]?.model, logicalCPUs: cpus().length, memoryBytes: totalmem(), postgres: database,
       image, sourceHashes: Object.fromEntries(['alert-engine.live.ts', 'alert-engine.perf.ts'].map(file => [file, createHash('sha256').update(readFileSync(new URL(file, import.meta.url))).digest('hex')])),
       apiClients: 10, apiCycleSeconds: 10, browserLanes: 1, browserCycleSeconds: 30,
+      sourcePauseLeadSeconds: 60, sourcePauseAcknowledgementBudgetSeconds: 30, rollover: new Date(rollover).toISOString(),
       numericalWorkerProfile: 'alertacceptance-v1; actual bounds are logged by the tagged backend', productionActivated: false});
     background = [
+      pauseSourceBeforeRollover(rollover, sourcePauseControl.signal, () => {
+        writeFileSync(`${control}/pause-source`, 'pause canonical/current source loop only');
+        events.push({kind: 'source-pause-requested', at: new Date().toISOString(), rollover: new Date(rollover).toISOString()});
+        checkpoint();
+      }, requestedAt => compose('logs', '--no-color', '--since', requestedAt, 'app')
+        .includes('"msg":"alert acceptance source worker paused"'))
+        .then(pause => {
+          sourcePaused = true;
+          events.push({kind: 'source-pause', at: pause.acknowledgedAt, ...pause, rollover: new Date(rollover).toISOString()});
+          checkpoint();
+        }).catch(error => {
+          if (sourcePauseControl.signal.aborted) return;
+          sourcePauseFailure = error instanceof Error && ['source_pause_missed_rollover', 'source_pause_acknowledgement_timeout'].includes(error.message)
+            ? error.message : 'source_pause_control_failed';
+          failures.push(sourcePauseFailure);
+          events.push({kind: 'source-pause-failed', at: new Date().toISOString(), reason: sourcePauseFailure, rollover: new Date(rollover).toISOString()});
+          checkpoint();
+        }),
       (async () => {for (let cycle = 0; !stopped; cycle++) {try {await browserCycle(browser, fleet, journeys, cycle);} catch {failures.push('browser_cycle_failed');} await sleep(30_000);}})(),
       (async () => {while (!stopped) {try {healthSamples.push(health(fleet)); metricSample(); checkpoint();} catch {events.push({kind: 'health_or_metrics_unavailable', at: new Date().toISOString()});} await sleep(minute);}})(),
       ...Array.from({length: 10}, async (_, user) => {
@@ -381,6 +403,7 @@ COMMIT;`);
     // Every scenario runs with the same live collectors and browser lane. The
     // final rollover probe may extend past60m; the live phase is never shortened.
     while (Date.now() < Math.max(liveEnd, sourceResumeAt + minute)) {
+      if (sourcePauseFailure) throw new Error(sourcePauseFailure);
       const now = Date.now();
       if (!handedOff && now >= liveStart + 5 * minute) {events.push({kind: 'collector-handoff', ...await handoff(page, main)}); handedOff = true;}
       if (!restarted && now >= liveStart + 20 * minute) {
@@ -390,10 +413,6 @@ COMMIT;`);
         restartApp(); segmentStart = ingestionMetrics();
         plannedOutages.push({start: restartStarted, end: Date.now()});
         events.push({kind: 'backend-restart-complete', at: new Date().toISOString()}); restarted = true;
-      }
-      if (!sourcePaused && now >= sourcePauseAt) {
-        writeFileSync(`${control}/pause-source`, 'pause canonical/current source loop only'); sourcePaused = true;
-        events.push({kind: 'source-pause', at: new Date().toISOString()});
       }
       if (sourcePaused && !lateInserted && now >= rollover + 2 * minute) {
         const late = lateMissingInterval(fleet.find(item => item.missing && !item.maintained)!, phaseEpoch, rollover);
@@ -412,6 +431,8 @@ COMMIT;`);
       if (falselyResolved > 0) {failures.push('missing_cohort_falsely_resolved'); break;}
       await sleep(10_000);
     }
+    if (sourcePauseFailure) throw new Error(sourcePauseFailure);
+    expect(sourcePaused, 'source worker must confirm quiescence before rollover').toBe(true);
     events.push({kind: 'live-complete', at: new Date().toISOString(), elapsedMs: Date.now() - liveStart});
     const recovered = Number(psql(`SELECT count(DISTINCT policy_id) FROM almanac_alert_occurrences WHERE policy_id=ANY(${idsSQL(fleet.filter(item => !item.missing).map(item => item.policy))}) AND state='resolved'`));
     expect(recovered, 'healthy cohort must recover from the provider phase').toBe(size - size / 10);
@@ -480,6 +501,7 @@ COMMIT;`);
     }
   } finally {
     stopped = true;
+    sourcePauseControl.abort();
     rmSync(`${control}/pause`, {force: true}); rmSync(`${control}/pause-source`, {force: true});
     await Promise.allSettled(background);
     if (!missingStopped) stopAgent(missing.agent.container);
