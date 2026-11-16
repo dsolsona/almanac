@@ -144,17 +144,20 @@ async function browserCycle(browser: Browser, fleet: FleetItem[], journeys: Jour
   } finally {await context.close();}
 }
 
-function lateMissingInterval(item: FleetItem) {
+function lateMissingInterval(item: FleetItem, phaseEpoch: number, rollover: number) {
   // A genuinely absent minute after the missing collector stopped; never
   // rewrite a committed observation or manufacture a duplicate conflict.
   const result = psql(`BEGIN;
 WITH proof AS (SELECT * FROM almanac_sli_observations WHERE sli_id=${sqlID(item.sli)} AND outcome='observed' ORDER BY interval_start DESC LIMIT 1),
- candidate AS (SELECT p.*,p.interval_start+interval '1 minute' AS late_start FROM proof p
- WHERE p.interval_start+interval '1 minute'<date_trunc('minute',clock_timestamp())-interval '2 minutes')
+ candidate AS (SELECT p.*,missing.point AS late_start FROM proof p CROSS JOIN LATERAL (
+ SELECT point FROM generate_series(p.interval_start+interval '1 minute',
+ least(p.interval_start+interval '60 minutes',to_timestamp(${rollover / 1000})-interval '1 minute',date_trunc('minute',clock_timestamp())-interval '3 minutes'),interval '1 minute') point
+ WHERE NOT EXISTS(SELECT 1 FROM almanac_sli_observations o WHERE o.sli_id=p.sli_id AND o.measurement_revision=p.measurement_revision AND o.interval_start=point)
+ ORDER BY point LIMIT 1) missing)
 INSERT INTO almanac_sli_observations(interval_start,sli_id,measurement_revision,outcome,good_count,total_count,result_digest,missing_components,
  execution_id,delivery_id,agent_id,session_generation,configuration_revision,lease_id,agent_created_at,recorded_at)
-SELECT late_start,sli_id,measurement_revision,'observed',10000,10000,decode(repeat('bc',32),'hex'),'{}',gen_random_uuid(),gen_random_uuid(),agent_id,session_generation,configuration_revision,lease_id,late_start,clock_timestamp()
-FROM candidate ON CONFLICT DO NOTHING RETURNING interval_start;
+SELECT late_start,sli_id,measurement_revision,'observed',CASE WHEN extract(epoch FROM late_start+interval '1 minute')>=${phaseEpoch} THEN 10000 ELSE 9000 END,10000,decode(repeat('bc',32),'hex'),'{}',gen_random_uuid(),gen_random_uuid(),agent_id,session_generation,configuration_revision,lease_id,late_start,clock_timestamp()
+FROM candidate ON CONFLICT DO NOTHING RETURNING interval_start,good_count;
 ${marking.replaceAll('$1', sqlID(item.sli))}
 COMMIT;`);
   return {sli: item.sli, inserted: result};
@@ -393,7 +396,7 @@ COMMIT;`);
         events.push({kind: 'source-pause', at: new Date().toISOString()});
       }
       if (sourcePaused && !lateInserted && now >= rollover + 2 * minute) {
-        const late = lateMissingInterval(fleet.find(item => item.missing && !item.maintained)!);
+        const late = lateMissingInterval(fleet.find(item => item.missing && !item.maintained)!, phaseEpoch, rollover);
         events.push({kind: 'late-interval', ...late});
         if (!late.inserted) failures.push('late_interval_fixture_inserted_no_missing_minute');
         lateInserted = true;

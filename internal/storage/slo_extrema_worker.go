@@ -26,9 +26,7 @@ func (r *Runtime) buildSloExtrema(ctx context.Context, clock func() time.Time) (
 		return false, err
 	}
 	defer conn.Release()
-	// Normalize the server clock once before constructing shared window inputs.
-	// Publication still samples its own post-wait lease clock.
-	now := normalizedAgentNow(clock)
+	now := clock().UTC()
 	closed := now.Truncate(time.Hour)
 	work, err := dbgen.New(conn).ClaimSloExtremaCursor(bounded, dbgen.ClaimSloExtremaCursorParams{
 		CalculationVersion: operationalCalculationVersion, Now: timestamp(now), ClosedThrough: timestamp(closed), LeaseUntil: timestamp(now.Add(30 * time.Second))})

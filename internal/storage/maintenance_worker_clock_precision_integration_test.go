@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dsolsona/almanac/internal/api"
 	"github.com/dsolsona/almanac/internal/storage/dbgen"
 )
 
@@ -91,6 +92,47 @@ func TestIntegrationMaintenanceWorkerClockPrecision(t *testing.T) {
 			if !through.After(first) || attempts != 0 {
 				t.Fatalf("worker did not advance durable cursor: through=%v attempts=%d", through, attempts)
 			}
+			if err = f.runtime.refreshCurrentProjection(t.Context(), mustPGUUID(f.sloID), clock); err != nil {
+				t.Fatal(err)
+			}
+			var payload []byte
+			var closedReady bool
+			if err = f.conn.QueryRow(t.Context(), `SELECT payload,coalesce((payload#>>'{_budget_cache,closed_ready}')::boolean,false) FROM almanac_slo_current_projections WHERE slo_id=$1`, f.sloID).Scan(&payload, &closedReady); err != nil {
+				t.Fatal(err)
+			}
+			var item api.SloOperationalOverviewItem
+			if err = unmarshalReceiptMetadata(payload, &item); err != nil {
+				t.Fatal(err)
+			}
+			if item.BudgetHistoryState == nil || *item.BudgetHistoryState != "ready" || !closedReady || len(item.BudgetSparkline) == 0 {
+				t.Fatalf("ready retained rows became unavailable under real server precision: state=%v closedReady=%v points=%d", item.BudgetHistoryState, closedReady, len(item.BudgetSparkline))
+			}
+			numeric := 0
+			for _, sample := range item.BudgetSparkline {
+				if sample.Good == nil || sample.Total == nil {
+					continue
+				}
+				numeric++
+				observed := int64(0)
+				for at := f.historyStart; at.Before(f.at); at = at.Add(time.Minute) {
+					if at.Before(sample.EvaluationAt.Add(-time.Hour)) || !at.Before(sample.EvaluationAt) {
+						continue
+					}
+					if maintained && !at.Before(first.Add(10*time.Minute)) && at.Before(first.Add(20*time.Minute)) {
+						continue
+					}
+					observed++
+				}
+				good, gok := new(big.Rat).SetString(*sample.Good)
+				total, tok := new(big.Rat).SetString(*sample.Total)
+				if !gok || !tok || good.Cmp(big.NewRat(990*observed, 1)) != 0 || total.Cmp(big.NewRat(1000*observed, 1)) != 0 {
+					t.Fatalf("budget sparkline numeric input differs from independent minute population at%v", sample.EvaluationAt)
+				}
+			}
+			if numeric == 0 {
+				t.Fatal("history-ready cache contains no numeric budget samples")
+			}
+
 		})
 	}
 }

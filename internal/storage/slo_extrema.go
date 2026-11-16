@@ -25,6 +25,10 @@ type extremaCompliance struct {
 }
 
 func extremaWindowInput(row dbgen.GetSloRow, source dbgen.GetSloOperationalContextRow, now, retention time.Time) slo.WindowInput {
+	// These are server-owned snapshot times. Keep every retained consumer on
+	// PostgreSQL precision before entering the strict shared calculator.
+	now = now.UTC().Truncate(time.Microsecond)
+	retention = retention.UTC().Truncate(time.Microsecond)
 	cadence := time.Duration(row.CadenceSeconds) * time.Second
 	return slo.WindowInput{Now: now, ValidFrom: row.EvaluationValidFrom.Time.UTC(), SliValidFrom: row.SliValidFrom.Time.UTC(),
 		RetentionStart: retention, Duration: time.Duration(row.RollingWindowSeconds) * time.Second, Cadence: cadence,

@@ -244,9 +244,9 @@ func (r *extremaReader) livePoints(ctx context.Context, base slo.WindowInput, st
 		var values []retainedSloPoint
 		var err error
 		if r.maintenance != nil {
-			values, err = buildMaintenanceRetainedRepairPoints(ctx, r.maintenance, r.row, r.source, start, through, r.now)
+			values, err = buildMaintenanceRetainedRepairPoints(ctx, r.maintenance, r.row, r.source, start, through, base.Now)
 		} else {
-			values, err = buildRetainedRepairPoints(ctx, r.q, r.row, r.source, start, through, r.now)
+			values, err = buildRetainedRepairPoints(ctx, r.q, r.row, r.source, start, through, base.Now)
 		}
 		if err != nil {
 			return nil, err
