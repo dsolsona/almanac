@@ -48,6 +48,7 @@ func dropMaintenanceCompilerFixture(t *testing.T, conn *pgx.Conn) {
 // This private schema rewind removes the exact 0065 indexes and 0064 objects before replay.
 func dropMaintenanceCompatibilityFixture(t *testing.T, conn *pgx.Conn) {
 	t.Helper()
+	dropMaintenanceRetainedFixture(t, conn)
 	if _, err := conn.Exec(t.Context(), `DROP TABLE public.almanac_maintenance_preparation;
 DROP FUNCTION public.guard_maintenance_preparation_identity()`); err != nil {
 		t.Fatalf("reconstruct pre-0066 preparation schema: %v", err)
@@ -65,6 +66,24 @@ DROP FUNCTION public.guard_maintenance_preparation_identity()`); err != nil {
  DROP TABLE public.almanac_maintenance_comparisons,public.almanac_maintenance_changed_inputs,
  public.almanac_maintenance_change_sets,public.almanac_maintenance_compatibility;`); err != nil {
 		t.Fatalf("reconstruct pre-0064 compatibility schema: %v", err)
+	}
+}
+
+// Rewind only the additive 0067 objects before replaying a populated old schema.
+func dropMaintenanceRetainedFixture(t *testing.T, conn *pgx.Conn) {
+	t.Helper()
+	if _, err := conn.Exec(t.Context(), `ALTER TABLE public.almanac_maintenance_preparation
+DROP CONSTRAINT almanac_maintenance_preparation_extrema_bucket_check,
+DROP CONSTRAINT almanac_maintenance_preparation_kind_check,
+DROP CONSTRAINT almanac_maintenance_preparation_check2,
+ADD CONSTRAINT almanac_maintenance_preparation_kind_check CHECK(kind IN ('mask','compatibility','scoped_hour','comparison')),
+ADD CONSTRAINT almanac_maintenance_preparation_check2 CHECK((kind='scoped_hour' AND sli_id IS NOT NULL AND definition_revision IS NOT NULL AND measurement_revision IS NOT NULL AND hour_start IS NOT NULL AND source_generation IS NOT NULL AND second_build IS NULL)
+ OR (kind IN ('mask','compatibility','comparison') AND sli_id IS NULL AND definition_revision IS NULL AND measurement_revision IS NULL AND hour_start IS NULL AND source_generation IS NULL AND (second_build IS NOT NULL)=(kind='comparison')));
+DROP INDEX public.almanac_slo_extrema_authority_candidate_idx;
+ALTER TABLE public.almanac_slo_extrema_cursor DROP COLUMN exclusion_revision;
+ALTER TABLE public.almanac_slo_extrema DROP CONSTRAINT almanac_slo_extrema_exclusion_revision_check,
+ADD CONSTRAINT almanac_slo_extrema_exclusion_revision_check CHECK (exclusion_revision=0)`); err != nil {
+		t.Fatalf("reconstruct pre-0067 retained authority schema: %v", err)
 	}
 }
 

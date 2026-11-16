@@ -70,6 +70,7 @@ sql:
       - internal/storage/migrations/0064_maintenance_compatibility.sql
       - internal/storage/migrations/0065_maintenance_evaluation_candidates.sql
       - internal/storage/migrations/0066_maintenance_preparation.sql
+      - internal/storage/migrations/0067_maintenance_retained_authority.sql
     gen:
       go:
         package: dbgen

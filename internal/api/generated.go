@@ -17,6 +17,8 @@ import (
 	"strings"
 	"time"
 
+	jsontext "encoding/json/jsontext"
+
 	"github.com/oapi-codegen/runtime"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
@@ -1878,6 +1880,7 @@ func (e SloDisplayCoverageFreshness) Valid() bool {
 // Defines values for SloDisplayCoverageQualityStates.
 const (
 	SloDisplayCoverageQualityStatesComplete       SloDisplayCoverageQualityStates = "complete"
+	SloDisplayCoverageQualityStatesExcluded       SloDisplayCoverageQualityStates = "excluded"
 	SloDisplayCoverageQualityStatesExpiredHistory SloDisplayCoverageQualityStates = "expired_history"
 	SloDisplayCoverageQualityStatesNoData         SloDisplayCoverageQualityStates = "no_data"
 	SloDisplayCoverageQualityStatesNotApplicable  SloDisplayCoverageQualityStates = "not_applicable"
@@ -1891,6 +1894,8 @@ const (
 func (e SloDisplayCoverageQualityStates) Valid() bool {
 	switch e {
 	case SloDisplayCoverageQualityStatesComplete:
+		return true
+	case SloDisplayCoverageQualityStatesExcluded:
 		return true
 	case SloDisplayCoverageQualityStatesExpiredHistory:
 		return true
@@ -1913,6 +1918,7 @@ func (e SloDisplayCoverageQualityStates) Valid() bool {
 
 // Defines values for SloDisplayCoverageStates.
 const (
+	SloDisplayCoverageStatesExcluded      SloDisplayCoverageStates = "excluded"
 	SloDisplayCoverageStatesExpired       SloDisplayCoverageStates = "expired"
 	SloDisplayCoverageStatesKnownEmpty    SloDisplayCoverageStates = "known_empty"
 	SloDisplayCoverageStatesMissing       SloDisplayCoverageStates = "missing"
@@ -1926,6 +1932,8 @@ const (
 // Valid indicates whether the value is a known member of the SloDisplayCoverageStates enum.
 func (e SloDisplayCoverageStates) Valid() bool {
 	switch e {
+	case SloDisplayCoverageStatesExcluded:
+		return true
 	case SloDisplayCoverageStatesExpired:
 		return true
 	case SloDisplayCoverageStatesKnownEmpty:
@@ -2169,6 +2177,27 @@ func (e SloHistoryValuePageLane) Valid() bool {
 	}
 }
 
+// Defines values for SloMaintenanceCompatibilityKind.
+const (
+	EqualUnion     SloMaintenanceCompatibilityKind = "equal_union"
+	IndexedAbsence SloMaintenanceCompatibilityKind = "indexed_absence"
+	SameRevision   SloMaintenanceCompatibilityKind = "same_revision"
+)
+
+// Valid indicates whether the value is a known member of the SloMaintenanceCompatibilityKind enum.
+func (e SloMaintenanceCompatibilityKind) Valid() bool {
+	switch e {
+	case EqualUnion:
+		return true
+	case IndexedAbsence:
+		return true
+	case SameRevision:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SloOperationalDetailSnapshotKind.
 const (
 	CurrentOperationalRead SloOperationalDetailSnapshotKind = "current_operational_read"
@@ -2295,6 +2324,7 @@ func (e SloOperationalQualityFreshness) Valid() bool {
 // Defines values for SloOperationalQualityState.
 const (
 	SloOperationalQualityStateComplete       SloOperationalQualityState = "complete"
+	SloOperationalQualityStateExcluded       SloOperationalQualityState = "excluded"
 	SloOperationalQualityStateExpiredHistory SloOperationalQualityState = "expired_history"
 	SloOperationalQualityStateNoData         SloOperationalQualityState = "no_data"
 	SloOperationalQualityStateNotApplicable  SloOperationalQualityState = "not_applicable"
@@ -2308,6 +2338,8 @@ const (
 func (e SloOperationalQualityState) Valid() bool {
 	switch e {
 	case SloOperationalQualityStateComplete:
+		return true
+	case SloOperationalQualityStateExcluded:
 		return true
 	case SloOperationalQualityStateExpiredHistory:
 		return true
@@ -2384,6 +2416,7 @@ func (e SloOperationalSampleRetainedExtrema) Valid() bool {
 
 // Defines values for SloOperationalSampleState.
 const (
+	SloOperationalSampleStateExcluded      SloOperationalSampleState = "excluded"
 	SloOperationalSampleStateExpired       SloOperationalSampleState = "expired"
 	SloOperationalSampleStateKnownEmpty    SloOperationalSampleState = "known_empty"
 	SloOperationalSampleStateMissing       SloOperationalSampleState = "missing"
@@ -2397,6 +2430,8 @@ const (
 // Valid indicates whether the value is a known member of the SloOperationalSampleState enum.
 func (e SloOperationalSampleState) Valid() bool {
 	switch e {
+	case SloOperationalSampleStateExcluded:
+		return true
 	case SloOperationalSampleStateExpired:
 		return true
 	case SloOperationalSampleStateKnownEmpty:
@@ -2534,6 +2569,7 @@ const (
 	SloUrgencyReasonCodeBudgetBelowHalf         SloUrgencyReasonCode = "budget_below_half"
 	SloUrgencyReasonCodeCompleteWindowViolation SloUrgencyReasonCode = "complete_window_violation"
 	SloUrgencyReasonCodeEvaluationUnavailable   SloUrgencyReasonCode = "evaluation_unavailable"
+	SloUrgencyReasonCodeExcluded                SloUrgencyReasonCode = "excluded"
 	SloUrgencyReasonCodeExpiredHistory          SloUrgencyReasonCode = "expired_history"
 	SloUrgencyReasonCodeHigh1hBurn              SloUrgencyReasonCode = "high_1h_burn"
 	SloUrgencyReasonCodeIncompleteCoverage      SloUrgencyReasonCode = "incomplete_coverage"
@@ -2555,6 +2591,8 @@ func (e SloUrgencyReasonCode) Valid() bool {
 	case SloUrgencyReasonCodeCompleteWindowViolation:
 		return true
 	case SloUrgencyReasonCodeEvaluationUnavailable:
+		return true
+	case SloUrgencyReasonCodeExcluded:
 		return true
 	case SloUrgencyReasonCodeExpiredHistory:
 		return true
@@ -3784,14 +3822,16 @@ type DatasourceWriteProvider string
 
 // DerivedGeneration defines model for DerivedGeneration.
 type DerivedGeneration struct {
-	CalculationLagSeconds float32            `json:"calculation_lag_seconds"`
-	CalculationVersion    string             `json:"calculation_version"`
-	DefinitionRevision    string             `json:"definition_revision"`
-	EvaluatedThrough      time.Time          `json:"evaluated_through"`
-	ExclusionRevision     string             `json:"exclusion_revision"`
-	GenerationId          openapi_types.UUID `json:"generation_id"`
-	MeasurementRevision   string             `json:"measurement_revision"`
-	PublishedAt           time.Time          `json:"published_at"`
+	CalculationLagSeconds float32   `json:"calculation_lag_seconds"`
+	CalculationVersion    string    `json:"calculation_version"`
+	DefinitionRevision    string    `json:"definition_revision"`
+	EvaluatedThrough      time.Time `json:"evaluated_through"`
+
+	// ExclusionRevision Requested exclusion authority captured for this generation. Retained values preserve their actual computed mask in calculation_provenance; pinned generations never substitute a newer authority.
+	ExclusionRevision   string             `json:"exclusion_revision"`
+	GenerationId        openapi_types.UUID `json:"generation_id"`
+	MeasurementRevision string             `json:"measurement_revision"`
+	PublishedAt         time.Time          `json:"published_at"`
 
 	// RetentionStart Cadence-aligned retained-input boundary used by this generation; present on runtime-prepared results
 	RetentionStart   *time.Time `json:"retention_start,omitempty"`
@@ -4400,15 +4440,33 @@ type Slo struct {
 
 // SloBurnValue defines model for SloBurnValue.
 type SloBurnValue struct {
-	End           time.Time                 `json:"end"`
-	Performance   SloEvaluationPerformance  `json:"performance"`
-	Quality       SloOperationalQuality     `json:"quality"`
-	Start         time.Time                 `json:"start"`
-	WindowSeconds SloBurnValueWindowSeconds `json:"window_seconds"`
+	// CalculationProvenance Actual enclosing immutable mask and original source snapshot for this value. Requested authority may differ from the computed mask only with a compatibility proof. Legacy revision-zero or no-eligible-time results may omit provenance; unavailable gaps must not fabricate it. Detailed reused-hour certificates remain private.
+	CalculationProvenance *SloCalculationProvenance `json:"calculation_provenance,omitempty"`
+	End                   time.Time                 `json:"end"`
+	Performance           SloEvaluationPerformance  `json:"performance"`
+	Quality               SloOperationalQuality     `json:"quality"`
+	Start                 time.Time                 `json:"start"`
+	WindowSeconds         SloBurnValueWindowSeconds `json:"window_seconds"`
 }
 
 // SloBurnValueWindowSeconds defines model for SloBurnValue.WindowSeconds.
 type SloBurnValueWindowSeconds int
+
+// SloCalculationProvenance Actual enclosing immutable mask and original source snapshot for this value. Requested authority may differ from the computed mask only with a compatibility proof. Legacy revision-zero or no-eligible-time results may omit provenance; unavailable gaps must not fabricate it. Detailed reused-hour certificates remain private.
+type SloCalculationProvenance struct {
+	// BuildId Complete immutable build. Required for nonzero computed revision; may be absent only for canonical revision zero.
+	BuildId *openapi_types.UUID `json:"build_id,omitempty"`
+
+	// Compatibility Authenticated compatibility over the complete calculation input window, not its displayed bucket. Required when computed revision is older than requested revision. Pending, changed and unavailable checks are not proofs.
+	Compatibility *SloMaintenanceCompatibility `json:"compatibility,omitempty"`
+
+	// ComputedRevision Actual computed mask C; never greater than requested authority R.
+	ComputedRevision  string `json:"computed_revision"`
+	RequestedRevision string `json:"requested_revision"`
+
+	// SourceGeneration Original calculation snapshot; not a claim that an old retained mark was recalculated at the response generation.
+	SourceGeneration string `json:"source_generation"`
+}
 
 // SloCreateRequest defines model for SloCreateRequest.
 type SloCreateRequest struct {
@@ -4451,9 +4509,11 @@ type SloCurrentStatusUrgency string
 
 // SloDailyComplianceDay defines model for SloDailyComplianceDay.
 type SloDailyComplianceDay struct {
-	DayEnd             time.Time `json:"day_end"`
-	DayStart           time.Time `json:"day_start"`
-	DefinitionRevision string    `json:"definition_revision"`
+	// CalculationProvenance Actual enclosing immutable mask and original source snapshot for this value. Requested authority may differ from the computed mask only with a compatibility proof. Legacy revision-zero or no-eligible-time results may omit provenance; unavailable gaps must not fabricate it. Detailed reused-hour certificates remain private.
+	CalculationProvenance *SloCalculationProvenance `json:"calculation_provenance,omitempty"`
+	DayEnd                time.Time                 `json:"day_end"`
+	DayStart              time.Time                 `json:"day_start"`
+	DefinitionRevision    string                    `json:"definition_revision"`
 
 	// EffectiveAt Canonical source-cadence boundary used for the rolling objective calculation; graph marker remains day_end.
 	EffectiveAt time.Time                `json:"effective_at"`
@@ -4647,6 +4707,27 @@ type SloHistoryValuePage struct {
 // SloHistoryValuePageLane defines model for SloHistoryValuePage.Lane.
 type SloHistoryValuePageLane string
 
+// SloMaintenanceCompatibility Authenticated compatibility over the complete calculation input window, not its displayed bucket. Required when computed revision is older than requested revision. Pending, changed and unavailable checks are not proofs.
+type SloMaintenanceCompatibility struct {
+	// ComparisonId Required only for equal_union; identifies a completed direct immutable-union comparison.
+	ComparisonId     *openapi_types.UUID `json:"comparison_id,omitempty"`
+	ComputedRevision string              `json:"computed_revision"`
+
+	// End Exclusive UTC source-window end; strictly after start.
+	End time.Time `json:"end"`
+
+	// IndexedThrough Contiguous analyzed history. At least requested_revision for indexed_absence/equal_union; same_revision requires no catch-up.
+	IndexedThrough    string                          `json:"indexed_through"`
+	Kind              SloMaintenanceCompatibilityKind `json:"kind"`
+	RequestedRevision string                          `json:"requested_revision"`
+
+	// Start Inclusive UTC source-window start.
+	Start time.Time `json:"start"`
+}
+
+// SloMaintenanceCompatibilityKind defines model for SloMaintenanceCompatibility.Kind.
+type SloMaintenanceCompatibilityKind string
+
 // SloOperationalContext defines model for SloOperationalContext.
 type SloOperationalContext struct {
 	DatasourceDisplayName  string             `json:"datasource_display_name"`
@@ -4750,7 +4831,16 @@ type SloOperationalOverviewPage struct {
 // SloOperationalQuality defines model for SloOperationalQuality.
 type SloOperationalQuality struct {
 	// Coverage Exact fraction rounded half-even to 12 decimal places at output.
-	Coverage            *string                        `json:"coverage"`
+	Coverage *string `json:"coverage"`
+
+	// ExcludedGood Exact excluded good events, paired with excluded_total. Null means unknown full excluded population; omission means legacy metadata was not supplied. Never substitute zero for unknown.
+	ExcludedGood jsontext.Value `json:"excluded_good,omitzero"`
+
+	// ExcludedIntervals Removed eligible intervals including expired excluded intervals. Omission means legacy metadata was not supplied. Maintenance-aware calculated values include all three exclusion fields.
+	ExcludedIntervals *int64 `json:"excluded_intervals,omitempty"`
+
+	// ExcludedTotal Exact excluded total events, at least excluded_good. Both fields are null or both exact nonnegative strings; exact zero is the string 0.
+	ExcludedTotal       jsontext.Value                 `json:"excluded_total,omitzero"`
 	ExpectedIntervals   int64                          `json:"expected_intervals"`
 	ExpiredIntervals    int64                          `json:"expired_intervals"`
 	FirstObservationAt  *time.Time                     `json:"first_observation_at"`
@@ -4794,15 +4884,18 @@ type SloOperationalRangeMaxSamplesPerSeries int
 
 // SloOperationalSample defines model for SloOperationalSample.
 type SloOperationalSample struct {
-	AllowedBudget   *string               `json:"allowed_budget"`
-	Attainment      *string               `json:"attainment"`
-	BucketEnd       time.Time             `json:"bucket_end"`
-	BucketStart     time.Time             `json:"bucket_start"`
-	Burn            *string               `json:"burn"`
-	DisplayCoverage *SloDisplayCoverage   `json:"display_coverage,omitempty"`
-	EvaluationAt    time.Time             `json:"evaluation_at"`
-	Good            *string               `json:"good"`
-	Quality         SloOperationalQuality `json:"quality"`
+	AllowedBudget *string   `json:"allowed_budget"`
+	Attainment    *string   `json:"attainment"`
+	BucketEnd     time.Time `json:"bucket_end"`
+	BucketStart   time.Time `json:"bucket_start"`
+	Burn          *string   `json:"burn"`
+
+	// CalculationProvenance Actual enclosing immutable mask and original source snapshot for this value. Requested authority may differ from the computed mask only with a compatibility proof. Legacy revision-zero or no-eligible-time results may omit provenance; unavailable gaps must not fabricate it. Detailed reused-hour certificates remain private.
+	CalculationProvenance *SloCalculationProvenance `json:"calculation_provenance,omitempty"`
+	DisplayCoverage       *SloDisplayCoverage       `json:"display_coverage,omitempty"`
+	EvaluationAt          time.Time                 `json:"evaluation_at"`
+	Good                  *string                   `json:"good"`
+	Quality               SloOperationalQuality     `json:"quality"`
 
 	// ReceivedAt Receipt metadata only.
 	ReceivedAt        *time.Time                            `json:"received_at"`
@@ -4835,6 +4928,9 @@ type SloOperationalSeriesKind string
 
 // SloOperationalValue defines model for SloOperationalValue.
 type SloOperationalValue struct {
+	// CalculationProvenance Actual enclosing immutable mask and original source snapshot for this value. Requested authority may differ from the computed mask only with a compatibility proof. Legacy revision-zero or no-eligible-time results may omit provenance; unavailable gaps must not fabricate it. Detailed reused-hour certificates remain private.
+	CalculationProvenance *SloCalculationProvenance `json:"calculation_provenance,omitempty"`
+
 	// EvaluationAt Snapshot evaluation time. For live current status the actual measurement endpoint is window.end and may be earlier while collection is pending.
 	EvaluationAt time.Time                `json:"evaluation_at"`
 	Performance  SloEvaluationPerformance `json:"performance"`

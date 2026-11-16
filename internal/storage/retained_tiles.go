@@ -47,7 +47,11 @@ func retainedWindowSample(at time.Time, quality api.SloOperationalQuality, perfo
 	if quality.Reason != nil {
 		value.Reason = *quality.Reason
 	}
-	return operationalSample(value, at, at, revision)
+	sample := operationalSample(value, at, at, revision)
+	// Quality is already the exact public projection. Reconstructing it from
+	// the legacy subset above would erase supplied excluded populations.
+	sample.Quality = quality
+	return sample
 }
 
 func compactRetainedPoints(points []retainedSloPoint, start, end time.Time, target, revision string) (retainedSloTile, error) {
@@ -59,9 +63,15 @@ func compactRetainedPoints(points []retainedSloPoint, start, end time.Time, targ
 			return tile, slo.ErrOperationalFacts
 		}
 		attainment = append(attainment, point.Attainment)
-		budget = append(budget, retainedWindowSample(at, point.Current.Quality, point.Current.Performance, revision))
-		burn1h = append(burn1h, retainedWindowSample(at, point.Burn1h.Quality, point.Burn1h.Performance, revision))
-		burn6h = append(burn6h, retainedWindowSample(at, point.Burn6h.Quality, point.Burn6h.Performance, revision))
+		budgetSample := retainedWindowSample(at, point.Current.Quality, point.Current.Performance, revision)
+		budgetSample.CalculationProvenance = point.Current.CalculationProvenance
+		budget = append(budget, budgetSample)
+		shortSample := retainedWindowSample(at, point.Burn1h.Quality, point.Burn1h.Performance, revision)
+		shortSample.CalculationProvenance = point.Burn1h.CalculationProvenance
+		burn1h = append(burn1h, shortSample)
+		longSample := retainedWindowSample(at, point.Burn6h.Quality, point.Burn6h.Performance, revision)
+		longSample.CalculationProvenance = point.Burn6h.CalculationProvenance
+		burn6h = append(burn6h, longSample)
 	}
 	return compactRetainedTile(retainedSloTile{Attainment: attainment, Budget: budget, Burn1h: burn1h, Burn6h: burn6h}, start, end, target)
 }
@@ -214,7 +224,7 @@ func retainedDisplayCoverage(samples []api.SloOperationalSample) (*api.SloDispla
 		freshness := []api.SloDisplayCoverageFreshness{api.SloDisplayCoverageFreshness(sample.Quality.Freshness)}
 		if sample.DisplayCoverage != nil {
 			stored := sample.DisplayCoverage
-			if len(stored.States) == 0 || len(stored.States) > 8 || len(stored.QualityStates) == 0 || len(stored.QualityStates) > 8 || len(stored.Freshness) == 0 || len(stored.Freshness) > 3 ||
+			if len(stored.States) == 0 || len(stored.States) > 9 || len(stored.QualityStates) == 0 || len(stored.QualityStates) > 9 || len(stored.Freshness) == 0 || len(stored.Freshness) > 3 ||
 				!slices.Contains(stored.States, states[0]) || !slices.Contains(stored.QualityStates, qualities[0]) || !slices.Contains(stored.Freshness, freshness[0]) {
 				return nil, slo.ErrOperationalFacts
 			}

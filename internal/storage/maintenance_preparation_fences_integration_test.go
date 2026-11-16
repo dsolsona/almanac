@@ -193,9 +193,9 @@ func TestIntegrationMaintenancePreparationBoundsAndCancellation(t *testing.T) {
 	if !errors.Is(err, ErrOperationalResource) {
 		t.Fatalf("source expansion bound %v", err)
 	}
-	_, err = prepareMaintenanceEnqueue(t.Context(), tx, preparationScope(f), []maintenanceEvaluationPreparation{{Kind: "mask"}, {Kind: "mask"}}, maintenancePreparationLimits{MaxRequests: 1, MaxSourceHours: 1}, f.now)
-	if !errors.Is(err, ErrOperationalResource) {
-		t.Fatalf("request count admission became invalid intent: %v", err)
+	_, err = prepareMaintenanceEnqueue(t.Context(), tx, preparationScope(f), []maintenanceEvaluationPreparation{{Kind: "mask"}, {Kind: "invalid"}}, maintenancePreparationLimits{MaxRequests: 1, MaxSourceHours: 1}, f.now)
+	if !errors.Is(err, ErrMaintenanceInvalid) {
+		t.Fatalf("invalid tail request was hidden by bounded admission: %v", err)
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()

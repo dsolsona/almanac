@@ -41,6 +41,7 @@ func retainedReadParts(start, end time.Time) ([]retainedReadPart, error) {
 
 // All database reads finish in extremaReader.prepare before display assembly.
 type retainedSeriesReader struct {
+	maintenance  *maintenanceConsumerSession
 	q            *dbgen.Queries
 	row          dbgen.GetSloRow
 	source       dbgen.GetSloOperationalContextRow
@@ -205,8 +206,11 @@ func (c *retainedSeriesReader) rolling(ctx context.Context, base slo.WindowInput
 			burn = c.first.Burn6h
 		}
 		first.Quality, first.Performance = burn.Quality, burn.Performance
+		first.CalculationProvenance = burn.CalculationProvenance
 	}
-	samples = append([]api.SloOperationalSample{retainedWindowSample(start, first.Quality, first.Performance, revision)}, samples...)
+	firstSample := retainedWindowSample(start, first.Quality, first.Performance, revision)
+	firstSample.CalculationProvenance = first.CalculationProvenance
+	samples = append([]api.SloOperationalSample{firstSample}, samples...)
 	return reduceRetainedDisplay(samples, start, end, c.row.Target, selectedMetric, min(maxBuckets, 375))
 }
 

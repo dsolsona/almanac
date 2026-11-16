@@ -29,8 +29,10 @@ diagnostics, retention and the preserving migration. Occurrence objectives on a
 single SLI only, as today. The hourly aggregates, dirty-hour marking, source
 generations and batched window query are unchanged inputs.
 
-Excludes new calculation methods, exclusions (`exclusion_revision` stays 0),
-alerting, retention length changes and any visual change. The observation table
+The original scope excluded new calculation methods, maintenance and alerting.
+The accepted scoped-maintenance amendment below extends calculation/read scope
+and the additive wire contract; alert activation remains separate. Retention
+length changes and visual redesign remain excluded. The observation table
 merge (ADR-0041) and keyset pagination (ADR-0042) are separate decisions.
 
 ## Required amendments to accepted contracts
@@ -107,6 +109,171 @@ changes. SPEC-0021 defines the query-equivalence and 200-SLI contention gate,
 separate from later 100/200-policy engine acceptance.
 This proposal does not change the retained extrema worker or its five-minute
 closed-hour target; source aggregates can be rebuilt before their hour closes.
+
+### Accepted amendment: shared scoped-maintenance adoption
+
+This scoped adoption and additive wire contract was **accepted for implementation
+by the maintainer on 2026-11-15**. It extends the revision-zero contract above to
+persisted SLO-scoped maintenance for the supported occurrence objective under
+accepted [ADR-0052](../adr/0052-compiled-maintenance-populations.md). Acceptance
+does not activate workers, select resource defaults or waive correctness,
+performance or release gates. It does not adopt the separate dirty-interior
+raw-fallback proposal.
+
+#### Observable calculation and read behavior
+
+Current status, list/service classifications and sparklines, detail current/burn
+values, retained graphs, completed-day compliance and pinned exact-value pages
+must use the same shared maintenance arithmetic as alert evidence. New reads
+capture the requested SLO exclusion authority R in their consistent source
+snapshot. An explicit pinned generation continues to describe its original
+authority, values, quality and receipts, even after maintenance changes.
+
+Keep the same requested window, cadence, validity/retention boundaries, targets,
+formulas and rounding. Exclusions remove intervals from both the event population
+and expected evaluation coverage; they do not replace bad events with good events
+or extend the window backwards. Missing eligible observations remain missing;
+missing excluded observations do not reduce eligible coverage. Unknown excluded
+event counts are not zero. The SPEC-0016 example remains 900/1,000 eligible events,
+not 1,900/2,000. Collection health remains independent of exclusion-adjusted quality.
+
+Freshness uses the shared evaluator's latest eligible endpoint, including an
+excluded suffix whose start precedes the requested window. A downstream live-read
+adapter must not overwrite that result by ageing evidence across excluded time.
+Receipt metadata remains the certified maximum receipt of eligible observed or
+known-empty contributions; excluded, failed or incomplete contributions cannot
+supply it. Missing/legacy receipt certification remains null, without changing
+numeric results or forcing an otherwise unnecessary rebuild.
+
+When a real eligible population is wholly removed, quality is `excluded`, with
+null attainment, allowed/remaining budget, remaining fraction and burn; it is not
+zero traffic, successful performance or alert recovery. No eligible time before
+activation/validity remains `not_yet_eligible`/`not_applicable`. A partly excluded
+full window is not a shortened window merely because its expected eligible count
+is smaller. Existing shortened-validity and incomplete-data rules still apply.
+
+A fully excluded completed day has compliance status `unknown`, explanation/reason
+`excluded`, and contributes to `unknown_days`, never `evaluable_days`. Otherwise
+daily compliance evaluates the same full requested rolling window over eligible
+intervals. A fully excluded current value contributes a Watch reason `excluded`
+to list/detail/service urgency; existing higher-priority independent reasons still
+win. No new numerical urgency threshold or UI layout is introduced.
+
+#### Additive wire contract
+
+Apply these additions consistently to API, generated types and strict UI/CLI
+consumers before exposing nonzero-revision operational results:
+
+- `DerivedGeneration.exclusion_revision` remains a nonnegative decimal string and
+  identifies requested authority R captured for that generation. It does not claim
+  that every retained mark was recomputed at R. Pinned old generations keep their
+  original R; the current authority must not be substituted on later pages.
+- Add optional `calculation_provenance` to `SloOperationalValue`, `SloBurnValue`,
+  `SloOperationalSample` and `SloDailyComplianceDay`. It is required when an actual
+  maintenance-aware calculated value is supplied, including compatible reuse at
+  C=0 under R>0; an unavailable gap must not fabricate it. Legacy R=0 values and
+  no-eligible-time results that consumed no maintenance population may omit it.
+  Each object has `requested_revision`, `computed_revision` and
+  `source_generation` as nonnegative decimal strings, and `build_id` as an optional
+  UUID. C is the actual enclosing immutable mask revision; `source_generation`
+  identifies that value's original calculation snapshot. `build_id` is required
+  for C>0 and may be absent only for canonical revision-zero evaluation.
+- Its optional `compatibility` object contains `kind` (`same_revision`,
+  `indexed_absence` or `equal_union`), `computed_revision`, `requested_revision`,
+  `indexed_through` (nonnegative decimal strings), `start` and `end` (UTC instants),
+  and optional UUID `comparison_id`. Bounds identify the complete calculation
+  input window, not the graph bucket. A proof is mandatory when C<R.
+  `same_revision` requires C=R and no history catch-up;
+  `indexed_absence` requires contiguous indexed history through at least R;
+  `equal_union` additionally identifies the completed direct comparison in
+  `comparison_id`. A pending, changed or unavailable check is not a proof.
+- Preserve actual reused source-hour keys and their proofs in retained calculation
+  evidence. The enclosing C does not assert that every contributing scoped hour
+  was newly computed at C. Public window provenance does not expand into an
+  unbounded per-hour wire list. Reusing a mark for a new R may attach a newly
+  validated proof in the new response; it must not rewrite the saved mark or any
+  previously pinned response.
+- Add `excluded_intervals` (nonnegative int64) and `excluded_good`/`excluded_total`
+  (nullable exact nonnegative decimal strings) to `SloOperationalQuality`.
+  Maintenance-aware calculated values include all three. `excluded_intervals`
+  counts removed intervals within the eligible requested window, including
+  expired excluded intervals. The event-count pair is either both exact strings
+  or both null when the full excluded event population cannot be established.
+  A known zero population is `"0"`/`"0"`; unknown is null. Legacy omission means
+  metadata was not supplied, not a certified zero. Expected, observed, missing,
+  expired and coverage fields continue to describe the eligible population.
+- Add `excluded` to quality state, sample state, display-coverage state and
+  display-coverage quality-state enums; expand presence-set maxima to include the
+  additional member. Add `excluded` to urgency-reason codes. Performance and daily
+  compliance status enums retain their existing meanings; fully excluded values
+  use unknown performance with reason `excluded`. Reduced display coverage still
+  describes bucket presence, never averaged or invented numeric samples.
+
+Newly calculated revision-zero values may supply the same metadata with zero
+excluded intervals and exact zero excluded events. Existing legacy payloads and
+certified receipts remain readable; private codec/certificate markers are not
+public fields. A mathematical calculation-version bump is not required merely
+for these additive provenance and population fields.
+
+#### Compatibility, preparation and publication
+
+Retained extrema and history caches must preserve enough exact eligible/excluded
+inputs and coverage evidence to replay the shared calculation after raw expiry.
+Retained selection continues to use exact values and preserve quality/freshness
+transitions, endpoint identities and coarse-coverage disclosures. Reusing a reduced
+lane must prove unchanged membership over the complete source-input union of all
+endpoints considered during selection, including discarded endpoints. Per-mark
+proofs alone cannot certify that a new extremum or quality transition did not
+appear between retained marks. Retain separate actual per-mark provenance. New responses
+may contain marks computed under different C values, each valid for requested R;
+a generation header alone cannot establish that compatibility.
+
+For every reused value, prove unchanged membership over its complete source
+window using ADR-0052's indexed changed-input absence or completed direct union
+comparison. Never walk arbitrary revision chains, use a broad work envelope as
+proof, or relabel old values. Metadata-only changes, distant/future exclusions
+and overlapping declarations with an unchanged union must preserve unaffected
+navigation without rebuilding a retained year. Source corrections still require
+their own source-generation/fact fences; a mask proof cannot certify source data.
+
+Publish current projections, extrema, prepared history and compatibility-labelled
+responses only under their definition, measurement, source, exclusion and work
+ownership fences. Targeted maintenance invalidation and bounded preparation must
+commit consistently with the authority change/consumption protocol. Revision-zero
+and unaffected fast paths retain their existing bounded reads and latency gates.
+
+Missing preparation returns honest pending/unavailable regions or compatible
+stale/failed values under SPEC-0019, never partially calculated current numbers.
+Normal navigation must not wait for compilation or repair. An authenticated read
+that requests durable work revalidates session/resource authority and binds its
+fixed target/provenance before committing that work; cancellation, revoked access
+or failed enqueue cannot be reported as successful preparation. Worker deferral
+and durable enqueue preserve the original target and ownership atomically.
+Shared jobs retain source failure/backoff and lease semantics; dependency pending
+does not consume an exception budget. Exhausted/unavailable resources remain
+distinct from temporary preparation. Timer backstops remain authoritative.
+
+#### Adoption acceptance and decision
+
+Independent raw-oracle comparisons must cover eligible/excluded exact populations,
+unknown excluded counts, fully excluded and zero-traffic results, excluded-tail
+freshness, receipt geometry, non-hour-dividing cadence, retention/validity clipping,
+retained replay and pinned generations. Exercise concurrent source/authority
+changes, revoked viewer preparation, stale publication, restart and terminal work
+failure. Verify current/list/detail/burn-range/daily/exact-page agreement through
+the real API, CLI and normal container journey, including legacy R=0 readers.
+
+Keep all SPEC-0019 foreground, pool, work, currentness and browser latency limits,
+and the SPEC-0021 100/200-policy correctness/performance gates. Measure fragmented,
+overlapping, future and narrow maintenance changes with unaffected-range reads,
+ingestion and live recovery; ordinary unit results or revision-zero measurements
+do not establish adoption capacity. No numerical profile, runtime registration,
+semantic-edit/archive support, maintenance editor or new external dependency is
+selected by this amendment.
+
+**Maintainer decision, 2026-11-15:** accepted this scoped current/history/report
+adoption and additive wire contract for implementation under ADR-0052. Verified
+resource profiles, production activation and release gates remain separate.
 
 ### Extrema rows
 

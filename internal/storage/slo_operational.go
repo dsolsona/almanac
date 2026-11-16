@@ -71,6 +71,7 @@ type OperationalOverviewInput struct {
 }
 
 type OperationalDetailInput struct {
+	maintenance        *maintenanceConsumerSession
 	retainedReader     *retainedSeriesReader
 	historyPublication *retainedHistoryPublication
 	releaseSnapshot    func() error
@@ -133,6 +134,10 @@ func readSloOperationalDetailAttempt(ctx context.Context, databaseURL string, in
 	if contextRow.PollingIntervalSeconds != row.CadenceSeconds || contextRow.MeasurementRevision != row.MeasurementRevision {
 		return api.SloOperationalDetail{}, ErrObjectiveInvalid
 	}
+	input.maintenance, err = captureMaintenanceConsumer(ctx, tx, row, input.Runtime)
+	if err != nil {
+		return api.SloOperationalDetail{}, err
+	}
 	released := false
 	input.releaseSnapshot = func() error {
 		if err := finishAgentRead(ctx, tx, input.Now, started, user, installation, session); err != nil {
@@ -150,7 +155,8 @@ func readSloOperationalDetailAttempt(ctx context.Context, databaseURL string, in
 	result.Context.SliDisplayName = contextRow.SliDisplayName
 	result.Context.DatasourceDisplayName = contextRow.DatasourceDisplayName
 	publication := input.historyPublication != nil && input.historyPublication.generation.SloID.Valid
-	if released || publication {
+	preparation := input.maintenance != nil && len(input.maintenance.preparation) > 0
+	if released || publication || preparation {
 		readStarted := started
 		if !released {
 			if err := finishAgentRead(ctx, tx, input.Now, started, user, installation, session); err != nil {
@@ -167,6 +173,16 @@ func readSloOperationalDetailAttempt(ctx context.Context, databaseURL string, in
 		defer rollbackTransaction(tx)
 		if started.Before(readStarted) {
 			return api.SloOperationalDetail{}, ErrInvalidSession
+		}
+	}
+	if input.maintenance != nil && (publication || preparation) {
+		if preparation {
+			err = publishMaintenanceConsumerPreparation(ctx, tx, input.maintenance, maintenancePreparationHistorical, input.Now)
+		} else {
+			err = fenceMaintenanceConsumerSnapshot(ctx, tx, input.maintenance)
+		}
+		if err != nil {
+			return api.SloOperationalDetail{}, err
 		}
 	}
 	if publication {
@@ -215,8 +231,17 @@ func dailyComplianceStatus(result slo.WindowResult, dayEnd, validFrom time.Time,
 	if !dayEnd.After(validFrom) || result.Performance == "not_applicable" && result.Expected == 0 {
 		return api.SloDailyComplianceDayStatusNotApplicable, "before_evaluation_validity"
 	}
-	if result.EligibleStart.After(result.RequestedStart) || result.Expected != int64(window/cadence) {
+	if result.State == "unavailable" {
+		if result.Reason != "" {
+			return api.SloDailyComplianceDayStatusUnknown, result.Reason
+		}
+		return api.SloDailyComplianceDayStatusUnknown, "unavailable"
+	}
+	if result.EligibleStart.After(result.RequestedStart) || result.Expected+result.Excluded != int64(window/cadence) {
 		return api.SloDailyComplianceDayStatusUnknown, "shortened_window"
+	}
+	if result.State == "excluded" {
+		return api.SloDailyComplianceDayStatusUnknown, "excluded"
 	}
 	if result.State == "zero_traffic" {
 		return api.SloDailyComplianceDayStatusUnknown, "zero_traffic"
@@ -451,11 +476,15 @@ func evaluateOperationalAt(ctx context.Context, base slo.WindowInput, at time.Ti
 }
 
 func operationalQuality(result slo.WindowResult) api.SloOperationalQuality {
-	return api.SloOperationalQuality{State: api.SloOperationalQualityState(result.State), Freshness: api.SloOperationalQualityFreshness(result.Freshness),
+	quality := api.SloOperationalQuality{State: api.SloOperationalQualityState(result.State), Freshness: api.SloOperationalQualityFreshness(result.Freshness),
 		ExpectedIntervals: result.Expected, ObservedIntervals: result.Observed, KnownEmptyIntervals: result.KnownEmpty,
 		MissingIntervals: result.Missing, ExpiredIntervals: result.Expired, ZeroTrafficIntervals: result.ZeroTraffic,
 		Coverage: result.Coverage, FirstObservationAt: result.FirstObservation, LastObservationAt: result.LastObservation,
 		LatestReceiptAt: result.LatestReceipt, Reason: stringPointer(result.Reason)}
+	if result.Excluded != 0 || result.ExcludedGood != nil || result.ExcludedTotal != nil {
+		quality = maintenancePublicQuality(result, quality)
+	}
+	return quality
 }
 
 func operationalPerformance(result slo.WindowResult) api.SloEvaluationPerformance {
@@ -584,6 +613,8 @@ func operationalSample(result slo.WindowResult, bucketStart, bucketEnd time.Time
 		state = "missing"
 	case "zero_traffic":
 		state = "zero_traffic"
+	case "excluded":
+		state = "excluded"
 	case "complete":
 		if result.Observed == 0 && result.KnownEmpty > 0 {
 			state = "known_empty"
@@ -636,6 +667,10 @@ func buildSloOperationalDetail(ctx context.Context, q *dbgen.Queries, row dbgen.
 		Target:         sli.NormalizeDecimal(row.Target)}
 	rolling, attainment, daily := input.retainedReader.rolling, input.retainedReader.attainment, input.retainedReader.daily
 	var currentWindows map[time.Duration]slo.WindowResult
+	var currentProvenance map[time.Duration]*api.SloCalculationProvenance
+	if input.maintenance != nil {
+		currentProvenance = make(map[time.Duration]*api.SloCalculationProvenance)
+	}
 	if input.currentOnly || input.retainedReader != nil {
 		currentWindows = make(map[time.Duration]slo.WindowResult)
 		durations := []time.Duration{window}
@@ -655,7 +690,18 @@ func buildSloOperationalDetail(ctx context.Context, q *dbgen.Queries, row dbgen.
 			inputs = append(inputs, value)
 			currentWindows[duration] = slo.WindowResult{}
 		}
-		values, err := evaluateDerivedWindows(ctx, q, row.SliID, row.MeasurementRevision, inputs)
+		var values []slo.WindowResult
+		var err error
+		var currentBatch *maintenanceConsumerBatch
+		if input.maintenance != nil {
+			batch, calculationErr := input.maintenance.evaluate(ctx, row, inputs, false, false)
+			values, err = batch.values, calculationErr
+			if calculationErr == nil {
+				currentBatch = &batch
+			}
+		} else {
+			values, err = evaluateDerivedWindows(ctx, q, row.SliID, row.MeasurementRevision, inputs)
+		}
 		if input.retainedReader != nil && (errors.Is(err, ErrDerivedPending) || errors.Is(err, ErrDerivedSourceFailed)) {
 			input.retainedReader.pending = true
 			input.retainedReader.failed = errors.Is(err, ErrDerivedSourceFailed)
@@ -672,6 +718,12 @@ func buildSloOperationalDetail(ctx context.Context, q *dbgen.Queries, row dbgen.
 		}
 		for index, value := range values {
 			currentWindows[inputs[index].Duration] = value
+			if currentBatch != nil {
+				currentProvenance[inputs[index].Duration], err = currentBatch.provenance(index)
+				if err != nil {
+					return api.SloOperationalDetail{}, err
+				}
+			}
 		}
 	}
 	evaluate := func(duration time.Duration) (slo.WindowResult, error) {
@@ -682,7 +734,7 @@ func buildSloOperationalDetail(ctx context.Context, q *dbgen.Queries, row dbgen.
 		} else {
 			result, err = evaluateOperationalAt(ctx, base, measurementEnd, duration)
 		}
-		if input.At == nil && result.LastObservation != nil {
+		if input.maintenance == nil && input.At == nil && result.LastObservation != nil {
 			result.Freshness = "fresh"
 			if requestedAt.After(result.LastObservation.Add(base.FreshnessGrace)) {
 				result.Freshness = "stale"
@@ -717,6 +769,18 @@ func buildSloOperationalDetail(ctx context.Context, q *dbgen.Queries, row dbgen.
 		burn6h = burnEvaluation(result, 21600)
 	}
 	current := operationalValue(currentResult)
+	current.CalculationProvenance = currentProvenance[window]
+	burn1h.CalculationProvenance = currentProvenance[time.Hour]
+	burn6h.CalculationProvenance = currentProvenance[6*time.Hour]
+	if current.CalculationProvenance != nil {
+		current.Quality = maintenancePublicQuality(currentResult, current.Quality)
+	}
+	if burn1h.CalculationProvenance != nil {
+		burn1h.Quality = maintenancePublicQuality(currentWindows[time.Hour], burn1h.Quality)
+	}
+	if burn6h.CalculationProvenance != nil {
+		burn6h.Quality = maintenancePublicQuality(currentWindows[6*time.Hour], burn6h.Quality)
+	}
 	current.EvaluationAt = effectiveAt
 	current.Window.RequestedStart = requestedAt.Add(-time.Duration(row.RollingWindowSeconds) * time.Second)
 	applyOperationalDefinitionWindow(&current, row.ActivatedAt.Time.UTC(), row.EvaluationValidFrom.Time.UTC(), row.HistoricalRequestedBy, row.HistoricalRequestedAt)

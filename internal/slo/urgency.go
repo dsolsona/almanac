@@ -42,6 +42,8 @@ func ClassifyOperational(input OperationalState) OperationalUrgency {
 		add(watch, "not_yet_eligible")
 	case "zero_traffic":
 		add(watch, "zero_traffic")
+	case "excluded":
+		add(watch, "excluded")
 	case "unavailable":
 		add(watch, "evaluation_unavailable")
 	case "partial":
@@ -103,7 +105,7 @@ func ClassifyOperational(input OperationalState) OperationalUrgency {
 	order := []string{
 		"stale_observations", "no_data", "expired_history", "complete_window_violation",
 		"negative_observed_budget", "low_observed_budget", "high_1h_burn",
-		"evaluation_unavailable", "not_yet_eligible", "zero_traffic", "incomplete_coverage",
+		"evaluation_unavailable", "not_yet_eligible", "excluded", "zero_traffic", "incomplete_coverage",
 		"short_burn_unavailable", "budget_below_half", "on_track",
 	}
 	provisional := input.Provisional || input.ShortenedEligibility || input.QualityState == "partial" || input.QualityState == "unavailable"

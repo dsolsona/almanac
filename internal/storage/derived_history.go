@@ -28,6 +28,7 @@ func preparedHistoryMatches(value api.SloOperationalDetail, key dbgen.FindPrepar
 		stamp.DefinitionRevision == strconv.FormatInt(key.DefinitionRevision, 10) &&
 		stamp.MeasurementRevision == strconv.FormatInt(key.MeasurementRevision, 10) &&
 		stamp.SourceGeneration == strconv.FormatInt(key.SourceGeneration, 10) &&
+		stamp.ExclusionRevision == strconv.FormatInt(key.ExclusionRevision, 10) &&
 		stamp.CalculationVersion == operationalCalculationVersion &&
 		value.CalculationVersion == operationalCalculationVersion &&
 		stamp.EvaluatedThrough.Equal(key.EvaluatedThrough.Time) &&
@@ -189,8 +190,11 @@ func loadRetainedSloHistory(ctx context.Context, q *dbgen.Queries, row dbgen.Get
 		return api.SloOperationalDetail{}, err
 	}
 	retention := timestamp(ceilSliBoundary(now.Add(-sli.ObservationRetention), time.Duration(row.CadenceSeconds)*time.Second))
+	if input.maintenance != nil {
+		input.maintenance.sourceGeneration, input.maintenance.sourceCaptured = sourceGeneration, true
+	}
 	key := dbgen.FindPreparedSloHistoryParams{Now: timestamp(now), RetentionStart: retention, CalculationVersion: operationalCalculationVersion, Kind: kind, SloID: row.ID, DefinitionRevision: row.DefinitionRevision, MeasurementRevision: row.MeasurementRevision, SourceGeneration: sourceGeneration,
-		EvaluatedThrough: timestamp(bound.effectiveAt), RangeStart: timestamp(bound.start), RangeEnd: timestamp(bound.end), BurnWindowSeconds: int32(input.BurnWindow), Live: input.At == nil}
+		ExclusionRevision: row.ExclusionRevision, EvaluatedThrough: timestamp(bound.effectiveAt), RangeStart: timestamp(bound.start), RangeEnd: timestamp(bound.end), BurnWindowSeconds: int32(input.BurnWindow), Live: input.At == nil}
 	cached, err := q.FindPreparedSloHistory(ctx, key)
 	if err == nil {
 		var result api.SloOperationalDetail
@@ -212,7 +216,7 @@ func loadRetainedSloHistory(ctx context.Context, q *dbgen.Queries, row dbgen.Get
 	if input.Runtime != nil {
 		input.Runtime.metrics.historyMisses.Add(1)
 	}
-	calculation.retainedReader = &retainedSeriesReader{q: q, row: row, source: source, now: now}
+	calculation.retainedReader = &retainedSeriesReader{maintenance: input.maintenance, q: q, row: row, source: source, now: now}
 	reader := &extremaReader{retainedSeriesReader: *calculation.retainedReader}
 	base := extremaWindowInput(row, source, now, retention.Time)
 	if err := reader.prepare(ctx, base, bound); err != nil {
@@ -224,7 +228,7 @@ func loadRetainedSloHistory(ctx context.Context, q *dbgen.Queries, row dbgen.Get
 		return api.SloOperationalDetail{}, err
 	}
 	input.historyPublication.generation = dbgen.InsertDerivedGenerationParams{SloID: row.ID,
-		DefinitionRevision: row.DefinitionRevision, MeasurementRevision: row.MeasurementRevision, SourceGeneration: sourceGeneration,
+		DefinitionRevision: row.DefinitionRevision, MeasurementRevision: row.MeasurementRevision, SourceGeneration: sourceGeneration, ExclusionRevision: row.ExclusionRevision,
 		CalculationVersion: operationalCalculationVersion, EvaluatedThrough: timestamp(bound.effectiveAt), RetentionStart: retention, PublishedAt: timestamp(normalizedAgentNow(input.Now))}
 	input.historyPublication.history = dbgen.InsertPreparedSloHistoryParams{RangeStart: timestamp(bound.start), RangeEnd: timestamp(bound.end), BurnWindowSeconds: int32(input.BurnWindow), Kind: kind}
 	input.historyPublication.live = input.At == nil
@@ -249,6 +253,7 @@ func publishRetainedHistory(ctx context.Context, q *dbgen.Queries, result api.Sl
 	g := publication.generation
 	stamp := generationStamp(generationID, g.SourceGeneration, g.DefinitionRevision, g.MeasurementRevision, g.CalculationVersion,
 		g.EvaluatedThrough.Time, g.PublishedAt.Time, g.RetentionStart.Time)
+	stamp.ExclusionRevision = strconv.FormatInt(g.ExclusionRevision, 10)
 	result.Generation = &stamp
 	payload, err := marshalReceiptMetadata(struct {
 		api.SloOperationalDetail

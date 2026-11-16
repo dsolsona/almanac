@@ -15,8 +15,8 @@ import (
 
 func TestIntegrationAlertRetentionUpgrade(t *testing.T) {
 	t.Parallel()
-	if latest := latestTestSchemaVersion(t); latest != 66 {
-		t.Fatalf("update the exact 0058 reconstruction for migration suffix after 0066: latest=%d", latest)
+	if latest := latestTestSchemaVersion(t); latest != 67 {
+		t.Fatalf("update the exact 0058 reconstruction for migration suffix after 0067: latest=%d", latest)
 	}
 	f := newAlertTestFixture(t)
 	active := f.policy(t, "Upgrade active")
@@ -91,8 +91,8 @@ DELETE FROM public.almanac_schema_migrations WHERE version>=59;`)
 		t.Fatalf("0058 compatibility: %v %v", state, err)
 	}
 	result, err := Upgrade(t.Context(), f.f.databaseURL)
-	if err != nil || result.Applied != 8 || result.DatabaseSchemaVersion != 66 {
-		t.Fatalf("populated 0058 through 0066: %+v %v", result, err)
+	if err != nil || result.Applied != 9 || result.DatabaseSchemaVersion != 67 {
+		t.Fatalf("populated 0058 through 0067: %+v %v", result, err)
 	}
 	if after := snapshot(); after != before {
 		t.Fatal("forward upgrade changed occurrence/evaluation/transition/range history or prior migration ledger")

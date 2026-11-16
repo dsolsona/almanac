@@ -1,3 +1,26 @@
+Maintenance consumer integration, 2026-11-16: [F4-T51](tasks/F4-T51.md)
+now connects shared current/list calculations, retained hourly production,
+queued daily composition, authenticated targeted repair and pinned exact values
+internally. Real changed-history recovery returns the independently expected
+49,500/50,000 counts with ten excluded intervals and original C/R provenance.
+Current/source publication races reject stale outputs. Review corrections make
+terminal dependencies explicit failed gaps and remove no-eligible provenance that
+could fail client validation. Combined checks and deployed collection/SLO/alert
+management acceptance are in progress. No adoption PR is open yet. Production
+profiles, preparation/alert runtime registration and live-load/cold-browser release
+gates remain open; these focused checks do not claim capacity or activation.
+
+Maintenance adoption, 2026-11-15: the maintainer approved merging
+[PR #126](https://github.com/dsolsona/almanac/pull/126) at verified `9afc3b8`.
+All four application CI checks passed; it is merged as `90e9af7` and main is
+pulled. The maintainer also accepted SPEC-0020’s scoped current/history/report
+adoption and additive wire contract for implementation. [F4-T51](tasks/F4-T51.md)
+connects those consumers while production activation and release gates remain
+separate. Private retained replay, summary/facts and 100/200-policy correctness
+fixtures pass together in 14.020s. Those policy fixtures share one SLO and do not
+establish live-load capacity or browser performance. API/client support and
+coordinated source/authority publication remain in progress.
+
 Maintenance-aware alert implementation, 2026-11-15:
 [F4-T42](tasks/F4-T42.md) through [F4-T49](tasks/F4-T49.md) are assembled on
 merged main `c78d668`: immutable bounded compilation, indexed coverage and

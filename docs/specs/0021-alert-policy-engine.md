@@ -5,11 +5,20 @@
 - Accepted: pending
 - Approval: full draft pending; continued implementation and unwired foundations authorized, with initial 100/200-policy verification scope
 - Implementation: in progress
-- Related ADRs: [ADR-0051](../adr/0051-durable-alert-policy-state-machine.md) (proposed)
+- Related ADRs: [ADR-0051](../adr/0051-durable-alert-policy-state-machine.md) (proposed), [ADR-0052](../adr/0052-compiled-maintenance-populations.md) (accepted for implementation)
 - Plan: [0035](../plans/0035-alerting-delivery.md); initial design review in [F4-T01](../tasks/F4-T01.md)
 - Supersedes / superseded by: proposed replacement of SPEC-0011's initial evaluation/lifecycle and release scope; no accepted contract is superseded yet
 
 ## Purpose
+
+Implementation direction, 2026-11-15: the maintainer accepted ADR-0052's durable
+compiled maintenance populations and SPEC-0020's
+[shared consumer amendment](0020-cumulative-slo-calculation.md#accepted-amendment-shared-scoped-maintenance-adoption)
+for implementation. The dirty-interior raw fallback proposal retained below was
+not adopted. Current work uses the canonical source path plus shared scoped
+populations, preserves pending boundaries and keeps production profiles,
+registration and release gates separate. This scoped approval does not accept
+the remainder of this draft or claim live-load capacity.
 
 Give operators one durable, explainable alert for a policy's burn conditions,
 with global acknowledgement and recoverable evaluation progress. Deliver it in

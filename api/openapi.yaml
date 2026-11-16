@@ -1992,7 +1992,7 @@ components:
         source_generation: {type: string, pattern: '^(0|[1-9][0-9]*)$'}
         measurement_revision: {type: string, pattern: '^[1-9][0-9]*$'}
         definition_revision: {type: string, pattern: '^[1-9][0-9]*$'}
-        exclusion_revision: {type: string, pattern: '^(0|[1-9][0-9]*)$'}
+        exclusion_revision: {type: string, pattern: '^(0|[1-9][0-9]*)$', description: Requested exclusion authority captured for this generation. Retained values preserve their actual computed mask in calculation_provenance; pinned generations never substitute a newer authority.}
         calculation_version: {type: string}
         evaluated_through: {type: string, format: date-time}
         published_at: {type: string, format: date-time}
@@ -2033,21 +2033,44 @@ components:
       type: object
       required: [code, provisional]
       properties:
-        code: {type: string, enum: [on_track, stale_observations, no_data, expired_history, complete_window_violation, negative_observed_budget, low_observed_budget, high_1h_burn, evaluation_unavailable, not_yet_eligible, zero_traffic, incomplete_coverage, short_burn_unavailable, budget_below_half]}
+        code: {type: string, enum: [on_track, stale_observations, no_data, expired_history, complete_window_violation, negative_observed_budget, low_observed_budget, high_1h_burn, evaluation_unavailable, not_yet_eligible, zero_traffic, incomplete_coverage, short_burn_unavailable, budget_below_half, excluded]}
         provisional: {type: boolean}
     SloOperationalValue:
       type: object
       required: [evaluation_at, window, quality, performance]
       properties:
+        calculation_provenance: {$ref: '#/components/schemas/SloCalculationProvenance'}
         evaluation_at: {type: string, format: date-time, description: Snapshot evaluation time. For live current status the actual measurement endpoint is window.end and may be earlier while collection is pending.}
         window: {$ref: '#/components/schemas/SloEvaluationWindow'}
         quality: {$ref: '#/components/schemas/SloOperationalQuality'}
         performance: {$ref: '#/components/schemas/SloEvaluationPerformance'}
+    SloCalculationProvenance:
+      type: object
+      description: Actual enclosing immutable mask and original source snapshot for this value. Requested authority may differ from the computed mask only with a compatibility proof. Legacy revision-zero or no-eligible-time results may omit provenance; unavailable gaps must not fabricate it. Detailed reused-hour certificates remain private.
+      required: [requested_revision, computed_revision, source_generation]
+      properties:
+        requested_revision: {type: string, pattern: '^(0|[1-9][0-9]*)$'}
+        computed_revision: {type: string, pattern: '^(0|[1-9][0-9]*)$', description: Actual computed mask C; never greater than requested authority R.}
+        source_generation: {type: string, pattern: '^(0|[1-9][0-9]*)$', description: Original calculation snapshot; not a claim that an old retained mark was recalculated at the response generation.}
+        build_id: {type: string, format: uuid, description: Complete immutable build. Required for nonzero computed revision; may be absent only for canonical revision zero.}
+        compatibility: {$ref: '#/components/schemas/SloMaintenanceCompatibility'}
+    SloMaintenanceCompatibility:
+      type: object
+      description: Authenticated compatibility over the complete calculation input window, not its displayed bucket. Required when computed revision is older than requested revision. Pending, changed and unavailable checks are not proofs.
+      required: [kind, computed_revision, requested_revision, indexed_through, start, end]
+      properties:
+        kind: {type: string, enum: [same_revision, indexed_absence, equal_union]}
+        computed_revision: {type: string, pattern: '^(0|[1-9][0-9]*)$'}
+        requested_revision: {type: string, pattern: '^(0|[1-9][0-9]*)$'}
+        indexed_through: {type: string, pattern: '^(0|[1-9][0-9]*)$', description: Contiguous analyzed history. At least requested_revision for indexed_absence/equal_union; same_revision requires no catch-up.}
+        start: {type: string, format: date-time, description: Inclusive UTC source-window start.}
+        end: {type: string, format: date-time, description: Exclusive UTC source-window end; strictly after start.}
+        comparison_id: {type: string, format: uuid, description: Required only for equal_union; identifies a completed direct immutable-union comparison.}
     SloOperationalQuality:
       type: object
       required: [state, freshness, expected_intervals, observed_intervals, known_empty_intervals, missing_intervals, expired_intervals, zero_traffic_intervals, coverage, first_observation_at, last_observation_at, latest_receipt_at]
       properties:
-        state: {type: string, enum: [complete, partial, no_data, zero_traffic, expired_history, not_yet_eligible, not_applicable, unavailable]}
+        state: {type: string, enum: [complete, partial, no_data, zero_traffic, expired_history, not_yet_eligible, not_applicable, unavailable, excluded]}
         freshness: {type: string, enum: [unknown, fresh, stale]}
         expected_intervals: {type: integer, format: int64, minimum: 0}
         observed_intervals: {type: integer, format: int64, minimum: 0}
@@ -2055,6 +2078,27 @@ components:
         missing_intervals: {type: integer, format: int64, minimum: 0}
         expired_intervals: {type: integer, format: int64, minimum: 0}
         zero_traffic_intervals: {type: integer, format: int64, minimum: 0}
+        excluded_intervals: {type: integer, format: int64, minimum: 0, description: Removed eligible intervals including expired excluded intervals. Omission means legacy metadata was not supplied. Maintenance-aware calculated values include all three exclusion fields.}
+        excluded_good:
+          type: string
+          nullable: true
+          pattern: '^[0-9]+(?:\.[0-9]+)?$'
+          description: Exact excluded good events, paired with excluded_total. Null means unknown full excluded population; omission means legacy metadata was not supplied. Never substitute zero for unknown.
+          x-go-type: jsontext.Value
+          x-go-type-import: {path: encoding/json/jsontext, name: jsontext}
+          x-go-type-skip-optional-pointer: true
+          x-omitempty: false
+          x-omitzero: true
+        excluded_total:
+          type: string
+          nullable: true
+          pattern: '^[0-9]+(?:\.[0-9]+)?$'
+          description: Exact excluded total events, at least excluded_good. Both fields are null or both exact nonnegative strings; exact zero is the string 0.
+          x-go-type: jsontext.Value
+          x-go-type-import: {path: encoding/json/jsontext, name: jsontext}
+          x-go-type-skip-optional-pointer: true
+          x-omitempty: false
+          x-omitzero: true
         coverage: {type: string, nullable: true, description: Exact fraction rounded half-even to 12 decimal places at output.}
         first_observation_at: {type: string, format: date-time, nullable: true}
         last_observation_at: {type: string, format: date-time, nullable: true}
@@ -2064,6 +2108,7 @@ components:
       type: object
       required: [window_seconds, start, end, quality, performance]
       properties:
+        calculation_provenance: {$ref: '#/components/schemas/SloCalculationProvenance'}
         window_seconds: {type: integer, enum: [3600, 21600]}
         start: {type: string, format: date-time}
         end: {type: string, format: date-time}
@@ -2124,6 +2169,7 @@ components:
       type: object
       required: [utc_date, day_start, day_end, requested_at, effective_at, slo_id, definition_revision, target, quality, performance, status, explanation]
       properties:
+        calculation_provenance: {$ref: '#/components/schemas/SloCalculationProvenance'}
         utc_date: {type: string, format: date}
         day_start: {type: string, format: date-time}
         day_end: {type: string, format: date-time}
@@ -2194,10 +2240,11 @@ components:
       type: object
       required: [bucket_start, bucket_end, evaluation_at, state, quality, revision, good, total, attainment, allowed_budget, remaining_budget, remaining_fraction, burn, received_at, retained_extrema]
       properties:
+        calculation_provenance: {$ref: '#/components/schemas/SloCalculationProvenance'}
         bucket_start: {type: string, format: date-time}
         bucket_end: {type: string, format: date-time}
         evaluation_at: {type: string, format: date-time}
-        state: {type: string, enum: [observed, zero_traffic, known_empty, missing, expired, not_applicable, partial, stale]}
+        state: {type: string, enum: [observed, zero_traffic, known_empty, missing, expired, not_applicable, partial, stale, excluded]}
         quality: {$ref: '#/components/schemas/SloOperationalQuality'}
         revision: {type: string, pattern: '^[1-9][0-9]*$'}
         good: {type: string, nullable: true}
@@ -2219,15 +2266,15 @@ components:
         states:
           type: array
           minItems: 1
-          maxItems: 8
+          maxItems: 9
           uniqueItems: true
-          items: {type: string, enum: [observed, zero_traffic, known_empty, missing, expired, not_applicable, partial, stale]}
+          items: {type: string, enum: [observed, zero_traffic, known_empty, missing, expired, not_applicable, partial, stale, excluded]}
         quality_states:
           type: array
           minItems: 1
-          maxItems: 8
+          maxItems: 9
           uniqueItems: true
-          items: {type: string, enum: [complete, partial, no_data, zero_traffic, expired_history, not_yet_eligible, not_applicable, unavailable]}
+          items: {type: string, enum: [complete, partial, no_data, zero_traffic, expired_history, not_yet_eligible, not_applicable, unavailable, excluded]}
         freshness:
           type: array
           minItems: 1

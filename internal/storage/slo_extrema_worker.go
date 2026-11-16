@@ -73,6 +73,14 @@ func (r *Runtime) buildSloExtrema(ctx context.Context, clock func() time.Time) (
 	if row.DefinitionRevision != work.DefinitionRevision || row.MeasurementRevision != work.MeasurementRevision {
 		return true, ErrDerivedPending
 	}
+	maintenance, err := captureMaintenanceConsumer(bounded, tx, row, r)
+	if err != nil {
+		return true, err
+	}
+	// The cursor tracks source progress, not a coalesced maintenance dirty range.
+	// New artifacts use this read's authority; unchanged old buckets are proven
+	// compatible or repaired individually by the existing preparation queue.
+	work.ExclusionRevision = row.ExclusionRevision
 	source, err := q.GetSloOperationalContext(bounded, dbgen.GetSloOperationalContextParams{SliID: row.SliID, Revision: row.MeasurementRevision})
 	if err != nil {
 		return true, err
@@ -95,19 +103,105 @@ func (r *Runtime) buildSloExtrema(ctx context.Context, clock func() time.Time) (
 	}
 	facts = derivedFactsRange{sli: row.SliID, revision: row.MeasurementRevision, from: start.Add(-max(time.Duration(row.RollingWindowSeconds)*time.Second, 6*time.Hour)), to: end}
 	base := extremaWindowInput(row, source, now, retention)
-	for hour := start; hour.Before(end); hour = hour.Add(time.Hour) {
-		lanes, err := buildExtremaHour(bounded, q, row, base, hour)
+	// Admitted maintenance turns finish every calculation before acquiring
+	// resource/publication locks. A pending input commits only prerequisites.
+	if maintenance != nil {
+		maintenance.sourceGeneration, maintenance.sourceCaptured = generation, true
+	}
+	enterPublication := func() error {
+		phaseNow := normalizedAgentNow(clock)
+		if phaseNow.IsZero() || !work.LeaseUntil.Valid || !phaseNow.Before(work.LeaseUntil.Time) {
+			return ErrDerivedPending
+		}
+		if err := tx.Rollback(bounded); err != nil {
+			return err
+		}
+		nextTx, err := conn.BeginTx(bounded, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 		if err != nil {
+			return err
+		}
+		tx = nextTx
+		if _, err := tx.Exec(bounded, "SET LOCAL statement_timeout='5s'; SET LOCAL lock_timeout='250ms'; SET LOCAL jit=off"); err != nil {
+			return err
+		}
+		var prepared maintenancePreparedEnqueue
+		if len(maintenance.preparation) > 0 {
+			prepared, err = prepareMaintenanceEnqueue(bounded, tx, maintenance.scope, maintenance.preparation, maintenance.preparationLimits, phaseNow)
+			if err != nil {
+				if errors.Is(err, ErrMaintenanceSnapshotChanged) {
+					return errors.Join(ErrDerivedPending, err)
+				}
+				return err
+			}
+		}
+		if err := fenceMaintenanceConsumerSnapshot(bounded, tx, maintenance); err != nil {
+			return errors.Join(ErrDerivedPending, err)
+		}
+		q = dbgen.New(tx)
+		parent, err := q.LockMaintenanceExtremaParent(bounded, work.ID)
+		if err != nil {
+			return err
+		}
+		finished := normalizedAgentNow(clock)
+		if parent.Version != work.Version || parent.LeaseEpoch != work.LeaseEpoch || !parent.LeaseUntil.Valid || !parent.LeaseUntil.Time.Equal(work.LeaseUntil.Time) || finished.IsZero() || !finished.Before(parent.LeaseUntil.Time) {
+			return ErrDerivedPending
+		}
+		if len(maintenance.preparation) > 0 {
+			return enqueueMaintenancePreparation(bounded, tx, prepared, maintenancePreparationHistorical, finished)
+		}
+		return nil
+	}
+	defer func() { rollbackTransaction(tx) }()
+	type hourArtifact struct {
+		start time.Time
+		lanes extremaLanes
+	}
+	var artifacts []hourArtifact
+	for hour := start; hour.Before(end); hour = hour.Add(time.Hour) {
+		var lanes extremaLanes
+		var err error
+		if maintenance != nil {
+			lanes, err = buildMaintenanceExtremaHour(bounded, maintenance, row, base, hour)
+		} else {
+			lanes, err = buildExtremaHour(bounded, q, row, base, hour)
+		}
+		if err != nil {
+			if maintenance != nil && errors.Is(err, ErrDerivedPending) && len(maintenance.preparation) > 0 {
+				if err := enterPublication(); err != nil {
+					return true, err
+				}
+				if err := tx.Commit(bounded); err != nil {
+					return true, err
+				}
+			}
 			return true, err
 		}
-		if err := publishExtrema(bounded, q, work, lanes, hour, hour.Add(time.Hour), generation, retention, now); err != nil {
+		if maintenance != nil {
+			artifacts = append(artifacts, hourArtifact{start: hour, lanes: lanes})
+		} else if err := publishExtrema(bounded, q, work, lanes, hour, hour.Add(time.Hour), generation, retention, now); err != nil {
 			return true, err
 		}
 	}
 	dayEnd := utcDayStart(start).Add(24 * time.Hour)
 	if !dayEnd.After(closed) && end.After(start) && (!built.Before(dayEnd) || !end.Before(dayEnd)) {
-		if err := buildExtremaDay(bounded, q, work, row, base, dayEnd, generation, now); err != nil {
+		if maintenance != nil {
+			maintenance.preparation = append(maintenance.preparation, maintenanceEvaluationPreparation{Kind: "extrema_day", RequestedRevision: row.ExclusionRevision, Hour: maintenanceHourKey{SloID: row.ID, SliID: row.SliID, DefinitionRevision: row.DefinitionRevision, MeasurementRevision: row.MeasurementRevision, SourceGeneration: generation, HourStart: dayEnd.Add(-24 * time.Hour)}})
+		} else if err := buildExtremaDay(bounded, q, work, row, base, dayEnd, generation, now); err != nil {
 			return true, err
+		}
+	}
+	if maintenance != nil {
+		if err := enterPublication(); err != nil {
+			return true, err
+		}
+		for _, artifact := range artifacts {
+			if err := publishExtrema(bounded, q, work, artifact.lanes, artifact.start, artifact.start.Add(time.Hour), generation, retention, normalizedAgentNow(clock)); err != nil {
+				return true, err
+			}
+		}
+		finished := normalizedAgentNow(clock)
+		if finished.IsZero() || !finished.Before(work.LeaseUntil.Time) {
+			return true, ErrDerivedPending
 		}
 	}
 	if !start.After(built) {
@@ -126,7 +220,7 @@ func (r *Runtime) buildSloExtrema(ctx context.Context, clock func() time.Time) (
 		next = closed.Add(time.Hour)
 	}
 	advanced, err := q.AdvanceSloExtremaCursor(bounded, dbgen.AdvanceSloExtremaCursorParams{ID: work.ID, Version: work.Version, LeaseEpoch: work.LeaseEpoch,
-		BuiltThrough: timestamp(built), DirtyFrom: dirtyFrom, DirtyTo: dirtyTo, NextAttemptAt: timestamp(next)})
+		ExclusionRevision: row.ExclusionRevision, BuiltThrough: timestamp(built), DirtyFrom: dirtyFrom, DirtyTo: dirtyTo, NextAttemptAt: timestamp(next)})
 	if err != nil {
 		return true, err
 	}
@@ -205,7 +299,7 @@ func publishExtrema(ctx context.Context, q *dbgen.Queries, work dbgen.ClaimSloEx
 		return ErrOperationalResource
 	}
 	count, err := q.PublishSloExtrema(ctx, dbgen.PublishSloExtremaParams{ID: work.ID, Version: work.Version, LeaseEpoch: work.LeaseEpoch,
-		ResolutionSeconds: int32(end.Sub(start) / time.Second), RangeStart: timestamp(start), RangeEnd: timestamp(end), SourceGeneration: generation,
+		ExclusionRevision: work.ExclusionRevision, ResolutionSeconds: int32(end.Sub(start) / time.Second), RangeStart: timestamp(start), RangeEnd: timestamp(end), SourceGeneration: generation,
 		RetentionStart: timestamp(retention), PublishedAt: timestamp(now), Lanes: payload})
 	if err != nil {
 		return err

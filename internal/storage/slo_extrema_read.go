@@ -49,6 +49,9 @@ func (r *extremaReader) preparePlan(ctx context.Context, base slo.WindowInput, b
 			coarseFrom = plan.partialDay.Add(24 * time.Hour)
 		}
 		params := dbgen.ReadSloExtremaPartsParams{SloID: r.row.ID, DefinitionRevision: r.row.DefinitionRevision, MeasurementRevision: r.row.MeasurementRevision, CalculationVersion: operationalCalculationVersion, CoarseFrom: timestamp(coarseFrom)}
+		if r.maintenance != nil {
+			params.ExclusionRevision = r.maintenance.requestedRevision
+		}
 		for _, part := range parts {
 			params.Starts = append(params.Starts, timestamp(part.start))
 			params.Ends = append(params.Ends, timestamp(part.end))
@@ -74,6 +77,9 @@ func (r *extremaReader) preparePlan(ctx context.Context, base slo.WindowInput, b
 			stored[part] = row
 		}
 		r.rowsRead = len(rows)
+	}
+	if err := r.reconcileMaintenanceRows(ctx, base, parts, stored); err != nil {
+		return err
 	}
 	r.totalSeconds = int64(bound.end.Sub(bound.start) / time.Second)
 	r.series = new(retainedSloTile)
@@ -176,6 +182,15 @@ func (r *extremaReader) preparePlan(ctx context.Context, base slo.WindowInput, b
 				return err
 			}
 			day = operationalComplianceDay(value, part.end, base.ValidFrom, r.row.ID.Bytes, revision, base.Target, base.Duration, base.Cadence)
+			if value.Expected != 0 || value.Excluded != 0 {
+				day.CalculationProvenance, err = lanes.Compliance.Mark.Maintenance.publicProvenance()
+				if err != nil {
+					return err
+				}
+			}
+			if day.CalculationProvenance != nil {
+				day.Quality = maintenancePublicQuality(value, day.Quality)
+			}
 		} else {
 			r.pending = true
 			r.failed = r.failed || row.Failing
@@ -226,7 +241,13 @@ func (r *extremaReader) livePoints(ctx context.Context, base slo.WindowInput, st
 		if end.Before(through) {
 			through = end
 		}
-		values, err := buildRetainedRepairPoints(ctx, r.q, r.row, r.source, start, through, r.now)
+		var values []retainedSloPoint
+		var err error
+		if r.maintenance != nil {
+			values, err = buildMaintenanceRetainedRepairPoints(ctx, r.maintenance, r.row, r.source, start, through, r.now)
+		} else {
+			values, err = buildRetainedRepairPoints(ctx, r.q, r.row, r.source, start, through, r.now)
+		}
 		if err != nil {
 			return nil, err
 		}

@@ -793,6 +793,7 @@ type AlmanacSloExtremaCursor struct {
 	LastError           pgtype.Text        `json:"last_error"`
 	FailingSince        pgtype.Timestamptz `json:"failing_since"`
 	ManualRetriedAt     pgtype.Timestamptz `json:"manual_retried_at"`
+	ExclusionRevision   int64              `json:"exclusion_revision"`
 }
 
 type AlmanacSloHistoryBlock struct {

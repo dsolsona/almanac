@@ -16,14 +16,14 @@ WITH projection_metadata AS MATERIALIZED (
         WHEN f.slo_id IS NOT NULL AND f.attempts>=5 AND f.failing_since<=sqlc.arg(now)::timestamptz-interval '7 days' THEN NULL
         WHEN g.id IS NULL OR g.definition_revision<>d.revision OR g.measurement_revision<>d.measurement_revision
           OR p.performance_complete IS NOT TRUE
-          OR g.calculation_version<>sqlc.arg(calculation_version)
+          OR g.exclusion_revision<>exclusion_state.revision OR g.calculation_version<>sqlc.arg(calculation_version)
           OR g.source_generation<>coalesce(source.generation,0)
           OR g.retention_start<>to_timestamp(ceil(extract(epoch FROM (sqlc.arg(now)::timestamptz-interval '365 days'))/d.cadence_seconds)*d.cadence_seconds)
           OR g.evaluated_through<to_timestamp(floor(extract(epoch FROM sqlc.arg(now)::timestamptz)/d.cadence_seconds)*d.cadence_seconds)
           OR coalesce(public.almanac_projection_deadline(p.current_valid_until),'-infinity'::timestamptz)<=sqlc.arg(now)::timestamptz
           OR EXISTS (SELECT 1 FROM public.almanac_slo_extrema e
              WHERE e.slo_id=s.id AND e.definition_revision=d.revision AND e.measurement_revision=d.measurement_revision
-               AND e.calculation_version=sqlc.arg(calculation_version) AND e.exclusion_revision=0 AND e.resolution_seconds=3600
+               AND e.calculation_version=sqlc.arg(calculation_version) AND e.exclusion_revision=exclusion_state.revision AND e.resolution_seconds=3600
                AND e.range_start>=date_trunc('hour',(g.evaluated_through-interval '7 days') AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
                AND e.range_end<=date_trunc('hour',g.evaluated_through AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
                AND e.published_at>coalesce(p.budget_published_at::timestamptz,'-infinity'::timestamptz))
@@ -32,6 +32,7 @@ WITH projection_metadata AS MATERIALIZED (
         END) AS at
     FROM public.almanac_slos s
     JOIN public.almanac_slo_definitions d ON d.slo_id=s.id AND d.revision=s.definition_revision
+    JOIN public.almanac_slo_exclusion_state exclusion_state ON exclusion_state.slo_id=d.slo_id
     LEFT JOIN projection_metadata p ON p.slo_id=s.id
     LEFT JOIN public.almanac_slo_derived_generations g ON g.id=p.generation_id
     LEFT JOIN public.almanac_sli_source_generations source ON source.sli_id=d.sli_id AND source.measurement_revision=d.measurement_revision

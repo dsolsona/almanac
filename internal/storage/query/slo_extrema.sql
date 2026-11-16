@@ -23,13 +23,15 @@ FROM candidate c WHERE w.id=c.id RETURNING w.*,c.prior_attempts;
 
 -- name: PublishSloExtrema :execrows
 INSERT INTO public.almanac_slo_extrema
-    (slo_id,definition_revision,measurement_revision,calculation_version,resolution_seconds,range_start,range_end,source_generation,retention_start,published_at,lanes)
-SELECT w.slo_id,w.definition_revision,w.measurement_revision,w.calculation_version,
+    (slo_id,definition_revision,measurement_revision,exclusion_revision,calculation_version,resolution_seconds,range_start,range_end,source_generation,retention_start,published_at,lanes)
+SELECT w.slo_id,w.definition_revision,w.measurement_revision,sqlc.arg(exclusion_revision)::bigint,w.calculation_version,
        sqlc.arg(resolution_seconds),sqlc.arg(range_start)::timestamptz,sqlc.arg(range_end)::timestamptz,
        sqlc.arg(source_generation),sqlc.arg(retention_start)::timestamptz,sqlc.arg(published_at)::timestamptz,sqlc.arg(lanes)::jsonb
 FROM public.almanac_slo_extrema_cursor w
 JOIN public.almanac_slos s ON s.id=w.slo_id AND s.definition_revision=w.definition_revision
+JOIN public.almanac_slo_exclusion_state x ON x.slo_id=w.slo_id AND x.revision=sqlc.arg(exclusion_revision)::bigint
 WHERE w.id=sqlc.arg(id) AND w.version=sqlc.arg(version) AND w.lease_epoch=sqlc.arg(lease_epoch)
+  AND w.lease_until>sqlc.arg(published_at)::timestamptz
 ON CONFLICT (slo_id,definition_revision,measurement_revision,exclusion_revision,calculation_version,resolution_seconds,range_start)
 DO UPDATE SET range_end=EXCLUDED.range_end,source_generation=EXCLUDED.source_generation,
               retention_start=EXCLUDED.retention_start,published_at=EXCLUDED.published_at,lanes=EXCLUDED.lanes
@@ -37,7 +39,7 @@ WHERE almanac_slo_extrema.source_generation<=EXCLUDED.source_generation;
 
 -- name: AdvanceSloExtremaCursor :execrows
 UPDATE public.almanac_slo_extrema_cursor
-SET built_through=sqlc.arg(built_through)::timestamptz,dirty_from=sqlc.narg(dirty_from)::timestamptz,dirty_to=sqlc.narg(dirty_to)::timestamptz,
+SET exclusion_revision=sqlc.arg(exclusion_revision)::bigint,built_through=sqlc.arg(built_through)::timestamptz,dirty_from=sqlc.narg(dirty_from)::timestamptz,dirty_to=sqlc.narg(dirty_to)::timestamptz,
     attempts=0,lease_until=NULL,last_error=NULL,failing_since=NULL,next_attempt_at=sqlc.arg(next_attempt_at)::timestamptz
 WHERE id=sqlc.arg(id) AND version=sqlc.arg(version) AND lease_epoch=sqlc.arg(lease_epoch);
 
@@ -70,14 +72,20 @@ WITH requested AS (
            unnest(sqlc.arg(resolutions)::integer[]) AS resolution,unnest(sqlc.arg(graph)::boolean[]) AS graph,
            generate_subscripts(sqlc.arg(starts)::timestamptz[],1)::integer AS ordinal
 ), selected AS MATERIALIZED (
-    SELECT r.*,e.retention_start,e.source_generation,e.published_at,e.lanes,
+    SELECT r.*,e.retention_start,coalesce(e.source_generation,0)::bigint AS source_generation,
+           coalesce(e.exclusion_revision,0)::bigint AS exclusion_revision,e.published_at,e.lanes,
            (e.slo_id IS NOT NULL AND w.built_through>=r.end_at
              AND NOT coalesce(w.dirty_from<r.end_at AND w.dirty_to>r.start_at,false))::boolean AS ready,
            coalesce(w.attempts>=5,false)::boolean AS failing
     FROM requested r
-    LEFT JOIN public.almanac_slo_extrema e ON e.slo_id=sqlc.arg(slo_id) AND e.definition_revision=sqlc.arg(definition_revision)
-      AND e.measurement_revision=sqlc.arg(measurement_revision) AND e.calculation_version=sqlc.arg(calculation_version)
-      AND e.exclusion_revision=0 AND e.resolution_seconds=r.resolution AND e.range_start=r.start_at AND e.range_end=r.end_at
+    LEFT JOIN LATERAL (
+      SELECT candidate.* FROM public.almanac_slo_extrema candidate
+      WHERE candidate.slo_id=sqlc.arg(slo_id) AND candidate.definition_revision=sqlc.arg(definition_revision)
+        AND candidate.measurement_revision=sqlc.arg(measurement_revision) AND candidate.calculation_version=sqlc.arg(calculation_version)
+        AND candidate.exclusion_revision<=sqlc.arg(exclusion_revision)::bigint
+        AND candidate.resolution_seconds=r.resolution AND candidate.range_start=r.start_at AND candidate.range_end=r.end_at
+      ORDER BY candidate.exclusion_revision DESC LIMIT 1
+    ) e ON true
     LEFT JOIN public.almanac_slo_extrema_cursor w ON w.slo_id=sqlc.arg(slo_id) AND w.definition_revision=sqlc.arg(definition_revision)
       AND w.measurement_revision=sqlc.arg(measurement_revision) AND w.calculation_version=sqlc.arg(calculation_version)
 ), transitions AS MATERIALIZED (
@@ -89,7 +97,7 @@ WITH requested AS (
       AND coalesce(jsonb_array_length(mark->'labels'),0)=0
     GROUP BY lane.key
 ), projected AS MATERIALIZED (
-    SELECT s.ordinal,s.start_at,s.end_at,s.resolution,s.retention_start,s.source_generation,s.published_at,s.ready,s.failing,
+    SELECT s.ordinal,s.start_at,s.end_at,s.resolution,s.retention_start,s.source_generation,s.exclusion_revision,s.published_at,s.ready,s.failing,
            CASE WHEN NOT s.ready THEN NULL
              WHEN NOT s.graph THEN jsonb_build_object('compliance',s.lanes->'compliance')
              ELSE (SELECT jsonb_object_agg(lane.key,CASE
@@ -105,7 +113,7 @@ WITH requested AS (
     SELECT *,coalesce(sum(octet_length(lanes::text)) OVER (),0)::bigint AS payload_bytes FROM projected
 )
 SELECT ordinal,start_at::timestamptz AS range_start,end_at::timestamptz AS range_end,resolution::integer AS resolution,
-       retention_start,source_generation,published_at,
+       retention_start,source_generation,exclusion_revision,published_at,
        CASE WHEN payload_bytes<=20971520 THEN lanes ELSE '{}'::jsonb END AS lanes,
        coalesce(ready,false)::boolean AS ready,failing,payload_bytes
 FROM bounded ORDER BY ordinal;

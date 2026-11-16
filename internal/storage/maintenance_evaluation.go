@@ -21,6 +21,8 @@ type maintenanceComputedMask struct {
 	BuildID  pgtype.UUID
 }
 type maintenanceEvaluationInput struct {
+	// Summary defers public decimal formatting; RetainFacts owns replay inputs.
+	Summary, RetainFacts                    bool
 	SloID, SliID                            pgtype.UUID
 	DefinitionRevision, MeasurementRevision int64
 	Requests                                []maintenanceMaskWindows
@@ -31,7 +33,14 @@ type maintenanceEvaluationResult struct {
 	Masks            []maintenanceEvaluatedMask
 	Preparation      []maintenanceEvaluationPreparation
 }
+type maintenanceWindowFacts struct {
+	Totals   slo.WindowTotals
+	Coverage *slo.WindowCoverage
+}
+
 type maintenanceEvaluatedMask struct {
+	// Facts are aligned only when requested; computed revision zero uses legacy marks.
+	Facts             []maintenanceWindowFacts
 	RequestedRevision int64
 	Computed          maintenanceComputedMask
 	Proofs            []maintenanceCompatibilityProof
@@ -70,6 +79,7 @@ func evaluateMaintenanceWindows(ctx context.Context, tx pgx.Tx, in maintenanceEv
 		if err != nil {
 			for i := range result.Masks {
 				result.Masks[i].Windows = nil
+				result.Masks[i].Facts = nil
 			}
 		}
 	}()
@@ -152,10 +162,18 @@ func evaluateMaintenanceWindows(ctx context.Context, tx pgx.Tx, in maintenanceEv
 	for i := range work {
 		w := &work[i]
 		unavailable := make([]string, len(w.windows))
+		var facts []maintenanceWindowFacts
+		if in.RetainFacts {
+			facts = make([]maintenanceWindowFacts, len(w.windows))
+		}
 		if len(w.windows) == 0 {
 			w.mask.Windows = nil
 		} else if w.mask.Computed.Revision == 0 {
-			w.mask.Windows, err = evaluateDerivedWindows(ctx, q, in.SliID, in.MeasurementRevision, w.windows)
+			evaluate := slo.EvaluateOperationalTotals
+			if in.Summary {
+				evaluate = slo.EvaluateOperationalTotalsSummary
+			}
+			w.mask.Windows, err = evaluateDerivedWindowsUsing(ctx, q, in.SliID, in.MeasurementRevision, w.windows, evaluate)
 			if errors.Is(err, ErrDerivedPending) {
 				seen := map[maintenanceWindowRange]bool{}
 				for _, window := range w.plan.Windows {
@@ -167,15 +185,21 @@ func evaluateMaintenanceWindows(ctx context.Context, tx pgx.Tx, in maintenanceEv
 				}
 			}
 		} else {
-			w.mask.Windows, w.mask.ReusedHours, err = evaluateMaintenanceMask(ctx, tx, in, w.mask.Computed, w.plan, hours, raw, &result.Preparation, unavailable)
+			w.mask.Windows, w.mask.ReusedHours, err = evaluateMaintenanceMask(ctx, tx, in, w.mask.Computed, w.plan, hours, raw, &result.Preparation, unavailable, facts)
 		}
 		if err == nil {
 			expanded := make([]slo.WindowResult, len(in.Requests[i].Windows))
+			if in.RetainFacts {
+				w.mask.Facts = make([]maintenanceWindowFacts, len(expanded))
+			}
 			if len(w.mask.Windows) != len(w.positions) {
 				return result, slo.ErrOperationalFacts
 			}
 			for j, original := range w.positions {
 				expanded[original] = w.mask.Windows[j]
+				if in.RetainFacts {
+					w.mask.Facts[original] = facts[j]
+				}
 				w.mask.Unavailable[original] = unavailable[j]
 			}
 			w.mask.Windows = expanded

@@ -210,7 +210,10 @@ Read work is independent of declaration overlap after compilation, while long
 windows read bounded hourly summaries rather than full raw populations.
 
 The candidate needs new schema/query/worker code and an accepted SPEC-0020 scope
-amendment before production adoption. Numerical admission/compile batch defaults,
+amendment before production adoption. The [accepted shared scoped-maintenance
+amendment](../specs/0020-cumulative-slo-calculation.md#accepted-amendment-shared-scoped-maintenance-adoption)
+records the maintainer’s 2026-11-15 approval of that consumer and wire contract
+for implementation; production activation and release gates remain separate. Numerical admission/compile batch defaults,
 interval-index choice and retained physical size remain experiment outputs.
 Existing pool sizes, source failure rules and performance targets remain in force.
 No public maintenance-management endpoint or unsupported SLO method is implied.

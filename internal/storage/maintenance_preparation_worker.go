@@ -132,18 +132,27 @@ func (r *Runtime) processMaintenancePreparation(ctx context.Context, job dbgen.A
 		return "stale", ErrMaintenancePreparationStale
 	}
 	state, reason := "pending", "dependency_pending"
-	err := r.maintenancePreparationTransaction(ctx, min(o.OperationBudget, job.LeaseUntil.Time.Sub(now)), func(ctx context.Context, tx pgx.Tx) error {
-		var err error
-		state, err = executeMaintenancePreparation(ctx, tx, job, o, clock)
-		if err != nil {
-			return err
-		}
-		finished := normalizedAgentNow(clock)
-		if finished.IsZero() || !finished.Before(job.LeaseUntil.Time) {
-			return ErrMaintenancePreparationStale
-		}
-		return nil
-	})
+	var err error
+	if job.Kind == "extrema_hour" {
+		// This stage releases its RR connection before opening RC publication.
+		// Do not hold an unused outer derived connection across those phases.
+		state, err = r.executeMaintenanceExtremaHour(ctx, job, o, clock)
+	} else if job.Kind == "extrema_day" {
+		state, err = r.executeMaintenanceExtremaDay(ctx, job, o, clock)
+	} else {
+		err = r.maintenancePreparationTransaction(ctx, min(o.OperationBudget, job.LeaseUntil.Time.Sub(now)), func(ctx context.Context, tx pgx.Tx) error {
+			var err error
+			state, err = executeMaintenancePreparation(ctx, tx, job, o, clock)
+			if err != nil {
+				return err
+			}
+			finished := normalizedAgentNow(clock)
+			if finished.IsZero() || !finished.Before(job.LeaseUntil.Time) {
+				return ErrMaintenancePreparationStale
+			}
+			return nil
+		})
+	}
 	retry := o.PendingRetry
 	original := err
 	if err != nil {

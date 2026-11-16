@@ -305,6 +305,7 @@ type Querier interface {
 	LockMaintenanceBuild(ctx context.Context, id pgtype.UUID) (AlmanacMaintenanceBuild, error)
 	LockMaintenanceComparison(ctx context.Context, id pgtype.UUID) (AlmanacMaintenanceComparison, error)
 	LockMaintenanceCompatibility(ctx context.Context, sloID pgtype.UUID) (AlmanacMaintenanceCompatibility, error)
+	LockMaintenanceExtremaParent(ctx context.Context, id pgtype.UUID) (AlmanacSloExtremaCursor, error)
 	LockMaintenanceHourBuild(ctx context.Context, id pgtype.UUID) (AlmanacMaintenanceBuild, error)
 	// Preparation uses caller READ COMMITTED; facts are read after authority locks.
 	LockMaintenanceHourSli(ctx context.Context, id pgtype.UUID) (pgtype.UUID, error)
@@ -341,6 +342,12 @@ type Querier interface {
 	PreviewCalculatedRetention(ctx context.Context, arg PreviewCalculatedRetentionParams) (PreviewCalculatedRetentionRow, error)
 	PruneExpiredLoginAttempts(ctx context.Context, nowAt pgtype.Timestamptz) error
 	PublishDerivedCurrentProjection(ctx context.Context, arg PublishDerivedCurrentProjectionParams) (int64, error)
+	// The resource/source, parent cursor and targeted job fences are held by the
+	// caller. This publication never advances the parent's progress/dirty range.
+	PublishMaintenanceSloExtrema(ctx context.Context, arg PublishMaintenanceSloExtremaParams) (int64, error)
+	// The resource/source, parent cursor and targeted job fences are held by the
+	// caller. This publication never advances the parent's progress/dirty range.
+	PublishMaintenanceSloExtremaDay(ctx context.Context, arg PublishMaintenanceSloExtremaDayParams) (int64, error)
 	PublishSloExtrema(ctx context.Context, arg PublishSloExtremaParams) (int64, error)
 	PutMaintenanceCompilerMember(ctx context.Context, arg PutMaintenanceCompilerMemberParams) error
 	ReadAlertBinding(ctx context.Context, id pgtype.UUID) (ReadAlertBindingRow, error)
@@ -399,6 +406,8 @@ type Querier interface {
 	// Key arrays are admitted before SQL. Prefer exact build; only when absent seek
 	// one older exact-source candidate. Its proof is validated by the same RR reader.
 	ReadMaintenanceEvaluationScopedHours(ctx context.Context, arg ReadMaintenanceEvaluationScopedHoursParams) ([]ReadMaintenanceEvaluationScopedHoursRow, error)
+	ReadMaintenanceExtremaClaim(ctx context.Context, id pgtype.UUID) (AlmanacMaintenancePreparation, error)
+	ReadMaintenanceExtremaParent(ctx context.Context, arg ReadMaintenanceExtremaParentParams) (AlmanacSloExtremaCursor, error)
 	ReadMaintenanceHour(ctx context.Context, arg ReadMaintenanceHourParams) (ReadMaintenanceHourRow, error)
 	ReadMaintenanceHourDefinition(ctx context.Context, arg ReadMaintenanceHourDefinitionParams) (ReadMaintenanceHourDefinitionRow, error)
 	// A backward predecessor plus a bounded forward PK range; never a revision scan.
@@ -409,6 +418,12 @@ type Querier interface {
 	ReadMaintenanceRevision(ctx context.Context, arg ReadMaintenanceRevisionParams) (ReadMaintenanceRevisionRow, error)
 	ReadMaintenanceSnapshot(ctx context.Context, arg ReadMaintenanceSnapshotParams) ([]AlmanacMaintenanceExclusionRevision, error)
 	ReadMaintenanceState(ctx context.Context, sloID pgtype.UUID) (int64, error)
+	// Caller supplies at most 24 missing exact hour starts from one day snapshot.
+	// An older generation's failure cannot veto a distinct current repair key.
+	ReadMaintenanceTerminalExtremaHours(ctx context.Context, arg ReadMaintenanceTerminalExtremaHoursParams) ([]pgtype.Timestamptz, error)
+	// The caller supplies bounded exact bucket pairs. A terminal target from a
+	// different source snapshot cannot block a newly captured repair.
+	ReadMaintenanceTerminalExtremaTargets(ctx context.Context, arg ReadMaintenanceTerminalExtremaTargetsParams) ([]ReadMaintenanceTerminalExtremaTargetsRow, error)
 	ReadMaintenanceUnionPage(ctx context.Context, arg ReadMaintenanceUnionPageParams) ([]ReadMaintenanceUnionPageRow, error)
 	// Exact table pages read only one bounded, immutable prepared generation.
 	ReadPreparedSloValuePage(ctx context.Context, arg ReadPreparedSloValuePageParams) (ReadPreparedSloValuePageRow, error)

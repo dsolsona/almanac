@@ -1,3 +1,6 @@
+[F4-T51](F4-T51.md) implements the accepted shared scoped-maintenance adoption
+and additive consumer contract, retaining production activation and release gates.
+
 # Implementation tasks
 
 [F4-T50](F4-T50.md) connects maintenance-aware alert evidence and atomic durable
