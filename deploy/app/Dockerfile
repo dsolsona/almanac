@@ -20,7 +20,12 @@ COPY cmd/ ./cmd/
 COPY internal/ ./internal/
 COPY web/assets.go ./web/assets.go
 COPY --from=web /src/web/dist ./web/dist
-RUN CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/almanac ./cmd/almanac
+ARG ALERT_ACCEPTANCE=false
+RUN case "$ALERT_ACCEPTANCE" in \
+      false) CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/almanac ./cmd/almanac ;; \
+      true) CGO_ENABLED=0 go build -tags=alertacceptance -trimpath -ldflags='-s -w' -o /out/almanac ./cmd/almanac ;; \
+      *) exit 2 ;; \
+    esac
 
 # Small runtime with TLS, certificate validation, and volume locking tools.
 FROM debian:bookworm-slim@sha256:99c0b25c46d0214d5a2091092e7908907dcaecd6a962cde0ac700acee222b6f3 AS runtime

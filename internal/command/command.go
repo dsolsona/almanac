@@ -288,6 +288,12 @@ func serveBackend(parent context.Context, cfg config.Config, stderr io.Writer) (
 	defer storageRuntime.Close()
 	lifeCtx, cancelLife := context.WithCancelCause(context.Background())
 	defer cancelLife(context.Canceled)
+	stopAcceptance, err := startAlertAcceptance(lifeCtx, storageRuntime, logger)
+	if err != nil {
+		logger.Error("backend acceptance fixture initialization failed")
+		return 1
+	}
+	defer stopAcceptance()
 	server, err := backendhttp.New(lifeCtx, cfg, service, databaseURL, tlsConfig, assets, storageRuntime)
 	if err != nil {
 		logger.Error("backend server initialization failed")

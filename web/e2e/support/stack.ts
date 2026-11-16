@@ -15,7 +15,8 @@ function docker(args: string[], input?: string): string {
 
 export function composeArgs(...args: string[]): string[] {
   return ['compose', '-p', project, '-f', '../compose.yaml', '-f', '../compose.e2e.yaml',
-    ...(postgresStorage === 'disk' ? ['-f', '../compose.e2e.disk.yaml'] : []), ...args];
+    ...(postgresStorage === 'disk' || process.env.E2E_ALERT_ACCEPTANCE === '1' ? ['-f', '../compose.e2e.disk.yaml'] : []),
+    ...(process.env.E2E_ALERT_ACCEPTANCE === '1' ? ['-f', '../compose.e2e.alerts.yaml'] : []), ...args];
 }
 
 export function compose(...args: string[]): string {

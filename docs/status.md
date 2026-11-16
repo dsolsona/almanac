@@ -1,3 +1,14 @@
+Alerting completion, 2026-11-16: [PR #127](https://github.com/dsolsona/almanac/pull/127)
+now includes the bounded maintenance-authority consumer at `c0d970f`; all four
+application CI checks pass. Three confirmed preparation/cache review defects are
+corrected and their threads resolved. The combined consumer, populated-upgrade
+and regression selection passes under race in 14.953s. An acceptance-only build
+adapter is being verified against the real isolated deployment; its PostgreSQL
+pause/resume, exact maintenance evidence and joined cancellation selection passes
+in 7.197s. Ordinary binaries exclude the adapter. The independent live-fleet and
+catch-up gates remain open, and production activation remains unapproved.
+[F4-T51](tasks/F4-T51.md) records implementation and acceptance evidence.
+
 Maintenance consumer integration, 2026-11-16: [F4-T51](tasks/F4-T51.md)
 now connects shared current/list calculations, retained hourly production,
 queued daily composition, authenticated targeted repair and pinned exact values

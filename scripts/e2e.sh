@@ -26,7 +26,17 @@ case "$E2E_POSTGRES_STORAGE" in
   memory|disk) ;;
   *) printf 'E2E_POSTGRES_STORAGE must be memory or disk\n' >&2; exit 2 ;;
 esac
+export E2E_ALERT_ACCEPTANCE="${E2E_ALERT_ACCEPTANCE:-0}"
+case "$E2E_ALERT_ACCEPTANCE" in
+  0) ;;
+  1) export E2E_POSTGRES_STORAGE=disk; mkdir -p -m 0755 .local/alert-acceptance/control ;;
+  *) printf 'E2E_ALERT_ACCEPTANCE must be 0 or 1\n' >&2; exit 2 ;;
+esac
 compose() {
+  if [ "$E2E_ALERT_ACCEPTANCE" = 1 ]; then
+    docker compose -p "$COMPOSE_PROJECT_NAME" -f compose.yaml -f compose.e2e.yaml -f compose.e2e.disk.yaml -f compose.e2e.alerts.yaml "$@"
+    return
+  fi
   if [ "$E2E_POSTGRES_STORAGE" = disk ]; then
     docker compose -p "$COMPOSE_PROJECT_NAME" -f compose.yaml -f compose.e2e.yaml -f compose.e2e.disk.yaml "$@"
   else
@@ -43,6 +53,9 @@ down() {
 
 up() {
   down
+  if [ "$E2E_ALERT_ACCEPTANCE" = 1 ]; then
+    rm -f .local/alert-acceptance/control/pause
+  fi
   compose build --quiet
   compose --profile agent build --quiet agent
   # A rebuild leaves the previous images untagged; remove this project's, never anyone else's.

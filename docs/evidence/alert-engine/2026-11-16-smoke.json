@@ -1,0 +1,342 @@
+{
+  "date": "2026-11-16",
+  "base": "c0d970f",
+  "profile": "alertacceptance-v1",
+  "image": "sha256:a8d739b40af2b570e10d1be5b478d832574e522b9179186cb696039b89332acf",
+  "source_sha256": {
+    "internal/storage/alert_acceptance.go": "99b5f5fa891336e0ce1533033ce465e2b37c3f7fb2905d1a354128487f91afdd",
+    "internal/storage/alert_acceptance_integration_test.go": "3303e92ec60312ea4df769309f638308c0181db34ad06797f510d81f3b43d884",
+    "internal/command/command.go": "5c49942c93d0b89b01cfc551d01d6cc893a2f290704605bc4a48f46846c5dd98",
+    "internal/command/alert_acceptance_enabled.go": "9b7b1b0da1ecbed6c782061457605ea4d4287b98ec7f83396e216d05e5410dbf",
+    "internal/command/alert_acceptance_disabled.go": "d1804ec46623b8da86154dc28eec670fa7a2a5b5c77cb0b96168b64119bcf981",
+    "deploy/app/Dockerfile": "b8fa7714f87c44c4f6d5557af4a86110ac2cbce235918f11893e968a2a0a4fa1",
+    "compose.e2e.alerts.yaml": "333e8e5d700f0e18f4cd45f908f692fb0e6f6f49e0f9624ea15e7b7874f1c449",
+    "scripts/e2e.sh": "3d13f83f9fe31d6ff8880c96c31e9d4436a11efa233739863aba16212055ceba",
+    "web/perf/alert-engine.perf.ts": "9db9da98018c65a32e42cea188e8c42da185146848be23d665f8a588e5daccde",
+    "web/playwright.alert-engine.config.ts": "1ada7eea15691cdee4ee56a57fc85f00f06ea15579c912da2e4f011d99012640",
+    "web/e2e/support/stack.ts": "40904a8c7f62de54af2f4a577bd9ac41a5d0294c760af4f0860b14f8625f1b22"
+  },
+  "smoke": {
+    "started": "2026-11-16T19:19:14.718Z",
+    "completed": "2026-11-16T19:21:02.339Z",
+    "size": 1,
+    "fleet": [
+      {
+        "sli": "a4c81717-4d19-4dbe-8e44-2a6e95df1d10",
+        "slo": "96c29baf-789b-48f6-a1f1-7e22804c7a36",
+        "policy": "f0e30c14-f4d1-4562-813c-40b154656766"
+      }
+    ],
+    "journals": [
+      {
+        "id": "7914536d-82bd-495d-a121-7bead902af28",
+        "truth": "breaching",
+        "result": {
+          "Version": 1,
+          "Occurrence": {
+            "ID": "6d12c640-17aa-483e-a59f-7a2ad1589bfe",
+            "State": "firing",
+            "ClosedAt": "0001-01-01T00:00:00Z",
+            "PolicyID": "f0e30c14-f4d1-4562-813c-40b154656766",
+            "Revision": 1,
+            "UpdatedAt": "2026-11-16T19:21:00.925835Z",
+            "AcknowledgedAt": "0001-01-01T00:00:00Z",
+            "AcknowledgedBy": "",
+            "FiringSnapshot": {
+              "SLOID": "96c29baf-789b-48f6-a1f1-7e22804c7a36",
+              "Cutoff": "2026-11-16T19:20:00Z",
+              "SLIRevision": 1,
+              "SLORevision": 1,
+              "SourceGeneration": 421,
+              "ExclusionRevision": 0,
+              "CalculationVersion": "occurrences-operational-v1"
+            },
+            "LatestSnapshot": {
+              "SLOID": "96c29baf-789b-48f6-a1f1-7e22804c7a36",
+              "Cutoff": "2026-11-16T19:20:00Z",
+              "SLIRevision": 1,
+              "SLORevision": 1,
+              "SourceGeneration": 421,
+              "ExclusionRevision": 0,
+              "CalculationVersion": "occurrences-operational-v1"
+            },
+            "OpenedDetectedAt": "2026-11-16T19:21:00.925835Z",
+            "LatestBreachingSnapshot": {
+              "SLOID": "96c29baf-789b-48f6-a1f1-7e22804c7a36",
+              "Cutoff": "2026-11-16T19:20:00Z",
+              "SLIRevision": 1,
+              "SLORevision": 1,
+              "SourceGeneration": 421,
+              "ExclusionRevision": 0,
+              "CalculationVersion": "occurrences-operational-v1"
+            }
+          },
+          "EvaluationID": "7914536d-82bd-495d-a121-7bead902af28",
+          "FormatVersion": 1
+        },
+        "evidence": {
+          "Input": {
+            "Policy": {
+              "ID": "f0e30c14-f4d1-4562-813c-40b154656766",
+              "Revision": 1,
+              "Conditions": [
+                {
+                  "ID": "fast",
+                  "Long": 3600,
+                  "Short": 300,
+                  "Threshold": "14.4"
+                },
+                {
+                  "ID": "sustained",
+                  "Long": 21600,
+                  "Short": 1800,
+                  "Threshold": "6"
+                }
+              ]
+            },
+            "Windows": [
+              {
+                "End": "2026-11-16T19:20:00Z",
+                "Good": "49400",
+                "Start": "2026-11-16T19:15:00Z",
+                "Total": "50000",
+                "Reason": "",
+                "Quality": "complete",
+                "Snapshot": {
+                  "SLOID": "96c29baf-789b-48f6-a1f1-7e22804c7a36",
+                  "Cutoff": "2026-11-16T19:20:00Z",
+                  "SLIRevision": 1,
+                  "SLORevision": 1,
+                  "SourceGeneration": 421,
+                  "ExclusionRevision": 0,
+                  "CalculationVersion": "occurrences-operational-v1"
+                },
+                "Maintenance": {
+                  "ComputedRevision": 0,
+                  "RequestedRevision": 0
+                }
+              },
+              {
+                "End": "2026-11-16T19:20:00Z",
+                "Good": "291900",
+                "Start": "2026-11-16T18:50:00Z",
+                "Total": "300000",
+                "Reason": "",
+                "Quality": "complete",
+                "Snapshot": {
+                  "SLOID": "96c29baf-789b-48f6-a1f1-7e22804c7a36",
+                  "Cutoff": "2026-11-16T19:20:00Z",
+                  "SLIRevision": 1,
+                  "SLORevision": 1,
+                  "SourceGeneration": 421,
+                  "ExclusionRevision": 0,
+                  "CalculationVersion": "occurrences-operational-v1"
+                },
+                "Maintenance": {
+                  "ComputedRevision": 0,
+                  "RequestedRevision": 0
+                }
+              },
+              {
+                "End": "2026-11-16T19:20:00Z",
+                "Good": "582900",
+                "Start": "2026-11-16T18:20:00Z",
+                "Total": "600000",
+                "Reason": "",
+                "Quality": "complete",
+                "Snapshot": {
+                  "SLOID": "96c29baf-789b-48f6-a1f1-7e22804c7a36",
+                  "Cutoff": "2026-11-16T19:20:00Z",
+                  "SLIRevision": 1,
+                  "SLORevision": 1,
+                  "SourceGeneration": 421,
+                  "ExclusionRevision": 0,
+                  "CalculationVersion": "occurrences-operational-v1"
+                },
+                "Maintenance": {
+                  "ComputedRevision": 0,
+                  "RequestedRevision": 0
+                }
+              },
+              {
+                "End": "2026-11-16T19:20:00Z",
+                "Good": "3492900",
+                "Start": "2026-11-16T13:20:00Z",
+                "Total": "3600000",
+                "Reason": "",
+                "Quality": "complete",
+                "Snapshot": {
+                  "SLOID": "96c29baf-789b-48f6-a1f1-7e22804c7a36",
+                  "Cutoff": "2026-11-16T19:20:00Z",
+                  "SLIRevision": 1,
+                  "SLORevision": 1,
+                  "SourceGeneration": 421,
+                  "ExclusionRevision": 0,
+                  "CalculationVersion": "occurrences-operational-v1"
+                },
+                "Maintenance": {
+                  "ComputedRevision": 0,
+                  "RequestedRevision": 0
+                }
+              }
+            ],
+            "Snapshot": {
+              "SLOID": "96c29baf-789b-48f6-a1f1-7e22804c7a36",
+              "Cutoff": "2026-11-16T19:20:00Z",
+              "SLIRevision": 1,
+              "SLORevision": 1,
+              "SourceGeneration": 421,
+              "ExclusionRevision": 0,
+              "CalculationVersion": "occurrences-operational-v1"
+            },
+            "Objective": {
+              "Target": "0.999",
+              "Cadence": 60,
+              "RetentionStart": "2025-11-16T19:21:00.903374Z",
+              "DefinitionValidFrom": "2026-11-16T12:19:00Z",
+              "MeasurementValidFrom": "2026-11-16T12:19:00Z"
+            },
+            "RecoveryBaseline": null
+          },
+          "Evaluation": {
+            "Truth": "breaching",
+            "PolicyID": "f0e30c14-f4d1-4562-813c-40b154656766",
+            "Revision": 1,
+            "Snapshot": {
+              "SLOID": "96c29baf-789b-48f6-a1f1-7e22804c7a36",
+              "Cutoff": "2026-11-16T19:20:00Z",
+              "SLIRevision": 1,
+              "SLORevision": 1,
+              "SourceGeneration": 421,
+              "ExclusionRevision": 0,
+              "CalculationVersion": "occurrences-operational-v1"
+            },
+            "Conditions": [
+              {
+                "ID": "fast",
+                "Long": {
+                  "End": "2026-11-16T19:20:00Z",
+                  "Good": "582900",
+                  "Start": "2026-11-16T18:20:00Z",
+                  "Total": "600000",
+                  "Reason": "",
+                  "Quality": "complete",
+                  "Snapshot": {
+                    "SLOID": "96c29baf-789b-48f6-a1f1-7e22804c7a36",
+                    "Cutoff": "2026-11-16T19:20:00Z",
+                    "SLIRevision": 1,
+                    "SLORevision": 1,
+                    "SourceGeneration": 421,
+                    "ExclusionRevision": 0,
+                    "CalculationVersion": "occurrences-operational-v1"
+                  },
+                  "Maintenance": {
+                    "ComputedRevision": 0,
+                    "RequestedRevision": 0
+                  }
+                },
+                "Short": {
+                  "End": "2026-11-16T19:20:00Z",
+                  "Good": "49400",
+                  "Start": "2026-11-16T19:15:00Z",
+                  "Total": "50000",
+                  "Reason": "",
+                  "Quality": "complete",
+                  "Snapshot": {
+                    "SLOID": "96c29baf-789b-48f6-a1f1-7e22804c7a36",
+                    "Cutoff": "2026-11-16T19:20:00Z",
+                    "SLIRevision": 1,
+                    "SLORevision": 1,
+                    "SourceGeneration": 421,
+                    "ExclusionRevision": 0,
+                    "CalculationVersion": "occurrences-operational-v1"
+                  },
+                  "Maintenance": {
+                    "ComputedRevision": 0,
+                    "RequestedRevision": 0
+                  }
+                },
+                "Outcome": "not_matching",
+                "Threshold": "14.4"
+              },
+              {
+                "ID": "sustained",
+                "Long": {
+                  "End": "2026-11-16T19:20:00Z",
+                  "Good": "3492900",
+                  "Start": "2026-11-16T13:20:00Z",
+                  "Total": "3600000",
+                  "Reason": "",
+                  "Quality": "complete",
+                  "Snapshot": {
+                    "SLOID": "96c29baf-789b-48f6-a1f1-7e22804c7a36",
+                    "Cutoff": "2026-11-16T19:20:00Z",
+                    "SLIRevision": 1,
+                    "SLORevision": 1,
+                    "SourceGeneration": 421,
+                    "ExclusionRevision": 0,
+                    "CalculationVersion": "occurrences-operational-v1"
+                  },
+                  "Maintenance": {
+                    "ComputedRevision": 0,
+                    "RequestedRevision": 0
+                  }
+                },
+                "Short": {
+                  "End": "2026-11-16T19:20:00Z",
+                  "Good": "291900",
+                  "Start": "2026-11-16T18:50:00Z",
+                  "Total": "300000",
+                  "Reason": "",
+                  "Quality": "complete",
+                  "Snapshot": {
+                    "SLOID": "96c29baf-789b-48f6-a1f1-7e22804c7a36",
+                    "Cutoff": "2026-11-16T19:20:00Z",
+                    "SLIRevision": 1,
+                    "SLORevision": 1,
+                    "SourceGeneration": 421,
+                    "ExclusionRevision": 0,
+                    "CalculationVersion": "occurrences-operational-v1"
+                  },
+                  "Maintenance": {
+                    "ComputedRevision": 0,
+                    "RequestedRevision": 0
+                  }
+                },
+                "Outcome": "matching",
+                "Threshold": "6"
+              }
+            ],
+            "RecoveryComparison": null
+          },
+          "FormatVersion": 1
+        },
+        "revision": 1,
+        "policy_id": "f0e30c14-f4d1-4562-813c-40b154656766",
+        "claim_epoch": 2,
+        "claim_token": "242ed47c-bbb5-4cab-92cd-0ceea77d0f94",
+        "committed_at": "2026-11-16T19:21:00.925835+00:00",
+        "input_digest": "\\xbab44dc4787e396ce863e840a09b31a6cf622ed2ae13707a0f38a317c181eb33",
+        "scheduled_at": "2026-11-16T19:21:00+00:00",
+        "effective_cutoff": "2026-11-16T19:20:00+00:00",
+        "source_generation": 421,
+        "exclusion_revision": 0
+      }
+    ],
+    "acknowledged": "6d12c640-17aa-483e-a59f-7a2ad1589bfe",
+    "capacityAcceptance": false,
+    "productionActivated": false
+  },
+  "checks": {
+    "postgres_race_seconds": 7.197,
+    "tagged_command_race_seconds": 1.021,
+    "deployed_tests": 2,
+    "deployed_minutes": 1.9,
+    "normal_binary_excludes_workers": true
+  },
+  "limits": [
+    "Size-one smoke; no capacity claim.",
+    "No nonzero masks in deployed smoke; exact masked evidence tested separately in PostgreSQL.",
+    "Production activation and acceptance profile remain gated."
+  ]
+}
