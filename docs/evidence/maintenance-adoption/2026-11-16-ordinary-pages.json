@@ -1,0 +1,226 @@
+{
+  "date": "2026-11-16",
+  "result": "passed",
+  "command": "E2E_POSTGRES_STORAGE=disk E2E_KEEP=1 make test-perf",
+  "candidate_base": "4d52185f88bd3f7a4f2cc7f30c57fe32ffad54a5",
+  "application_code": "a3f9cac17422b80478c02b209e4bcebb5d0e5308",
+  "fixture_change": "Forward the existing storage/keep controls through the Docker-socket development overlay; explicit and unset values verified.",
+  "application_image": "sha256:bad2692ae06fe1333f7f0fd772ac9fe27ad340045ec3c9d9f04db7f8ffc2a2a8",
+  "memory_bytes": 4130635776,
+  "storage": "disk volume; actual PostgreSQL mount inspected",
+  "tests_passed": 6,
+  "suite_duration": "8.7 minutes",
+  "seed_duration": "5.9 minutes",
+  "results": {
+    "budget_ms": 1000,
+    "fleet": {
+      "size": 20,
+      "days": 35
+    },
+    "summary": [
+      {
+        "page": "slo.list",
+        "load": "cold",
+        "runs": 10,
+        "median_ms": 576,
+        "p95_ms": 654,
+        "max_ms": 654
+      },
+      {
+        "page": "slo.list",
+        "load": "warm",
+        "runs": 10,
+        "median_ms": 252,
+        "p95_ms": 321,
+        "max_ms": 321
+      },
+      {
+        "page": "slo.detail",
+        "load": "cold",
+        "runs": 10,
+        "median_ms": 351,
+        "p95_ms": 498,
+        "max_ms": 498
+      },
+      {
+        "page": "slo.detail",
+        "load": "warm",
+        "runs": 10,
+        "median_ms": 73,
+        "p95_ms": 114,
+        "max_ms": 114
+      },
+      {
+        "page": "sli.list",
+        "load": "cold",
+        "runs": 10,
+        "median_ms": 310,
+        "p95_ms": 496,
+        "max_ms": 496
+      },
+      {
+        "page": "sli.list",
+        "load": "warm",
+        "runs": 10,
+        "median_ms": 73,
+        "p95_ms": 111,
+        "max_ms": 111
+      },
+      {
+        "page": "sli.detail",
+        "load": "cold",
+        "runs": 10,
+        "median_ms": 375,
+        "p95_ms": 522,
+        "max_ms": 522
+      },
+      {
+        "page": "sli.detail",
+        "load": "warm",
+        "runs": 10,
+        "median_ms": 102,
+        "p95_ms": 168,
+        "max_ms": 168
+      }
+    ],
+    "samples": {
+      "slo.list": {
+        "cold": [
+          572,
+          589,
+          527,
+          654,
+          639,
+          551,
+          477,
+          613,
+          576,
+          618
+        ],
+        "warm": [
+          288,
+          307,
+          221,
+          223,
+          208,
+          259,
+          252,
+          300,
+          321,
+          180
+        ]
+      },
+      "slo.detail": {
+        "cold": [
+          373,
+          498,
+          277,
+          302,
+          486,
+          415,
+          363,
+          281,
+          290,
+          351
+        ],
+        "warm": [
+          114,
+          47,
+          107,
+          59,
+          73,
+          48,
+          81,
+          79,
+          89,
+          51
+        ]
+      },
+      "sli.list": {
+        "cold": [
+          341,
+          273,
+          255,
+          331,
+          310,
+          288,
+          315,
+          496,
+          298,
+          324
+        ],
+        "warm": [
+          93,
+          59,
+          66,
+          94,
+          103,
+          60,
+          77,
+          111,
+          73,
+          45
+        ]
+      },
+      "sli.detail": {
+        "cold": [
+          335,
+          375,
+          489,
+          305,
+          522,
+          475,
+          401,
+          305,
+          502,
+          347
+        ],
+        "warm": [
+          98,
+          102,
+          89,
+          106,
+          147,
+          94,
+          114,
+          168,
+          112,
+          80
+        ]
+      }
+    }
+  },
+  "windows": [
+    {
+      "phase": "ingesting",
+      "seconds": 60.231,
+      "observations_accepted": 20,
+      "wal_bytes": 998144
+    },
+    {
+      "phase": "idle",
+      "seconds": 60.26,
+      "observations_accepted": 0,
+      "wal_bytes": 458864
+    }
+  ],
+  "statement_counter_unavailable_reason": "pg_stat_statements requires server startup with shared_preload_libraries",
+  "source_sha256": {
+    "compose.dev.socket.yaml": "2eeff9757003c0e3ed525dc57a8f713702eac50db0fe7d6de7c71d681e67aae2",
+    "internal/storage/derived_current.go": "3905315092654957f3d7439c1560dab6ae6b7ae98e013ecb53ffd5c8cef7d5e7",
+    "internal/storage/derived_budget.go": "a353dfdd849fb047d32480549e40b1fd9ee1a02e801b7e1e0af6d3c132d2e151",
+    "internal/storage/query/slo_extrema.sql": "e05adf8644c964fd0cf51ce88d3b49dce4d1fc9975fb13c89406f7ea94bfd9f5",
+    "internal/storage/query/slo_sparkline.sql": "83642f27f9134214773155a24d0875da174918d7650aa72b3992e00f494302e0",
+    "web/perf/pages.perf.ts": "7c82fc7310f412cdb4727e59ab904d98875a81de3c37d7d8ba77d34eb108be15",
+    "web/perf/seed.setup.ts": "b9e477978179f6086ad3b714a4a475e082c1aee1d1dec1b390d6227e94ab1116",
+    "web/src/slos/client.ts": "ccc9c4886741f38e526413a88821af79bc7ccacd856df91f9fb200f50eaf2a08",
+    "web/src/slos/maintenance.ts": "fd554d82434df16f2ba5e5b3ba895dabd94ef1f1ff34f8b303e2321346ea25f1"
+  },
+  "limitations": [
+    "Ordinary prepared 20-SLI/20-SLO navigation, with 35 days of history; not a 200-SLI stress workload.",
+    "Production maintenance-consumer and alert-worker profiles remain disabled. Nonzero-mask/live alert capacity and total detection delay are not established.",
+    "Ten cold and ten in-app samples per page; p95 equals the maximum for this sample count.",
+    "Cold SLO list and SLI detail exceed the preferred 500 ms target but every sample is below the 1000 ms gate.",
+    "Statement counters and runtime metrics are unavailable in the normal fixture configuration."
+  ]
+}

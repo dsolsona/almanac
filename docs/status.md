@@ -8,9 +8,13 @@ terminal dependencies explicit failed gaps and remove no-eligible provenance tha
 could fail client validation. Combined checks pass 90 integration groups / 165 cases; all eleven deployed
 collection/SLO/alert-management journeys pass. Ready [PR #127](https://github.com/dsolsona/almanac/pull/127)
 is open. Its initial integration CI exposes one stale migration-count fixture,
-corrected in focused verification. Ordinary page-performance seeding is under
-diagnosis after tmpfs OOM and a separate disk-backed timeout; no page timings
-are claimed. Production
+corrected in focused verification. All four application CI checks now pass on `4d52185`. Ordinary page-performance
+seeding exposed tmpfs OOM and missing host-to-container fixture controls. Their
+forwarding correction is verified. The actual disk-backed 35-day/20-SLO run passes
+all six checks: cold/in-app p95 is 654/321ms for SLO list, 498/114ms for SLO detail,
+496/111ms for SLI list and 522/168ms for SLI detail. All samples meet the <1,000ms
+gate. [Evidence](evidence/maintenance-adoption/2026-11-16-ordinary-pages.json)
+records the ordinary profile and excludes nonzero-mask/live-engine capacity claims. Production
 profiles, preparation/alert runtime registration and live-load/cold-browser release
 gates remain open; these focused checks do not claim capacity or activation.
 
