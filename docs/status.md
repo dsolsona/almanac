@@ -5,8 +5,13 @@ deferred. The existing component configuration now supports backend/UI/alerts,
 using one shared processor lifecycle in ordinary and tagged binaries. Focused
 component, HTTP-constructor, ownership/shutdown and disabled-evaluator checks
 pass; independent review finds no actionable startup defect. The normal Docker
-binary is undergoing a single-policy firing/acknowledgement/recovery check.
-No capacity or performance suite is running. [F4-T51](tasks/F4-T51.md) records
+binary passes the single-policy firing/acknowledgement/recovery check in 5.8m,
+using the same occurrence and real provider measurements. The local deployment
+is healthy with alerts enabled; UI navigation, real SLO selection and policy
+create/save/disable flows pass on the identical binary. The isolated test stack
+is stopped. All four application CI checks and CodeRabbit pass on runtime head `6e424ce`,
+with no unresolved review threads. No capacity or performance suite is running.
+[F4-T51](tasks/F4-T51.md) records
 the amended scope, implementation and verification.
 
 Alerting implementation, 2026-11-16: [PR #127](https://github.com/dsolsona/almanac/pull/127)

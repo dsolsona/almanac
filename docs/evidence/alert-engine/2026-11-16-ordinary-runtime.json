@@ -35,11 +35,26 @@
     "independent_review": "No actionable startup/configuration findings."
   },
   "one_policy_journey": {
-    "result": "in_progress",
+    "result": "passed",
+    "duration_seconds": 345.61,
+    "began_at": "2026-11-16T22:21:19.607Z",
+    "completed_at": "2026-11-16T22:27:05.217Z",
     "normal_binary": true,
-    "collector_count": 1,
+    "policy": "f6908f58-c1ed-44f8-8978-c4d1375a25e4",
+    "slo": "4f70eb4c-2093-4dcc-856c-0f18e1792eaa",
+    "occurrence": "e8c15be8-8cfb-4c1b-8eca-4e796efb3725",
+    "states": [
+      "firing",
+      "acknowledged",
+      "resolved"
+    ],
+    "source": "live provider changes and ordinary backend processing",
     "capacity_check": false,
-    "initial_fixture_failure": "A120-second firing wait expired during correctly recorded before_policy_activation ranges. Two scheduled slots22:02 and22:03 on the preserved fixture had cutoffs before policy activation. The affected functional selector uses the existing five-minute smoke allowance; the image is unchanged."
+    "preserved_fixture_failures": [
+      "The initial 120-second firing wait omitted correctly skipped before-policy-activation cutoffs.",
+      "A new provider series had no value at earlier query timestamps; the synthetic initial bad population is now defined explicitly.",
+      "Reusing the isolated fixture exposed a constant policy-name collision; each invocation now generates a unique name."
+    ]
   },
   "capacity_checks_run": false,
   "performance_suite_run": false,
@@ -52,5 +67,35 @@
     "result": "passed",
     "scope": "Sidebar navigation, real SLO search/selection, policy creation/save, disable and policy-list read",
     "same_binary_digest_as_local": true
-  }
+  },
+  "implementation_head": "6e424ce",
+  "independent_fixture_counts": {
+    "breaching": {
+      "scheduled_at": "2026-11-16T22:24:00+00:00",
+      "cutoff": "2026-11-16T22:22:00+00:00",
+      "windows": [
+        {
+          "Start": "2026-11-16T22:21:00Z",
+          "End": "2026-11-16T22:22:00Z",
+          "Good": "9700",
+          "Total": "10000",
+          "Quality": "complete"
+        }
+      ]
+    },
+    "clear": {
+      "scheduled_at": "2026-11-16T22:27:00+00:00",
+      "cutoff": "2026-11-16T22:25:00+00:00",
+      "windows": [
+        {
+          "Start": "2026-11-16T22:24:00Z",
+          "End": "2026-11-16T22:25:00Z",
+          "Good": "10000",
+          "Total": "10000",
+          "Quality": "complete"
+        }
+      ]
+    }
+  },
+  "isolated_stack_stopped_after_check": true
 }
