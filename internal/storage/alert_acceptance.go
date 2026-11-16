@@ -101,6 +101,7 @@ func (r *Runtime) startAlertAcceptance(ctx context.Context, logger *slog.Logger,
 		_, err := r.runMaintenancePreparationTurn(ctx, tick, preparation, clock)
 		return err
 	})
+	evaluationPaused := false
 	run("evaluation", func(ctx context.Context, tick time.Time) error {
 		paused, err := alertAcceptancePaused(cfg.PauseFile)
 		if err != nil {
@@ -108,7 +109,15 @@ func (r *Runtime) startAlertAcceptance(ctx context.Context, logger *slog.Logger,
 			return nil
 		}
 		if paused {
+			if !evaluationPaused {
+				logger.InfoContext(ctx, "alert acceptance evaluator paused")
+				evaluationPaused = true
+			}
 			return nil
+		}
+		if evaluationPaused {
+			logger.InfoContext(ctx, "alert acceptance evaluator resumed")
+			evaluationPaused = false
 		}
 		_, err = r.processAlertTick(ctx, tick, processor, clock)
 		return err

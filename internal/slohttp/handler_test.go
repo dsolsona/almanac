@@ -57,6 +57,19 @@ func TestPreparationProblemsExposeBoundedRecoveryMetadata(t *testing.T) {
 	}
 }
 
+func TestLegacyEvaluationMaintenanceIsUnavailableWithoutPreparation(t *testing.T) {
+	t.Parallel()
+	w := httptest.NewRecorder()
+	storageError(w, storage.ErrSloEvaluationMaintenanceUnsupported, "request-id")
+	var p api.Problem
+	if err := json.Unmarshal(w.Body.Bytes(), &p); err != nil {
+		t.Fatal(err)
+	}
+	if w.Code != http.StatusServiceUnavailable || p.Code != "unavailable" || p.Preparation != nil || w.Header().Get("Retry-After") != "" {
+		t.Fatalf("unsupported legacy evaluation advertised preparation/retry: %d %s", w.Code, w.Body.String())
+	}
+}
+
 func TestObjectiveRoutesRequireSessionAndCSRF(t *testing.T) {
 	auth, err := authhttp.New(&authentication.Service{}, authhttp.Options{PublicOrigin: "https://example.test", Now: time.Now})
 	if err != nil {

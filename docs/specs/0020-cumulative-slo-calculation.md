@@ -159,6 +159,13 @@ intervals. A fully excluded current value contributes a Watch reason `excluded`
 to list/detail/service urgency; existing higher-priority independent reasons still
 win. No new numerical urgency threshold or UI layout is introduced.
 
+The legacy ephemeral `/slos/{id}/evaluation` DTO and `slos evaluate` command
+support revision-zero calculation only. Nonzero exclusion authority returns the
+existing HTTP 503 `unavailable` problem without preparation metadata or a
+`Retry-After` header; it must not return unadjusted numerical success. A final
+authority fence prevents a maintenance change during an R=0 read from publishing
+that old result. This guard does not extend the legacy DTO's calculation contract.
+
 #### Additive wire contract
 
 Apply these additions consistently to API, generated types and strict UI/CLI

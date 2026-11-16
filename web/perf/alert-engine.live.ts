@@ -212,11 +212,35 @@ function conditionHandoffs(fleet: FleetItem[]) {
  SELECT 1 FROM almanac_alert_evaluations e WHERE e.policy_id=o.policy_id AND EXISTS(SELECT 1 FROM jsonb_array_elements(e.evidence->'Evaluation'->'Conditions') c WHERE c->>'ID'='fast' AND c->>'Outcome'='not_matching') AND EXISTS(SELECT 1 FROM jsonb_array_elements(e.evidence->'Evaluation'->'Conditions') c WHERE c->>'ID'='sustained' AND c->>'Outcome'='matching'))`));
 }
 
+function closedHistoryReady(fleet: FleetItem[], through: string) {
+  return Number(psql(`SELECT count(*) FROM almanac_slo_current_projections p
+ JOIN almanac_slo_derived_generations g ON g.id=p.generation_id AND g.slo_id=p.slo_id
+ JOIN almanac_slo_exclusion_state x ON x.slo_id=p.slo_id
+ WHERE p.slo_id=ANY(${idsSQL(fleet.map(item => item.slo))})
+ AND g.exclusion_revision=x.revision
+ AND p.payload->>'budget_history_state'='ready'
+ AND p.payload #>> '{budget_history_generation,generation_id}'=g.id::text
+ AND p.payload #>> '{budget_history_generation,exclusion_revision}'=x.revision::text
+ AND p.payload #>> '{_budget_cache,closed_ready}'='true'
+ AND (p.payload #>> '{_budget_cache,closed_through}')::timestamptz>='${through}'::timestamptz
+ AND EXISTS(SELECT 1 FROM jsonb_array_elements(p.payload->'budget_sparkline') point
+ WHERE point->>'good' IS NOT NULL AND point->>'total' IS NOT NULL AND point->>'remaining_fraction' IS NOT NULL)`));
+}
+
+async function pauseEvaluation() {
+  const requestedAt = new Date().toISOString();
+  writeFileSync(`${control}/pause`, 'pause evaluator only');
+  // This event is emitted only after the prior bounded turn has returned.
+  await expect.poll(() => compose('logs', '--no-color', '--since', requestedAt, 'app')
+    .includes('"msg":"alert acceptance evaluator paused"'), {timeout: 30_000, intervals: [1000]}).toBe(true);
+  return {requestedAt, acknowledgedAt: new Date().toISOString()};
+}
+
 export async function runAlertEngineLive(page: Page, browser: Browser, size: number) {
   if (![100, 200].includes(size) || process.env.E2E_ALERT_ACCEPTANCE !== '1') throw new Error('live acceptance requires the tagged deployment and size100/200');
   mkdirSync(root, {recursive: true}); mkdirSync(control, {recursive: true});
   const name = unique('engine-live'), beganAt = new Date().toISOString();
-  const phaseEpoch = Number(psql(`SELECT extract(epoch FROM date_trunc('minute',clock_timestamp())+interval '15 minutes')::bigint`));
+  const phaseEpoch = Number(psql(`SELECT extract(epoch FROM date_trunc('minute',clock_timestamp())+interval '20 minutes')::bigint`));
   const goodQuery = `vector(9000 + 1000 * (time() >= bool ${phaseEpoch}))`;
   const main = await datasource(page, `${name}-main`), missing = await datasource(page, `${name}-missing`);
   const fleet: FleetItem[] = [], journeys: Journey[] = [], apiSamples: APISample[] = [], healthSamples: unknown[] = [], events: unknown[] = [], ingestionSamples: unknown[] = [];
@@ -252,14 +276,8 @@ FROM proof p CROSS JOIN LATERAL generate_series('${start}'::timestamptz,p.interv
 ${marking.replaceAll('$1', sqlID(id))}
 COMMIT;`);
     }
-    // Initial backfill must finish before measuring ingestion-only interference.
+    // Complete the canonical seed before creating consumers.
     await expect.poll(() => Number(psql(`SELECT count(*) FROM almanac_derived_dirty_ranges WHERE sli_id=ANY(${idsSQL(slis.map(item => item.id))})`)), {timeout: 5 * minute, intervals: [1000]}).toBe(0);
-    // Actual live ingestion, without policies, supplies the comparison baseline.
-    const baselineStart = ingestionMetrics();
-    await sleep(minute);
-    const baselineEnd = ingestionMetrics(), baseline = ingestionDelta(baselineStart, baselineEnd);
-    expect(baseline.accepted).toBeGreaterThan(0);
-    save('ingestion-baseline', {baselineStart, baselineEnd, baseline});
     const service = await expectOk(api(page, 'POST', '/api/v1/services', {name, display_name: 'Live engine acceptance'}));
     for (const [index, item] of slis.entries()) {
       const slo = await expectOk(api(page, 'POST', '/api/v1/slos', {name: `${name}-${index}`, display_name: `Engine SLO ${String(index).padStart(3, '0')}`,
@@ -297,17 +315,34 @@ COMMIT;`);
     save('live-initial-continuity', { ...initialContinuity, conditionHandoffs: conditionHandoffs(fleet), health: health(fleet) });
     expect(fleet.some(item => item.missing && !item.maintained)).toBe(true);
     expect(fleet.some(item => item.missing && item.maintained)).toBe(true);
+    const closedThrough = psql(`SELECT to_char(date_trunc('hour',clock_timestamp()),'YYYY-MM-DD"T"HH24:MI:SS"Z"')`);
+    await expect.poll(() => closedHistoryReady(fleet, closedThrough), {timeout: 5 * minute, intervals: [1000]}).toBe(size);
+    save('live-history-preflight', {at: new Date().toISOString(), closedThrough, readySLOs: size, numericSamplesRequired: true});
     stopAgent(missing.agent.container); missingStopped = true;
+    const baselinePause = await pauseEvaluation();
+    // Keep exactly the same definitions, masks, collectors and background SLO
+    // work as the load phase. Only evaluation and concurrent readers are absent.
+    const baselineStart = ingestionMetrics();
+    await sleep(minute);
+    const baselineEnd = ingestionMetrics(), baseline = ingestionDelta(baselineStart, baselineEnd);
+    expect(baseline.accepted).toBeGreaterThan(0);
+    save('ingestion-baseline', {baselineStart, baselineEnd, baseline, baselinePause,
+      configuredSLIs: size, configuredSLOs: size, policies: size, collectingSLIs: size - size / 10,
+      fragmentedSLOs: size / 2, evaluationPaused: true});
+    rmSync(`${control}/pause`, {force: true});
+    const beforeResources = resourceSnapshot();
+    const image = compose('images', '--quiet', 'app').trim(), database = psql('SELECT version()');
     const liveStart = Date.now(), liveEnd = liveStart + liveDuration;
     const rollover = Math.ceil(liveStart / (60 * minute)) * 60 * minute;
     const sourcePauseAt = rollover - 5000, sourceResumeAt = rollover + 4 * minute;
     let handedOff = false, restarted = false, sourcePaused = false, sourceResumed = false, lateInserted = false;
-    const beforeResources = resourceSnapshot(); segmentStart = ingestionMetrics();
+    segmentStart = ingestionMetrics();
     save('live-profile', {beganAt, liveStart: new Date(liveStart).toISOString(), fixedLiveMinutes: 60, fixedOutageMinutes: size === 200 ? 30 : 0, catchupBudgetMinutes: 5,
       size, distinctSLIs: new Set(fleet.map(item => item.sli)).size, distinctSLOs: new Set(fleet.map(item => item.slo)).size, conditions: 2 * size,
       missingCohort: size / 10, fragmentedSLOs: size / 2, fragmentsPerSLO: 12, historicalGood: 9000, total: 10000, goodQuery, phaseEpoch,
-      cpu: cpus()[0]?.model, logicalCPUs: cpus().length, memoryBytes: totalmem(), postgres: psql('SELECT version()'),
-      image: compose('images', '--quiet', 'app').trim(), sourceHashes: Object.fromEntries(['alert-engine.live.ts', 'alert-engine.perf.ts'].map(file => [file, createHash('sha256').update(readFileSync(new URL(file, import.meta.url))).digest('hex')])),
+      fixtureVersion: 'alert-engine-live-v2',
+      cpu: cpus()[0]?.model, logicalCPUs: cpus().length, memoryBytes: totalmem(), postgres: database,
+      image, sourceHashes: Object.fromEntries(['alert-engine.live.ts', 'alert-engine.perf.ts'].map(file => [file, createHash('sha256').update(readFileSync(new URL(file, import.meta.url))).digest('hex')])),
       apiClients: 10, apiCycleSeconds: 10, browserLanes: 1, browserCycleSeconds: 30,
       numericalWorkerProfile: 'alertacceptance-v1; actual bounds are logged by the tagged backend', productionActivated: false});
     background = [
@@ -385,10 +420,9 @@ COMMIT;`);
     if (size === 200) {
       const pauseAt = new Date().toISOString();
       const observedBefore = Number(psql(`SELECT count(*) FROM almanac_sli_observations WHERE sli_id=ANY(${idsSQL(fleet.filter(item => !item.missing).map(item => item.sli))})`));
-      writeFileSync(`${control}/pause`, 'pause evaluator only');
-      await sleep(5000);
+      const pause = await pauseEvaluation();
       const countBefore = Number(psql(`SELECT count(*) FROM almanac_alert_evaluations WHERE policy_id=ANY(${policyIDs})`));
-      events.push({kind: 'evaluator-outage-start', at: pauseAt, evaluations: countBefore}); checkpoint();
+      events.push({kind: 'evaluator-outage-start', at: pauseAt, ...pause, evaluations: countBefore}); checkpoint();
       await sleep(outageDuration);
       const countAfter = Number(psql(`SELECT count(*) FROM almanac_alert_evaluations WHERE policy_id=ANY(${policyIDs})`));
       const observedAfter = Number(psql(`SELECT count(*) FROM almanac_sli_observations WHERE sli_id=ANY(${idsSQL(fleet.filter(item => !item.missing).map(item => item.sli))})`));
