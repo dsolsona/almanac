@@ -16,7 +16,8 @@ func startAlertAcceptance(ctx context.Context, runtime *storage.Runtime, logger 
 		return nil, err
 	}
 	return runtime.StartAlertAcceptance(ctx, logger, storage.AlertAcceptanceConfig{
-		RetentionStart: retention,
-		PauseFile:      "/run/alert-acceptance/pause",
+		RetentionStart:  retention,
+		PauseFile:       "/run/alert-acceptance/pause",
+		SourcePauseFile: "/run/alert-acceptance/pause-source",
 	})
 }

@@ -17,6 +17,46 @@ import (
 )
 
 func acceptanceLogger() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
+
+func TestIntegrationAlertAcceptanceSourcePause(t *testing.T) {
+	t.Parallel()
+	f := newAlertTestFixture(t)
+	dir := t.TempDir()
+	pause := filepath.Join(dir, "pause-source")
+	if err := os.WriteFile(pause, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	stop, err := f.runtime.startAlertAcceptance(t.Context(), acceptanceLogger(), AlertAcceptanceConfig{
+		RetentionStart: f.historyStart, SourcePauseFile: pause,
+	}, f.clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stop()
+	count := func() int {
+		var n int
+		if err := f.conn.QueryRow(t.Context(), `SELECT count(*) FROM almanac_derived_dirty_ranges WHERE sli_id=$1`, f.sliID).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	before := count()
+	if before == 0 {
+		t.Fatal("fixture has no pending source work")
+	}
+	_, next := f.runtime.runDerivedTurn(t.Context(), acceptanceLogger(), f.clock, f.now.Add(time.Hour))
+	if got := count(); got != before || !next.Equal(f.now.Add(time.Second)) {
+		t.Fatalf("paused source advanced: before=%d after=%d next=%v", before, got, next)
+	}
+	if err := os.Remove(pause); err != nil {
+		t.Fatal(err)
+	}
+	f.runtime.runDerivedTurn(t.Context(), acceptanceLogger(), f.clock, f.now.Add(time.Hour))
+	if got := count(); got != 0 {
+		t.Fatalf("resumed source did not publish original work: %d dirty ranges", got)
+	}
+}
+
 func acceptanceWait(t *testing.T, condition func() bool) {
 	t.Helper()
 	deadline := time.NewTimer(10 * time.Second)

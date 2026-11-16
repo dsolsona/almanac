@@ -54,7 +54,7 @@ down() {
 up() {
   down
   if [ "$E2E_ALERT_ACCEPTANCE" = 1 ]; then
-    rm -f .local/alert-acceptance/control/pause
+    rm -f .local/alert-acceptance/control/pause .local/alert-acceptance/control/pause-source
   fi
   compose build --quiet
   compose --profile agent build --quiet agent

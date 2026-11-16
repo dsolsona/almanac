@@ -17,8 +17,9 @@ import (
 // fixture supplies canonical retention authority; PauseFile stops only alert
 // evaluation while source ingestion and shared preparation continue normally.
 type AlertAcceptanceConfig struct {
-	RetentionStart time.Time
-	PauseFile      string
+	RetentionStart  time.Time
+	PauseFile       string
+	SourcePauseFile string
 }
 
 // This is a pinned experimental profile, not production configuration. All
@@ -50,6 +51,13 @@ func (r *Runtime) startAlertAcceptance(ctx context.Context, logger *slog.Logger,
 	windows := maintenanceWindowLimits{MaxSourceHours: 1000, MaxRawRows: 20000, MaxFragments: 20000}
 	admission := maintenancePreparationLimits{MaxRequests: 16, MaxSourceHours: 1000}
 	consumer := &maintenanceConsumerOptions{Windows: windows, Preparation: admission, MaxRetainedProofs: 960}
+	consumer.pauseSource = func() bool {
+		paused, err := alertAcceptancePaused(cfg.SourcePauseFile)
+		if err != nil {
+			logger.WarnContext(ctx, "alert acceptance source paused", "reason", "pause_file_unreadable")
+		}
+		return paused
+	}
 	processor := alertProcessorOptions{MaxPolicies: 200, Concurrency: 2, Lease: 30 * time.Second, Horizon: 24 * time.Hour, PendingRetry: time.Second, FailureRetry: 2 * time.Second, MaxAttempts: 5, Limits: alert.Limits{MaxConditions: 8, MaxDecimalBytes: 96}, Maintenance: &alertMaintenanceOptions{Windows: windows, Preparation: admission}}
 	preparation := maintenancePreparationTurnOptions{MaxLive: 32, MaxHistorical: 16, Concurrency: 2, PageLimit: 64, Lease: 30 * time.Second, OperationBudget: 5 * time.Second, PendingRetry: time.Second, FailureRetry: 2 * time.Second, MaxAttempts: 5, RetentionStart: cfg.RetentionStart}
 	authority := maintenanceAuthorityOptions{MaxClaims: 16, MaxChanges: 64, MaxBuckets: 24, MaxScanHours: 24, Lease: 30 * time.Second, OperationBudget: 5 * time.Second, PendingRetry: time.Second, FailureRetry: 2 * time.Second, MaxAttempts: 5, RetentionStart: cfg.RetentionStart}

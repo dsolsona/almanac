@@ -29,6 +29,8 @@ type maintenanceConsumerOptions struct {
 	Windows           maintenanceWindowLimits
 	Preparation       maintenancePreparationLimits
 	MaxRetainedProofs int
+	// Only the tagged acceptance adapter supplies this isolated fixture control.
+	pauseSource func() bool
 }
 
 func captureMaintenanceConsumer(ctx context.Context, tx pgx.Tx, row dbgen.GetSloRow, runtime *Runtime) (*maintenanceConsumerSession, error) {

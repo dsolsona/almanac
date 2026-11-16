@@ -2,13 +2,17 @@ import {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import {expect, test} from '@playwright/test';
 import {api, expectOk, unique} from '../e2e/support/api.ts';
 import {psql, startAgent} from '../e2e/support/stack.ts';
+import {runAlertEngineLive} from './alert-engine.live.ts';
 
 const root = '../.local/alert-acceptance';
+const mode = process.env.E2E_ALERT_ENGINE_MODE ?? 'smoke';
+if (!['smoke', 'live'].includes(mode)) throw new Error('E2E_ALERT_ENGINE_MODE must be smoke or live');
 const size = Number(process.env.E2E_ALERT_ENGINE_SIZE ?? '1');
 if (![1, 100, 200].includes(size)) throw new Error('E2E_ALERT_ENGINE_SIZE must be 1, 100 or 200');
 const marking = readFileSync(new URL('../../internal/storage/testdata/mark_observation_fixture.sql', import.meta.url), 'utf8');
 
 test('deployed engine creates durable occurrences and globally acknowledges them', async ({page}) => {
+  test.skip(mode !== 'smoke');
   test.setTimeout(15 * 60_000);
   if (process.env.E2E_ALERT_ACCEPTANCE !== '1') throw new Error('requires the acceptance-only deployment');
   mkdirSync(root, {recursive: true});
@@ -77,4 +81,11 @@ COMMIT;`);
   const journals = JSON.parse(psql(`SELECT json_agg(to_jsonb(e)) FROM almanac_alert_evaluations e WHERE policy_id=ANY(ARRAY[${policyIDs}]::uuid[])`));
   writeFileSync(`${root}/smoke.json`, JSON.stringify({started, completed: new Date().toISOString(), size,
     fleet, journals, acknowledged: occurrence.id, capacityAcceptance: false, productionActivated: false}, null, 2));
+});
+
+
+test('live independent policy fleets preserve evidence, ingestion and navigation', async ({page, browser}) => {
+  test.skip(mode !== 'live');
+  test.setTimeout(125 * 60_000);
+  await runAlertEngineLive(page, browser, size);
 });
