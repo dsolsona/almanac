@@ -84,7 +84,7 @@ ALTER TABLE public.almanac_alert_ranges ADD CONSTRAINT almanac_alert_ranges_kind
 DROP INDEX public.almanac_canonical_receipt_repair_idx;
 ALTER TABLE public.almanac_sli_hourly_aggregates DROP COLUMN receipt_source_generation,DROP COLUMN certified_receipt_at,ALTER COLUMN latest_receipt_at SET NOT NULL;
 DELETE FROM public.almanac_schema_migrations WHERE version>=59;`)
-	if err != nil || tag.RowsAffected() != 8 {
+	if err != nil || tag.RowsAffected() != 9 {
 		t.Fatalf("reconstruct populated 0058: removed=%d %v", tag.RowsAffected(), err)
 	}
 	if state, err := CheckCompatibility(t.Context(), f.f.databaseURL); err != nil || state != CompatibilityPending {

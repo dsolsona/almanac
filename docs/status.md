@@ -5,8 +5,12 @@ internally. Real changed-history recovery returns the independently expected
 49,500/50,000 counts with ten excluded intervals and original C/R provenance.
 Current/source publication races reject stale outputs. Review corrections make
 terminal dependencies explicit failed gaps and remove no-eligible provenance that
-could fail client validation. Combined checks and deployed collection/SLO/alert
-management acceptance are in progress. No adoption PR is open yet. Production
+could fail client validation. Combined checks pass 90 integration groups / 165 cases; all eleven deployed
+collection/SLO/alert-management journeys pass. Ready [PR #127](https://github.com/dsolsona/almanac/pull/127)
+is open. Its initial integration CI exposes one stale migration-count fixture,
+corrected in focused verification. Ordinary page-performance seeding is under
+diagnosis after tmpfs OOM and a separate disk-backed timeout; no page timings
+are claimed. Production
 profiles, preparation/alert runtime registration and live-load/cold-browser release
 gates remain open; these focused checks do not claim capacity or activation.
 
