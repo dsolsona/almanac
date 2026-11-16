@@ -9,7 +9,7 @@ import (
 	"github.com/dsolsona/almanac/internal/storage"
 )
 
-// Ordinary binaries contain no acceptance workers or activation switch.
-func startAlertAcceptance(context.Context, *storage.Runtime, *slog.Logger) (func(), error) {
-	return func() {}, nil
+// Ordinary binaries start the shared processors without fixture controls.
+func startBackendProcessing(ctx context.Context, runtime *storage.Runtime, logger *slog.Logger, alerts bool) (func(), error) {
+	return runtime.StartProcessing(ctx, logger, alerts)
 }

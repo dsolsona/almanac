@@ -73,3 +73,12 @@ sequencing choice. The earlier gate must not be misreported as passed.
 The maintainer explicitly confirmed this sequence: build the unwired state
 machine and durable storage first; keep calculator adoption, production activation
 and release behind the existing correctness/performance gates.
+
+
+### Ordinary local operation, 2026-11-16
+
+The maintainer explicitly directs PR127 to finish ordinary engine startup and
+configuration and enable the local deployment now, while deferring capacity
+checks. [F4-T51](../tasks/F4-T51.md) records the bounded implementation and
+one-policy verification. This amends the unwired-only sequencing for that PR;
+it does not certify the earlier failed live-load evidence or enable delivery.

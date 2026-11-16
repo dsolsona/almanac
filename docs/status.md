@@ -1,3 +1,14 @@
+Ordinary alert runtime completion, 2026-11-16: the maintainer explicitly requests
+ordinary startup/configuration and enabled local deployment in
+[PR #127](https://github.com/dsolsona/almanac/pull/127), with capacity checks
+deferred. The existing component configuration now supports backend/UI/alerts,
+using one shared processor lifecycle in ordinary and tagged binaries. Focused
+component, HTTP-constructor, ownership/shutdown and disabled-evaluator checks
+pass; independent review finds no actionable startup defect. The normal Docker
+binary is undergoing a single-policy firing/acknowledgement/recovery check.
+No capacity or performance suite is running. [F4-T51](tasks/F4-T51.md) records
+the amended scope, implementation and verification.
+
 Alerting implementation, 2026-11-16: [PR #127](https://github.com/dsolsona/almanac/pull/127)
 contains shared maintenance-aware SLO consumers and the bounded authority
 consumer. The isolated deployed engine creates and globally acknowledges 100

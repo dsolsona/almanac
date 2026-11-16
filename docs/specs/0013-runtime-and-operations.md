@@ -20,6 +20,14 @@
 
 ## Purpose and executable shape
 
+> Ordinary alert startup, 2026-11-16: the maintainer explicitly requested finishing
+> the existing combined backend/UI/alerts configuration in PR127 and enabling the
+> local deployment, with capacity checks deferred. Ordinary binaries run the
+> shared calculation/preparation processors under the backend owner, and run
+> alert evaluation when `alerts` is selected. The build-tagged fixture adds only
+> private test controls. This scoped activation direction does not certify
+> 100/200-policy capacity or enable external notification delivery.
+
 Provide a convenient combined server and independently runnable components without
 requiring distributed deployment for local use. UI-only serving and version/help
 exist through [F1-T04](../tasks/F1-T04.md); explicit database upgrades exist through
@@ -27,25 +35,28 @@ exist through [F1-T04](../tasks/F1-T04.md); explicit database upgrades exist thr
 authentication, protected provisioning, health and single-owner lifecycle.
 [F1-T15](../tasks/F1-T15.md) adds noninteractive setup over the HTTPS API.
 [F1-T16](../tasks/F1-T16.md) adds the explicit backend/UI pair on the same listener.
-The
-backend's management, ingestion and agent workloads in the table remain future
-work, as do combined alerts and other commands. Unsupported server modes
-fail before listening.
+Management, ingestion, agent connections and the combined alert evaluator run
+inside the backend. Standalone remote alert workers and notification delivery
+remain future work. Unsupported server modes fail before listening.
 
 | Command | Starts | Credentials |
 | --- | --- | --- |
-| `almanac serve` | Backend, embedded UI, alert evaluator and notification dispatcher | Database and application secrets |
+| `almanac serve` | Backend, embedded UI and alert evaluator; delivery deferred | Database and application secrets |
 | `almanac serve --components=backend` | Management/ingestion API, agent connections, storage-owned maintenance/recompute/planning | Database and application secrets |
 | `almanac serve --components=ui` | Embedded static UI and restricted same-origin API proxy | Backend origin; no DB credential |
-| `almanac serve --components=alerts` | Alert evaluator and delivery worker through private backend API | Scoped worker token; no DB credential |
+| `almanac serve --components=backend,alerts` | Backend API, shared calculations and alert evaluator | Database and application secrets |
+| `almanac serve --components=backend,ui,alerts` | Backend API, embedded UI and alert evaluator (default) | Database and application secrets |
+| `almanac serve --components=alerts` | Deferred standalone worker; rejected before listening | Future scoped worker token; no DB credential |
 | `almanac <resource> <action>` | CLI management/API client, exits when operation finishes | User automation token/session profile |
 | `almanac db upgrade` | Explicit ordered schema upgrade, then exits | Schema-owner DB credential |
 | `almanac setup` | Complete one-time onboarding through API | Initial administrator password and new password via protected files |
 | `almanac admin recover` | Offline audited local administrator recovery | Stopped backend, OS/DB administrative access and explicit confirmation |
 | `almanac-agent run` | Agent connection and provider execution | Agent token and backend URL |
 
-Component lists may combine `backend,ui,alerts`; reject unknown/duplicate names and
-incompatible settings. `serve` never launches a collector. Agent ships as a separate
+Component lists support backend with optional UI and alerts in any order;
+backend-only operation keeps shared preparation active without evaluating alert
+policies. UI-only proxy serving remains available. Reject unknown/duplicate names
+and incompatible settings. A standalone alerts selection is not yet supported. `serve` never launches a collector. Agent ships as a separate
 small executable/image from the same Go module, sharing protocol libraries only.
 
 The UI is a React browser application using the backend HTTP API. “Embedded” means
@@ -61,10 +72,10 @@ provider schemas are adapters; provider execution exists only in the agent. `cmd
 wires dependencies and lifecycle. Package names are a proposed layout, not an
 obligation to invent interfaces with no consumer.
 
-Backend exclusively mutates persistent application state. The alert component
-claims evaluation/delivery work through a private API and submits fenced results.
-Embedded mode uses the same application operations through an in-process adapter;
-remote mode uses HTTP. They must have contract parity. The UI proxy forwards only
+Backend exclusively mutates persistent application state. Combined alert evaluation
+uses the existing backend-owned durable claims, calculation and fenced atomic
+publication operations. A future standalone worker must use a private backend API,
+with parity for the same operations; it does not receive database credentials. The UI proxy forwards only
 the configured Almanac API routes to one fixed backend origin, never arbitrary URLs.
 
 ## Scale boundaries
@@ -212,3 +223,25 @@ patches through ordinary tested dependency updates; do not require a new ADR per
   PostgreSQL and lifecycle coverage under F1-T16. Secure UI-only authentication,
   combined/separate alert parity, containers, restore and scalability remain
   unverified and unimplemented.
+
+
+### Initial combined processor profile
+
+The ordinary owner runs authority preparation, derived preparation and optional
+alert evaluation with the existing two-connection derived pool. Each processor
+starts at most one turn per second, retains 30-second leases and five-second
+background operation limits, and joins cancellation before pools close. Alert
+turns claim at most 200 policies in waves of two; they preserve original ordered
+cutoffs and the 24-hour catch-up horizon. Pending dependencies retry after one
+second; genuine failures use the implemented two-second retry and five-attempt
+limit, remaining visible for explicit recovery rather than losing work.
+
+Shared reads use the existing 2,500,000 canonical-fact ceiling, an equally bounded
+mask-fragment ceiling, 960 retained proofs and at most 8,762 physical source hours
+(the 365-day horizon plus edge allowance). Admission emits at most 16 preparation
+requests. Preparation turns admit 32 live and 16 historical jobs with two workers
+and 64-event pages. Authority turns admit 16 claims, 64 changes, 24 buckets and
+24 scanned hours. All bounds are logged at startup. Retention follows the
+canonical 365-day policy at each whole-second worker tick; retained evidence keeps
+its actual original cutoff. These are initial operational limits, not measured
+capacity guarantees. Capacity testing remains explicitly deferred.

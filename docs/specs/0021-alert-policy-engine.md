@@ -3,7 +3,7 @@
 - Status: draft
 - Created: 2026-11-12
 - Accepted: pending
-- Approval: full draft pending; continued implementation and unwired foundations authorized, with initial 100/200-policy verification scope
+- Approval: full draft pending; continued implementation and foundations authorized. On 2026-11-16 the maintainer explicitly requested ordinary startup/configuration and enabled local operation in PR127, with capacity checks deferred.
 - Implementation: in progress
 - Related ADRs: [ADR-0051](../adr/0051-durable-alert-policy-state-machine.md) (proposed), [ADR-0052](../adr/0052-compiled-maintenance-populations.md) (accepted for implementation)
 - Plan: [0035](../plans/0035-alerting-delivery.md); initial design review in [F4-T01](../tasks/F4-T01.md)

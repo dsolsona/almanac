@@ -1,0 +1,56 @@
+{
+  "implementation_base": "9cfd7b5",
+  "scope": "Ordinary backend-owned startup and local activation authorized on2026-11-16; capacity deferred.",
+  "ordinary_image": "sha256:5512caaceca2e9fece312c4597b3daa39546cb5a10c7d8fedefc309fc0f65dfd",
+  "local": {
+    "url": "https://localhost:18088",
+    "command": [
+      "almanac",
+      "serve",
+      "--components=backend,ui,alerts"
+    ],
+    "make_run_exit_code": 0,
+    "host_https_readiness": "200 with certificate validation via scripts/check-local-readiness.sh",
+    "started_at": "2026-11-16T22:04:04.50159195Z",
+    "processing_profile": "runtime-v1",
+    "alerts_enabled": true
+  },
+  "bounds": {
+    "source_hours": 8762,
+    "canonical_raw_rows": 2500000,
+    "mask_fragments": 2500000,
+    "retained_proofs": 960,
+    "derived_pool_connections": 2,
+    "evaluation_concurrency": 2,
+    "max_policies_per_turn": 200,
+    "lease_seconds": 30,
+    "operation_seconds": 5,
+    "horizon_hours": 24
+  },
+  "focused_checks": {
+    "config_seconds": 0.007,
+    "http_constructor_seconds": 0.072,
+    "disabled_evaluator_and_shared_preparation_race_seconds": 4.48,
+    "command_help_seconds": 0.005,
+    "independent_review": "No actionable startup/configuration findings."
+  },
+  "one_policy_journey": {
+    "result": "in_progress",
+    "normal_binary": true,
+    "collector_count": 1,
+    "capacity_check": false,
+    "initial_fixture_failure": "A120-second firing wait expired during correctly recorded before_policy_activation ranges. Two scheduled slots22:02 and22:03 on the preserved fixture had cutoffs before policy activation. The affected functional selector uses the existing five-minute smoke allowance; the image is unchanged."
+  },
+  "capacity_checks_run": false,
+  "performance_suite_run": false,
+  "capacity_accepted": false,
+  "normal_remote_alert_workers": "deferred",
+  "notification_delivery": "deferred",
+  "binary_sha256": "ec87e6ee7168d0e67269c4145127e057ca221d3fd1fa0f394f6b5d23bb19ccc2",
+  "isolated_ordinary_image": "sha256:bbd15a6ed99bfe7dfb756142ec615663494ca0a232802f9bc4f281bd2bc20ee9",
+  "ui_management": {
+    "result": "passed",
+    "scope": "Sidebar navigation, real SLO search/selection, policy creation/save, disable and policy-list read",
+    "same_binary_digest_as_local": true
+  }
+}

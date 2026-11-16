@@ -10,7 +10,10 @@ import (
 	"github.com/dsolsona/almanac/internal/storage"
 )
 
-func startAlertAcceptance(ctx context.Context, runtime *storage.Runtime, logger *slog.Logger) (func(), error) {
+func startBackendProcessing(ctx context.Context, runtime *storage.Runtime, logger *slog.Logger, alerts bool) (func(), error) {
+	if !alerts {
+		return runtime.StartProcessing(ctx, logger, false)
+	}
 	retention, err := alertAcceptanceRetention(os.Getenv("ALMANAC_ALERT_ACCEPTANCE_RETENTION_START"))
 	if err != nil {
 		return nil, err

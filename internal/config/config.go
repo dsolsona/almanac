@@ -247,7 +247,7 @@ func (c Config) Validate() error {
 		return errors.New("config: shutdown_timeout must be positive and at most 2m")
 	}
 	if c.MetricsListen != "" {
-		if c.Components != "backend" && !c.BackendUI() {
+		if !c.HasBackend() {
 			return errors.New("config: metrics_listen requires the backend")
 		}
 		host, port, err := net.SplitHostPort(c.MetricsListen)
@@ -264,7 +264,7 @@ func (c Config) Validate() error {
 			return errors.New("config: metrics_listen must be separate from the public listener")
 		}
 	}
-	if c.Components == "backend" || c.BackendUI() {
+	if c.HasBackend() {
 		if strings.TrimSpace(c.DatabaseURLFile) == "" {
 			return errors.New("config: database_url_file is required for backend")
 		}
@@ -284,7 +284,7 @@ func (c Config) Validate() error {
 			return errors.New("config: source_secret_keyset_id must be a canonical UUID")
 		}
 	}
-	if c.Components != "backend" && !c.BackendUI() && (c.DatabaseURLFile != "" || c.InitialAdminLogin != "" || c.InitialAdminPasswordFile != "" || c.PublicOrigin != "" || c.TLSCertFile != "" || c.TLSKeyFile != "" || len(c.TrustedProxyCIDRs) != 0 || c.SourceSecretKeysetFile != "" || c.SourceSecretKeysetID != "") {
+	if !c.HasBackend() && (c.DatabaseURLFile != "" || c.InitialAdminLogin != "" || c.InitialAdminPasswordFile != "" || c.PublicOrigin != "" || c.TLSCertFile != "" || c.TLSKeyFile != "" || len(c.TrustedProxyCIDRs) != 0 || c.SourceSecretKeysetFile != "" || c.SourceSecretKeysetID != "") {
 		return errors.New("config: backend-only fields require components=backend")
 	}
 	if c.Components == "ui" {
@@ -327,7 +327,15 @@ func (c *Config) setTrustedProxyList(value string) error {
 
 func (c Config) UIOnly() bool { return c.Components == "ui" }
 
-func (c Config) BackendUI() bool { return c.Components == "backend,ui" || c.Components == "ui,backend" }
+func (c Config) HasBackend() bool {
+	return slices.Contains(strings.Split(c.Components, ","), "backend")
+}
+
+func (c Config) HasAlerts() bool { return slices.Contains(strings.Split(c.Components, ","), "alerts") }
+
+func (c Config) BackendUI() bool {
+	return c.HasBackend() && slices.Contains(strings.Split(c.Components, ","), "ui")
+}
 
 func canonicalUUID(value string) bool {
 	parsed, err := uuid.Parse(value)
