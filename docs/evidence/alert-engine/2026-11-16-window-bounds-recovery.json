@@ -1,0 +1,274 @@
+{
+  "date": "2026-11-16",
+  "base": "34b08ce4e9602c9d8b502c4022788bfbda82d5fe",
+  "source_sha256": "058578cc4aa0a9524ff5a5b656fceda408d75500083f85967f713613a778a5b1",
+  "regression_sha256": "be54df04339f2695cdb01adffa3a77b3efc404a94184f187c7bbdbf1a0a4c2ae",
+  "defect": "Full-hour populations were added before raw leading/trailing edges; observation bounds failed to preserve minimum start and maximum end.",
+  "fix": "Preserve earliest observation start and latest observation end independently of merge order. Validation remains unchanged.",
+  "checks": {
+    "reproduction_red_seconds": 3.427,
+    "helper_green_seconds": 4.963,
+    "integrated_race_seconds": 38.379,
+    "public_retry_recovered_policies": 50,
+    "independent_raw_window_checks": 200,
+    "original_pending_cutoffs_preserved": true,
+    "ui_acknowledgement_persisted": true
+  },
+  "recovered": [
+    {
+      "policy": "0e15ad15-4f07-41ff-b223-51ee73be5a5f",
+      "id": "981b20f0-a078-43ee-933d-5df44f577cf7",
+      "cutoff": "2026-11-16T19:40:00+00:00"
+    },
+    {
+      "policy": "2a2849ae-2048-4e1f-81c0-d3093e921402",
+      "id": "b680cd3c-aac3-42d7-965f-edd690911dc2",
+      "cutoff": "2026-11-16T19:40:00+00:00"
+    },
+    {
+      "policy": "146b4b30-1283-4df9-9634-677aabda242c",
+      "id": "49220080-8ea3-4ac1-ac34-2d3cec1ff2b7",
+      "cutoff": "2026-11-16T19:40:00+00:00"
+    },
+    {
+      "policy": "4103b5ad-b0de-4b0e-be6e-4767607d901e",
+      "id": "939d411e-ac47-4def-97be-6a8c99cdefef",
+      "cutoff": "2026-11-16T19:40:00+00:00"
+    },
+    {
+      "policy": "5d61e5a0-b58e-4306-aeee-1580bf077672",
+      "id": "bd36760a-5f03-4626-be41-131ee79ff75c",
+      "cutoff": "2026-11-16T19:40:00+00:00"
+    },
+    {
+      "policy": "8b5a9454-c792-4f73-9c82-f3c334887e7a",
+      "id": "80b1d0bd-e38f-4ddd-9c12-03892386e9aa",
+      "cutoff": "2026-11-16T19:40:00+00:00"
+    },
+    {
+      "policy": "ac6b3f4d-517d-4a4c-8b40-195da090a584",
+      "id": "454f61da-74cd-4beb-814c-d3760bddc1a1",
+      "cutoff": "2026-11-16T19:40:00+00:00"
+    },
+    {
+      "policy": "b1d7c01a-ff34-4685-b5c7-9f78b76ae46b",
+      "id": "eb41bb56-7d3e-480d-ab34-0c0481d3d440",
+      "cutoff": "2026-11-16T19:40:00+00:00"
+    },
+    {
+      "policy": "bbd78147-ab21-4487-8fb5-0480c011e98a",
+      "id": "57f0b372-1bda-4f31-8722-d9d51c629089",
+      "cutoff": "2026-11-16T19:40:00+00:00"
+    },
+    {
+      "policy": "bcb89608-9b6c-40c7-8589-92ee1575d683",
+      "id": "f8b465a3-0d68-47e6-b434-1417e715c943",
+      "cutoff": "2026-11-16T19:40:00+00:00"
+    },
+    {
+      "policy": "c76ed1a8-4a38-47ad-8f4f-a4272421c1b7",
+      "id": "218f7670-8d09-4bc1-ae48-822c9061153c",
+      "cutoff": "2026-11-16T19:40:00+00:00"
+    },
+    {
+      "policy": "ca9d3420-a5bd-4f8a-9933-6812122abb7b",
+      "id": "bf89c2df-1a7a-418c-bd3d-89a9ced333ab",
+      "cutoff": "2026-11-16T19:40:00+00:00"
+    },
+    {
+      "policy": "dafc22d6-7979-4972-ab8a-9b17ad255e29",
+      "id": "3a18ad36-5e5d-49dd-8f33-cf67e1f24449",
+      "cutoff": "2026-11-16T19:40:00+00:00"
+    },
+    {
+      "policy": "ffd3fb27-e712-483b-bb39-926257c928b4",
+      "id": "5d77c0a0-26b0-4716-9e06-78e9e7d40679",
+      "cutoff": "2026-11-16T19:40:00+00:00"
+    },
+    {
+      "policy": "15e1f64e-19d1-4104-a821-c55e39afbf7a",
+      "id": "801eed12-eeae-44ab-8bb7-5a2464696cdc",
+      "cutoff": "2026-11-16T19:40:00+00:00"
+    },
+    {
+      "policy": "fc8fb91b-703a-4bcb-8aea-ca45270d7d3c",
+      "id": "603d4b58-9002-4474-945e-9f48e5f81355",
+      "cutoff": "2026-11-16T19:40:00+00:00"
+    },
+    {
+      "policy": "00d74cbe-a534-41c5-a71c-fa0d3067ef36",
+      "id": "3ebb819d-b53b-4b7d-af56-274d0108f049",
+      "cutoff": "2026-11-16T19:40:00+00:00"
+    },
+    {
+      "policy": "34d43cf1-4358-43b2-b682-7f87d79f307e",
+      "id": "62c689be-3dbf-45c2-8ac4-978f72b4305e",
+      "cutoff": "2026-11-16T19:40:00+00:00"
+    },
+    {
+      "policy": "52968727-e359-4116-be0c-ab4916b09cb5",
+      "id": "9152df07-f683-47f6-8651-18c662904232",
+      "cutoff": "2026-11-16T19:40:00+00:00"
+    },
+    {
+      "policy": "eb348575-8eba-4e04-8bde-4a4033863ea4",
+      "id": "7ae976b6-bc3c-4142-8664-02fe1fa70734",
+      "cutoff": "2026-11-16T19:40:00+00:00"
+    },
+    {
+      "policy": "a71707d6-3808-4009-90a4-9e459f2413a8",
+      "id": "201dd7c2-84d5-47aa-a5fe-51275c645f5f",
+      "cutoff": "2026-11-16T19:40:00+00:00"
+    },
+    {
+      "policy": "4e74897f-c856-4453-b5b4-6c397a961a38",
+      "id": "c076e6eb-f6bf-4358-82e7-15f57b8889a1",
+      "cutoff": "2026-11-16T19:40:00+00:00"
+    },
+    {
+      "policy": "c1f50943-8720-4323-8f4e-14c0dfd7d889",
+      "id": "2e668442-eb33-4205-93e9-c581fbec5b60",
+      "cutoff": "2026-11-16T19:40:00+00:00"
+    },
+    {
+      "policy": "59d63543-c00a-4aa9-ba93-3eca0c9e2117",
+      "id": "c319b389-f4b7-4d4c-8852-61324106b8a5",
+      "cutoff": "2026-11-16T19:40:00+00:00"
+    },
+    {
+      "policy": "86406d03-5f27-43c7-9201-7b7640d2c1df",
+      "id": "60279789-51f2-4456-bc24-f47149f5b4ff",
+      "cutoff": "2026-11-16T19:40:00+00:00"
+    },
+    {
+      "policy": "88cc2507-f56d-4017-9c06-d6edc43951dc",
+      "id": "32c9a6ed-13de-4723-aca6-cccbf8c69190",
+      "cutoff": "2026-11-16T19:40:00+00:00"
+    },
+    {
+      "policy": "c181bb09-f466-421c-855c-b38a4c6031f7",
+      "id": "92794572-869d-4a13-bc0a-447d613a47f5",
+      "cutoff": "2026-11-16T19:40:00+00:00"
+    },
+    {
+      "policy": "c4a096a0-1c1b-492c-be0f-22ddb7975a09",
+      "id": "fefe589a-72b8-4b6c-bc96-8eb3b9b66615",
+      "cutoff": "2026-11-16T19:40:00+00:00"
+    },
+    {
+      "policy": "2c64faf9-2ccd-4924-ac89-46549da1f5ec",
+      "id": "78c771f5-9edd-47f7-a5a4-a88014ef30af",
+      "cutoff": "2026-11-16T19:40:00+00:00"
+    },
+    {
+      "policy": "267d1d2f-4d27-49e7-a840-1afab6c6adbe",
+      "id": "5b1d1a74-34e5-4695-84f2-b2cc5a28ff9e",
+      "cutoff": "2026-11-16T19:40:00+00:00"
+    },
+    {
+      "policy": "d2b4e4fc-e8a4-4044-9459-199c18b96170",
+      "id": "f35f5067-a917-469a-a933-06e9e289178c",
+      "cutoff": "2026-11-16T19:40:00+00:00"
+    },
+    {
+      "policy": "e502968e-9f65-41b0-accc-68f43718f361",
+      "id": "0ad8fce6-d486-41e6-b65d-490723748111",
+      "cutoff": "2026-11-16T19:40:00+00:00"
+    },
+    {
+      "policy": "e1c5b809-f1f1-425e-a495-4dee727ef9d6",
+      "id": "0390f721-02e6-47e2-a38e-e4ed61a45a26",
+      "cutoff": "2026-11-16T19:40:00+00:00"
+    },
+    {
+      "policy": "7fd7cfb6-7883-443d-88fd-e127697d94e0",
+      "id": "1d829d23-4eef-466e-ac7e-5c24bc41de82",
+      "cutoff": "2026-11-16T19:40:00+00:00"
+    },
+    {
+      "policy": "8cccab0d-9f12-41c5-85c8-ad8c30b22579",
+      "id": "de09e429-8838-4256-8b68-9ffa2650d272",
+      "cutoff": "2026-11-16T19:40:00+00:00"
+    },
+    {
+      "policy": "d0e97107-03e7-44cc-8333-f5439df2ef69",
+      "id": "649e162d-6434-495d-9c28-f1d275406171",
+      "cutoff": "2026-11-16T19:40:00+00:00"
+    },
+    {
+      "policy": "a2336075-58ba-4fab-a11d-d7b0ce36653d",
+      "id": "688d0b27-374f-4ea6-8058-5e7d85dba6be",
+      "cutoff": "2026-11-16T19:40:00+00:00"
+    },
+    {
+      "policy": "25091099-4b30-463f-91c0-15c8d3491d10",
+      "id": "78dc3785-a793-48dc-81a5-ea8808fe2cfa",
+      "cutoff": "2026-11-16T19:40:00+00:00"
+    },
+    {
+      "policy": "326e7d90-be1e-43db-8790-83f2082f7f63",
+      "id": "2bf7b8c6-2129-4066-891a-01c8252c3880",
+      "cutoff": "2026-11-16T19:40:00+00:00"
+    },
+    {
+      "policy": "3fcb785e-4dbb-49c1-99c3-a3bbcc03a16c",
+      "id": "500c425a-e3fa-40f2-9d1f-6c0c57e184e5",
+      "cutoff": "2026-11-16T19:40:00+00:00"
+    },
+    {
+      "policy": "63d4fa64-07b7-4c9c-8576-8ddfa4ef8ff7",
+      "id": "b8ad998d-a03c-40ef-b41b-de908a5a0a19",
+      "cutoff": "2026-11-16T19:40:00+00:00"
+    },
+    {
+      "policy": "6dc6ad5b-d375-4f58-a497-3c34589c7bd9",
+      "id": "f6539974-34c7-46f6-9f83-d11622f4a5e2",
+      "cutoff": "2026-11-16T19:40:00+00:00"
+    },
+    {
+      "policy": "9de74775-a8d3-4f2a-ad05-98aab053038a",
+      "id": "0fe15722-d24a-4094-81d2-06b46aacb678",
+      "cutoff": "2026-11-16T19:40:00+00:00"
+    },
+    {
+      "policy": "c75b2efa-a536-48f0-8773-bb146f86033a",
+      "id": "081d1f49-8d8a-41e7-93cd-40660ce15337",
+      "cutoff": "2026-11-16T19:41:00+00:00"
+    },
+    {
+      "policy": "bb88f186-18c5-4c22-9ad6-a27832e699c2",
+      "id": "fdba17df-11ca-4e83-a4c9-537ef240d807",
+      "cutoff": "2026-11-16T19:40:00+00:00"
+    },
+    {
+      "policy": "d1ab6c13-962c-44ee-8266-4a22b2a7730f",
+      "id": "b51ad0b5-7886-4c79-a288-96685e71c6c9",
+      "cutoff": "2026-11-16T19:40:00+00:00"
+    },
+    {
+      "policy": "1668fa31-a137-4a01-9fff-7f1b5489b946",
+      "id": "d54df58b-8a7e-4964-bd62-f224fa88c66d",
+      "cutoff": "2026-11-16T19:40:00+00:00"
+    },
+    {
+      "policy": "cfa987e8-859d-43b8-b4af-bf2af9487031",
+      "id": "0ae87104-1c23-4509-a251-428e5e603b05",
+      "cutoff": "2026-11-16T19:40:00+00:00"
+    },
+    {
+      "policy": "ed1848a5-7bfe-415e-9edd-8d1492a674db",
+      "id": "debf071d-d2dd-4e70-bdec-ad6fdd160591",
+      "cutoff": "2026-11-16T19:40:00+00:00"
+    },
+    {
+      "policy": "fd886657-d5a5-48aa-b63e-3779659bf048",
+      "id": "edebabe4-2c92-4fc3-92bd-62afe817bed9",
+      "cutoff": "2026-11-16T19:40:00+00:00"
+    }
+  ],
+  "limits": [
+    "This repairs the failed preflight; it does not certify sustained fleet capacity.",
+    "The initial recovery probe omitted fixture port exports; the corrected fixture profile was verified.",
+    "Production activation remains gated."
+  ]
+}
