@@ -448,28 +448,29 @@ type AlmanacMaintenanceMember struct {
 }
 
 type AlmanacMaintenancePreparation struct {
-	ID                  pgtype.UUID        `json:"id"`
-	Kind                string             `json:"kind"`
-	SloID               pgtype.UUID        `json:"slo_id"`
-	TargetRevision      int64              `json:"target_revision"`
-	BuildID             pgtype.UUID        `json:"build_id"`
-	SecondBuild         pgtype.UUID        `json:"second_build"`
-	SliID               pgtype.UUID        `json:"sli_id"`
-	DefinitionRevision  pgtype.Int8        `json:"definition_revision"`
-	MeasurementRevision pgtype.Int8        `json:"measurement_revision"`
-	HourStart           pgtype.Timestamptz `json:"hour_start"`
-	SourceGeneration    pgtype.Int8        `json:"source_generation"`
-	Priority            string             `json:"priority"`
-	State               string             `json:"state"`
-	AvailableAt         pgtype.Timestamptz `json:"available_at"`
-	LastTick            pgtype.Timestamptz `json:"last_tick"`
-	LeaseToken          pgtype.UUID        `json:"lease_token"`
-	LeaseEpoch          int64              `json:"lease_epoch"`
-	LeaseUntil          pgtype.Timestamptz `json:"lease_until"`
-	Attempts            int32              `json:"attempts"`
-	Reason              string             `json:"reason"`
-	CreatedAt           pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+	ID                          pgtype.UUID        `json:"id"`
+	Kind                        string             `json:"kind"`
+	SloID                       pgtype.UUID        `json:"slo_id"`
+	TargetRevision              int64              `json:"target_revision"`
+	BuildID                     pgtype.UUID        `json:"build_id"`
+	SecondBuild                 pgtype.UUID        `json:"second_build"`
+	SliID                       pgtype.UUID        `json:"sli_id"`
+	DefinitionRevision          pgtype.Int8        `json:"definition_revision"`
+	MeasurementRevision         pgtype.Int8        `json:"measurement_revision"`
+	HourStart                   pgtype.Timestamptz `json:"hour_start"`
+	SourceGeneration            pgtype.Int8        `json:"source_generation"`
+	Priority                    string             `json:"priority"`
+	State                       string             `json:"state"`
+	AvailableAt                 pgtype.Timestamptz `json:"available_at"`
+	LastTick                    pgtype.Timestamptz `json:"last_tick"`
+	LeaseToken                  pgtype.UUID        `json:"lease_token"`
+	LeaseEpoch                  int64              `json:"lease_epoch"`
+	LeaseUntil                  pgtype.Timestamptz `json:"lease_until"`
+	Attempts                    int32              `json:"attempts"`
+	Reason                      string             `json:"reason"`
+	CreatedAt                   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt                   pgtype.Timestamptz `json:"updated_at"`
+	AuthorityRetargetedRevision int64              `json:"authority_retargeted_revision"`
 }
 
 type AlmanacManagementReceipt struct {
@@ -753,12 +754,28 @@ type AlmanacSloExclusionState struct {
 }
 
 type AlmanacSloExclusionWork struct {
-	SloID           pgtype.UUID        `json:"slo_id"`
-	DesiredRevision int64              `json:"desired_revision"`
-	WorkVersion     int64              `json:"work_version"`
-	AffectedStart   pgtype.Timestamptz `json:"affected_start"`
-	AffectedEnd     pgtype.Timestamptz `json:"affected_end"`
-	NextAttemptAt   pgtype.Timestamptz `json:"next_attempt_at"`
+	SloID             pgtype.UUID        `json:"slo_id"`
+	DesiredRevision   int64              `json:"desired_revision"`
+	WorkVersion       int64              `json:"work_version"`
+	AffectedStart     pgtype.Timestamptz `json:"affected_start"`
+	AffectedEnd       pgtype.Timestamptz `json:"affected_end"`
+	NextAttemptAt     pgtype.Timestamptz `json:"next_attempt_at"`
+	ProcessedRevision int64              `json:"processed_revision"`
+	ProgressPart      int16              `json:"progress_part"`
+	ProgressHour      pgtype.Timestamptz `json:"progress_hour"`
+	ProgressUntil     pgtype.Timestamptz `json:"progress_until"`
+	ScheduledThrough  pgtype.Timestamptz `json:"scheduled_through"`
+	CurrentRevision   int64              `json:"current_revision"`
+	BoundaryThrough   pgtype.Timestamptz `json:"boundary_through"`
+	Attempts          int32              `json:"attempts"`
+	FailureVersion    int64              `json:"failure_version"`
+	FailureReason     string             `json:"failure_reason"`
+	LeaseToken        pgtype.UUID        `json:"lease_token"`
+	LeaseEpoch        int64              `json:"lease_epoch"`
+	LeaseUntil        pgtype.Timestamptz `json:"lease_until"`
+	ClaimedVersion    pgtype.Int8        `json:"claimed_version"`
+	ClaimedRevision   pgtype.Int8        `json:"claimed_revision"`
+	LastTick          pgtype.Timestamptz `json:"last_tick"`
 }
 
 type AlmanacSloExtrema struct {

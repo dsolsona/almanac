@@ -98,7 +98,7 @@ func (q *Queries) PublishMaintenanceSloExtrema(ctx context.Context, arg PublishM
 }
 
 const readMaintenanceExtremaClaim = `-- name: ReadMaintenanceExtremaClaim :one
-SELECT id, kind, slo_id, target_revision, build_id, second_build, sli_id, definition_revision, measurement_revision, hour_start, source_generation, priority, state, available_at, last_tick, lease_token, lease_epoch, lease_until, attempts, reason, created_at, updated_at FROM public.almanac_maintenance_preparation WHERE id=$1
+SELECT id, kind, slo_id, target_revision, build_id, second_build, sli_id, definition_revision, measurement_revision, hour_start, source_generation, priority, state, available_at, last_tick, lease_token, lease_epoch, lease_until, attempts, reason, created_at, updated_at, authority_retargeted_revision FROM public.almanac_maintenance_preparation WHERE id=$1
 `
 
 func (q *Queries) ReadMaintenanceExtremaClaim(ctx context.Context, id pgtype.UUID) (AlmanacMaintenancePreparation, error) {
@@ -127,6 +127,7 @@ func (q *Queries) ReadMaintenanceExtremaClaim(ctx context.Context, id pgtype.UUI
 		&i.Reason,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AuthorityRetargetedRevision,
 	)
 	return i, err
 }

@@ -72,6 +72,7 @@ DROP FUNCTION public.guard_maintenance_preparation_identity()`); err != nil {
 // Rewind only the additive 0067 objects before replaying a populated old schema.
 func dropMaintenanceRetainedFixture(t *testing.T, conn *pgx.Conn) {
 	t.Helper()
+	dropMaintenanceAuthorityFixture(t, conn)
 	if _, err := conn.Exec(t.Context(), `ALTER TABLE public.almanac_maintenance_preparation
 DROP CONSTRAINT almanac_maintenance_preparation_extrema_bucket_check,
 DROP CONSTRAINT almanac_maintenance_preparation_kind_check,
@@ -97,5 +98,23 @@ func setLegacyMaintenanceAnalysis(t *testing.T, conn *pgx.Conn, legacy bool) {
 	}
 	if _, err := conn.Exec(t.Context(), statement); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// Rewind the additive 0068 queue checkpoints without altering older work identity.
+func dropMaintenanceAuthorityFixture(t *testing.T, conn *pgx.Conn) {
+	t.Helper()
+	if _, err := conn.Exec(t.Context(), `DROP INDEX public.almanac_authority_due_idx,
+public.almanac_maintenance_input_start_idx,public.almanac_maintenance_input_end_idx,
+public.almanac_maintenance_retarget_idx;
+ALTER TABLE public.almanac_maintenance_preparation DROP COLUMN authority_retargeted_revision;
+ALTER TABLE public.almanac_slo_exclusion_work
+DROP CONSTRAINT almanac_authority_progress_revision,DROP CONSTRAINT almanac_authority_lease,
+DROP COLUMN processed_revision,DROP COLUMN progress_part,DROP COLUMN progress_hour,
+DROP COLUMN progress_until,DROP COLUMN scheduled_through,DROP COLUMN current_revision,
+DROP COLUMN boundary_through,DROP COLUMN attempts,DROP COLUMN failure_version,
+DROP COLUMN failure_reason,DROP COLUMN lease_token,DROP COLUMN lease_epoch,
+DROP COLUMN lease_until,DROP COLUMN claimed_version,DROP COLUMN claimed_revision,DROP COLUMN last_tick`); err != nil {
+		t.Fatalf("reconstruct pre-0068 authority queue: %v", err)
 	}
 }

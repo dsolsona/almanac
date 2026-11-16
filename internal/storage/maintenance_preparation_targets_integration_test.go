@@ -278,7 +278,7 @@ func TestIntegrationMaintenancePreparationTargetPopulatedUpgrade(t *testing.T) {
 	}
 	snapshot := func() string {
 		var out string
-		if err := f.conn.QueryRow(t.Context(), `SELECT jsonb_agg(to_jsonb(p) ORDER BY id)::text FROM almanac_maintenance_preparation p`).Scan(&out); err != nil {
+		if err := f.conn.QueryRow(t.Context(), `SELECT jsonb_agg(to_jsonb(p)-'authority_retargeted_revision' ORDER BY id)::text FROM almanac_maintenance_preparation p`).Scan(&out); err != nil {
 			t.Fatal(err)
 		}
 		return out
@@ -296,7 +296,7 @@ func TestIntegrationMaintenancePreparationTargetPopulatedUpgrade(t *testing.T) {
 		t.Fatalf("rewind did not restore old queue constraints: %v", err)
 	}
 	upgraded, err := Upgrade(t.Context(), f.f.databaseURL)
-	if err != nil || upgraded.Applied != 1 || upgraded.DatabaseSchemaVersion != 67 {
+	if err != nil || upgraded.Applied != 2 || upgraded.DatabaseSchemaVersion != 68 {
 		t.Fatalf("upgrade %+v %v", upgraded, err)
 	}
 	if snapshot() != before {
