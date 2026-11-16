@@ -79,6 +79,53 @@ func TestIntegrationMaintenancePreparationBoundedProgress(t *testing.T) {
 	}
 }
 
+func TestIntegrationMaintenancePreparationCanonicalPendingOnly(t *testing.T) {
+	t.Parallel()
+	f, h := hourFixture(t)
+	missing := h.HourStart.Add(time.Hour)
+	if _, err := f.conn.Exec(t.Context(), `INSERT INTO almanac_derived_dirty_ranges(sli_id,measurement_revision,generation,range_start,range_end,next_attempt_at,updated_at)
+SELECT sli_id,measurement_revision,source_generation,hour_start,hour_start+interval '1 hour',$3,$3 FROM almanac_sli_hourly_aggregates WHERE sli_id=$1 AND hour_start=$2`, h.SliID, missing, f.now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.conn.Exec(t.Context(), `DELETE FROM almanac_sli_hourly_aggregates WHERE sli_id=$1 AND hour_start=$2`, h.SliID, missing); err != nil {
+		t.Fatal(err)
+	}
+	in := evaluationFixtureInput(f, h)
+	in.Requests = in.Requests[:1]
+	ready := in.Requests[0].Windows[0]
+	pending := ready
+	pending.At = missing.Add(time.Hour)
+	in.Requests[0].Windows = []slo.WindowInput{ready, ready, pending}
+	got, err := evaluateFixtureMaintenance(t, f, in)
+	if !errors.Is(err, ErrDerivedPending) || len(got.Preparation) != 1 || got.Preparation[0].Kind != "source_window" || !got.Preparation[0].Start.Equal(missing) || !got.Preparation[0].End.Equal(missing.Add(time.Hour)) {
+		t.Fatalf("ready spans consumed pending admission: %+v %v", got.Preparation, err)
+	}
+	compilerTx(t, f, func(tx pgx.Tx) error {
+		p, err := prepareMaintenanceEnqueue(t.Context(), tx, preparationScope(f), got.Preparation, maintenancePreparationLimits{MaxRequests: 1, MaxSourceHours: 1}, f.now)
+		if err != nil {
+			return err
+		}
+		if len(p.hours) != 1 || !p.hours[0].Time.Equal(missing) {
+			t.Fatalf("one-request admission omitted the missing hour: %+v", p.hours)
+		}
+		return enqueueMaintenancePreparation(t.Context(), tx, p, maintenancePreparationLive, f.now)
+	})
+	var attempts int
+	if err := f.conn.QueryRow(t.Context(), `SELECT attempts FROM almanac_derived_dirty_ranges WHERE sli_id=$1 AND range_start=$2`, h.SliID, missing).Scan(&attempts); err != nil || attempts != 0 {
+		t.Fatalf("enqueue changed canonical failure budget: %d %v", attempts, err)
+	}
+	f.drain(t, "canonical missing source")
+	got, err = evaluateFixtureMaintenance(t, f, in)
+	if err != nil || len(got.Preparation) != 0 || len(got.Masks[0].Windows) != 3 {
+		t.Fatalf("canonical repair did not recover: %+v %v", got, err)
+	}
+	for _, w := range got.Masks[0].Windows {
+		if w.Good == nil || *w.Good != "59400.000000000000" || w.Total == nil || *w.Total != "60000.000000000000" {
+			t.Fatalf("canonical repair changed exact counts: %+v", w)
+		}
+	}
+}
+
 func TestIntegrationMaintenancePreparationBoundedSourcePrefix(t *testing.T) {
 	t.Parallel()
 	f, h := hourFixture(t)

@@ -12,6 +12,10 @@ import (
 )
 
 type extremaBudgetCache struct {
+	// Only a completely prepared closed sample set may be reused. Source cursor
+	// readiness alone cannot certify maintenance compatibility; completing that
+	// preparation need not change the retained rows' publication timestamps.
+	ClosedReady   bool                       `json:"closed_ready"`
 	ClosedThrough time.Time                  `json:"closed_through"`
 	PublishedAt   time.Time                  `json:"published_at"`
 	RangeStart    time.Time                  `json:"range_start"`
@@ -42,6 +46,7 @@ func attachExtremaBudget(ctx context.Context, q *dbgen.Queries, item *api.SloOpe
 	var previous []api.SloOperationalSample
 	var cache extremaBudgetCache
 	cacheHit := unmarshalReceiptMetadata(state.Cache, &cache) == nil && unmarshalReceiptMetadata(state.Samples, &previous) == nil &&
+		cache.ClosedReady &&
 		len(previous) > 0 && len(previous) <= 120 && len(cache.Closed) <= 120 &&
 		cache.RangeStart.Before(at) && !cache.RangeStart.Before(at.Add(-8*24*time.Hour)) &&
 		cache.ClosedThrough.Equal(closed) && cache.PublishedAt.Equal(state.PublishedAt.Time)
@@ -102,7 +107,9 @@ func attachExtremaBudget(ctx context.Context, q *dbgen.Queries, item *api.SloOpe
 			sample.CalculationProvenance = first.CalculationProvenance
 			samples = append(samples, sample)
 		} else {
-			history = "preparing"
+			if history != "unavailable" {
+				history = "preparing"
+			}
 			samples = append(samples, reader.unpreparedTile(base, retainedReadPart{start: start.Add(-cadence), end: start}).Budget...)
 		}
 		for _, sample := range reader.series.Budget {
@@ -110,7 +117,7 @@ func attachExtremaBudget(ctx context.Context, q *dbgen.Queries, item *api.SloOpe
 				samples = append(samples, sample)
 			}
 		}
-		cache = extremaBudgetCache{ClosedThrough: closed, PublishedAt: state.PublishedAt.Time, RangeStart: start, LastStart: lastStart}
+		cache = extremaBudgetCache{ClosedReady: history == "ready", ClosedThrough: closed, PublishedAt: state.PublishedAt.Time, RangeStart: start, LastStart: lastStart}
 		for _, sample := range samples {
 			if sample.EvaluationAt.After(lastStart) {
 				cache.Closed = append(cache.Closed, sample)
@@ -150,7 +157,9 @@ func attachExtremaBudget(ctx context.Context, q *dbgen.Queries, item *api.SloOpe
 				}
 			}
 		case errors.Is(evalErr, ErrDerivedPending), errors.Is(evalErr, ErrDerivedSourceFailed):
-			history = "preparing"
+			if history != "unavailable" {
+				history = "preparing"
+			}
 			reason := "history_preparing"
 			if errors.Is(evalErr, ErrDerivedSourceFailed) {
 				history, reason = "unavailable", "history_preparation_failed"

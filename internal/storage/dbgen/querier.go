@@ -415,6 +415,9 @@ type Querier interface {
 	ReadMaintenanceHourIsolation(ctx context.Context) (string, error)
 	ReadMaintenanceHourRaw(ctx context.Context, arg ReadMaintenanceHourRawParams) ([]ReadMaintenanceHourRawRow, error)
 	ReadMaintenanceHourState(ctx context.Context, arg ReadMaintenanceHourStateParams) (ReadMaintenanceHourStateRow, error)
+	// Same interior readiness predicate as the canonical batch, in its RR snapshot.
+	// Only unmet distinct spans may consume the caller's bounded preparation prefix.
+	ReadMaintenancePendingSourceWindows(ctx context.Context, arg ReadMaintenancePendingSourceWindowsParams) ([]ReadMaintenancePendingSourceWindowsRow, error)
 	ReadMaintenanceRevision(ctx context.Context, arg ReadMaintenanceRevisionParams) (ReadMaintenanceRevisionRow, error)
 	ReadMaintenanceSnapshot(ctx context.Context, arg ReadMaintenanceSnapshotParams) ([]AlmanacMaintenanceExclusionRevision, error)
 	ReadMaintenanceState(ctx context.Context, sloID pgtype.UUID) (int64, error)

@@ -616,3 +616,57 @@ func (q *Queries) ReadMaintenanceEvaluationScopedHours(ctx context.Context, arg 
 	}
 	return items, nil
 }
+
+const readMaintenancePendingSourceWindows = `-- name: ReadMaintenancePendingSourceWindows :many
+WITH requested AS (
+ SELECT unnest($3::timestamptz[]) AS start_at,
+        unnest($4::timestamptz[]) AS end_at
+)
+SELECT r.start_at::timestamptz AS start_at,r.end_at::timestamptz AS end_at
+FROM requested r
+WHERE r.start_at<r.end_at AND EXISTS (
+ SELECT 1 FROM public.almanac_derived_dirty_ranges d
+ WHERE d.sli_id=$1 AND d.measurement_revision=$2
+  AND d.range_start<r.end_at AND d.range_end>r.start_at
+)
+ORDER BY r.start_at,r.end_at
+`
+
+type ReadMaintenancePendingSourceWindowsParams struct {
+	SliID               pgtype.UUID          `json:"sli_id"`
+	MeasurementRevision int64                `json:"measurement_revision"`
+	Starts              []pgtype.Timestamptz `json:"starts"`
+	Ends                []pgtype.Timestamptz `json:"ends"`
+}
+
+type ReadMaintenancePendingSourceWindowsRow struct {
+	StartAt pgtype.Timestamptz `json:"start_at"`
+	EndAt   pgtype.Timestamptz `json:"end_at"`
+}
+
+// Same interior readiness predicate as the canonical batch, in its RR snapshot.
+// Only unmet distinct spans may consume the caller's bounded preparation prefix.
+func (q *Queries) ReadMaintenancePendingSourceWindows(ctx context.Context, arg ReadMaintenancePendingSourceWindowsParams) ([]ReadMaintenancePendingSourceWindowsRow, error) {
+	rows, err := q.db.Query(ctx, readMaintenancePendingSourceWindows,
+		arg.SliID,
+		arg.MeasurementRevision,
+		arg.Starts,
+		arg.Ends,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ReadMaintenancePendingSourceWindowsRow{}
+	for rows.Next() {
+		var i ReadMaintenancePendingSourceWindowsRow
+		if err := rows.Scan(&i.StartAt, &i.EndAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

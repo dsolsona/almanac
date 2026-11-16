@@ -176,12 +176,21 @@ func evaluateMaintenanceWindows(ctx context.Context, tx pgx.Tx, in maintenanceEv
 			w.mask.Windows, err = evaluateDerivedWindowsUsing(ctx, q, in.SliID, in.MeasurementRevision, w.windows, evaluate)
 			if errors.Is(err, ErrDerivedPending) {
 				seen := map[maintenanceWindowRange]bool{}
+				params := dbgen.ReadMaintenancePendingSourceWindowsParams{SliID: in.SliID, MeasurementRevision: in.MeasurementRevision}
 				for _, window := range w.plan.Windows {
 					span := maintenanceWindowRange{Start: window.FullStart, End: window.FullEnd}
 					if span.Start.Before(span.End) && !seen[span] {
 						seen[span] = true
-						result.Preparation = append(result.Preparation, maintenanceEvaluationPreparation{Kind: "source_window", RequestedRevision: w.mask.RequestedRevision, Start: span.Start, End: span.End})
+						params.Starts = append(params.Starts, timestamp(span.Start))
+						params.Ends = append(params.Ends, timestamp(span.End))
 					}
+				}
+				pending, readErr := q.ReadMaintenancePendingSourceWindows(ctx, params)
+				if readErr != nil {
+					return result, readErr
+				}
+				for _, span := range pending {
+					result.Preparation = append(result.Preparation, maintenanceEvaluationPreparation{Kind: "source_window", RequestedRevision: w.mask.RequestedRevision, Start: span.StartAt.Time.UTC(), End: span.EndAt.Time.UTC()})
 				}
 			}
 		} else {
