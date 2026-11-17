@@ -113,7 +113,7 @@ function WindowList({ canWrite }: { canWrite: boolean }) {
   </>;
 }
 
-function WindowDetail({ id, revision, context }: { id: string; revision: string; context: AuthContext }) {
+function WindowDetail({ id, revision, editing, context }: { id: string; revision: string; editing: boolean; context: AuthContext }) {
   const [result, setResult] = useState<Awaited<ReturnType<typeof maintenanceClient.get>>>();
   const [error, setError] = useState('');
   const [refresh, setRefresh] = useState(0);
@@ -145,14 +145,25 @@ function WindowDetail({ id, revision, context }: { id: string; revision: string;
     requestAnimationFrame(() => heading.current?.focus());
     setRefresh(value => value + 1);
   }
+  const canEdit = context.session?.role === 'administrator' || context.session?.role === 'editor';
+  const isFuture = window && !window.tombstone && Date.parse(window.start) > now;
+  const [openedForEdit, setOpenedForEdit] = useState(false);
+  useEffect(() => {
+    if (editing && !revision && canEdit && isFuture) setOpenedForEdit(true);
+  }, [editing, revision, canEdit, isFuture]);
+  if (editing && result && openedForEdit && canEdit) return <ScheduleMaintenance context={context} existing={result} />;
+
   return <>
     <PageHeader headingRef={heading} title={window?.title ?? 'Maintenance window'} breadcrumb={{ href: root, label: 'Maintenance', current: window?.title ?? 'Window' }}
       actions={<>
+        {!revision && !editing && canEdit && isFuture && <a data-app-route href={`${root}/${id}?edit=1`} className="ui-button ui-button--outline">Edit schedule</a>}
         {!revision && result && <MaintenanceLifecycle context={context} record={result.value} etag={result.etag} now={now} readNow={() => readWindowClock(result.serverClock)}
           fallbackFocus={heading} onRevisionRead={acceptLifecycleRevision} onUpdated={applyLifecycleUpdate} />}
         <RefreshButton label="Refresh maintenance window" onClick={() => setRefresh(value => value + 1)} />
       </>} />
     {error && <p className="ui-error" role="alert">{error}</p>}
+    {editing && result && !isFuture && <p role="status">The window is no longer scheduled. Its current details are shown.</p>}
+    {editing && result && !canEdit && <p role="status">An editor or administrator can change the schedule.</p>}
     {!window && !error && <LoadingIndicator label="Loading maintenance window" />}
     {window && <>
       <section className="maintenance-panel maintenance-detail" aria-label="Maintenance details">
@@ -189,9 +200,11 @@ export function MaintenancePage({ context }: { context: AuthContext }) {
   const [pathname = root, query] = route.split('?');
   const id = pathname.split('/')[2];
   const canWrite = context.session?.role === 'administrator' || context.session?.role === 'editor';
+  const params = new URLSearchParams(query);
+  const revision = params.get('revision') ?? '';
 
   return <div className="maintenance-page">{id === 'new'
     ? canWrite ? <ScheduleMaintenance context={context} /> : <><PageHeader title="Schedule maintenance" /><p role="alert">An editor or administrator can schedule maintenance.</p></>
-    : id ? <WindowDetail key={route} id={id} context={context} revision={new URLSearchParams(query).get('revision') ?? ''} />
+    : id ? <WindowDetail key={route} id={id} context={context} revision={revision} editing={!revision && params.get('edit') === '1'} />
       : <WindowList canWrite={canWrite} />}</div>;
 }

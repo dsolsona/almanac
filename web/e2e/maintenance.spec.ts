@@ -63,12 +63,26 @@ test('schedule and inspect explicit SLO maintenance in the deployed app', async 
     await page.getByRole('button', { name: 'Schedule maintenance', exact: true }).click();
     await expect(page.getByRole('heading', { name: displayName, exact: true, level: 1 })).toBeVisible();
     const pathname = new URL(page.url()).pathname;
-    const saved = await expectOk(api(page, 'GET', `/api/v1${pathname}`));
+    let saved = await expectOk(api(page, 'GET', `/api/v1${pathname}`));
     expect(saved.body.slo_ids).toEqual([slo.body.id]);
     expect(Date.parse(saved.body.start)).toBe(start.getTime());
     expect(Date.parse(saved.body.end) - Date.parse(saved.body.start)).toBe(75 * 60_000);
     await expect(page.getByRole('link', { name: 'Checkout availability', exact: true })).toHaveAttribute('href', `/slos/${slo.body.id}`);
     await expect(page.getByText('Scheduled', { exact: true })).toBeVisible();
+    await page.getByRole('link', { name: 'Edit schedule', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Edit maintenance schedule', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Remove Checkout availability', exact: true })).toBeVisible();
+    await page.getByRole('textbox', { name: 'Reason', exact: true }).fill('Apply the approved database update.');
+    await page.getByRole('button', { name: 'Save schedule', exact: true }).click();
+    await expect(page.getByRole('heading', { name: displayName, exact: true, level: 1 })).toBeVisible();
+    const previous = saved;
+    saved = await expectOk(api(page, 'GET', `/api/v1${pathname}`));
+    expect(saved.body.revision).toBe('2');
+    expect(saved.body.reason).toBe('Apply the approved database update.');
+    expect(saved.body.start).toBe(previous.body.start);
+    expect(saved.body.end).toBe(previous.body.end);
+    expect(saved.body.slo_ids).toEqual(previous.body.slo_ids);
+
     await page.screenshot({ path: testInfo.outputPath('maintenance-detail-light.png'), fullPage: true });
     await testInfo.attach('maintenance-detail-light', { path: testInfo.outputPath('maintenance-detail-light.png'), contentType: 'image/png' });
 

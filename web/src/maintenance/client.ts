@@ -14,6 +14,8 @@ export const maintenanceClient = {
     request<MaintenancePage>(`${path}?${new URLSearchParams({ limit: String(limit), ...(cursor ? { cursor } : {}) })}`, { signal }),
   get: (id: string, revision: string, signal: AbortSignal) =>
     request<MaintenanceWindow>(`${path}/${id}${revision ? `?${new URLSearchParams({ revision })}` : ''}`, { signal }),
+  update: (id: string, body: MaintenanceWrite, context: AuthContext, key: string, etag: string) =>
+    request<MaintenanceWindow>(`${path}/${id}`, { ...write(context, body, key, etag), method: 'PUT' }, true),
   create: (body: MaintenanceWrite, context: AuthContext, key: string) =>
     request<MaintenanceWindow>(path, write(context, body, key), true),
 };

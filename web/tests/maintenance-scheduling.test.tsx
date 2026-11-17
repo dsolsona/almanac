@@ -209,3 +209,22 @@ it('keeps the current route when a save completes after leaving the form', async
   await act(async () => { finish?.({ value: record, etag: '' }); });
   expect(location.pathname).toBe('/alerts');
 });
+
+it('preserves the exact bounds of an API-created window when editing its reason', async () => {
+  const route = `/maintenance/${id}?edit=1`;
+  history.replaceState({}, '', route);
+  const etag = `"maintenance:${id}:1"`;
+  vi.spyOn(sloClient, 'get').mockRejectedValue(new Error('Name not loaded'));
+  vi.spyOn(sloClient, 'overview').mockResolvedValue({ items: [] } as unknown as OperationalOverview);
+  const update = vi.spyOn(maintenanceClient, 'update').mockResolvedValue({ value: { ...record, revision: '2' }, etag: `"maintenance:${id}:2"` });
+
+  render(<ScheduleMaintenance context={context} existing={{ value: record, etag }} />);
+  fireEvent.change(screen.getByLabelText('Reason'), { target: { value: 'Updated reason' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save schedule' }));
+  await act(async () => {});
+  expect(update).toHaveBeenCalledWith(id, {
+    title: record.title, reason: 'Updated reason', slo_ids: record.slo_ids,
+    start: '2026-11-18T02:00:01.000Z', end: '2026-11-18T02:00:02.000Z',
+  }, context, expect.any(String), etag);
+  expect(location.pathname + location.search).toBe(`/maintenance/${id}`);
+});

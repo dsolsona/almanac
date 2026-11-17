@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import type { AuthContext } from '../auth/client.ts';
 import { Button, ChoiceChips, Combobox, DatePicker, FormActions, FormSection, PageHeader, TextareaField, TextField, type ComboboxOption } from '../components/ui/index.ts';
 import { SloFailure, sloClient } from '../slos/client.ts';
-import { maintenanceClient, type MaintenanceWrite } from './client.ts';
+import { maintenanceClient, type MaintenanceWindow, type MaintenanceWrite } from './client.ts';
 
 const maxScope = 100;
 
@@ -13,27 +13,55 @@ const durations = [
   { value: '120', label: '2 hours' },
 ];
 
-export function ScheduleMaintenance({ context }: { context: AuthContext }) {
-  const [title, setTitle] = useState('');
-  const [reason, setReason] = useState('');
+export function ScheduleMaintenance({ context, existing }: { context: AuthContext; existing?: { value: MaintenanceWindow; etag: string } }) {
+  const windowRecord = existing?.value;
+  const originalDuration = windowRecord ? Date.parse(windowRecord.end) - Date.parse(windowRecord.start) : 0;
+  const initialDuration = windowRecord ? String(originalDuration / 60_000) : '60';
+  const displayDurations = windowRecord && !Number.isInteger(originalDuration / 60_000)
+    ? [...durations, { value: initialDuration, label: `${originalDuration / 1000} seconds` }]
+    : durations;
+  const returnTo = windowRecord ? `/maintenance/${windowRecord.id}` : '/maintenance';
+  const [title, setTitle] = useState(windowRecord?.title ?? '');
+  const [reason, setReason] = useState(windowRecord?.reason ?? '');
   const [term, setTerm] = useState('');
   const [options, setOptions] = useState<ComboboxOption[]>([]);
-  const [selected, setSelected] = useState<ComboboxOption[]>([]);
+  const [selected, setSelected] = useState<ComboboxOption[]>(() => windowRecord?.slo_ids.map(id => ({ id, label: id })) ?? []);
   const [searchError, setSearchError] = useState('');
   const [searching, setSearching] = useState(true);
-  const [day, setDay] = useState('');
-  const [time, setTime] = useState('');
-  const [duration, setDuration] = useState('60');
+  const [day, setDay] = useState(windowRecord?.start.slice(0, 10) ?? '');
+  const [time, setTime] = useState(windowRecord?.start.slice(11, 19) ?? '');
+  const [duration, setDuration] = useState(initialDuration);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [etag, setETag] = useState(existing?.etag ?? '');
+  const [conflict, setConflict] = useState(false);
+  const [latest, setLatest] = useState<MaintenanceWindow>();
+  const route = useRef(location.pathname + location.search);
   const attempt = useRef<{ body: string; key: string } | null>(null);
   const notice = useRef<HTMLParagraphElement>(null);
   const mounted = useRef(false);
+  const revisionRead = useRef<AbortController | null>(null);
 
   useEffect(() => {
     mounted.current = true;
-    return () => { mounted.current = false; };
+    return () => { mounted.current = false; revisionRead.current?.abort(); };
   }, []);
+
+  useEffect(() => {
+    if (!windowRecord) return;
+    const controller = new AbortController();
+    async function resolveNames(ids: string[]) {
+      for (let offset = 0; offset < ids.length && !controller.signal.aborted; offset += 10) {
+        const results = await Promise.allSettled(ids.slice(offset, offset + 10).map(id => sloClient.get(id, controller.signal)));
+        if (controller.signal.aborted) return;
+        const names = new Map(results.flatMap(result => result.status === 'fulfilled'
+          ? [[result.value.value.id, result.value.value.display_name] as const] : []));
+        setSelected(current => current.map(option => ({ ...option, label: names.get(option.id) ?? option.label })));
+      }
+    }
+    void resolveNames(windowRecord.slo_ids);
+    return () => controller.abort();
+  }, [windowRecord]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -57,13 +85,16 @@ export function ScheduleMaintenance({ context }: { context: AuthContext }) {
 
   const minutes = Number(duration);
   const start = Date.parse(`${day}T${time}Z`);
-  const end = start + minutes * 60_000;
-  const validSchedule = day && time && Number.isFinite(start) && new Date(start).getUTCFullYear() >= 1970 && /^[0-9]+$/.test(duration) && Number.isSafeInteger(minutes) && minutes > 0 &&
+  const retainedDuration = windowRecord && duration === initialDuration;
+  const durationMs = retainedDuration ? originalDuration : minutes * 60_000;
+  const end = start + durationMs;
+  const validDuration = retainedDuration || /^[0-9]+$/.test(duration) && Number.isSafeInteger(minutes) && minutes > 0;
+  const validSchedule = day && time && Number.isFinite(start) && new Date(start).getUTCFullYear() >= 1970 && validDuration &&
     Number.isFinite(new Date(end).getTime()) && new Date(end).getUTCFullYear() <= 9999;
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (saving) return;
+    if (saving || conflict) return;
     const bytes = new TextEncoder();
     if (!title.trim() || !reason.trim() || bytes.encode(title.trim()).length > 512 || bytes.encode(reason.trim()).length > 4096) {
       setError('Enter a name and reason within the allowed lengths.');
@@ -76,26 +107,56 @@ export function ScheduleMaintenance({ context }: { context: AuthContext }) {
       title: title.trim(), reason: reason.trim(), slo_ids: selected.map(option => option.id).sort(),
       start: new Date(start).toISOString(), end: new Date(end).toISOString(),
     };
-    const serialized = JSON.stringify(body);
+    const serialized = JSON.stringify([etag, body]);
     if (attempt.current?.body !== serialized) attempt.current = { body: serialized, key: crypto.randomUUID() };
     setSaving(true);
     setError('');
     try {
-      const result = await maintenanceClient.create(body, context, attempt.current.key);
-      if (!mounted.current || location.pathname !== '/maintenance/new') return;
+      const result = windowRecord
+        ? await maintenanceClient.update(windowRecord.id, body, context, attempt.current.key, etag)
+        : await maintenanceClient.create(body, context, attempt.current.key);
+      if (!mounted.current || location.pathname + location.search !== route.current) return;
       history.replaceState({}, '', `/maintenance/${result.value.id}`);
       dispatchEvent(new PopStateEvent('popstate'));
     } catch (failure) {
       if (!mounted.current) return;
-      if (failure instanceof SloFailure && !failure.uncertain) attempt.current = null;
+      if (failure instanceof SloFailure && !failure.uncertain) {
+        attempt.current = null;
+        setConflict(!!windowRecord && failure.status === 409);
+      }
       setError(failure instanceof Error ? failure.message : 'The maintenance could not be scheduled.');
     } finally {
       if (mounted.current) setSaving(false);
     }
   }
 
+  async function readCurrentRevision() {
+    if (!windowRecord || saving) return;
+    const controller = new AbortController();
+    revisionRead.current = controller;
+    setSaving(true);
+    try {
+      const current = await maintenanceClient.get(windowRecord.id, '', controller.signal);
+      if (!mounted.current) return;
+      setLatest(current.value);
+      const currentTime = current.serverClock?.time ?? Date.now();
+      if (current.value.tombstone || Date.parse(current.value.start) <= currentTime) {
+        setError('The latest revision is no longer scheduled. Open the window to see its current state.');
+        return;
+      }
+      setETag(current.etag);
+      setConflict(false);
+      setError('Latest revision loaded. Check its schedule before saving your changes.');
+    } catch (failure) {
+      if (mounted.current) setError(failure instanceof Error ? failure.message : 'The latest revision could not be loaded.');
+    } finally {
+      if (mounted.current) setSaving(false);
+    }
+  }
+
   return <>
-    <PageHeader title="Schedule maintenance" breadcrumb={{ href: '/maintenance', label: 'Maintenance', current: 'Schedule' }} />
+    <PageHeader title={windowRecord ? 'Edit maintenance schedule' : 'Schedule maintenance'}
+      breadcrumb={{ href: returnTo, label: windowRecord?.title ?? 'Maintenance', current: windowRecord ? 'Edit schedule' : 'Schedule' }} />
     <form className="maintenance-form" onSubmit={submit}>
       <FormSection title="Context">
         <TextField id="maintenance-title" label="Name" value={title} onChange={event => setTitle(event.target.value)} maxLength={512} required disabled={saving} />
@@ -111,19 +172,21 @@ export function ScheduleMaintenance({ context }: { context: AuthContext }) {
       <FormSection title="Schedule" hint="UTC">
         <div className="maintenance-schedule-row">
           <DatePicker label="Start date" value={day} onValueChange={setDay} disabled={saving} today={new Date().toISOString().slice(0, 10)} />
-          <TextField id="maintenance-time" label="Start time (UTC)" type="time" value={time} onChange={event => setTime(event.target.value)} required disabled={saving} />
+          <TextField id="maintenance-time" label="Start time (UTC)" type="time" step={windowRecord ? 1 : 60} value={time} onChange={event => setTime(event.target.value)} required disabled={saving} />
         </div>
         <div className="maintenance-duration">
-          <ChoiceChips id="maintenance-duration" label="Duration" options={durations} value={duration} onChange={setDuration} disabled={saving}
+          <ChoiceChips id="maintenance-duration" label="Duration" options={displayDurations} value={duration} onChange={setDuration} disabled={saving}
             custom={{ unit: 'minutes', placeholder: 'Minutes', inputMode: 'numeric', format: value => `${value} min`,
               validate: value => /^[0-9]+$/.test(value) && Number.isSafeInteger(Number(value)) && Number(value) > 0 ? undefined : 'Enter a positive whole number of minutes.' }} />
         </div>
-        {validSchedule && <p className="ui-hint">Ends <time dateTime={new Date(end).toISOString()}>{new Date(end).toISOString().slice(0, 16).replace('T', ' ')} UTC</time></p>}
+        {validSchedule && <p className="ui-hint">Ends <time dateTime={new Date(end).toISOString()}>{new Date(end).toISOString().slice(0, windowRecord ? 19 : 16).replace('T', ' ')} UTC</time></p>}
       </FormSection>
       {error && <p ref={notice} tabIndex={-1} role="alert" className="ui-error">{error}</p>}
+      {latest && <p className="ui-hint">Current revision {latest.revision} · {latest.title} · {latest.start} to {latest.end} · {latest.slo_ids.length} SLOs</p>}
       <FormActions>
-        <a data-app-route href="/maintenance" className="ui-button ui-button--outline">Cancel</a>
-        <Button type="submit" pending={saving}>Schedule maintenance</Button>
+        <a data-app-route href={returnTo} className="ui-button ui-button--outline">Cancel</a>
+        {conflict && <Button variant="outline" disabled={saving} onClick={() => void readCurrentRevision()}>Read latest revision</Button>}
+        <Button type="submit" pending={saving} disabled={conflict}>{windowRecord ? 'Save schedule' : 'Schedule maintenance'}</Button>
       </FormActions>
     </form>
   </>;
