@@ -24,7 +24,6 @@ export function AlertDetailScreen(props:Props){
           try{const result=await alertClient.series(props.id,condition.id,{},controller.signal);
             if(result.value.policy_id!==record.value.policy_id||result.value.evaluation_revision!==record.value.evaluation_revision)throw new Error('Chart revision changed.');
             series.set(condition.id,result.value);
-            if(result.value.sampling.reduced)notices.push(`Chart sampling shows ${result.value.sampling.returned} of ${result.value.sampling.total} retained evaluations${result.value.sampling.omitted_extrema?'; some extrema are omitted':''}.`);
             if(result.value.gaps.some(gap=>gap.basis==='effective_cutoff'&&gap.kind!=='unavailable'))notices.push('Some evaluation history is not retained. Gaps are left open in the chart.');
           }catch(failure){if(!controller.signal.aborted)notices.push('Chart history could not be loaded. Exact saved evidence remains available.');}
         }));

@@ -31,6 +31,31 @@ notification silences and destination configuration are later scope.
 
 ## Behavior and contracts
 
+### Approved presentation correction, 2026-11-17
+
+The maintainer approved these scoped corrections to the implemented management UI;
+this does not accept unrelated draft contracts or change engine semantics:
+
+- Successful policy creation and editing return to the policies list with a brief
+  accessible confirmation. Failed and uncertain commands retain their draft and
+  existing reconciliation controls. A save completing while the list is already
+  open refreshes its rows.
+- Policies use the shared resource-table presentation: left-aligned linked name,
+  centred secondary columns, status chip, enclosed pager and labelled mobile rows.
+- Active/History selection belongs in the occurrence-list toolbar below its heading.
+  Policies is a secondary title-row action, available to viewers as well as editors.
+- Active detail copy identifies the last evaluated condition, paired burn values,
+  windows and threshold. Acknowledgement shows actor/time without implying assignment.
+  Missing evidence still prevents a claim of recovery. Resolved copy distinguishes
+  ordinary condition recovery from resolution after a maintenance change; if its
+  terminal transition has not been loaded, use a neutral recovery description.
+- Current evidence stays visible. One collapsed Evidence details section contains
+  calculation explanation, original firing evidence and technical metadata for both
+  snapshots. Exact values, bounds and revisions remain accessible.
+- Reduced chart detail is explained quietly beside the plot in plain language,
+  including potentially missing brief peaks. Actual missing history and read failures
+  remain distinct from the choice of which retained evaluations to plot.
+
 ### Alert list and history
 
 Use A's compact table: alert/policy name and SLO are separate, with lifecycle,

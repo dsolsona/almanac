@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type MouseEvent } from 'react';
-import { Button, Combobox, Dialog, PageHeader, Pager, RefreshButton, SearchField, SelectField, StatusChip, TextField, Toolbar, ToolbarSpacer, resourceRowClick } from '../components/ui/index.ts';
+import { Button, Combobox, Dialog, PageHeader, Pager, RefreshButton, SearchField, SegmentedControl, SelectField, StatusChip, TextField, Toolbar, ToolbarSpacer, resourceRowClick } from '../components/ui/index.ts';
 import './occurrence-list.css';
 
 export type AlertLifecycle = 'firing' | 'acknowledged' | 'resolved' | 'disabled' | 'superseded';
@@ -29,7 +29,7 @@ type Props = {
   onOpen: (href: string) => void; onAcknowledge: (id: string, expectedVersion: string) => void;
   acknowledgement?: { id: string; pending: boolean; error?: string };
   gaps?: { id: string; start: string; end: string; reason: string }[];
-  busy?: boolean; error?: string;
+  busy?: boolean; error?: string; policiesHref?: string; onViewChange?: (view:'active'|'history')=>void;
 };
 const labels: Record<AlertLifecycle, string> = { firing: 'Firing', acknowledged: 'Acknowledged', resolved: 'Resolved', disabled: 'Disabled', superseded: 'Superseded' };
 const titles: Record<FilterSection, string> = { all: 'Filter alerts', alert: 'Filter alert', slo: 'Filter SLO', state: 'Filter state', evidence: 'Filter evidence', age: 'Filter duration' };
@@ -112,9 +112,10 @@ export function AlertOccurrenceList(props: Props) {
   const includes = (part: FilterSection) => section === 'all' || section === part;
   const field = (key: keyof AlertListFilters, value: string) => setDraft(previous => ({ ...previous, [key]: value }));
   return <div className="alert-occurrence-list">
-    <PageHeader headingRef={heading} title={view === 'active' ? 'Alerts' : 'Alert history'} actions={props.canCreate === false ? undefined : <a className="ui-button ui-button--primary" href={props.newPolicyHref} data-app-route>New alert policy</a>} />
+    <PageHeader headingRef={heading} title={view === 'active' ? 'Alerts' : 'Alert history'} actions={<div className="alert-page-actions">{props.policiesHref&&<a className="ui-button ui-button--outline" href={props.policiesHref} data-app-route>Policies</a>}{props.canCreate !== false&&<a className="ui-button ui-button--primary" href={props.newPolicyHref} data-app-route>New alert policy</a>}</div>} />
     <Toolbar>
       <SearchField inputRef={search} id={`${id}-search`} label="Search alerts" placeholder="Search alerts…" value={filters.policyName} onChange={event => props.onFiltersChange({ ...filters, policyName: event.target.value })} />
+      {props.onViewChange&&<SegmentedControl label="Alert view" value={view} options={[{value:'active',label:'Active'},{value:'history',label:'History'}]} onChange={props.onViewChange}/>}
       <ToolbarSpacer /><Button variant={filterCount ? 'selected' : 'ghost'} aria-haspopup="dialog" onClick={event => openFilter(event, 'all')}>Filters{filterCount > 0 ? ` · ${filterCount}` : ''}</Button>
       <Button variant={props.grouped ? 'selected' : 'ghost'} aria-pressed={props.grouped} onClick={() => props.onGroupChange(!props.grouped)}>Group by SLO</Button>
       {filterCount > 0 && <Button variant="link" onClick={() => { props.onFiltersChange(emptyAlertListFilters()); search.current?.focus(); }}>Clear filters</Button>}

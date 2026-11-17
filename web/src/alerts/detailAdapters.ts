@@ -1,6 +1,7 @@
 import type { components } from '../api/generated.ts';
 import type { TimelineChart, TimelinePoint } from '../components/charts/timelineModel.ts';
 import type { AlertConditionEvidence, AlertEvidenceSnapshot, AlertOccurrenceDetailData } from './AlertOccurrenceDetail.tsx';
+import { exactDecimal } from '../slos/detailFormat.ts';
 import { conditionName, processingStatus } from './adapters.ts';
 
 type Schema=components['schemas'];
@@ -19,7 +20,7 @@ export function evidenceChart(series:Schema['AlertSeries']|undefined,condition:S
         const gap=series.gaps.find(gap=>gap.basis==='effective_cutoff'&&gap.start!==gap.end&&Date.parse(gap.start)<time&&Date.parse(gap.end)>prior);
         if(gap||series.sampling.reduced){
           const middle=Math.floor((prior+time)/2);
-          if(middle>prior&&middle<time)result.push({timestamp:new Date(middle).toISOString(),value:null,coverage:'missing',reason:gap?'Retained evaluation evidence is unavailable in this interval.':'Intermediate evaluations omitted by chart sampling.'});
+          if(middle>prior&&middle<time)result.push({timestamp:new Date(middle).toISOString(),value:null,coverage:'missing',reason:gap?'Retained evaluation evidence is unavailable in this interval.':'Not every evaluation is plotted here.'});
         }
       }
       const window=point.condition[which],value=window.burn??null;
@@ -28,7 +29,7 @@ export function evidenceChart(series:Schema['AlertSeries']|undefined,condition:S
     }
     return result;
   };
-  return {title:'Burn rate',summary:series?`${series.sampling.returned} retained evaluations${series.sampling.reduced?` of ${series.sampling.total}; intermediate evaluations omitted`:''}${series.sampling.omitted_extrema?'; some extrema omitted':''}.`:'Retained chart history is unavailable. Saved evidence is shown below.',start,end,stepMs:60000,fillExpectedGaps:false,timeZone:'UTC',
+  return {title:'Burn rate',summary:series?'Burn rate at saved evaluation times.':'Retained chart history is unavailable. Saved evidence is shown below.',start,end,stepMs:60000,fillExpectedGaps:false,timeZone:'UTC',
     lanes:[{id:'burn',label:'Burn rate',unit:'×',series:[{id:'short',label:'Short window',color:'primary',points:points('short')},{id:'long',label:'Long window',points:points('long')}]}],referenceLines:[{lane:'burn',value:condition.threshold,label:`${condition.threshold}× threshold`}]};
 }
 export function evidenceSnapshot(value:Schema['AlertEvidence'],occurrence:Schema['AlertRecord'],series:Map<string,Schema['AlertSeries']>):AlertEvidenceSnapshot {
@@ -41,7 +42,7 @@ export function evidenceSnapshot(value:Schema['AlertEvidence'],occurrence:Schema
         const item=condition[which];
         return {label:which==='short'?'Short window':'Long window',seconds:(Date.parse(item.end)-Date.parse(item.start))/1000,start:item.start,end:item.end,bad:item.bad??null,total:item.total??null,observedErrorRate:item.observed_error_rate??null,allowedErrorRate:item.allowed_error_rate??null,burn:item.burn??null,reason:item.reason??item.quality.replaceAll('_',' '),quality:item.quality};
       }
-      return {id:condition.id,name:conditionName(condition),outcome:condition.outcome,explanation:outcomeExplanation(condition.outcome),threshold:condition.threshold,windows:[window('short'),window('long')],chart:evidenceChart(series.get(condition.id),condition)} satisfies AlertConditionEvidence;
+      return {id:condition.id,name:conditionName(condition),outcome:condition.outcome,explanation:outcomeExplanation(condition.outcome),threshold:condition.threshold,windows:[window('short'),window('long')],chart:evidenceChart(series.get(condition.id),condition),...(series.get(condition.id)?.sampling.reduced?{chartNote:series.get(condition.id)?.sampling.omitted_extrema?'The chart shows selected evaluations; brief peaks may not appear. Exact values for the latest evaluation are shown above.':'The chart shows selected evaluations. Exact values for the latest evaluation are shown above.'}:{})} satisfies AlertConditionEvidence;
     })};
 }
 const lifecycleLabels:Record<Schema['AlertLifecycle'],string>={firing:'Firing',acknowledged:'Acknowledged',resolved:'Resolved',disabled:'Disabled',superseded:'Superseded'};
@@ -49,7 +50,13 @@ export function occurrenceDetail(record:Schema['AlertRecord'],original:Schema['A
   if(latest.evaluation.snapshot.cutoff!==record.latest_snapshot.cutoff||original.evaluation.snapshot.cutoff!==record.firing_snapshot.cutoff)throw new Error('The alert changed while evidence was being read. Refresh to see its current evidence.');
   const last=[...transitions.items].reverse().find(item=>['resolved','disabled','superseded'].includes(item.to));
   const progress=processing.revision===record.evaluation_revision?processingStatus(processing):{state:'current' as const};
-  const stateReason=record.state==='firing'?'A condition matched. The alert remains open until complete evidence confirms recovery.':record.state==='acknowledged'?'Someone is handling this alert. It remains open until complete evidence confirms recovery.':record.state==='resolved'?'Complete evidence confirmed recovery.':record.state==='disabled'?'This alert was closed when its policy or SLO was disabled.':'A new policy definition superseded this alert.';
+  const matching=latest.evaluation.conditions.find(condition=>condition.outcome==='matching');
+  const unavailable=latest.evaluation.conditions.find(condition=>condition.outcome==='unavailable');
+  const duration=(start:string,end:string)=>{const minutes=(Date.parse(end)-Date.parse(start))/60000;return minutes%60===0?`${minutes/60} h`:`${minutes} min`;};
+  const stateReason=record.state==='firing'||record.state==='acknowledged'
+    ?matching?`Last evaluated: ${conditionName(matching)} at ${exactDecimal(matching.short.burn??null)}× (${duration(matching.short.start,matching.short.end)}) and ${exactDecimal(matching.long.burn??null)}× (${duration(matching.long.start,matching.long.end)}); threshold ${exactDecimal(matching.threshold)}×.`
+      :unavailable?'Recovery cannot be confirmed because some evaluations are unavailable.':'No condition meets its threshold in the latest evaluation.'
+    :record.state==='resolved'?(last?.cause==='resolved_after_maintenance_change'?'Resolved after a maintenance exclusion changed.':last?.cause==='conditions_cleared'?'Every condition is below threshold in at least one window.':'Recovery confirmed. See lifecycle history for the resolution details.'):record.state==='disabled'?'Closed because its policy or SLO was disabled.':'Closed because the policy’s evaluation settings changed.';
   return {id:record.id,version:record.version,policyName:record.original_policy.name,slo:{id:record.firing_snapshot.slo_id,name:record.original_policy.slo_name,service:record.original_policy.service_name,href:`/slos/${record.firing_snapshot.slo_id}`},state:record.state,severity:record.original_policy.severity,reason:stateReason,openedAt:record.firing_snapshot.cutoff,detectedAt:record.opened_detected_at,closedAt:record.closed_at,terminalCause:last?.reason??last?.cause.replaceAll('_',' '),
     ...(record.acknowledged_at&&record.acknowledged_by?{acknowledged:{at:record.acknowledged_at,actor:record.acknowledged_by===userID?'You':record.acknowledged_by}}:{}),
     processing:progress.state==='current'?progress:{...progress,totalDelaySeconds:processing.lag_seconds},

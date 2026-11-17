@@ -30,6 +30,7 @@ test('selected alert detail cards and exact keyboard inspection @matrix', async 
   if (info.project.name === 'desktop-dark') await capture(page, detail, '../.local/alert-detail-keyboard-focus-dark.png');
   await detail.getByRole('heading', { level: 1 }).click();
   await capture(page, detail, `../.local/alert-detail-${info.project.name}.png`);
+  await detail.getByText('Evidence details', { exact: true }).click();
   await detail.getByText('How this is calculated', { exact: true }).click();
   await expect(detail.getByText(/375 bad.*30,000/)).toBeVisible();
   await expect(detail.getByText('1.25%', { exact: true })).toBeVisible();
@@ -91,6 +92,7 @@ test('detail acknowledgement errors and committed resolution retain usable focus
   await chart.focus(); await page.keyboard.press('End');
   await expect(chart.getByRole('tooltip')).toContainText('1 ×'); await expect(chart.getByRole('tooltip')).toContainText('2 ×');
   await page.keyboard.press('Escape');
+  await detail.getByText('Evidence details', { exact: true }).click();
   await detail.getByText('Original firing evidence', { exact: true }).click();
   const original = detail.getByRole('region', { name: 'Original firing evidence' });
   await expect(original.getByRole('heading', { name: 'Sustained burn · Matching' })).toBeVisible();
@@ -119,7 +121,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
       expect(await detail.getByRole('group', { name: /Inspect Burn rate/ }).evaluate(element => getComputedStyle(element).getPropertyValue('-webkit-tap-highlight-color'))).toBe('rgba(0, 0, 0, 0)');
       expect(panel.y).toBeGreaterThanOrEqual(0); expect(panel.y + panel.height).toBeLessThanOrEqual(800);
       await page.screenshot({ path: `../.local/alert-detail-touch-inspection-${colorScheme}.png` });
-      await detail.getByText('How this is calculated', { exact: true }).tap(); await expect(tooltip).toHaveCount(0);
+      await detail.getByText('Evidence details', { exact: true }).tap(); await expect(tooltip).toHaveCount(0);
       await example.getByRole('button', { name: 'Hold acknowledgement', exact: true }).tap();
       const acknowledge = detail.getByRole('button', { name: 'Acknowledge', exact: true }); await acknowledge.scrollIntoViewIfNeeded();
       expect((await acknowledge.boundingBox())!.height).toBeGreaterThanOrEqual(44);

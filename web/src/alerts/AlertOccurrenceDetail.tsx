@@ -14,7 +14,7 @@ export type AlertEvidenceWindow = {
 };
 export type AlertConditionEvidence = {
   id: string; name: string; outcome: 'matching' | 'not_matching' | 'unavailable';
-  explanation: string; threshold: string; windows: readonly [AlertEvidenceWindow, AlertEvidenceWindow]; chart: TimelineChart;
+  explanation: string; threshold: string; windows: readonly [AlertEvidenceWindow, AlertEvidenceWindow]; chart: TimelineChart; chartNote?: string;
 };
 export type AlertEvidenceSnapshot = {
   evaluatedAt: string; sloTarget: string; sloWindowSeconds: number; policyRevision: string; sloRevision: string; measurementRevision: string;
@@ -128,13 +128,16 @@ export function AlertOccurrenceDetail({ data, now, backHref, canAcknowledge, onA
         <div className="alert-detail-chart-title"><h2>Burn rate</h2><Time value={data.latest.evaluatedAt} /></div>
         <p className="sr-only">{selected.chart.summary}</p>
         <TimelineChartView chart={selected.chart} showHeader={false} generation={`${data.version}:${data.latest.evaluatedAt}:${selected.id}`} inspection />
+        {selected.chartNote&&<p className="alert-detail-chart-note">{selected.chartNote}</p>}
         <div className="alert-detail-legend" aria-label="Chart series">{selected.chart.lanes.flatMap(lane => lane.series).map((series, index) => <span key={series.id}><i className={`alert-detail-series--${series.color === 'critical' ? 'critical' : series.color === 'primary' ? 0 : index}`} aria-hidden="true" />{series.label}</span>)}</div>
         <p className="alert-detail-condition-outcome">{data.latest.conditions.length === 1 && <strong>{outcomes[selected.outcome]} · </strong>}{selected.explanation}</p>
       </> : <p role="alert">Latest condition evidence unavailable.</p>}
-      <details className="alert-detail-disclosure"><summary>Latest evidence provenance</summary><Provenance snapshot={data.latest} /></details>
-      <details className="alert-detail-disclosure"><summary>Original firing evidence</summary><section aria-label="Original firing evidence">{data.original.conditions.map(condition => <div className="alert-detail-original-condition" key={condition.id}><h3>{condition.name} · {outcomes[condition.outcome]}</h3><Windows condition={condition} bounds /><p>{condition.explanation}</p></div>)}<Provenance snapshot={data.original} /></section></details>
     </section>
-    <details className="alert-detail-card alert-detail-expand"><summary>How this is calculated</summary><div>{selected ? <Calculation condition={selected} snapshot={data.latest} /> : <p>Calculation evidence unavailable.</p>}<p className="alert-detail-calculation-time">Evaluated <Time value={data.latest.evaluatedAt} /></p></div></details>
+    <details className="alert-detail-card alert-detail-expand"><summary>Evidence details</summary><div>
+      <details className="alert-detail-disclosure"><summary>How this is calculated</summary>{selected ? <Calculation condition={selected} snapshot={data.latest} /> : <p>Calculation evidence unavailable.</p>}<p className="alert-detail-calculation-time">Evaluated <Time value={data.latest.evaluatedAt} /></p></details>
+      <details className="alert-detail-disclosure"><summary>Original firing evidence</summary><section aria-label="Original firing evidence">{data.original.conditions.map(condition => <div className="alert-detail-original-condition" key={condition.id}><h3>{condition.name} · {outcomes[condition.outcome]}</h3><Windows condition={condition} bounds /><p>{condition.explanation}</p></div>)}</section></details>
+      <details className="alert-detail-disclosure"><summary>Technical details</summary><h3>Latest evaluation</h3><Provenance snapshot={data.latest} /><h3>Firing evaluation</h3><Provenance snapshot={data.original} /></details>
+    </div></details>
     <details className="alert-detail-card alert-detail-expand" open><summary>Lifecycle history</summary><p className="alert-detail-detection">Detected <Time value={data.detectedAt} /></p><ol className="alert-detail-history">{data.lifecycle.map(event => <li key={event.id}><Time value={event.at} /><div><h3>{event.title}</h3><p>{event.description}</p>{event.actor && <p>{event.actor}</p>}{event.effectiveAt && event.effectiveAt !== event.at && <p>Effective <Time value={event.effectiveAt} /></p>}{event.cause && <p>{event.cause}</p>}</div></li>)}</ol></details>
   </article>;
 }

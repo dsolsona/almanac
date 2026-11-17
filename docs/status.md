@@ -1,3 +1,14 @@
+Alert UI correction, 2026-11-17: [F4-T52](tasks/F4-T52.md) implements the
+maintainer-approved save-to-list flow, shared policies table, toolbar view selection,
+factual state copy and consolidated evidence disclosures. Forty-seven focused unit
+cases, forty-eight browser cases and both normal Docker onboarding/policy-management
+journeys pass; strict TypeScript, production build and production-exclusion checks
+pass. [Design evidence](evidence/alert-ui/2026-11-17/README.md) includes unedited
+before/after theme/mobile captures, the Services reference and the deployed save
+flow. Independent review's same-URL refresh and maintenance-attribution findings
+are corrected. The candidate is ready for PR review; broad CI remains pending. This UI correction
+does not certify deferred capacity/performance acceptance.
+
 Alert review closeout, 2026-11-17: [PR #127](https://github.com/dsolsona/almanac/pull/127)
 is the only open alert implementation PR. All five inline CodeRabbit threads are
 resolved. The additional review-summary proof-window finding is confirmed and

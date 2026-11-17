@@ -284,3 +284,11 @@ the alert identity; state, evidence, duration and actions stay centred. At narro
 widths the table scrolls within its labelled region. Server group totals and
 lifecycle remain authoritative; the presentation never downloads all pages to
 filter or group them, computes alert truth, or optimistically acknowledges a row.
+
+Alert policies use the shared resource-panel/table styles and status chips, with
+the pager inside the panel and labelled mobile rows. Occurrence Active/History
+selection uses the shared segmented control in the toolbar; Policies is a secondary
+title-row action. Alert details keep current measurements visible and group the
+calculation, original firing measurements and technical provenance under one
+collapsed Evidence details disclosure. Reduced chart detail is a quiet note beside
+the plot, separate from missing-history or failed-read notices.

@@ -7,6 +7,7 @@ test('selected alert list, evidence and compact creation remain usable @matrix',
  await page.goto('/alerts');
  await expect(page.getByRole('heading',{name:'Alerts',exact:true})).toBeVisible();
  await expect(page.getByRole('link',{name:'Checkout burn',exact:true})).toBeVisible();
+ await expect(page.getByRole('radiogroup',{name:'Alert view'})).toBeVisible();
  await expect(page.getByText('Both ≥ 14.4× burn')).toBeVisible();
  if(page.viewportSize()!.width<=1100){await expect(page.locator('.alert-mobile-summary')).toContainText('Firing');await expect(page.locator('.alert-mobile-summary')).toContainText('14.4×');}
  await page.screenshot({path:`../.local/alerts-public/list-${info.project.name}.png`,fullPage:true});
@@ -16,6 +17,7 @@ test('selected alert list, evidence and compact creation remain usable @matrix',
  await expect(page).toHaveURL(`/alerts/${alertID}`);
  await expect(page.getByRole('heading',{name:'Checkout burn',exact:true})).toBeVisible();
  await expect(page.getByRole('link',{name:alertSlo.display_name,exact:true})).toHaveAttribute('href',`/slos/${alertSlo.id}`);
+ await page.getByText('Evidence details',{exact:true}).click();
  await page.getByText('How this is calculated',{exact:true}).click();
  await expect(page.getByText('144 bad of 10,000')).toHaveCount(2);
  await expect(page.getByText('1.44% ÷ 0.1%')).toHaveCount(2);
@@ -37,7 +39,10 @@ test('selected alert list, evidence and compact creation remain usable @matrix',
  await page.screenshot({path:`../.local/alerts-public/create-${info.project.name}.png`,fullPage:true});
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  await page.getByRole('button',{name:'Create alert policy',exact:true}).click();
- await expect(page).toHaveURL(`/alerts/policies/${policyID}`);
+ await expect(page).toHaveURL('/alerts/policies');
+ await expect(page.getByRole('status')).toHaveText('Alert policy saved.');
+ await expect(page.getByRole('link',{name:'Checkout error budget',exact:true})).toBeVisible();
+ await page.getByRole('link',{name:'Checkout error budget',exact:true}).click();
  await expect(page.getByLabel('Alert policy name')).toHaveValue('Checkout error budget');
  expect(fixture.created().count).toBe(1);
  const ack=fixture.requests.find(request=>request.path.endsWith('/acknowledge'))!;
@@ -57,7 +62,7 @@ test('uncertain creation reconciles its original command without issuing another
  await page.getByRole('link',{name:'Review alert command'}).click();
  await expect(page.getByRole('heading',{name:'Command outcome needs confirmation'})).toBeVisible();
  await page.getByRole('button',{name:'Check command result'}).click();
- await expect(page).toHaveURL(`/alerts/policies/${policyID}`);
+ await expect(page).toHaveURL('/alerts/policies');
  expect(fixture.created().count).toBe(1);
  const lookup=fixture.requests.find(request=>request.path.startsWith('/api/v1/alert-commands'))!;
  expect(new URL(lookup.path,'http://fixture').searchParams.get('idempotency_key')).toBe(fixture.created().key);

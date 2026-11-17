@@ -1,0 +1,33 @@
+{
+  "base": "9f54acd447b8f80b49ffb2853e155584fea43c08",
+  "capture": "Playwright screenshots of application routes with fictional intercepted API data; expanded evidence uses the public-route fixture. Deployed screenshots are labelled separately.",
+  "viewports": {
+    "desktop": "1440x1000",
+    "mobile": "360x800"
+  },
+  "product_source_sha256": {
+    "web/src/alerts/AlertDetailScreen.tsx": "df26b88f960a3aac127a14348351b0d969b5a9aaffcfc4f78586daf12b1ab10d",
+    "web/src/alerts/AlertOccurrenceDetail.tsx": "dcabe4d9adf8559c2074e32b1256b71be1bb2fa0fae3f8172957b1d69d438157",
+    "web/src/alerts/AlertOccurrenceList.tsx": "ec1d589c6021da3e6799405bfe9bbaefb6212b450a75f91af638d49c6e52a3f5",
+    "web/src/alerts/AlertPolicyForm.tsx": "70fd9b1ac59b420885221c1f43b0470d0262e9262ad862e2220cdd3b5f8b7490",
+    "web/src/alerts/AlertsPage.tsx": "46219bcfbea95613ee7e609e44d87049291756b7e5165cd6db2e5d8219cefa7d",
+    "web/src/alerts/adapters.ts": "565f4ba96743c2d6776e64cbc948f4748e87e0d7402beacf18c8ebea22368040",
+    "web/src/alerts/alerts-page.css": "752f70e77c92cb943d0af567541e76b8544e9f3bfcb6838c62f8ae058cdf8177",
+    "web/src/alerts/client.ts": "812ff9be3bf1fbfc68eaed8af036649b3398a378f6bcbeb24bb1ed8ef144dade",
+    "web/src/alerts/detailAdapters.ts": "79a0b13debea3e2873b9347f0480ef19a68ba94e3d563de5fd23062c4c0e7d06",
+    "web/src/alerts/occurrence-detail.css": "6d428bc3c035a3dac2b47a1042e96eeae105c7749a35f192ade2abb32f24572a",
+    "web/src/alerts/occurrence-list.css": "4208ff8bf2eae79417960b7033b4e91a286976d6b4373fdb1b2683fe0703175f",
+    "web/src/alerts/policy-form.css": "4c1233f1765b72aefefdcd4d5f0ba8ff051bca25ff74d461afae3dba030f2de9",
+    "web/src/alerts/policyDraft.ts": "3c2feb6e1c8bd0d6f405721e34c36a4b996ddcde8b0ec8a54fc907e024924575",
+    "web/src/alerts/useAlertCommands.ts": "397356049bca282b1d3733437e97872fed1fc6c573d87f25b1990632e446c0e4",
+    "web/src/alerts/validation.ts": "882eeb4f3b8b2222a1e5902b2562fe2725f929a40678816959a68de681b7baeb",
+    "web/src/catalogue/AlertDetailExample.tsx": "d5d7eb15aa3a8a2814358e71ce19604335797ea6af9433002905e8f9e8071a76",
+    "web/src/catalogue/AlertOccurrenceExample.tsx": "062cce79285748e1398404c94e62626886b470e17bbff3f96c3e654a5d05a8e4"
+  },
+  "normal_deployment": {
+    "image": "sha256:be9aec3602ff1a039606633be81a6eeef21bb4ec6487e49905098964163bfa4c",
+    "command": "make test-e2e ARGS='e2e/alerts.spec.ts --workers=1'",
+    "result": "2 passed (7.1s); normal images built, isolated HTTPS stack started and removed",
+    "captured_at": "2026-11-17T15:42Z"
+  }
+}

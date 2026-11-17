@@ -24,7 +24,7 @@ function snapshot(at: string, original = false): AlertEvidenceSnapshot {
 const initial: AlertOccurrenceDetailData = {
   id: 'checkout-sustained', version: '11', policyName: 'Checkout sustained burn',
   slo: { id: 'checkout-availability', name: 'Checkout availability', service: 'Checkout', href: '/design-system#alert-detail-slo' },
-  state: 'firing', severity: 'medium', reason: 'Both burn windows exceed the threshold.', openedAt: '2026-11-12T10:32:00Z', detectedAt: '2026-11-12T10:32:08Z', processing: { state: 'current' },
+  state: 'firing', severity: 'medium', reason: 'Last evaluated: Sustained burn at 12.5× (30 min) and 7.4× (6 h); threshold 6×.', openedAt: '2026-11-12T10:32:00Z', detectedAt: '2026-11-12T10:32:08Z', processing: { state: 'current' },
   original: snapshot('2026-11-12T10:32:00Z', true), latest: snapshot(now),
   lifecycle: [{ id: 'fired', at: '2026-11-12T10:32:08Z', effectiveAt: '2026-11-12T10:32:00Z', title: 'Alert fired', description: 'Both burn windows exceeded the threshold in the same evaluation.' }],
 };
@@ -61,6 +61,7 @@ export function AlertDetailExample() {
   return <section className="catalogue-section" id="alert-detail" aria-labelledby="alert-detail-title">
     <div className="section-heading"><p className="eyebrow mono">ALERTS / DETAIL</p><h2 id="alert-detail-title">Alert occurrence detail</h2><p>Fictional supplied evidence. Actions simulate committed responses locally and do not change Almanac.</p></div>
     <div className="example-row">
+      <Button variant="outline" onClick={() => show({ ...initial, latest: { ...initial.latest, conditions: initial.latest.conditions.map(condition => ({ ...condition, chartNote: 'The chart shows selected evaluations; brief peaks may not appear. Exact values for the latest evaluation are shown above.' })) } })}>Show reduced chart detail</Button>
       <Button variant="outline" onClick={() => show(handoff())}>Show condition handoff</Button>
       <Button variant="outline" onClick={() => show(handoff(true))}>Show unavailable evidence</Button>
       <Button variant="outline" onClick={() => show({ ...initial, latest: snapshot('2026-11-12T10:37:00Z'), processing: { state: 'waiting', dueAt: '2026-11-12T10:38:00Z', reason: 'Waiting for aggregate preparation', totalDelaySeconds: 240, aggregateWaitSeconds: 180 } })}>Show calculation waiting</Button>

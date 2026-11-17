@@ -39,6 +39,7 @@ describe('selected alert detail', () => {
     expect(screen.getByRole('link', { name: 'Checkout availability' })).toHaveAttribute('href', '/slos/real-slo-id');
     expect(screen.getByText('Medium severity')).toBeVisible(); expect(screen.getByText('Firing', { exact: true })).toBeVisible();
     expect(screen.getByText('12.5×', { exact: true })).toBeVisible(); expect(screen.getByText('12.5×', { exact: true })).toHaveClass('is-matching'); expect(screen.getByText('7.4×', { exact: true })).toBeVisible();
+    await user.click(screen.getByText('Evidence details', { exact: true }));
     await user.click(screen.getByText('How this is calculated', { exact: true }));
     expect(screen.getByText(/375 bad.*30,000/)).toBeVisible();
     expect(screen.getAllByText('1.25%', { exact: true }).length).toBeGreaterThan(0);
@@ -50,15 +51,17 @@ describe('selected alert detail', () => {
   });
   it('retains original and latest evidence separately, including exact revisions and bounds', async () => {
     const user = userEvent.setup(); render(<AlertOccurrenceDetail {...props()} />);
+    await user.click(screen.getByText('Evidence details', { exact: true }));
     await user.click(screen.getByText(/Original firing evidence/));
     const original = screen.getByRole('region', { name: 'Original firing evidence' });
     expect(within(original).getAllByText('6.0000000000001×', { exact: true })).toHaveLength(2);
-    expect(within(original).getByText('9007199254740990')).toBeVisible();
+
     expect(within(original).getAllByText(/Observed error 0.60000000000001%/)).toHaveLength(2);
-    expect(within(original).getByText('99.9%')).toBeVisible();
+
     expect(original.querySelector('time[datetime="2026-11-12T10:32:00Z"]')).not.toBeNull();
-    await user.click(screen.getByText('Latest evidence provenance', { exact: true }));
+    await user.click(screen.getByText('Technical details', { exact: true }));
     expect(screen.getByText('9007199254740993')).toBeVisible();
+    expect(screen.getByText('9007199254740990')).toBeVisible();
     expect(screen.getAllByText('occurrences-v1')).toHaveLength(2);
   });
   it('renders supplied non-matching and unavailable outcomes without deriving them from displayed burn', async () => {

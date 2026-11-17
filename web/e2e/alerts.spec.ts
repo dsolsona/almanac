@@ -19,8 +19,13 @@ test('save, edit, disable and enable an alert policy through the deployed UI',as
  await page.getByRole('combobox',{name:'SLO',exact:true}).fill(name);
  await page.getByRole('option',{name:new RegExp(name)}).click();
  await page.getByRole('button',{name:'Create alert policy',exact:true}).click();
- await expect(page).toHaveURL(/\/alerts\/policies\/[0-9a-f-]{36}$/);
- const policyID=new URL(page.url()).pathname.split('/').at(-1)!;
+ await expect(page).toHaveURL(/\/alerts\/policies$/);
+ await expect(page.getByRole('status')).toHaveText('Alert policy saved.');
+ const savedLink=page.getByRole('link',{name,exact:true});
+ const policyID=(await savedLink.getAttribute('href'))!.split('/').at(-1)!;
+ await page.screenshot({path:'../.local/alert-ui-evidence/after/deployed-policy-created.png',fullPage:true});
+ await info.attach('policy-created-list',{body:await page.screenshot({fullPage:true}),contentType:'image/png'});
+ await savedLink.click();
  await expect(page.getByLabel('Alert policy name')).toHaveValue(name);
  let saved=await expectOk(api(page,'GET',`/api/v1/alert-policies/${policyID}`));
  expect(saved.body.slo_id).toBe(objective.body.id);expect(saved.body.severity).toBe('medium');
@@ -28,6 +33,9 @@ test('save, edit, disable and enable an alert policy through the deployed UI',as
  const revision=saved.body.evaluation_revision;
  await page.getByLabel('Alert policy name').fill(name+' renamed');
  await page.getByRole('button',{name:'Save changes',exact:true}).click();
+ await expect(page).toHaveURL(/\/alerts\/policies$/);
+ await expect(page.getByRole('link',{name:name+' renamed',exact:true})).toBeVisible();
+ await page.getByRole('link',{name:name+' renamed',exact:true}).click();
  await expect(page.getByRole('heading',{name:name+' renamed',exact:true})).toBeVisible();
  saved=await expectOk(api(page,'GET',`/api/v1/alert-policies/${policyID}`));expect(saved.body.evaluation_revision).toBe(revision);
  await page.getByRole('button',{name:'Disable policy',exact:true}).click();
