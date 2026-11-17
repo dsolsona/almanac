@@ -123,7 +123,8 @@ test('success toast supports keyboard dismissal, repeated saves and reading time
   await page.goto('/design-system#operational');
   const show=page.getByRole('button',{name:'Show success toast',exact:true});
   await expect(show).toBeVisible();
-  await page.clock.install();
+  await page.clock.install({time:new Date('2026-11-17T12:00:00Z')});
+  await page.clock.pauseAt(new Date('2026-11-17T12:00:01Z'));
   await show.click();
   const toast=page.locator('.ui-toast[data-open=true]');
   await expect(toast).toBeVisible();
@@ -135,5 +136,7 @@ test('success toast supports keyboard dismissal, repeated saves and reading time
   await page.screenshot({path:`../.local/alert-ui-evidence/refined/toast-${info.project.name}.png`,fullPage:false});
   await dismiss.press('Enter');await expect(toast).toHaveCount(0);
   await show.click();await expect(toast).toBeVisible();await page.mouse.move(0,0);
-  await page.clock.fastForward(5000);await expect(toast).toHaveCount(0);
+  await page.clock.fastForward(4000);await show.click();await page.mouse.move(0,0);
+  await page.clock.fastForward(4999);await expect(toast).toBeVisible();
+  await page.clock.fastForward(1);await expect(toast).toHaveCount(0);
 });

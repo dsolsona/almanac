@@ -30,7 +30,7 @@ export function AlertsPage({context,commands}:{context:AuthContext;commands:Comm
   const [alerts,setAlerts]=useState<AlertPage>(emptyPage),[policies,setPolicies]=useState<PolicyPage>({items:[],total:'0'});
   const [policy,setPolicy]=useState<Policy|null>(null),[etag,setEtag]=useState(''),[processing,setProcessing]=useState<Processing|null>(null);
   const [slos,setSlos]=useState<AlertSloOption[]>([]),[search,setSearch]=useState('');
-  const [busy,setBusy]=useState(true),[readError,setError]=useState(''),[notice,setNotice]=useState('');
+  const [busy,setBusy]=useState(true),[readError,setError]=useState(''),[notice,setNotice]=useState({id:0,message:''});
   const [receiptBusy,setReceiptBusy]=useState(false),[currentReview,setCurrentReview]=useState('');
   const {intent,status}=commands.state;
   const pending=status==='sending'||receiptBusy,uncertain=status==='uncertain'||status==='expired',error=readError||commands.state.error;
@@ -94,13 +94,13 @@ export function AlertsPage({context,commands}:{context:AuthContext;commands:Comm
   function accepted(result:CommandResult){
     commands.clearResult();setError('');
     const saved=result.operation==='alert-policy.create'||result.operation==='alert-policy.update';
-    setNotice(saved?'Alert policy saved.':result.operation==='alert.acknowledge'?'Alert acknowledged.':result.operation==='alert-policy.disable'?'Alert policy disabled.':result.operation==='alert-policy.enable'?'Alert policy enabled.':'Evaluation retry requested.');
+    setNotice(current=>({id:current.id+1,message:saved?'Alert policy saved.':result.operation==='alert.acknowledge'?'Alert acknowledged.':result.operation==='alert-policy.disable'?'Alert policy disabled.':result.operation==='alert-policy.enable'?'Alert policy enabled.':'Evaluation retry requested.'}));
     if(saved){if(href()==='/alerts/policies')setRefresh(value=>value+1);else navigate('/alerts/policies');}
     else setRefresh(value=>value+1);
   }
   useEffect(()=>{if(commands.state.status==='committed'&&commands.state.result&&commands.state.intent?.actorID===context.session?.user_id)accepted(commands.state.result);},[commands.state.status,commands.state.result]);
-  const dismissNotice=useCallback(()=>setNotice(''),[]);
-  const toast=<Toast message={notice} onDismiss={dismissNotice}/>;
+  const dismissNotice=useCallback(()=>setNotice(current=>({...current,message:''})),[]);
+  const toast=<Toast notificationId={notice.id} message={notice.message} onDismiss={dismissNotice}/>;
   function perform(command:Intent){if(!context.session)return;void commands.perform({...command,actorID:context.session.user_id,origin:route} as AlertIntent);}
   async function inspectCurrent(){
     if(!intent||intent.actorID!==context.session?.user_id)return;

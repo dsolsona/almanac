@@ -1,3 +1,12 @@
+Alert review correction, 2026-11-17: [PR #129](https://github.com/dsolsona/almanac/pull/129)
+has one valid CodeRabbit finding: identical successive success notices can inherit
+the previous dismissal deadline. Both consumers now assign a fresh notification
+ID, preserving the mounted live region and reading-time guards. Five focused unit
+cases and seven browser cases pass, including exact repeated-message timing.
+[F4-T52](tasks/F4-T52.md) preserves the regression and fixture-clock diagnosis.
+All four application CI gates pass on prior `cae4991`; the correction receives
+fresh CI/review after publication.
+
 Alert UI refinement, 2026-11-17: [PR #129](https://github.com/dsolsona/almanac/pull/129)
 now has a compact status/duration line, shared save toast, one-click supporting
 evidence and a quieter chart-led detail hierarchy. Nineteen focused unit cases,

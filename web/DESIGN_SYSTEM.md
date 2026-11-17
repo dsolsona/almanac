@@ -295,7 +295,8 @@ the plot, separate from missing-history or failed-read notices.
 
 Success feedback uses the shared `Toast`: fixed placement, a persistent polite
 live region, a labelled dismiss button and a five-second timer paused while the
-pointer or keyboard is reading it. It never takes focus automatically or shifts
+pointer or keyboard is reading it. Each notification has a new ID so repeating
+the same message restarts the full dismissal period. It never takes focus automatically or shifts
 page content; empty notifications remain outside layout. The Operational catalogue
 demonstrates it. Alert details use a compact status/duration line, reserve prose
 for exceptional states, and expose calculations/original evidence after one
