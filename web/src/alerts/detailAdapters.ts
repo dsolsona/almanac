@@ -1,7 +1,6 @@
 import type { components } from '../api/generated.ts';
 import type { TimelineChart, TimelinePoint } from '../components/charts/timelineModel.ts';
 import type { AlertConditionEvidence, AlertEvidenceSnapshot, AlertOccurrenceDetailData } from './AlertOccurrenceDetail.tsx';
-import { exactDecimal } from '../slos/detailFormat.ts';
 import { conditionName, processingStatus } from './adapters.ts';
 
 type Schema=components['schemas'];
@@ -52,11 +51,9 @@ export function occurrenceDetail(record:Schema['AlertRecord'],original:Schema['A
   const progress=processing.revision===record.evaluation_revision?processingStatus(processing):{state:'current' as const};
   const matching=latest.evaluation.conditions.find(condition=>condition.outcome==='matching');
   const unavailable=latest.evaluation.conditions.find(condition=>condition.outcome==='unavailable');
-  const duration=(start:string,end:string)=>{const minutes=(Date.parse(end)-Date.parse(start))/60000;return minutes%60===0?`${minutes/60} h`:`${minutes} min`;};
   const stateReason=record.state==='firing'||record.state==='acknowledged'
-    ?matching?`Last evaluated: ${conditionName(matching)} at ${exactDecimal(matching.short.burn??null)}× (${duration(matching.short.start,matching.short.end)}) and ${exactDecimal(matching.long.burn??null)}× (${duration(matching.long.start,matching.long.end)}); threshold ${exactDecimal(matching.threshold)}×.`
-      :unavailable?'Recovery cannot be confirmed because some evaluations are unavailable.':'No condition meets its threshold in the latest evaluation.'
-    :record.state==='resolved'?(last?.cause==='resolved_after_maintenance_change'?'Resolved after a maintenance exclusion changed.':last?.cause==='conditions_cleared'?'Every condition is below threshold in at least one window.':'Recovery confirmed. See lifecycle history for the resolution details.'):record.state==='disabled'?'Closed because its policy or SLO was disabled.':'Closed because the policy’s evaluation settings changed.';
+    ?matching?'':unavailable?'Recovery cannot be confirmed because some evaluations are unavailable.':''
+    :record.state==='resolved'?(last?.cause==='resolved_after_maintenance_change'?'Resolved after a maintenance exclusion changed.':''):record.state==='disabled'?'Closed because its policy or SLO was disabled.':'Closed because the policy’s evaluation settings changed.';
   return {id:record.id,version:record.version,policyName:record.original_policy.name,slo:{id:record.firing_snapshot.slo_id,name:record.original_policy.slo_name,service:record.original_policy.service_name,href:`/slos/${record.firing_snapshot.slo_id}`},state:record.state,severity:record.original_policy.severity,reason:stateReason,openedAt:record.firing_snapshot.cutoff,detectedAt:record.opened_detected_at,closedAt:record.closed_at,terminalCause:last?.reason??last?.cause.replaceAll('_',' '),
     ...(record.acknowledged_at&&record.acknowledged_by?{acknowledged:{at:record.acknowledged_at,actor:record.acknowledged_by===userID?'You':record.acknowledged_by}}:{}),
     processing:progress.state==='current'?progress:{...progress,totalDelaySeconds:processing.lag_seconds},

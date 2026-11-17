@@ -12,7 +12,7 @@ const condition = { id: 'sustained', name: 'Sustained burn', outcome: 'matching'
   chart: { title: 'Burn rate', summary: 'Exact supplied burn evidence.', start: '2026-11-12T09:42:00Z', end: '2026-11-12T10:42:00Z', stepMs: 300000, fillExpectedGaps: false, lanes: [{ id: 'burn', label: 'Burn', unit: '×', series: [{ id: 'recent', label: '30 min burn', points: [{ timestamp: '2026-11-12T10:42:00Z', value: '12.5', coverage: 'complete' as const }] }, { id: 'sustained', label: '6 h burn', points: [{ timestamp: '2026-11-12T10:42:00Z', value: '7.4', coverage: 'complete' as const }] }] }], referenceLines: [{ lane: 'burn', value: '6', label: '6× threshold' }] } };
 const snapshot = { evaluatedAt: '2026-11-12T10:42:00Z', sloTarget: '0.999', sloWindowSeconds: 2592000, policyRevision: '7', sloRevision: '3', measurementRevision: '2', sourceGeneration: '9007199254740993', exclusionRevision: '4', calculationVersion: 'occurrences-v1', primaryConditionId: 'sustained', conditions: [condition] };
 const data: AlertOccurrenceDetailData = {
-  id: 'occurrence-1', version: '11', policyName: 'Checkout sustained burn', slo: { id: 'slo-1', name: 'Checkout availability', service: 'Checkout', href: '/slos/real-slo-id' }, state: 'firing', severity: 'medium', openedAt: '2026-11-12T10:32:00Z', detectedAt: '2026-11-12T10:33:00Z', reason: 'Both burn windows exceed the threshold.', processing: { state: 'current' }, latest: snapshot,
+  id: 'occurrence-1', version: '11', policyName: 'Checkout sustained burn', slo: { id: 'slo-1', name: 'Checkout availability', service: 'Checkout', href: '/slos/real-slo-id' }, state: 'firing', severity: 'medium', openedAt: '2026-11-12T10:32:00Z', detectedAt: '2026-11-12T10:33:00Z', reason: '', processing: { state: 'current' }, latest: snapshot,
   original: { ...snapshot, evaluatedAt: '2026-11-12T10:32:00Z', sourceGeneration: '9007199254740990', conditions: [{ ...condition, windows: condition.windows.map((value, index) => ({ ...value, start: index === 0 ? '2026-11-12T10:02:00Z' : '2026-11-12T04:32:00Z', end: '2026-11-12T10:32:00Z', bad: index === 0 ? '180.000000000003' : '2160.000000000036', observedErrorRate: '0.0060000000000001', burn: '6.0000000000001' })) as unknown as typeof condition.windows }] },
   lifecycle: [{ id: 'fired', at: '2026-11-12T10:33:08.123456Z', effectiveAt: '2026-11-12T10:32:00Z', title: 'Alert fired', description: 'Both burn windows met the threshold in the same evaluation.' }],
 };
@@ -40,11 +40,12 @@ describe('selected alert detail', () => {
     expect(screen.getByText('Medium severity')).toBeVisible(); expect(screen.getByText('Firing', { exact: true })).toBeVisible();
     expect(screen.getByText('12.5×', { exact: true })).toBeVisible(); expect(screen.getByText('12.5×', { exact: true })).toHaveClass('is-matching'); expect(screen.getByText('7.4×', { exact: true })).toBeVisible();
     await user.click(screen.getByText('Evidence details', { exact: true }));
-    await user.click(screen.getByText('How this is calculated', { exact: true }));
+    expect(screen.getByRole('heading', { name: 'How this is calculated' })).toBeVisible();
     expect(screen.getByText(/375 bad.*30,000/)).toBeVisible();
     expect(screen.getAllByText('1.25%', { exact: true }).length).toBeGreaterThan(0);
     expect(screen.getAllByText('0.1%', { exact: true }).length).toBeGreaterThan(0);
     expect(screen.getByText('Lifecycle history', { exact: true })).toBeVisible();
+    await user.click(screen.getByText('Lifecycle history', { exact: true }));
     expect(screen.getByText(/10:33:08.123456 UTC/)).toBeVisible();
     expect(screen.getByText(/A 99.9% target allows 0.1% unsuccessful events/)).toBeVisible();
     for (const label of [/close alert/i, /assign/i, /notes/i, /destination/i]) expect(screen.queryByRole('button', { name: label })).not.toBeInTheDocument();
@@ -52,7 +53,7 @@ describe('selected alert detail', () => {
   it('retains original and latest evidence separately, including exact revisions and bounds', async () => {
     const user = userEvent.setup(); render(<AlertOccurrenceDetail {...props()} />);
     await user.click(screen.getByText('Evidence details', { exact: true }));
-    await user.click(screen.getByText(/Original firing evidence/));
+    expect(screen.getByRole('heading', { name: 'Original firing evidence' })).toBeVisible();
     const original = screen.getByRole('region', { name: 'Original firing evidence' });
     expect(within(original).getAllByText('6.0000000000001×', { exact: true })).toHaveLength(2);
 

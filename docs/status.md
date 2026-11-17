@@ -1,3 +1,13 @@
+Alert UI refinement, 2026-11-17: [PR #129](https://github.com/dsolsona/almanac/pull/129)
+now has a compact status/duration line, shared save toast, one-click supporting
+evidence and a quieter chart-led detail hierarchy. Nineteen focused unit cases,
+the route/design and detail browser selections, and both rebuilt normal Docker
+journeys pass. The original-head CI style-comparison race is corrected by binding
+to the loaded policy cell. A controlled regression also fixes repeated-toast
+keyboard dismissal. [F4-T52](tasks/F4-T52.md) records exact commands and host exit-143
+caveats; [refined evidence](evidence/alert-ui/2026-11-17/README.md) preserves both
+iterations and normal-deployment captures. Updated broad CI remains required.
+
 Alert UI correction, 2026-11-17: [F4-T52](tasks/F4-T52.md) implements the
 maintainer-approved save-to-list flow, shared policies table, toolbar view selection,
 factual state copy and consolidated evidence disclosures. Forty-seven focused unit

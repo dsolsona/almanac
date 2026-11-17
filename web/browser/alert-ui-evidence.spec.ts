@@ -52,7 +52,8 @@ test('sampled chart explains its limits beside the plot and keeps exact evidence
   await page.goto(`/alerts/${alertID}`);
   await expect(page.locator('.alert-detail-chart-note')).toContainText('brief peaks may not appear');
   await expect(page.locator('.alert-list-notice')).toHaveCount(0);
-  await expect(page.getByRole('region', { name: 'Current alert state' })).toContainText('14.4× (5 min) and 14.4× (1 h); threshold 14.4×');
+  await expect(page.getByRole('region', { name: 'Current alert state' })).toContainText('Open 2 min');
+  await expect(page.getByRole('region', { name: 'Current alert state' })).not.toContainText('Last evaluated:');
   await page.getByRole('button', { name: 'Acknowledge', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Current alert state' })).toContainText('Acknowledged by You');
   await expect(page.getByText(/Someone is handling|A condition matched/)).toHaveCount(0);
@@ -92,11 +93,47 @@ test('policy tables share the existing services presentation @matrix', async ({ 
   await page.evaluate(() => document.fonts.ready);
   await page.screenshot({ path: `../.local/alert-ui-evidence/after/services-reference-${info.project.name}.png`, fullPage: true });
   await page.goto('/alerts/policies');
-  const policy = page.locator('.alert-policy-table tbody td').first();
+  const policy = page.getByRole('link', { name: 'Checkout burn', exact: true }).locator('..');
   await expect(policy).toBeVisible();
   const policyStyle = await policy.evaluate(element => {
     const style = getComputedStyle(element);
     return { fontSize: style.fontSize, lineHeight: style.lineHeight, paddingLeft: style.paddingLeft };
   });
   expect(policyStyle).toEqual(referenceStyle);
+});
+
+
+test('save feedback floats without moving the policies toolbar', async ({ page }) => {
+  await alertFixture(page);
+  await page.goto('/alerts/policies');
+  const search=page.getByRole('searchbox',{name:'Search policies'});
+  const before=(await search.boundingBox())!.y;
+  await page.getByRole('link',{name:'Checkout burn',exact:true}).click();
+  await page.getByRole('button',{name:'Save changes',exact:true}).click();
+  await expect(page).toHaveURL('/alerts/policies');
+  await expect(page.getByRole('status').filter({hasText:'Alert policy saved.'})).toBeVisible();
+  await expect(page.locator('.ui-toast')).toHaveCSS('position','fixed');
+  expect((await search.boundingBox())!.y).toBe(before);
+  await page.screenshot({path:'../.local/alert-ui-evidence/refined/save-toast.png',fullPage:true});
+  await page.getByRole('button',{name:'Dismiss notification'}).click();
+  await expect(page.getByText('Alert policy saved.',{exact:true})).toHaveCount(0);
+});
+
+test('success toast supports keyboard dismissal, repeated saves and reading time @matrix', async ({ page }, info) => {
+  await page.goto('/design-system#operational');
+  const show=page.getByRole('button',{name:'Show success toast',exact:true});
+  await expect(show).toBeVisible();
+  await page.clock.install();
+  await show.click();
+  const toast=page.locator('.ui-toast[data-open=true]');
+  await expect(toast).toBeVisible();
+  const rect=(await toast.boundingBox())!;
+  expect(rect.x).toBeGreaterThanOrEqual(0);expect(rect.x+rect.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+  await toast.hover();await page.clock.fastForward(6000);await expect(toast).toBeVisible();
+  const dismiss=toast.getByRole('button',{name:'Dismiss notification'});
+  await dismiss.focus();await page.mouse.move(0,0);await page.clock.fastForward(6000);await expect(toast).toBeVisible();
+  await page.screenshot({path:`../.local/alert-ui-evidence/refined/toast-${info.project.name}.png`,fullPage:false});
+  await dismiss.press('Enter');await expect(toast).toHaveCount(0);
+  await show.click();await expect(toast).toBeVisible();await page.mouse.move(0,0);
+  await page.clock.fastForward(5000);await expect(toast).toHaveCount(0);
 });

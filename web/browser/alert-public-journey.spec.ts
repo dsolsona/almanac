@@ -18,7 +18,6 @@ test('selected alert list, evidence and compact creation remain usable @matrix',
  await expect(page.getByRole('heading',{name:'Checkout burn',exact:true})).toBeVisible();
  await expect(page.getByRole('link',{name:alertSlo.display_name,exact:true})).toHaveAttribute('href',`/slos/${alertSlo.id}`);
  await page.getByText('Evidence details',{exact:true}).click();
- await page.getByText('How this is calculated',{exact:true}).click();
  await expect(page.getByText('144 bad of 10,000')).toHaveCount(2);
  await expect(page.getByText('1.44% ÷ 0.1%')).toHaveCount(2);
  const chart=page.locator('.timeline-chart__plot').first();

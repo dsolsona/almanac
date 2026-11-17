@@ -1,0 +1,6 @@
+.ui-toast { position:fixed; z-index:var(--layer-notice); right:max(var(--space-6),env(safe-area-inset-right)); bottom:max(var(--space-6),env(safe-area-inset-bottom)); display:flex; align-items:center; gap:var(--space-5); max-width:min(30rem,calc(100vw - 32px)); box-sizing:border-box; padding:var(--space-3) var(--space-4); border:1px solid var(--border-strong); border-radius:var(--radius-sm); background:var(--surface); color:var(--text); box-shadow:var(--shadow); font:14px/1.5 var(--font-body); }
+.ui-toast [role=status] { overflow-wrap:anywhere; }
+.ui-toast .ui-button { flex-shrink:0; }
+@media (max-width:600px) { .ui-toast { right:max(var(--space-4),env(safe-area-inset-right)); bottom:max(var(--space-4),env(safe-area-inset-bottom)); gap:var(--space-3); } }
+
+.ui-toast[data-open=false] { padding:0; border:0; box-shadow:none; }

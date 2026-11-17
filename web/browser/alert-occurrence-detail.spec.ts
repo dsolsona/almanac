@@ -31,10 +31,8 @@ test('selected alert detail cards and exact keyboard inspection @matrix', async 
   await detail.getByRole('heading', { level: 1 }).click();
   await capture(page, detail, `../.local/alert-detail-${info.project.name}.png`);
   await detail.getByText('Evidence details', { exact: true }).click();
-  await detail.getByText('How this is calculated', { exact: true }).click();
   await expect(detail.getByText(/375 bad.*30,000/)).toBeVisible();
   await expect(detail.getByText('1.25%', { exact: true })).toBeVisible();
-  await detail.getByText(/Original firing evidence/).click();
   await expect(detail.getByRole('region', { name: 'Original firing evidence' })).toBeVisible();
   await capture(page, detail, `../.local/alert-detail-calculation-${info.project.name}.png`);
   await example.getByRole('button', { name: 'Show long detail names', exact: true }).click();
@@ -85,7 +83,7 @@ test('detail acknowledgement errors and committed resolution retain usable focus
   await expect(detail.getByText('Resolved', { exact: true })).toBeVisible();
   await expect(detail.getByRole('heading', { level: 1 })).toBeFocused();
   const evidence = detail.getByRole('region', { name: 'Alert evidence' });
-  await expect(evidence.getByText('Not matching ·', { exact: true })).toBeVisible();
+  await expect(evidence.getByText('Not matching ·', { exact: true })).toHaveCount(0);
   await expect(evidence.getByText('1×', { exact: true })).toBeVisible();
   await expect(evidence.getByText('2×', { exact: true })).toBeVisible();
   const chart = detail.getByRole('group', { name: /Inspect Burn rate/ });
@@ -93,11 +91,9 @@ test('detail acknowledgement errors and committed resolution retain usable focus
   await expect(chart.getByRole('tooltip')).toContainText('1 ×'); await expect(chart.getByRole('tooltip')).toContainText('2 ×');
   await page.keyboard.press('Escape');
   await detail.getByText('Evidence details', { exact: true }).click();
-  await detail.getByText('Original firing evidence', { exact: true }).click();
   const original = detail.getByRole('region', { name: 'Original firing evidence' });
   await expect(original.getByRole('heading', { name: 'Sustained burn · Matching' })).toBeVisible();
   await expect(original.getByText('6.8×', { exact: true })).toBeVisible();
-  await detail.getByText('How this is calculated', { exact: true }).click();
   await expect(detail.getByText('30 bad of 30,000', { exact: true })).toBeVisible();
   await expect(detail.getByText('720 bad of 360,000', { exact: true })).toBeVisible();
   await expect(detail.getByText('0.2%', { exact: true })).toBeVisible();

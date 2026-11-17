@@ -37,21 +37,26 @@ The maintainer approved these scoped corrections to the implemented management U
 this does not accept unrelated draft contracts or change engine semantics:
 
 - Successful policy creation and editing return to the policies list with a brief
-  accessible confirmation. Failed and uncertain commands retain their draft and
+  accessible toast that does not move the list. The toast can be dismissed, stays
+  while hovered or focused, and never takes focus automatically. Failed and uncertain commands retain their draft and
   existing reconciliation controls. A save completing while the list is already
   open refreshes its rows.
 - Policies use the shared resource-table presentation: left-aligned linked name,
   centred secondary columns, status chip, enclosed pager and labelled mobile rows.
 - Active/History selection belongs in the occurrence-list toolbar below its heading.
   Policies is a secondary title-row action, available to viewers as well as editors.
-- Active detail copy identifies the last evaluated condition, paired burn values,
-  windows and threshold. Acknowledgement shows actor/time without implying assignment.
+- Detail status is a compact lifecycle/duration line. Paired burn values, windows
+  and threshold appear with the chart rather than being repeated as a paragraph.
+  Acknowledgement shows actor/time without implying assignment.
   Missing evidence still prevents a claim of recovery. Resolved copy distinguishes
   ordinary condition recovery from resolution after a maintenance change; if its
-  terminal transition has not been loaded, use a neutral recovery description.
+  terminal transition has not been loaded, avoid inferring its cause. Ordinary
+  firing, acknowledgement and recovery need no explanatory status paragraph.
 - Current evidence stays visible. One collapsed Evidence details section contains
-  calculation explanation, original firing evidence and technical metadata for both
-  snapshots. Exact values, bounds and revisions remain accessible.
+  calculation explanation and original firing evidence directly after one expansion.
+  Only technical metadata for both snapshots stays further collapsed. Exact values,
+  bounds and revisions remain accessible. Lifecycle history is collapsed initially;
+  quiet dividers separate supporting sections from the primary chart surface.
 - Reduced chart detail is explained quietly beside the plot in plain language,
   including potentially missing brief peaks. Actual missing history and read failures
   remain distinct from the choice of which retained evaluations to plot.

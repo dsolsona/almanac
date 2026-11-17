@@ -292,3 +292,11 @@ title-row action. Alert details keep current measurements visible and group the
 calculation, original firing measurements and technical provenance under one
 collapsed Evidence details disclosure. Reduced chart detail is a quiet note beside
 the plot, separate from missing-history or failed-read notices.
+
+Success feedback uses the shared `Toast`: fixed placement, a persistent polite
+live region, a labelled dismiss button and a five-second timer paused while the
+pointer or keyboard is reading it. It never takes focus automatically or shifts
+page content; empty notifications remain outside layout. The Operational catalogue
+demonstrates it. Alert details use a compact status/duration line, reserve prose
+for exceptional states, and expose calculations/original evidence after one
+expansion. Technical metadata and initially collapsed lifecycle history stay quiet.

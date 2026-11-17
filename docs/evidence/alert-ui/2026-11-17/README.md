@@ -1,8 +1,8 @@
 # Alert UI correction evidence, 2026-11-17
 
 These are browser captures of the actual application routes with fictional API
-fixtures, not mockup HTML. Before captures use product source at `9f54acd`; after
-captures use the source hashes in [source.json](source.json). Desktop is 1440 px,
+fixtures, not mockup HTML. Before captures use product source at `9f54acd`; first-pass captures use the hashes in [source.json](source.json). Final refined
+captures use [refined/source.json](refined/source.json). Desktop is 1440 px,
 mobile is 360 px. Both themes are included. The isolated deployed save journey is
 recorded separately below.
 
@@ -14,8 +14,8 @@ uses labelled stacked rows instead of a desktop table requiring sideways scrolli
 
 | Before | After |
 | --- | --- |
-| ![Policies, desktop light, before](before/policies-desktop-light.png) | ![Policies, desktop light, after](after/policies-desktop-light.png) |
-| ![Policies, mobile dark, before](before/policies-mobile-dark.png) | ![Policies, mobile dark, after](after/policies-mobile-dark.png) |
+| ![Policies, desktop light, before](before/policies-desktop-light.png) | ![Policies, desktop light, after](refined/policies-desktop-light.png) |
+| ![Policies, mobile dark, before](before/policies-mobile-dark.png) | ![Policies, mobile dark, after](refined/policies-mobile-dark.png) |
 
 The existing Services page is the reference, captured with fictional fixtures:
 [desktop light](after/services-reference-desktop-light.png),
@@ -32,27 +32,29 @@ page actions. Browser checks exercise arrow-key selection and Back navigation.
 
 | Before | After |
 | --- | --- |
-| ![Alerts, desktop light, before](before/alerts-desktop-light.png) | ![Alerts, desktop light, after](after/alerts-desktop-light.png) |
+| ![Alerts, desktop light, before](before/alerts-desktop-light.png) | ![Alerts, desktop light, after](refined/alerts-desktop-light.png) |
 
 ## Alert details
 
-The state summary names the measured windows, burn values and threshold. Supporting
-calculations, original evidence and technical revisions are under Evidence details.
+The compact status line shows lifecycle and duration. Burn values and the chart
+carry the explanation without a duplicate paragraph. One expansion shows calculations
+and original evidence; only technical revisions remain further collapsed. History
+and supporting sections use quiet dividers and begin collapsed.
 Acknowledgement shows its actor/time and does not claim assignment. Sampling limits
 are explained beside the chart without a page-level technical warning.
 
 | Before | After |
 | --- | --- |
-| ![Detail, desktop dark, before](before/detail-desktop-dark.png) | ![Detail, desktop dark, after](after/detail-desktop-dark.png) |
-| ![Detail, mobile light, before](before/detail-mobile-light.png) | ![Detail, mobile light, after](after/detail-mobile-light.png) |
+| ![Detail, desktop dark, before](before/detail-desktop-dark.png) | ![Detail, desktop dark, after](refined/detail-desktop-dark.png) |
+| ![Detail, mobile light, before](before/detail-mobile-light.png) | ![Detail, mobile light, after](refined/detail-mobile-light.png) |
 
-[Expanded calculations, light](after/details-expanded-desktop-light.png) ·
-[Expanded calculations, dark](after/details-expanded-desktop-dark.png) ·
-[Acknowledged alert with reduced chart detail](after/sampled-acknowledged.png).
+[Expanded calculations, light](refined/details-expanded-desktop-light.png) ·
+[Expanded calculations, dark](refined/details-expanded-desktop-dark.png) ·
+[Acknowledged alert with reduced chart detail](refined/sampled-acknowledged.png).
 
 The paired captures also include each page in desktop light/dark and mobile
 light/dark in the `before/` and `after/` directories. They preserve all screenshots
-without image editing. Fixtures contain no real operational data or credentials.
+without image editing. First-pass images remain in `after/`; final images are in `refined/`. Fixtures contain no real operational data or credentials.
 
 ## Verification
 
@@ -74,3 +76,29 @@ The deployed screenshot contains disposable test records. Detail, acknowledgemen
 and theme/mobile captures above use fictional API fixtures; this focused deployed
 journey verifies policy management, not a new live firing/recovery run. Capacity,
 performance and broad application suites were not run for this UI correction.
+
+## Refined save feedback
+
+The shared toast leaves the list toolbar in exactly the same position before and
+after saving. It can be dismissed by keyboard; hover or focus pauses its five-second
+timer. A controlled regression verifies that a later toast still dismisses after
+keyboard dismissal of the previous one.
+
+![Save feedback outside the page layout](refined/save-toast.png)
+
+
+The refined normal-deployment journey also passes: both onboarding and policy
+management complete in 6.6 s (about 1 min 45 s including rebuild/startup/cleanup).
+This verifies the toast on an actual persisted save, alongside create/edit return
+to list and disable/enable/reload.
+
+![Refined save feedback in the isolated normal deployment](refined/deployed-policy-created.png)
+
+Refinement verification: 19 focused unit tests (3.62 s), 21 route/design browser
+cases (1.0 min), 11 detail interaction cases (37.3 s), and the six-theme Services
+comparison plus fixed-toolbar check (seven cases, 19.2 s) pass. Strict TypeScript,
+production build (719 ms), production exclusions and documentation checks pass.
+All six additional toast reading-time browser cases complete in 16.4 s, but their
+host make process exits 143; this is preserved as a host-command caveat rather than
+reported as a successful command. The controlled dismissal/timing unit cases and
+normal deployed flow exit zero; fresh PR CI owns the complete browser gate.

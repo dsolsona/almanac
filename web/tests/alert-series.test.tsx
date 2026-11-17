@@ -63,9 +63,9 @@ it('distinguishes maintenance resolution from ordinary condition recovery',()=>{
   const transitions:Schema['AlertTransitionPage']={items:[{id:'transition',to:'resolved',cause:'resolved_after_maintenance_change',request_id:'evaluation',sequence:'2',effective_at:first.scheduled_at,detected_at:first.scheduled_at}]};
   const maintenance=occurrenceDetail(record,evidence,evidence,processing,transitions,new Map());
   expect(maintenance.reason).toBe('Resolved after a maintenance exclusion changed.');
-  expect(occurrenceDetail(record,evidence,evidence,processing,{items:[]},new Map()).reason).toBe('Recovery confirmed. See lifecycle history for the resolution details.');
+  expect(occurrenceDetail(record,evidence,evidence,processing,{items:[]},new Map()).reason).toBe('');
   transitions.items[0]!.cause='conditions_cleared';
-  expect(occurrenceDetail(record,evidence,evidence,processing,transitions,new Map()).reason).toBe('Every condition is below threshold in at least one window.');
+  expect(occurrenceDetail(record,evidence,evidence,processing,transitions,new Map()).reason).toBe('');
 });
 it('keeps an acknowledged alert open when observations are unavailable',()=>{
   const {record,evidence,processing}=detailInput();record.state='acknowledged';
