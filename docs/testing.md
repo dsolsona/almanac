@@ -12,6 +12,7 @@ are in [commands](commands.md).
 | `make test-integration` | Go code against real PostgreSQL and the real binaries: constraints, transactions, persistence, auth, agents, CLI | a few minutes | database, protocol, API or runtime changes |
 | `make test-browser` | The UI catalogue in light, dark, intermediate and mobile setups; the production build | about two minutes | UI changes |
 | `make test-e2e` | The critical user journeys on a fresh Compose stack of the real images | a few minutes | affected user journeys or deployment changes |
+| `make test-smoke` | Exact SLO budgets and one browser navigation pass across the four SLI/SLO pages | depends on image cache and stack startup | local cross-layer SLI/SLO checks |
 | `make test-perf` | Page speed and exact values of the SLO list, SLO detail, SLI list and SLI detail on a seeded fleet | about ten minutes | nightly, performance work |
 
 `make check` runs the first three. Local verification starts with the smallest selection
@@ -84,6 +85,15 @@ data. `E2E_KEEP=1` keeps the stack for inspection; `sh scripts/e2e.sh down` (ins
 `make shell SOCKET=1`) removes it. The HTML report, with screenshots and traces of failures, is
 `.local/e2e/report/index.html`; raw results stay in the dev container's test-results volume, because
 trace recording on the macOS bind mount fails.
+
+Use `make test-smoke` when you need a quick check of the deployed SLI/SLO pages. It signs
+in through onboarding, seeds three SLIs and three SLOs across three services in a fresh
+PostgreSQL database, and writes one day of history with real agent provenance. It checks
+the exact remaining budgets and navigates the four pages once in one browser worker.
+The runner reports build, startup and Playwright timings. It starts VictoriaMetrics and
+VictoriaTraces, the providers needed by this fixture. Run any feature-specific or other
+provider journeys through `make test-e2e` with `ARGS`. Run only one isolated stack target
+at a time because these targets share the deployment name and ports.
 
 Normal suites use an in-memory PostgreSQL fixture. For a long retained-history
 experiment whose database and WAL would crowd the host's RAM, explicitly set

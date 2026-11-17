@@ -115,6 +115,7 @@ make test                     # fast checks and unit tests
 make test-integration         # integration tests, in parallel; RACE=1 adds the race detector
 make test-browser             # UI catalogue matrix and production build check
 make test-e2e                 # end-to-end journeys; ARGS='e2e/collection.spec.ts' or ARGS='-g agent' selects
+make test-smoke               # exact budgets and one navigation pass on a small seeded stack
 make test-perf                # page timings; PERF_DAYS=35 PERF_RUNS=10 by default
 make check                    # test, test-integration and test-browser (alias: make verify)
 make coverage                 # Go coverage report in .local/coverage/go.html
@@ -143,7 +144,7 @@ make preview                  # Vite dev server for UI work
 From the host, the test targets enter the dev container by themselves; inside it (`make shell`, CI)
 they run directly. Run `make generate` and `make build` inside it, for example
 `make shell CMD='make generate GENERATE_MODE=api'`. The database URL is preset in the container. Only
-`test-e2e`, `test-perf` and `make shell SOCKET=1` receive the Docker socket.
+`test-e2e`, `test-smoke`, `test-perf` and `make shell SOCKET=1` receive the Docker socket.
 
 Make suppresses an inherited `GOROOT` so the dev image's Go driver cannot select another
 installation's compiler.

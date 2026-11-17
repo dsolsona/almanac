@@ -6,7 +6,8 @@ import { ingestionBetween, pauseAgent, relationSizes, resourceDelta, resourceSna
 // UI's own journey measurement: from navigation start until the page's content (and, on SLO detail,
 // its charts) has painted, reported by the `almanac:journey` browser event. Budget: < 1,000 ms at p95.
 const BUDGET_MS = 1_000;
-const RUNS = Number(process.env.PERF_RUNS ?? 10);
+const smoke = process.env.E2E_SMOKE === '1';
+const RUNS = smoke ? 1 : Number(process.env.PERF_RUNS ?? 10);
 type Fleet = { days: number; size: number; slis: { id: string }[]; slos: { id: string; expectedBudget: string }[]; agentContainer: string };
 // Written by perf/seed.setup.ts, which runs first; read when the tests run, not when they are collected.
 let fleet: Fleet;
@@ -50,7 +51,7 @@ const pages = () => [
   { route: 'sli.detail', path: `/slis/${fleet.slis[0]!.id}` },
 ];
 
-test('the SLO list shows the exact seeded budgets', async ({ page }) => {
+test('the SLO list shows the exact seeded budgets', { tag: '@smoke' }, async ({ page }) => {
   await page.goto('/slos?page_size=20');
   for (const [index, slo] of fleet.slos.entries()) {
     const row = page.locator('.app-slo-row').filter({ hasText: `Performance SLO ${String(index).padStart(2, '0')}` });
@@ -65,8 +66,8 @@ test('cold loads of each page', async ({ browser }) => {
   }
 });
 
-test('in-app navigation between the pages', async ({ page }) => {
-  test.setTimeout(10 * 60_000);
+test('in-app navigation between the pages', { tag: '@smoke' }, async ({ page }) => {
+  if (!smoke) test.setTimeout(10 * 60_000);
   await instrument(page);
   await page.goto('/slos');
   await journey(page, 'slo.list', 0);
@@ -134,6 +135,7 @@ test('record storage, WAL and statement-counter availability', async () => {
 });
 
 test.afterAll(() => {
+  if (smoke) return;
   const percentile = (values: number[], p: number) => [...values].sort((a, b) => a - b)[Math.min(values.length - 1, Math.ceil((p / 100) * values.length) - 1)] ?? NaN;
   const summary = Object.entries(results).flatMap(([route, kinds]) => (['cold', 'warm'] as const).filter((kind) => kinds[kind].length).map((kind) => ({
     page: route, load: kind, runs: kinds[kind].length, median_ms: percentile(kinds[kind], 50), p95_ms: percentile(kinds[kind], 95), max_ms: Math.max(...kinds[kind]),
