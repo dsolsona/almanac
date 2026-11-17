@@ -59,7 +59,7 @@ func ListAlertPolicies(ctx context.Context, databaseURL string, input ListAlertP
 	if err != nil {
 		return page, err
 	}
-	err = alertReadTransaction(ctx, databaseURL, input.Runtime, input.Proof, input.Now, func(q *dbgen.Queries, _ string) error {
+	read := func(q *dbgen.Queries, _ string) error {
 		var err error
 		page.Total, err = q.CountAlertPolicies(ctx, filter)
 		if err != nil {
@@ -85,6 +85,12 @@ func ListAlertPolicies(ctx context.Context, databaseURL string, input ListAlertP
 			page.NextCursor, err = encodeAlertReadCursor(alertReadCursor{Version: 1, Kind: "alert-policies", Filter: identity, ID: last.ID.String(), Time: last.CreatedAt.Time.UnixMicro()})
 		}
 		return err
+	}
+	// A concurrent session activity update can invalidate the authority snapshot.
+	// Reopen the read transaction and rebuild its result on a serialization failure.
+	err = retryOperationalRead(ctx, func() error {
+		page = AlertPolicyPage{Items: []AlertPolicyCatalogItem{}}
+		return alertReadTransaction(ctx, databaseURL, input.Runtime, input.Proof, input.Now, read)
 	})
 	if err != nil {
 		return AlertPolicyPage{}, err

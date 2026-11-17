@@ -273,6 +273,41 @@ func TestIntegrationAlertCatalogPoliciesBeforeFiring(t *testing.T) {
 	}
 }
 
+func TestIntegrationAlertCatalogPolicyListConcurrentSessionTouch(t *testing.T) {
+	t.Parallel()
+	f := newAlertTestFixture(t)
+	id := f.policy(t, "Concurrent policy read")
+	input := ListAlertPoliciesInput{Runtime: f.runtime, Proof: alertManagementCommand(f, "policy-list").Proof, Now: f.clock, Limit: 2}
+	touch, err := f.conn.Begin(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rollbackTransaction(touch)
+	if _, err := touch.Exec(t.Context(), `UPDATE public.almanac_sessions SET last_seen_at=last_seen_at + interval '1 second' WHERE verifier=$1`, input.Proof.SessionVerifier[:]); err != nil {
+		t.Fatal(err)
+	}
+	observer := integrationConnect(t, f.f.databaseURL)
+	defer closeIntegrationConn(observer)
+	type outcome struct {
+		page AlertPolicyPage
+		err  error
+	}
+	done := make(chan outcome, 1)
+	go func() {
+		page, err := ListAlertPolicies(t.Context(), f.f.databaseURL, input)
+		done <- outcome{page: page, err: err}
+	}()
+	// Commit only once the reader's repeatable-read snapshot predates the touch.
+	waitForAgentQueryWait(t, observer, "%name: LockAgentSessionRead%")
+	if err := touch.Commit(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	got := <-done
+	if got.err != nil || got.page.Total != 1 || len(got.page.Items) != 1 || got.page.Items[0].Policy.ID != id {
+		t.Fatalf("policy catalogue after a concurrent session touch: %+v, %v", got.page, got.err)
+	}
+}
+
 func TestIntegrationAlertCatalogReadAuthority(t *testing.T) {
 	t.Parallel()
 	f := newAlertTestFixture(t)
