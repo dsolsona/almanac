@@ -11,6 +11,7 @@ import './slos.css';
 import './slo-reference.css';
 import './slo-detail.css';
 import { openSloMaintenanceList, SloMaintenanceList, useSloMaintenance } from './SloMaintenanceTimeline.tsx';
+import { SloMaintenanceComparison } from './SloMaintenanceComparison.tsx';
 import { SloHistoryChart } from '../components/charts/SloHistoryChart.tsx';
 import { SloCompletedDays, SloDefinitionPanels, SloSummary, SloVerdict } from './SloDetailPanels.tsx';
 import { durationText, percentExact } from './detailFormat.ts';
@@ -310,6 +311,7 @@ export function OperationalDetailView({id,definition:providedDefinition,location
     {activeBurnWindow!==burnWindow&&<p className="slo-detail-notice" role="status">{busy?`Showing ${activeBurnLabel} burn while the selected window loads.`:`Showing the last confirmed ${activeBurnLabel} burn; the selected result is unavailable.`}</p>}
     {detail?<><section className="slo-detail-panel" id="burn"><div className="slo-plot-head"><h2>Recent burn</h2><div className="slo-burn-controls" role="group" aria-label="Burn window">{([3600,21600] as const).map(value=><Button key={value} variant={burnWindow===value?'selected':'outline'} aria-pressed={burnWindow===value} onClick={()=>changeView({burn_window:String(value)})}>{value===3600?'1 h':'6 h'}</Button>)}</div></div>{plot('burn')}<div className="slo-plot-foot"><span>{activeBurnLabel} window · 1× reference</span>{maintenanceLegend}</div></section>
     <section className="slo-detail-panel" id="attainment"><div className="slo-plot-head"><h2>Attainment</h2><small>Good ÷ total per plotted interval</small></div>{plot('attainment',true)}<div className="slo-plot-foot"><span>{percentExact(definition.target)} target</span>{maintenanceLegend}</div></section><SloCompletedDays detail={detail}/></>:<section className="slo-detail-panel" id="burn" tabIndex={-1} aria-label="Recent burn"><p role="status">{busy?'Loading objective history…':'Measurements unavailable'}</p></section>}
+    {source&&<SloMaintenanceComparison current={source.current}/>}
     {source&&<SloDefinitionPanels value={source} definition={definition} context={detail?.context} warning={warning}/>}
   </div></section>;
 }
