@@ -1,3 +1,5 @@
+[F4-T53](F4-T53.md) proposes the explicit-SLO maintenance API and verification scope.
+
 [F4-T61](F4-T61.md) prepares service maintenance UI mocks and draft contracts before backend implementation.
 
 [F4-T51](F4-T51.md) implements the accepted shared scoped-maintenance adoption

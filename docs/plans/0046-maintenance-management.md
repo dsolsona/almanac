@@ -12,7 +12,7 @@ historical permissions come from [SPEC-0016](../specs/0016-maintenance-exclusion
    presentation, retain the inline dependency presentation, and exercise both
    the catalogue and the 50-service prototype. Keep screenshot evidence with
    the design. This is the first PR.
-2. **Schedule and inspect explicit SLO maintenance.** Extend the existing
+2. **Schedule and inspect explicit SLO maintenance.** [F4-T53](../tasks/F4-T53.md) proposes the API contract. Extend the existing
    `internal/storage/maintenance.go` authority with bounded list/detail reads
    and the public command paths under the accepted explicit-SLO contract.
    Define the API in `api/openapi.yaml` and regenerate the clients. Exercise
