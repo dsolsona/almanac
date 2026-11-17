@@ -7,7 +7,9 @@ Run `make help` for grouped commands, useful options and examples.
 
 ## Run locally
 
-Install Docker with its Compose plugin, Make and curl, then run:
+Install Docker with its Compose and Buildx plugins, Make and curl. Use the
+BuildKit builder for the app and agent images, which use Docker cache mounts.
+Run `docker buildx version` to check that the plugin is available, then run:
 
 ```sh
 make bootstrap

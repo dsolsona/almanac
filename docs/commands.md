@@ -2,8 +2,8 @@
 
 Everything builds, tests and ships through Docker
 ([ADR-0029](adr/0029-platform-agnostic-development-and-verification.md)); the test commands follow
-[ADR-0033](adr/0033-simple-test-suite.md). The host needs Docker (Engine, Desktop or Colima) and
-`make`.
+[ADR-0033](adr/0033-simple-test-suite.md). The host needs Docker (Engine, Desktop or Colima)
+with Compose and Buildx, and `make`. App and agent image builds use BuildKit cache mounts.
 
 Run `make help` for a grouped terminal reference to all public targets, common
 options and examples. It works before setup and starts no services. Use this
@@ -149,6 +149,6 @@ they run directly. Run `make generate` and `make build` inside it, for example
 Make suppresses an inherited `GOROOT` so the dev image's Go driver cannot select another
 installation's compiler.
 
-`make run` requires host Docker Compose, Make and curl. It checks HTTPS readiness with the
+`make run` requires host Docker Compose, Buildx, Make and curl. It checks HTTPS readiness with the
 application's public certificate before reporting success; a failed check keeps the services and
 volumes. Keep real credentials out of commands, logs and published artifacts.
