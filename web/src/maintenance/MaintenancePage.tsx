@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { AuthContext } from '../auth/client.ts';
 import { Button, LoadingIndicator, PageHeader, Pager, RefreshButton, StatusChip, Toolbar, ToolbarSpacer, resourceRowClick } from '../components/ui/index.ts';
-import { sloClient } from '../slos/client.ts';
+import { sloClient, type ServerClock } from '../slos/client.ts';
 import { maintenanceClient, type MaintenancePage as WindowPage, type MaintenanceWindow } from './client.ts';
 import { ScheduleMaintenance } from './ScheduleMaintenance.tsx';
 import './maintenance.css';
@@ -16,6 +16,25 @@ function windowStatus(window: MaintenanceWindow, now: number) {
   if (Date.parse(window.start) > now) return { label: 'Scheduled', tone: 'stale' } as const;
   if (Date.parse(window.end) <= now) return { label: 'Ended', tone: 'none' } as const;
   return { label: 'In progress', tone: 'warning' } as const;
+}
+
+function useWindowClock(clock: ServerClock | undefined, windows: MaintenanceWindow[]) {
+  const [tick, setTick] = useState(0);
+  const now = clock ? clock.time + Math.max(0, performance.now() - clock.receivedAt) : Date.now();
+  const next = windows.reduce((boundary, window) => {
+    if (window.tombstone) return boundary;
+    const start = Date.parse(window.start);
+    const end = Date.parse(window.end);
+    return Math.min(boundary, start > now ? start : end > now ? end : Infinity);
+  }, Infinity);
+
+  useEffect(() => {
+    if (next === Infinity) return;
+    const delay = next - (clock ? clock.time + Math.max(0, performance.now() - clock.receivedAt) : Date.now());
+    const timer = window.setTimeout(() => setTick(value => value + 1), Math.min(2_147_483_647, Math.max(1, Math.ceil(delay))));
+    return () => window.clearTimeout(timer);
+  }, [clock, next, tick]);
+  return now;
 }
 
 function navigate(path: string) {
@@ -34,7 +53,8 @@ function WindowList({ canWrite }: { canWrite: boolean }) {
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState('');
   const [refresh, setRefresh] = useState(0);
-  const [now, setNow] = useState(Date.now);
+  const [clock, setClock] = useState<ServerClock>();
+  const now = useWindowClock(clock, page?.items ?? []);
   const cursor = cursors.at(-1) ?? '';
 
   useEffect(() => {
@@ -44,7 +64,7 @@ function WindowList({ canWrite }: { canWrite: boolean }) {
     maintenanceClient.list(size, cursor, controller.signal).then(result => {
       if (controller.signal.aborted) return;
       setPage(result.value);
-      setNow(result.serverClock?.time ?? Date.now());
+      setClock(result.serverClock);
       setBusy(false);
     }).catch(error => {
       if (controller.signal.aborted) return;
@@ -124,6 +144,7 @@ function WindowDetail({ id, revision }: { id: string; revision: string }) {
   }, [id, revision, refresh]);
 
   const window = result?.value;
+  const now = useWindowClock(result?.serverClock, window ? [window] : []);
   const previous = window && BigInt(window.revision) - 1n;
   return <>
     <PageHeader title={window?.title ?? 'Maintenance window'} breadcrumb={{ href: root, label: 'Maintenance', current: window?.title ?? 'Window' }}
@@ -132,7 +153,7 @@ function WindowDetail({ id, revision }: { id: string; revision: string }) {
     {!window && !error && <LoadingIndicator label="Loading maintenance window" />}
     {window && <>
       <section className="maintenance-panel maintenance-detail" aria-label="Maintenance details">
-        <StatusChip {...windowStatus(window, result.serverClock?.time ?? Date.now())} />
+        <StatusChip {...windowStatus(window, now)} />
         <dl>
           <dt>Starts (UTC)</dt><dd><time dateTime={window.start}>{timeLabel(window.start)}</time></dd>
           <dt>Ends (UTC)</dt><dd><time dateTime={window.end}>{timeLabel(window.end)}</time></dd>

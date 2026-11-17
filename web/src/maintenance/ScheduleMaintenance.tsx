@@ -28,6 +28,12 @@ export function ScheduleMaintenance({ context }: { context: AuthContext }) {
   const [saving, setSaving] = useState(false);
   const attempt = useRef<{ body: string; key: string } | null>(null);
   const notice = useRef<HTMLParagraphElement>(null);
+  const mounted = useRef(false);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -76,13 +82,15 @@ export function ScheduleMaintenance({ context }: { context: AuthContext }) {
     setError('');
     try {
       const result = await maintenanceClient.create(body, context, attempt.current.key);
+      if (!mounted.current || location.pathname !== '/maintenance/new') return;
       history.replaceState({}, '', `/maintenance/${result.value.id}`);
       dispatchEvent(new PopStateEvent('popstate'));
     } catch (failure) {
+      if (!mounted.current) return;
       if (failure instanceof SloFailure && !failure.uncertain) attempt.current = null;
       setError(failure instanceof Error ? failure.message : 'The maintenance could not be scheduled.');
     } finally {
-      setSaving(false);
+      if (mounted.current) setSaving(false);
     }
   }
 
