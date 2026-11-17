@@ -39,6 +39,33 @@ manufacture recovery. Resume ordinary eligibility after the last overlapping
 window ends, without replaying suppressed notifications. Exact cooldown and
 notification deduplication integration require the detailed contract before code.
 
+### Proposed publication and alert boundary
+
+An installation-wide scope may cover more SLOs than one existing maintenance
+revision can safely fan out to. Publish the scheduled selector and its authority
+revision atomically before any effective start. Resolve and persist memberships
+in restartable bounded pages, keyed by the authority revision. Until an affected
+calculation can prove it read the complete membership at its cutoff, show
+preparation or last-known values with the original provenance. A late page does
+not move the scheduled start. Retries of an older revision cannot publish over
+a cancellation, shortening or newer selector revision.
+
+Opening a new occurrence is currently the user-visible trigger, independent of
+external transport. The proposed first stage reads effective suppression at
+the occurrence decision transaction's authority boundary. That read must not
+wait for scope fanout, and uncommitted work under a stale authority must retry.
+If an already-open occurrence remains breaching, it stays open. A fully
+excluded evaluation stays unavailable. A genuine clear evaluation with
+complete eligible data can resolve a pre-existing occurrence; the future
+delivery adapter may still suppress its recovery message.
+
+For an active window, current occurrence decisions use the authority effective
+at the evaluation boundary. Catch-up retains the suppression evidence from
+that boundary. Resuming after the last applicable window permits a new
+occurrence only at the first complete eligible evaluation that satisfies the
+policy. The suppression record must distinguish plain overlap from
+notification delivery, which remains a later adapter concern.
+
 ## Alternatives considered
 
 - Explicit SLOs and separate silences: already specified, but burdens service

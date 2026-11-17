@@ -1,3 +1,17 @@
+Maintenance management delivery, 2026-11-17: the explicit-SLO PRs include the
+[reviewed prototype](https://github.com/dsolsona/almanac/pull/130), the
+[explicit-SLO API](https://github.com/dsolsona/almanac/pull/131), the
+[management CLI](https://github.com/dsolsona/almanac/pull/133), browser
+[scheduling](https://github.com/dsolsona/almanac/pull/134),
+[SLO timeline overlays](https://github.com/dsolsona/almanac/pull/135) and
+[lifecycle actions](https://github.com/dsolsona/almanac/pull/136).
+The executable journey and isolated browser journeys passed, and the browser
+PRs carry production screenshots. The seeded-fleet performance gate is
+running separately. Service and all-service scope, plus suppression of new
+current alert occurrences, are proposed details in
+[SPEC-0023](specs/0023-maintenance-management.md) and
+[ADR-0053](adr/0053-service-maintenance-workflow.md).
+
 The first maintenance management increment implements the shared search-first picker and records the visual reference in [F4-T61](tasks/F4-T61.md). [Plan 0046](plans/0046-maintenance-management.md) sequences public explicit-SLO management, then service scope and notification suppression.
 
 Maintenance review refinements, 2026-11-17: [F4-T61](tasks/F4-T61.md) now orders creation Context → Scope → Schedule, edits custom duration inline, explains population comparisons and historical corrections in plain language, and makes graph maintenance bands inspectable with pointer/keyboard/touch access. The reported chart-card tooltip clipping is reproduced and corrected in the prototype. Focused checks pass; visual review remains open and no production/backend component is changed.

@@ -45,6 +45,29 @@ and changes, so moving resources cannot rewrite history. Ordinary membership cha
 must not require administrative retrospective editing. Composite child propagation
 continues to require explicit clarification under SPEC-0016's selected-SLO boundary.
 
+Proposed first-version scope details:
+
+- Use stable service identity. Renaming a service does not interrupt coverage.
+  Archived services cannot be newly selected. Historical coverage survives
+  archival and retains the original identifiers.
+- A service with no objectives can be scheduled. Its preview reports zero
+  objectives and its window covers subsequently eligible joins if the
+  prospective-membership proposal is accepted. Missing inventory is an error,
+  distinct from a successfully resolved empty service.
+- During a window, an eligibility or service assignment change records its
+  effective time. Members joining after the exclusive end receive no coverage.
+  Explicit SLO scope does not follow service membership. A composite selected by
+  service covers its own observations and does not automatically cover child
+  SLOs on other services.
+- The selected scope appears separately from the resolved, paginated impact
+  view. A preview identifies the inventory time used for its counts. Effective
+  history links each objective to its recorded participation interval.
+- Keep the accepted explicit-only resource contract available to existing
+  clients. The extended contract needs a discriminated selector for selected
+  services, all services and explicit SLOs. Never overload the existing
+  `slo_ids` field with an empty sentinel for all services or truncate an
+  effective population into that field.
+
 Store exact UTC `[start,end)` bounds. Show the chosen timezone and exact UTC preview.
 Reject nonexistent/ambiguous local input unless an unambiguous instant is selected.
 Alignment follows SPEC-0016: no silent expansion or invented fractional counts.
@@ -93,6 +116,18 @@ eligibility without replaying a suppressed backlog. Independent manual silences
 continue to apply. Collection/agent health remains visible. Maintenance does not
 change unrelated scopes or silence installation-wide health notifications.
 
+Proposed first-stage alert behavior: current Almanac surfaces occurrences in
+the application, API and CLI. A maintenance-aware evaluation still runs and
+retains its evidence. While covered, a matching result does not open a new
+current occurrence. An occurrence already open keeps its identity,
+acknowledgement and evidence. A valid clear result from complete eligible
+data may resolve it. Fully excluded evaluation remains unavailable and cannot
+manufacture recovery. At the first evaluable boundary after the last applicable
+window ends, a continuing match can open an occurrence with that boundary
+as its effective start. Suppressed historical transitions remain auditable and
+do not open a firing occurrence during catch-up. Future external delivery
+follows the suppression and resume policy when that surface exists.
+
 Cancellation or prospective early end changes both effects together. Retrospective
 correction changes new calculations but cannot undo sent notifications or previous
 exports. Stale calculations are marked outdated/pending until consistent results
@@ -122,8 +157,11 @@ its persistence/API design is a prerequisite rather than an assumed implementati
   missing eligible and zero-traffic cases without changing raw measurements.
 - AC-03: Inspect maintenance bands, reasons and exact bounds across accepted SLO
   detail composition in both themes, keyboard and mobile layouts.
-- AC-04: Preserve existing incidents, suppress scoped notifications and resume
-  correctly after overlapping windows, with no suppressed backlog.
+- AC-04: Suppress new current occurrences within effective scope, keep
+  pre-existing acknowledgements and evidence, and resume at an evaluable
+  boundary after overlapping windows end. Verify future notification delivery
+  independently once it exists. In both cases, catch-up creates no suppressed
+  backlog.
 - AC-05: Cancel future, end active and audit administrator historical changes;
   conflict and failed-save paths retain drafts and do not partially apply scope.
 - AC-06: Record joins/departures prospectively if that proposal is accepted;
