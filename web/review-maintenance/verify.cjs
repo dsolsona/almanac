@@ -38,7 +38,24 @@ for (const eventList of [false,true]) {
   if (eventList) await page.getByText('Timeline events',{exact:false}).click();
   const link=page.getByRole('link',{name:'Checkout database upgrade',exact:true});
   await (eventList ? link.last() : link.first()).click();
+  await page.waitForURL(/#detail$/);
+  await page.getByRole('heading',{name:'Checkout database upgrade',exact:true}).waitFor();
   check(await page.getByRole('heading',{name:'Checkout database upgrade',exact:true}).isVisible(),'SLO link selects database window');
   await page.getByRole('link',{name:'Maintenance',exact:true}).last().click();
 }
+await page.goto(base+'?scenario=pending#slo');
+const pendingBand=page.locator('.budget .maintenance-chart-band');
+const bandBounds=await pendingBand.boundingBox();
+await page.mouse.move(bandBounds.x+bandBounds.width/2,bandBounds.y+bandBounds.height/2);
+check((await page.getByRole('tooltip').textContent()).includes('Recalculation pending'),'pending tooltip states unavailable calculation');
+check(bandBounds.width<100,'pending keeps the one-hour band');
+await page.goto(base+'?case=end#detail');
+await page.getByRole('button',{name:'End early…',exact:true}).click();
+await page.getByLabel('Reason for this change').fill('Work completed');
+await page.getByRole('button',{name:'End maintenance',exact:true}).click();
+check((await page.locator('.maintenance-facts').textContent()).includes('02:30'),'early end changes effective bounds');
+await page.getByRole('link',{name:'Services',exact:true}).click();
+await page.getByRole('button',{name:'View maintenance',exact:true}).click();
+await page.waitForURL(/#detail$/);
+check((await page.locator('.maintenance-state').textContent()).includes('ended early'),'service link preserves lifecycle revision');
 await page.setViewportSize({width:360,height:900});await page.goto(base+'#list');await page.getByRole('button',{name:'Menu',exact:true}).click();check(await page.locator('.app-sidebar.is-open').count()===1,'production mobile drawer');await page.getByRole('link',{name:'Maintenance',exact:true}).click();check(await page.locator('.app-sidebar.is-open').count()===0,'maintenance closes mobile drawer');check(errors.length===0,errors.join('\n'));check(failed.length===0,failed.join('\n'));await browser.close();console.log(JSON.stringify({checks,duration_ms:Date.now()-started,errors,failed,screenshots:'.local/maintenance-review-v2'},null,2));})().catch(e=>{console.error(e);process.exit(1)});
