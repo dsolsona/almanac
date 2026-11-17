@@ -179,7 +179,7 @@ function WindowDetail({ id, revision, context }: { id: string; revision: string;
           {revision && <a data-app-route href={`${root}/${id}`}>Latest revision</a>}
         </nav>
       </section>
-      {!revision && <MaintenanceLifecycle historical context={context} record={window} etag={result.etag} now={now} onUpdated={applyLifecycleUpdate} />}
+      {!revision && result && <MaintenanceLifecycle historical context={context} record={window} etag={result.etag} now={now} onUpdated={applyLifecycleUpdate} />}
     </>}
   </>;
 }

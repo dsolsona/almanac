@@ -121,7 +121,11 @@ test('schedule and inspect explicit SLO maintenance in the deployed app', async 
     if (shortEnd.toISOString().slice(0, 10) !== new Date().toISOString().slice(0, 10)) {
       await dialog.getByRole('button', { name: /^New end date/ }).click();
       const endDay = new Intl.DateTimeFormat('en', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(shortEnd);
-      await page.getByRole('dialog', { name: /Choose New end date/ }).getByRole('button', { name: endDay, exact: true }).click();
+      const calendarDialog = page.getByRole('dialog', { name: /Choose New end date/ });
+      if (shortEnd.getUTCMonth() !== new Date().getUTCMonth()) {
+        await calendarDialog.getByRole('button', { name: 'Next month' }).click();
+      }
+      await calendarDialog.getByRole('button', { name: endDay, exact: true }).click();
     }
     await dialog.getByLabel('New end time (UTC)', { exact: true }).fill(shortEnd.toISOString().slice(11, 16));
     await dialog.getByLabel('Reason for this change', { exact: true }).fill('Traffic switch finished.');
