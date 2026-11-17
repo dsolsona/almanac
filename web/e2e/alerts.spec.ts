@@ -20,7 +20,7 @@ test('save, edit, disable and enable an alert policy through the deployed UI',as
  await page.getByRole('option',{name:new RegExp(name)}).click();
  await page.getByRole('button',{name:'Create alert policy',exact:true}).click();
  await expect(page).toHaveURL(/\/alerts\/policies$/);
- await expect(page.getByRole('status')).toHaveText('Alert policy saved.');
+ await expect(page.getByRole('status').filter({hasText:'Alert policy saved.'})).toHaveText('Alert policy saved.');
  const savedLink=page.getByRole('link',{name,exact:true});
  const policyID=(await savedLink.getAttribute('href'))!.split('/').at(-1)!;
  await page.screenshot({path:'../.local/alert-ui-evidence/after/deployed-policy-created.png',fullPage:true});

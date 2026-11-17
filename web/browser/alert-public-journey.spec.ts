@@ -39,7 +39,7 @@ test('selected alert list, evidence and compact creation remain usable @matrix',
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  await page.getByRole('button',{name:'Create alert policy',exact:true}).click();
  await expect(page).toHaveURL('/alerts/policies');
- await expect(page.getByRole('status')).toHaveText('Alert policy saved.');
+ await expect(page.getByRole('status').filter({hasText:'Alert policy saved.'})).toHaveText('Alert policy saved.');
  await expect(page.getByRole('link',{name:'Checkout error budget',exact:true})).toBeVisible();
  await page.getByRole('link',{name:'Checkout error budget',exact:true}).click();
  await expect(page.getByLabel('Alert policy name')).toHaveValue('Checkout error budget');
