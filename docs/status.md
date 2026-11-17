@@ -14,17 +14,16 @@ the route/design and detail browser selections, and both rebuilt normal Docker
 journeys pass. The original-head CI style-comparison race is corrected by binding
 to the loaded policy cell. A controlled regression also fixes repeated-toast
 keyboard dismissal. [F4-T52](tasks/F4-T52.md) records exact commands and host exit-143
-caveats; [refined evidence](evidence/alert-ui/2026-11-17/README.md) preserves both
-iterations and normal-deployment captures. Updated broad CI remains required.
+caveats and both verification rounds. The screenshot bundle was removed at the
+maintainer’s request before merge. Updated broad CI remains required.
 
 Alert UI correction, 2026-11-17: [F4-T52](tasks/F4-T52.md) implements the
 maintainer-approved save-to-list flow, shared policies table, toolbar view selection,
 factual state copy and consolidated evidence disclosures. Forty-seven focused unit
 cases, forty-eight browser cases and both normal Docker onboarding/policy-management
 journeys pass; strict TypeScript, production build and production-exclusion checks
-pass. [Design evidence](evidence/alert-ui/2026-11-17/README.md) includes unedited
-before/after theme/mobile captures, the Services reference and the deployed save
-flow. Independent review's same-URL refresh and maintenance-attribution findings
+pass. Visual checks cover before/after theme/mobile layouts, the Services
+reference and the deployed save flow. Independent review's same-URL refresh and maintenance-attribution findings
 are corrected. The candidate is ready for PR review; broad CI remains pending. This UI correction
 does not certify deferred capacity/performance acceptance.
 
