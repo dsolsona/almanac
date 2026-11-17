@@ -10,6 +10,7 @@ import { beginJourney, journeyContentReady } from '../telemetry/client.ts';
 import './slos.css';
 import './slo-reference.css';
 import './slo-detail.css';
+import { SloMaintenanceList, useSloMaintenance } from './SloMaintenanceTimeline.tsx';
 import { SloHistoryChart } from '../components/charts/SloHistoryChart.tsx';
 import { SloCompletedDays, SloDefinitionPanels, SloSummary, SloVerdict } from './SloDetailPanels.tsx';
 import { durationText, percentExact } from './detailFormat.ts';
@@ -279,6 +280,7 @@ export function OperationalDetailView({id,definition:providedDefinition,location
     return()=>abort.abort();
   },[id,period,burnWindow,refreshVersion,refreshCount]);
 
+  const maintenance = useSloMaintenance(id, detail?.range.effective_start, detail?.range.effective_end, refreshVersion + refreshCount);
   const activeBurnWindow=detail?.burn_series.burn_window_seconds??3600;
   const activeBurnLabel=activeBurnWindow===3600?'1 h':'6 h';
   const refresh=()=>{beginJourney(locationKey,false,true);clearQueryCache();setRefreshCount(value=>value+1);};
@@ -288,19 +290,21 @@ export function OperationalDetailView({id,definition:providedDefinition,location
   const controls=<div className="slo-history-controls"><div role="group" aria-label="Objective history period">{rangeOptions.map(value=><Button key={value} variant={range===value?'selected':'outline'} aria-pressed={range===value} onClick={()=>changeView({range:value})}>{value==='1y'?'1 y':value.replace('d',' d')}</Button>)}</div><div role="group" aria-label="Timezone">{(['UTC','local'] as const).map(value=><Button key={value} variant={zone===value?'selected':'outline'} aria-pressed={zone===value} onClick={()=>changeView({tz:value})}>{value==='UTC'?'UTC':'Local'}</Button>)}</div></div>;
   const warning=source?qualityWarning(source.current.quality,source.current.performance,source.current.window):'';
   const chartGeneration=detail?.generation?.generation_id;
-  const plot=(kind:'budget'|'burn'|'attainment',compact=false)=>detail&&<SloHistoryChart kind={kind} samples={kind==='budget'?detail.budget_series.samples:kind==='burn'?detail.burn_series.samples:detail.attainment_series.samples} start={detail.range.effective_start} end={detail.range.effective_end} target={definition.target} compact={compact} zone={zone} generation={chartGeneration} burnLabel={activeBurnLabel}/>;
+  const maintenanceLegend=!!maintenance.page?.items.length&&<span className="slo-maintenance-legend"><i aria-hidden="true"/>Maintenance period</span>;
+  const plot=(kind:'budget'|'burn'|'attainment',compact=false)=>detail&&<SloHistoryChart kind={kind} samples={kind==='budget'?detail.budget_series.samples:kind==='burn'?detail.burn_series.samples:detail.attainment_series.samples} start={detail.range.effective_start} end={detail.range.effective_end} target={definition.target} compact={compact} zone={zone} generation={chartGeneration} burnLabel={activeBurnLabel} maintenance={maintenance.page?.items}/>;
   return <section className="app-slo-detail slo-detail-b" aria-label="Operational SLO detail">{heading}<div className="slo-detail-stack">
     {source&&<SloVerdict value={source} warning={warning}/>}
     {statusError&&<p role="status" className="slo-detail-notice">Current status could not refresh. Showing the last confirmed evaluation{source?` at ${source.current.evaluation_at}`:''}.</p>}
     {error&&<div role="alert" className="slo-error"><p>{error}</p><p>{detail?`Showing the last confirmed evaluation at ${detail.effective_at}; values may be stale.`:'Refresh or choose a shorter period to try again.'}</p></div>}
     {busy&&<span role="status" className="sr-only">Refreshing operational evaluation</span>}
     <section className="slo-detail-panel" id="budget" aria-label="Your error budget"><div className="slo-plot-head"><h2>Your error budget</h2>{controls}</div>{source&&<SloSummary value={source} definition={definition}/>}{plot('budget')}
-    <div className="slo-plot-foot"><span>{source?.current.quality.state.replaceAll('_',' ')} · {source?.current.quality.freshness}</span>{detail&&<span>{durationText(detail.range.resolution_seconds)} resolution · {detail.range.reduced?'reduced history':'full resolution'}</span>}</div></section>
+    <div className="slo-plot-foot"><span>{source?.current.quality.state.replaceAll('_',' ')} · {source?.current.quality.freshness}</span>{detail&&<span>{durationText(detail.range.resolution_seconds)} resolution · {detail.range.reduced?'reduced history':'full resolution'}</span>}{maintenanceLegend}</div></section>
+    {detail&&<SloMaintenanceList id={id} start={detail.range.effective_start} end={detail.range.effective_end} zone={zone} {...maintenance}/>}
     {detail?.history_preparation&&<div className="slo-detail-notice" role="status"><p>{detail.history_preparation.ready_seconds===0?'No history is ready for this period yet.':`${Math.floor(100*detail.history_preparation.ready_seconds/detail.history_preparation.total_seconds)}% of this period’s history is ready.`} Available results are shown; unfinished intervals are left blank.</p><p>{detail.history_preparation.failed?'Some historical calculations failed.':'Historical processing is incomplete.'} Use Refresh to check progress.</p></div>}
     {currentStatus?.generation&&detail?.generation&&!sameDerivedInputs(currentStatus.generation,detail.generation)&&<p className="slo-detail-notice" role="status">These graphs and the status panel show different evaluations. Refresh the timeline to align them.</p>}
     {activeBurnWindow!==burnWindow&&<p className="slo-detail-notice" role="status">{busy?`Showing ${activeBurnLabel} burn while the selected window loads.`:`Showing the last confirmed ${activeBurnLabel} burn; the selected result is unavailable.`}</p>}
-    {detail?<><section className="slo-detail-panel" id="burn"><div className="slo-plot-head"><h2>Recent burn</h2><div className="slo-burn-controls" role="group" aria-label="Burn window">{([3600,21600] as const).map(value=><Button key={value} variant={burnWindow===value?'selected':'outline'} aria-pressed={burnWindow===value} onClick={()=>changeView({burn_window:String(value)})}>{value===3600?'1 h':'6 h'}</Button>)}</div></div>{plot('burn')}<div className="slo-plot-foot"><span>{activeBurnLabel} window · 1× reference</span></div></section>
-    <section className="slo-detail-panel" id="attainment"><div className="slo-plot-head"><h2>Attainment</h2><small>Good ÷ total per plotted interval</small></div>{plot('attainment',true)}<div className="slo-plot-foot"><span>{percentExact(definition.target)} target</span></div></section><SloCompletedDays detail={detail}/></>:<section className="slo-detail-panel" id="burn" tabIndex={-1} aria-label="Recent burn"><p role="status">{busy?'Loading objective history…':'Measurements unavailable'}</p></section>}
+    {detail?<><section className="slo-detail-panel" id="burn"><div className="slo-plot-head"><h2>Recent burn</h2><div className="slo-burn-controls" role="group" aria-label="Burn window">{([3600,21600] as const).map(value=><Button key={value} variant={burnWindow===value?'selected':'outline'} aria-pressed={burnWindow===value} onClick={()=>changeView({burn_window:String(value)})}>{value===3600?'1 h':'6 h'}</Button>)}</div></div>{plot('burn')}<div className="slo-plot-foot"><span>{activeBurnLabel} window · 1× reference</span>{maintenanceLegend}</div></section>
+    <section className="slo-detail-panel" id="attainment"><div className="slo-plot-head"><h2>Attainment</h2><small>Good ÷ total per plotted interval</small></div>{plot('attainment',true)}<div className="slo-plot-foot"><span>{percentExact(definition.target)} target</span>{maintenanceLegend}</div></section><SloCompletedDays detail={detail}/></>:<section className="slo-detail-panel" id="burn" tabIndex={-1} aria-label="Recent burn"><p role="status">{busy?'Loading objective history…':'Measurements unavailable'}</p></section>}
     {source&&<SloDefinitionPanels value={source} definition={definition} context={detail?.context} warning={warning}/>}
   </div></section>;
 }

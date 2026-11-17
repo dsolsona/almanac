@@ -34,7 +34,7 @@ test('SLO disclosures preserve long exact decimal counts on touch screens',async
  detail.current.performance={...detail.current.performance,good:'9007199254740993.000000000001',total:'9007199254740994.000000000002',bad:'1.000000000001',allowed_budget:'9007199254740.994000000000',remaining_budget:'9007199254739.993999999999',remaining_fraction:'1.000000000000',attainment:'1.000000000000',consumed_fraction:'0.000000000000'};
  await installSloFixture(page,detail);await page.goto(`/slos/${sloID}`);await page.locator('#calculation summary').click();await expect(page.locator('#calculation')).toContainText('9,007,199,254,740,993.000000000001');
  for(const selector of ['.calculation-inputs','.calculation-equation','.calculation-equation > strong'])for(const row of await page.locator(selector).all())expect(await row.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
- const graph=page.locator('.slo-history-chart.budget');await graph.tap();await expect(page.locator('.slo-point-tooltip')).toBeVisible();expect(await page.locator('.slo-point-tooltip').evaluate(el=>getComputedStyle(el).position)).toBe('absolute');await page.getByRole('heading',{name:'Your error budget'}).tap();await expect(page.locator('.slo-point-tooltip')).toHaveCount(0);await context.close();
+ const graph=page.locator('.slo-history-chart.budget');await graph.tap();await expect(page.locator('.slo-point-tooltip')).toBeVisible();expect(await page.locator('.slo-point-tooltip').evaluate(el=>getComputedStyle(el).position)).toBe('fixed');await page.getByRole('heading',{name:'Your error budget'}).tap();await expect(page.locator('.slo-point-tooltip')).toHaveCount(0);await context.close();
  }
 });
 
@@ -87,4 +87,54 @@ test('last-known SLO status stays readable and exposes the original evaluation',
   await expect(page.locator('#definition')).toHaveAttribute('open','');await expect(page.locator('#definition summary')).toBeFocused();
   await page.screenshot({path:`../.local/slo-current-${state}-${info.project.name}.png`,fullPage:true});
  }
+});
+
+test('maintenance bands identify the whole period and the budget tooltip escapes the card', { tag: '@matrix' }, async ({ page }, info) => {
+ const theme = info.project.name.endsWith('dark') ? 'dark' : 'light';
+ await page.addInitScript(value => localStorage.setItem('almanac-theme', value), theme);
+ await installSloFixture(page);
+ const id = '70000000-0000-4000-8000-000000000001';
+ const title = 'Checkout database upgrade';
+ const start = '2026-11-08T02:30:00Z';
+ const end = '2026-11-10T04:45:00Z';
+ await page.route(`**/api/v1/slos/${sloID}/maintenance?*`, route => {
+  const bounds = new URL(route.request().url()).searchParams;
+  expect(bounds.get('start')).toBe(sloFixture().range.effective_start);
+  expect(bounds.get('end')).toBe(sloFixture().range.effective_end);
+  return route.fulfill({ json: { items: [{ id, title, reason: 'Apply a scheduled database update.', start, end, tombstone: false, slo_ids: [sloID],
+    revision: '1', operation: 'create', created_at: start, updated_at: start,
+    creator_id: id, actor_id: id, audit_id: id }] } });
+ });
+ await page.goto(`/slos/${sloID}?range=7d`);
+ await expect(page.locator('.slo-maintenance-band')).toHaveCount(3);
+
+ for (const kind of ['budget', 'burn', 'attainment']) {
+  const chart = page.locator(`.slo-history-chart.${kind}`);
+  const band = chart.locator('.slo-maintenance-band');
+  await band.evaluate(node => node.scrollIntoView({ block: 'center' }));
+  const bounds = (await band.boundingBox())!;
+  for (const fraction of [0.05, 0.5, 0.95]) {
+   await page.mouse.move(bounds.x + bounds.width * fraction, bounds.y + bounds.height - 2);
+   await expect(chart.getByRole('tooltip')).toContainText(title);
+   await expect(chart.getByRole('tooltip')).toContainText('02:30:00 UTC');
+   await expect(chart.getByRole('tooltip')).toContainText('Apply a scheduled database update.');
+  }
+  if (kind === 'budget') {
+   const tooltip = chart.getByRole('tooltip');
+   const card = (await page.locator('#budget').boundingBox())!;
+   const popup = (await tooltip.boundingBox())!;
+   expect(popup.y + popup.height).toBeGreaterThan(card.y + card.height);
+   await tooltip.evaluate(node => { if (node instanceof HTMLElement) node.style.pointerEvents = 'auto'; });
+   expect(await tooltip.evaluate((node, cardBottom) => {
+    const box = node.getBoundingClientRect();
+    return node.contains(document.elementFromPoint(box.left + box.width / 2, (cardBottom + box.bottom) / 2));
+   }, card.y + card.height)).toBe(true);
+   await tooltip.evaluate(node => { if (node instanceof HTMLElement) node.style.pointerEvents = ''; });
+   await info.attach('maintenance-budget-tooltip', { body: await page.screenshot(), contentType: 'image/png' });
+  }
+ }
+
+ await page.getByText('Maintenance periods', { exact: false }).filter({ hasText: '1 in this period' }).click();
+ await expect(page.getByRole('link', { name: title, exact: true })).toHaveAttribute('href', `/maintenance/${id}`);
+ expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });

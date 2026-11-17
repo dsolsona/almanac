@@ -209,7 +209,7 @@ export async function request<T>(path: string, init: RequestInit = {}, mutation 
         await waitForReadRetry(signal, 2000);
       }
     }
-  }, init.signal, path.startsWith('/api/v1/services')||path.startsWith('/api/v1/slos/overview')||path.startsWith('/api/v1/maintenance')||path.split('?')[0]?.endsWith('/status') ? 0 : 30_000);
+  }, init.signal, path.startsWith('/api/v1/services')||path.startsWith('/api/v1/slos/overview')||path.startsWith('/api/v1/maintenance')||path.split('?')[0]?.endsWith('/maintenance')||path.split('?')[0]?.endsWith('/status') ? 0 : 30_000);
 }
 async function requestUncached<T>(path: string, init: RequestInit = {}, mutation = false, responseLimit = 4 * 1024 * 1024): Promise<{ value: T; etag: string; serverTime?:string; serverClock?:ServerClock }> {
   let response: Response;
@@ -249,6 +249,7 @@ async function requestUncached<T>(path: string, init: RequestInit = {}, mutation
   const value = data as Record<string, unknown>;
   const isService = path.startsWith('/api/v1/services');
   const isEvaluation = path.includes('/evaluation');
+  const maintenanceSloID = /^\/api\/v1\/slos\/([0-9a-f-]{36})\/maintenance$/.exec(pathname)?.[1];
   const isOverview=pathname==='/api/v1/slos/overview';
   const operationalID=/^\/api\/v1\/slos\/([0-9a-f-]{36})\/operational$/.exec(pathname)?.[1];
   const statusID=/^\/api\/v1\/slos\/([0-9a-f-]{36})\/status$/.exec(pathname)?.[1];
@@ -265,17 +266,22 @@ async function requestUncached<T>(path: string, init: RequestInit = {}, mutation
     typeof item.rolling_window_seconds === 'number' && Number.isSafeInteger(item.rolling_window_seconds) && item.rolling_window_seconds > 0 &&
     typeof item.cadence_seconds === 'number' && Number.isSafeInteger(item.cadence_seconds) && item.cadence_seconds > 0 &&
     item.rolling_window_seconds % item.cadence_seconds === 0 && uuid(item.service_id) && uuid(item.sli_id);
-  const maintenance = (item: unknown) => record(item) && uuid(item.id) &&
+  const maintenance = (item: unknown): item is components['schemas']['MaintenanceWindow'] => record(item) && uuid(item.id) &&
     (!maintenanceID || item.id === maintenanceID) && version(item.revision) &&
-    typeof item.title === 'string' && typeof item.reason === 'string' &&
+    typeof item.title === 'string' && item.title.length > 0 && typeof item.reason === 'string' &&
     Array.isArray(item.slo_ids) && item.slo_ids.every(uuid) &&
     ['create', 'edit', 'end', 'cancel', 'withdraw'].includes(String(item.operation)) &&
     typeof item.tombstone === 'boolean' && utcTimestamp(item.start) && utcTimestamp(item.end) &&
-    utcTimestamp(item.created_at) && utcTimestamp(item.updated_at) &&
+    Date.parse(String(item.start)) < Date.parse(String(item.end)) && utcTimestamp(item.created_at) && utcTimestamp(item.updated_at) &&
     uuid(item.creator_id) && uuid(item.actor_id) && uuid(item.audit_id);
-  const valid = isMaintenanceRoot || maintenanceID
-    ? isMaintenanceRoot && !init.method
-      ? Array.isArray(value.items) && value.items.length <= 200 && value.items.every(maintenance) &&
+  const overlayBounds = maintenanceSloID ? new URLSearchParams(path.split('?')[1] ?? '') : undefined;
+  const overlayStart = Date.parse(overlayBounds?.get('start') ?? '');
+  const overlayEnd = Date.parse(overlayBounds?.get('end') ?? '');
+  const valid = isMaintenanceRoot || maintenanceID || maintenanceSloID
+    ? maintenanceSloID || isMaintenanceRoot && !init.method
+      ? Array.isArray(value.items) && value.items.length <= 200 && value.items.every(item =>
+        maintenance(item) && (!maintenanceSloID || (item.tombstone === false &&
+          item.slo_ids.includes(maintenanceSloID) && Date.parse(item.start) < overlayEnd && overlayStart < Date.parse(item.end)))) &&
         (value.next_cursor === undefined || typeof value.next_cursor === 'string' && value.next_cursor.length <= 512)
       : maintenance(value) && response.headers.get('ETag') === `"maintenance:${value.id}:${value.revision}"`
     : isOverview ? uuid(value.snapshot_id)&&value.snapshot_id!=='00000000-0000-0000-0000-000000000000'&&validOperationalOverview(value)
@@ -299,6 +305,11 @@ export function write(context: AuthContext, body: unknown, key?: string, etag?: 
   return { method: etag ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': context.csrf_token, ...(key ? { 'Idempotency-Key': key } : {}), ...(etag ? { 'If-Match': etag } : {}) }, body: JSON.stringify(body) };
 }
 export const sloClient = {
+  maintenance: (id: string, start: string, end: string, cursor: string, signal: AbortSignal) =>
+    request<components['schemas']['MaintenancePage']>(
+      `/api/v1/slos/${id}/maintenance?${new URLSearchParams({ start, end, limit: '200', ...(cursor ? { cursor } : {}) })}`,
+      { signal },
+    ).then(result => result.value),
   values: (id:string,generation:string,lane:HistoryLane,offset:number,signal?:AbortSignal) => request<HistoryValuePage>(`/api/v1/slos/${id}/history/${generation}/values?${new URLSearchParams({lane,offset:String(offset),limit:'50'})}`,{signal}).then(x=>x.value),
   current: (id:string,signal?:AbortSignal) => request<CurrentStatus>(`/api/v1/slos/${id}/status`,{signal}).then(x=>x.value),
   services: (cursor = '', signal?: AbortSignal) => request<{items: Service[]; next_cursor: string}>(`/api/v1/services?${new URLSearchParams({limit:'50', ...(cursor ? {cursor} : {})})}`, {signal}).then(x => x.value),
