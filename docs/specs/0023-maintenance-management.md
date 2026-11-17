@@ -32,7 +32,14 @@ An explicit-SLO selection affects only those objectives, not every consumer of i
 SLI. Service selection covers all objectives belonging to those services.
 
 Proposed detail: resolve service membership at activation and include later joins
-prospectively. Departures end future coverage but retain elapsed history. All-service
+prospectively. For calculation exclusion, proposed coverage consists of complete
+observation intervals contained in both the maintenance window and the recorded
+membership interval. An unaligned join takes effect for calculation at the next
+applicable observation boundary. An unaligned departure leaves the interval
+containing the departure eligible. For an hourly SLO joining at 02:30 in a
+02:00–04:00 window, only 03:00–04:00 is excluded. If no whole interval remains,
+the join has no calculation effect for that window. Departures retain already
+covered intervals. All-service
 scope includes services created while active. Revisions retain effective membership
 and changes, so moving resources cannot rewrite history. Ordinary membership changes
 must not require administrative retrospective editing. Composite child propagation

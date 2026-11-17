@@ -19,6 +19,9 @@ historical permissions come from [SPEC-0016](../specs/0016-maintenance-exclusion
    future scheduling, stale revisions, replay, cancellation, prospective end,
    administrator corrections and SLO overlay overlap queries against PostgreSQL.
    Connect the reviewed UI and CLI and verify the authenticated journey.
+   Describe calculation exclusions and their evidence in stage 2. Reserve
+   notification-pause copy and controls for stage 3, when delivery suppression
+   is available.
 3. **Service scope and notification suppression.** Settle membership timing,
    composite coverage, large-scope publication and alert resume semantics in
    the spec and ADR before implementing those paths. The current alert engine
