@@ -334,8 +334,8 @@ JOIN public.almanac_maintenance_exclusions e ON e.id = s.exclusion_id AND e.curr
 JOIN public.almanac_maintenance_exclusion_revisions r ON r.exclusion_id = s.exclusion_id AND r.revision = s.revision
 WHERE s.slo_id = $1
   AND NOT r.tombstone
-  AND r.starts_at < $2::timestamptz
-  AND r.ends_at > $3::timestamptz
+  AND tstzrange(r.starts_at, r.ends_at, '[)') &&
+      tstzrange($2::timestamptz, $3::timestamptz, '[)')
   AND (r.starts_at, r.exclusion_id) > ($4::timestamptz, $5::uuid)
 ORDER BY r.starts_at, r.exclusion_id
 LIMIT $6
@@ -343,8 +343,8 @@ LIMIT $6
 
 type ListSloMaintenanceOverlapsParams struct {
 	SloID       pgtype.UUID        `json:"slo_id"`
-	WindowEnd   pgtype.Timestamptz `json:"window_end"`
 	WindowStart pgtype.Timestamptz `json:"window_start"`
+	WindowEnd   pgtype.Timestamptz `json:"window_end"`
 	AfterTime   pgtype.Timestamptz `json:"after_time"`
 	AfterID     pgtype.UUID        `json:"after_id"`
 	PageLimit   int32              `json:"page_limit"`
@@ -359,8 +359,8 @@ type ListSloMaintenanceOverlapsRow struct {
 func (q *Queries) ListSloMaintenanceOverlaps(ctx context.Context, arg ListSloMaintenanceOverlapsParams) ([]ListSloMaintenanceOverlapsRow, error) {
 	rows, err := q.db.Query(ctx, listSloMaintenanceOverlaps,
 		arg.SloID,
-		arg.WindowEnd,
 		arg.WindowStart,
+		arg.WindowEnd,
 		arg.AfterTime,
 		arg.AfterID,
 		arg.PageLimit,

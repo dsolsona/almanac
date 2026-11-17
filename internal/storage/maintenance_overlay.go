@@ -18,11 +18,11 @@ type ListSloMaintenanceInput struct {
 func ListSloMaintenance(ctx context.Context, databaseURL string, input ListSloMaintenanceInput) (MaintenancePage, error) {
 	sloID, ok := canonicalUUID(input.SloID)
 	if !ok || input.Now == nil || input.Proof.SessionVerifier == ([32]byte{}) ||
-		!validMaintenanceTime(input.Start) || !validMaintenanceTime(input.End) || !input.Start.Before(input.End) {
+		!validMaintenanceOverlayTime(input.Start) || !validMaintenanceOverlayTime(input.End) || !input.Start.Before(input.End) {
 		return MaintenancePage{}, ErrMaintenanceInvalid
 	}
 	const kind = "slo-maintenance"
-	scope := input.SloID + "/" + input.Start.UTC().Format(time.RFC3339) + "/" + input.End.UTC().Format(time.RFC3339)
+	scope := input.SloID + "/" + input.Start.UTC().Format(time.RFC3339Nano) + "/" + input.End.UTC().Format(time.RFC3339Nano)
 	limit, cursor, err := validateAgentPage(kind, scope, input.Limit, input.Cursor)
 	if err != nil {
 		return MaintenancePage{}, ErrMaintenanceInvalid
@@ -72,4 +72,11 @@ func ListSloMaintenance(ctx context.Context, databaseURL string, input ListSloMa
 		return MaintenancePage{}, err
 	}
 	return page, nil
+}
+
+// Chart viewports can end between observation boundaries. Retain PostgreSQL's
+// microsecond precision for both the query and the cursor's range identity.
+func validMaintenanceOverlayTime(at time.Time) bool {
+	_, offset := at.Zone()
+	return !at.IsZero() && at.Year() >= 1970 && at.Year() <= 9999 && offset == 0 && at.Nanosecond()%1000 == 0
 }

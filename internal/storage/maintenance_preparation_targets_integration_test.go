@@ -273,7 +273,7 @@ func TestIntegrationMaintenancePreparationTargetPopulatedUpgrade(t *testing.T) {
 	f := newMaintenanceFixture(t)
 	preparationEnqueue(t, f, []maintenanceEvaluationPreparation{{Kind: "mask", RequestedRevision: 0}}, maintenancePreparationHistorical)
 	dropMaintenanceRetainedFixture(t, f.conn)
-	if _, err := f.conn.Exec(t.Context(), `DELETE FROM almanac_schema_migrations WHERE version>=67`); err != nil {
+	if _, err := f.conn.Exec(t.Context(), `DROP INDEX public.almanac_maintenance_revision_range_idx; DELETE FROM almanac_schema_migrations WHERE version>=67`); err != nil {
 		t.Fatal(err)
 	}
 	snapshot := func() string {
@@ -296,7 +296,7 @@ func TestIntegrationMaintenancePreparationTargetPopulatedUpgrade(t *testing.T) {
 		t.Fatalf("rewind did not restore old queue constraints: %v", err)
 	}
 	upgraded, err := Upgrade(t.Context(), f.f.databaseURL)
-	if err != nil || upgraded.Applied != 2 || upgraded.DatabaseSchemaVersion != 68 {
+	if err != nil || upgraded.Applied != 3 || upgraded.DatabaseSchemaVersion != 69 {
 		t.Fatalf("upgrade %+v %v", upgraded, err)
 	}
 	if snapshot() != before {

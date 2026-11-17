@@ -36,7 +36,7 @@ func TestIntegrationMaintenanceOverlayCursorAndCurrentScope(t *testing.T) {
 		t.Fatalf("next page %+v: %v", page, err)
 	}
 	wrongRange := list
-	wrongRange.End = list.End.Add(time.Minute)
+	wrongRange.End = list.End.Add(time.Microsecond)
 	if _, err = ListSloMaintenance(ctx, database, wrongRange); !errors.Is(err, ErrMaintenanceInvalid) {
 		t.Fatalf("range cursor accepted: %v", err)
 	}

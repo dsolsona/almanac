@@ -12,7 +12,7 @@ import (
 
 func TestIntegrationAlertActivationPopulatedUpgrade(t *testing.T) {
 	t.Parallel()
-	if latest := latestTestSchemaVersion(t); latest != 68 {
+	if latest := latestTestSchemaVersion(t); latest != 69 {
 		t.Fatalf("update exact 0059 reconstruction for migration suffix: %d", latest)
 	}
 	f := newAlertTestFixture(t)
@@ -49,11 +49,11 @@ func TestIntegrationAlertActivationPopulatedUpgrade(t *testing.T) {
  ALTER TABLE almanac_alert_ranges ADD CONSTRAINT almanac_alert_ranges_kind_check CHECK(kind IN ('repeated_cutoff','unreconstructed_gap','administrative_cancellation','compacted_evaluations'));
  DROP INDEX almanac_canonical_receipt_repair_idx;
  ALTER TABLE almanac_sli_hourly_aggregates DROP COLUMN receipt_source_generation,DROP COLUMN certified_receipt_at,ALTER COLUMN latest_receipt_at SET NOT NULL;
- DELETE FROM almanac_schema_migrations WHERE version>=60;`); err != nil {
+ DROP INDEX public.almanac_maintenance_revision_range_idx; DELETE FROM almanac_schema_migrations WHERE version>=60;`); err != nil {
 		t.Fatal(err)
 	}
 	result, err := Upgrade(t.Context(), f.f.databaseURL)
-	if err != nil || result.Applied != 9 || result.DatabaseSchemaVersion != 68 {
+	if err != nil || result.Applied != 10 || result.DatabaseSchemaVersion != 69 {
 		t.Fatalf("populated 0059 upgrade: %+v %v", result, err)
 	}
 	if snapshot() != before {

@@ -12,7 +12,7 @@ import (
 
 func TestIntegrationCanonicalReceiptPopulatedUpgrade(t *testing.T) {
 	t.Parallel()
-	if latest := latestTestSchemaVersion(t); latest != 68 {
+	if latest := latestTestSchemaVersion(t); latest != 69 {
 		t.Fatalf("update exact0060 reconstruction: latest=%d", latest)
 	}
 	s := newSelfHealFixture(t, "receipt-upgrade", true)
@@ -28,7 +28,7 @@ func TestIntegrationCanonicalReceiptPopulatedUpgrade(t *testing.T) {
 	}
 	if _, err := s.conn.Exec(t.Context(), `DROP INDEX almanac_canonical_receipt_repair_idx;
  ALTER TABLE almanac_sli_hourly_aggregates DROP COLUMN receipt_source_generation,DROP COLUMN certified_receipt_at,ALTER COLUMN latest_receipt_at SET NOT NULL;
- DELETE FROM almanac_schema_migrations WHERE version>=61;`); err != nil {
+ DROP INDEX public.almanac_maintenance_revision_range_idx; DELETE FROM almanac_schema_migrations WHERE version>=61;`); err != nil {
 		t.Fatal(err)
 	}
 	snapshot := func() string {
@@ -45,7 +45,7 @@ func TestIntegrationCanonicalReceiptPopulatedUpgrade(t *testing.T) {
 	}
 	before := snapshot()
 	result, err := Upgrade(t.Context(), s.f.databaseURL)
-	if err != nil || result.Applied != 8 || result.DatabaseSchemaVersion != 68 {
+	if err != nil || result.Applied != 9 || result.DatabaseSchemaVersion != 69 {
 		t.Fatalf("upgrade %+v %v", result, err)
 	}
 	if snapshot() != before {

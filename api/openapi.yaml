@@ -988,8 +988,8 @@ paths:
         - {$ref: '#/components/parameters/SloId'}
         - {$ref: '#/components/parameters/PageLimit'}
         - {$ref: '#/components/parameters/PageCursor'}
-        - {name: start, in: query, required: true, schema: {type: string, format: date-time}}
-        - {name: end, in: query, required: true, schema: {type: string, format: date-time}}
+        - {name: start, in: query, required: true, description: UTC instant with at most microsecond precision., schema: {type: string, format: date-time}}
+        - {name: end, in: query, required: true, description: UTC instant with at most microsecond precision., schema: {type: string, format: date-time}}
       responses:
         '200':
           description: List effective maintenance overlapping a UTC timeline range

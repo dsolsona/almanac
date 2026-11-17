@@ -5679,7 +5679,9 @@ export interface operations {
             query: {
                 limit?: components["parameters"]["PageLimit"];
                 cursor?: components["parameters"]["PageCursor"];
+                /** @description UTC instant with at most microsecond precision. */
                 start: string;
+                /** @description UTC instant with at most microsecond precision. */
                 end: string;
             };
             header?: never;

@@ -5634,8 +5634,12 @@ type GetSloHistoryValuesParamsLane string
 type ListSloMaintenanceParams struct {
 	Limit  *PageLimit  `form:"limit,omitempty" json:"limit,omitempty"`
 	Cursor *PageCursor `form:"cursor,omitempty" json:"cursor,omitempty"`
-	Start  time.Time   `form:"start" json:"start"`
-	End    time.Time   `form:"end" json:"end"`
+
+	// Start UTC instant with at most microsecond precision.
+	Start time.Time `form:"start" json:"start"`
+
+	// End UTC instant with at most microsecond precision.
+	End time.Time `form:"end" json:"end"`
 }
 
 // GetSloOperationalDetailParams defines parameters for GetSloOperationalDetail.

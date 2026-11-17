@@ -136,7 +136,7 @@ ALTER TABLE public.almanac_sli_hourly_aggregates
  ALTER COLUMN latest_receipt_at SET NOT NULL;
 ALTER TABLE public.almanac_slo_current_projections DROP COLUMN performance_complete;
 DROP FUNCTION public.almanac_projection_performance_complete(jsonb);
-DELETE FROM public.almanac_schema_migrations WHERE version>=55;`)
+DROP INDEX public.almanac_maintenance_revision_range_idx; DELETE FROM public.almanac_schema_migrations WHERE version>=55;`)
 	if err != nil || tag.RowsAffected() != int64(latest-54) {
 		t.Fatalf("prepare populated 0054 fixture: removed=%d err=%v", tag.RowsAffected(), err)
 	}
