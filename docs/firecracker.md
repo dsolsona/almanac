@@ -1,5 +1,51 @@
 # Develop inside a Firecracker microVM
 
+## Generic microvm-helper
+
+Almanac's [project profile](../.microvm.d/config.toml) supports the generic
+microvm-helper command directly. Install it from your local checkout once:
+
+```sh
+uv tool install /path/to/microvm-helper
+```
+
+Then run `microvm config`, `microvm check`, `microvm base` and
+`microvm run api --prompt 'Describe your task'` from the Almanac checkout you
+want copied. Do not run `microvm init`: the project profile is already supplied.
+The [command catalog](commands.md#optional-firecracker-development-host) includes
+rebuild, reconnect, collection and stop examples.
+
+The [base hook](../.microvm.d/base.sh) preserves the dependency warming and
+application-data guards from `make vm-base`. Docker, Codex, Tern and host
+Codex/GitHub login transfer are enabled. Login transfer is private and happens
+only in workers, after cloning. The disk remains 80 GiB; CPU and memory retain
+the 2-vCPU/4-GiB defaults. All inputs used by `make setup` are listed in the
+profile so dependency changes select a fresh base.
+
+Generic microvm keeps its own state under `${XDG_STATE_HOME:-~/.local/state}/microvm`;
+it does not adopt `.local/firecracker` bases or workers. Build a generic base once.
+Unlike `make vm-base`, `microvm base` reuses a matching base; use
+`microvm base --rebuild` to refresh it. Existing `make vm-*` commands continue
+to manage their original workers. Neither launcher migrates or deletes the other's
+state. Worker names belong to the generic launcher's shared pool across projects.
+
+The generic guest task checkout is `/home/dev/workspace/.worktrees/codex`, replacing
+the repository-specific `/home/dev/almanac/.worktrees/codex` path. The base hook
+runs in that checkout automatically. No worker setup hook is needed: microvm
+handles source snapshots, identity, credentials and Tern. The host still needs
+Stencil Tern and the existing Codex/GitHub logins for the selected profile.
+See microvm-helper's README for its full host requirements and credential behavior.
+
+Focused checks for the profile and guest hook, without creating a VM:
+
+```sh
+microvm config
+bash -n .microvm.d/base.sh
+make shell CMD='python3 scripts/check-docs.py'
+```
+
+## Repository-specific launcher
+
 `scripts/firecracker-setup.sh` prepares an optional persistent Linux development machine
 for Codex. Docker Engine, application containers, volumes and builds live inside
 the guest. The host's Docker socket and filesystem are not mounted into it.
