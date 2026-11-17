@@ -126,7 +126,12 @@ These documents govern applicable work; read them before that work begins.
   skills, CI configuration and development tooling use focused link, syntax and
   behavior checks; they do not trigger application suites, images or benchmarks.
   For app changes, select the smallest checks covering the changed behavior and
-  required acceptance. For a failed CI check, inspect its evidence and run the
+  required acceptance. Use `make test-smoke` for deployed SLI/SLO navigation and
+  exact seeded budgets. Prefer the hosted smoke profile when available for the
+  branch, especially on a laptop-backed microVM. Select feature-specific browser
+  journeys through `make test-e2e ARGS=…`. Reserve `make test-perf` for required
+  fleet-scale acceptance and performance investigations, preferably in hosted CI.
+  For a failed CI check, inspect its evidence and run the
   implicated test selection locally, not its entire suite. Broaden local verification
   only for a concrete shared-impact risk or an explicit requirement; state that reason
   before running it. CI owns the broad PR gates. Diagnose failures before rerunning;

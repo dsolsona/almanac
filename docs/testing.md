@@ -13,13 +13,21 @@ are in [commands](commands.md).
 | `make test-browser` | The UI catalogue in light, dark, intermediate and mobile setups; the production build | about two minutes | UI changes |
 | `make test-e2e` | The critical user journeys on a fresh Compose stack of the real images | a few minutes | affected user journeys or deployment changes |
 | `make test-smoke` | Exact SLO budgets and one browser navigation pass across the four SLI/SLO pages | depends on image cache and stack startup | local cross-layer SLI/SLO checks |
-| `make test-perf` | Page speed and exact values of the SLO list, SLO detail, SLI list and SLI detail on a seeded fleet | about ten minutes | nightly, performance work |
+| `make test-perf` | Page speed and exact values of the SLO list, SLO detail, SLI list and SLI detail on a seeded fleet | depends on fleet preparation and runner | nightly, fleet-scale acceptance and performance investigations |
 
 `make check` runs the first three. Local verification starts with the smallest selection
 that covers the changed behavior. Documentation, skills, CI configuration and development
 tooling use their focused link, syntax and behavior checks; they do not require application
 suites, images or benchmarks. A tooling change that affects application deployment or runtime
 also exercises that specific affected journey.
+
+For a deployed SLI/SLO change, use the smoke fixture when exact budgets and
+navigation cover the changed behavior. Select the affected end-to-end test when
+the change needs a particular interaction, provider or workflow. For example,
+maintenance scheduling needs its own journey, and the smoke fixture verifies
+the baseline SLI/SLO pages. Use the full performance suite for scale and latency
+claims. Prefer hosted runs for smoke and performance checks when they are
+available for the branch, especially when the local microVM runs on a laptop.
 
 A failed CI job is a reason to inspect its log and artifacts, not to run the entire suite
 locally. After diagnosing and correcting the failure, select the implicated test, for example
@@ -101,6 +109,7 @@ at a time because these targets share the deployment name and ports.
 The app and agent Docker builds share a builder-local Go compilation cache. Edits to
 source or embedded assets still rebuild the current checkout. Matching compiled
 packages can be reused across image builds while the builder retains its cache.
+The image builds require BuildKit through Docker Buildx.
 
 Normal suites use an in-memory PostgreSQL fixture. For a long retained-history
 experiment whose database and WAL would crowd the host's RAM, explicitly set
