@@ -413,6 +413,22 @@ func runObjectiveCLIJourney(t *testing.T, binary, dir, profile, sliID, databaseU
 		if !found {
 			t.Fatal("CLI list omitted cancellation history")
 		}
+		body.Start = time.Now().UTC().Truncate(cadence)
+		body.End = body.Start.Add(10 * cadence)
+		active, activeTag := read(run(0, "maintenance", "create", "--input-file="+writeInput("maintenance-active.json", body), "--idempotency-key=cli-active"))
+		id = "--maintenance-id=" + active.Id.String()
+		end := api.MaintenanceEnd{End: body.Start.Add(5 * cadence), Reason: "Work will finish early"}
+		shortened, endTag := read(run(0, "maintenance", "end", id, "--input-file="+writeInput("maintenance-end.json", end),
+			"--idempotency-key=cli-end", "--if-match="+activeTag))
+		if shortened.Operation != "end" || shortened.Revision != "2" || !shortened.Start.Equal(body.Start) || !shortened.End.Equal(end.End) {
+			t.Fatal("CLI early end did not preserve elapsed coverage")
+		}
+		reason = "--input-file=" + writeInput("maintenance-withdraw.json", api.MaintenanceReason{Reason: "Restore affected measurements"})
+		withdrawn, _ := read(run(0, "maintenance", "withdraw", id, reason, "--idempotency-key=cli-withdraw", "--if-match="+endTag))
+		if withdrawn.Id != active.Id || withdrawn.Operation != "withdraw" || withdrawn.Revision != "3" || !withdrawn.Tombstone {
+			t.Fatal("CLI withdrawal did not retain the audited revision")
+		}
+
 	}()
 }
 func containsObjectiveService(values []api.Service, id string) bool {

@@ -3,6 +3,7 @@ package command
 import (
 	"context"
 	"encoding/json/v2"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -101,7 +102,7 @@ func maintenanceCommand(parent context.Context, args []string, stdout, stderr io
 		BackendURL: record.BackendURL, CABundle: []byte(record.CAPEM), Session: record.Session,
 	})
 	if err != nil {
-		return fail(datasourceSetupFailure(err))
+		return fail(maintenanceSetupFailure(err))
 	}
 	defer session.Close()
 	ops, editor, identity, err := session.DatasourceContext(ctx)
@@ -112,7 +113,7 @@ func maintenanceCommand(parent context.Context, args []string, stdout, stderr io
 		}
 	}
 	if err != nil {
-		return fail(datasourceSetupFailure(err))
+		return fail(maintenanceSetupFailure(err))
 	}
 	if in.Mutation() && identity.Role != "administrator" && identity.Role != "editor" {
 		return fail(datasourceForbidden())
@@ -158,4 +159,16 @@ func maintenanceCommand(parent context.Context, args []string, stdout, stderr io
 		fmt.Fprintf(stdout, "SLO: %s\n", id)
 	}
 	return 0
+}
+
+func maintenanceSetupFailure(err error) error {
+	if failure, ok := errors.AsType[*setupclient.Failure](err); ok {
+		if failure.Code != "unauthenticated" {
+			return failure
+		}
+		adjusted := *failure
+		adjusted.Message = "sign in before managing maintenance"
+		return &adjusted
+	}
+	return &datasourceCommandFailure{code: "management_unavailable", message: "maintenance management is temporarily unavailable"}
 }
