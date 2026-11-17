@@ -183,6 +183,8 @@ func New(ctx context.Context, cfg config.Config, service *authentication.Service
 	mux.Handle("/api/v1/slis/", slis)
 	mux.Handle("/api/v1/services", objectives)
 	mux.Handle("/api/v1/services/", objectives)
+	mux.Handle("/api/v1/maintenance", objectives)
+	mux.Handle("/api/v1/maintenance/", objectives)
 	mux.Handle("/api/v1/slos", objectives)
 	mux.Handle("/api/v1/slos/", objectives)
 	mux.Handle("/api/v1/", agents)

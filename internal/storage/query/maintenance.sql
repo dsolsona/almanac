@@ -51,3 +51,16 @@ WITH latest AS (
 SELECT r.* FROM latest c JOIN public.almanac_maintenance_exclusion_revisions r ON r.exclusion_id=c.exclusion_id AND r.revision=c.exclusion_revision
 WHERE c.included AND NOT r.tombstone AND r.starts_at<sqlc.arg(window_end)::timestamptz AND r.ends_at>sqlc.arg(window_start)::timestamptz
 ORDER BY r.starts_at,r.ends_at,r.exclusion_id;
+
+-- name: ListSloMaintenanceOverlaps :many
+SELECT r.exclusion_id, r.revision, r.starts_at
+FROM public.almanac_maintenance_exclusion_scopes s
+JOIN public.almanac_maintenance_exclusions e ON e.id = s.exclusion_id AND e.current_revision = s.revision
+JOIN public.almanac_maintenance_exclusion_revisions r ON r.exclusion_id = s.exclusion_id AND r.revision = s.revision
+WHERE s.slo_id = sqlc.arg(slo_id)
+  AND NOT r.tombstone
+  AND r.starts_at < sqlc.arg(window_end)::timestamptz
+  AND r.ends_at > sqlc.arg(window_start)::timestamptz
+  AND (r.starts_at, r.exclusion_id) > (sqlc.arg(after_time)::timestamptz, sqlc.arg(after_id)::uuid)
+ORDER BY r.starts_at, r.exclusion_id
+LIMIT sqlc.arg(page_limit);

@@ -957,6 +957,110 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/maintenance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List maintenance windows */
+        get: operations["listMaintenance"];
+        put?: never;
+        /** Create an explicit-SLO maintenance window */
+        post: operations["createMaintenance"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/maintenance/{maintenance_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read latest or historical maintenance revision */
+        get: operations["getMaintenance"];
+        /** Replace maintenance window details */
+        put: operations["editMaintenance"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/maintenance/{maintenance_id}/end": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** End maintenance prospectively */
+        post: operations["endMaintenance"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/maintenance/{maintenance_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel scheduled maintenance */
+        post: operations["cancelMaintenance"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/maintenance/{maintenance_id}/withdraw": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Include maintenance events again */
+        post: operations["withdrawMaintenance"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/slos/{slo_id}/maintenance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List effective maintenance overlapping a UTC timeline range */
+        get: operations["listSloMaintenance"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/services": {
         parameters: {
             query?: never;
@@ -2849,11 +2953,69 @@ export interface components {
             /** @description Relative authorized URL for bounded job diagnostics */
             details_url?: string;
         };
+        MaintenanceWindow: {
+            /** Format: uuid */
+            id: string;
+            /** @description Maximum 512 UTF-8 bytes. */
+            title: string;
+            /** @description Maximum 4096 UTF-8 bytes. */
+            reason: string;
+            slo_ids: string[];
+            revision: string;
+            /** @enum {string} */
+            operation: "create" | "edit" | "end" | "cancel" | "withdraw";
+            tombstone: boolean;
+            /** Format: date-time */
+            start: string;
+            /** Format: date-time */
+            end: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** Format: uuid */
+            creator_id: string;
+            /** Format: uuid */
+            actor_id: string;
+            /** Format: uuid */
+            audit_id: string;
+        };
+        MaintenanceWrite: {
+            /** @description Maximum 512 UTF-8 bytes. */
+            title: string;
+            /** @description Maximum 4096 UTF-8 bytes. */
+            reason: string;
+            /** Format: date-time */
+            start: string;
+            /** Format: date-time */
+            end: string;
+            slo_ids: string[];
+        };
+        MaintenanceReason: {
+            /** @description Maximum 4096 UTF-8 bytes. */
+            reason: string;
+        };
+        MaintenanceEnd: {
+            /** @description Maximum 4096 UTF-8 bytes. */
+            reason: string;
+            /** Format: date-time */
+            end: string;
+        };
+        MaintenancePage: {
+            items: components["schemas"]["MaintenanceWindow"][];
+            next_cursor?: string;
+        };
         Problem: {
             code: string;
             message: string;
             preparation?: components["schemas"]["DerivedPreparation"];
             request_id: string;
+            /** @description Current maintenance revision after a stale write. */
+            current_revision?: string;
+            /** Format: date-time */
+            suggested_start?: string;
+            /** Format: date-time */
+            suggested_end?: string;
             blocking_slo_ids?: string[];
             blocking_service_ids?: string[];
             field_errors: {
@@ -5230,6 +5392,311 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Request rejected */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listMaintenance: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["PageLimit"];
+                cursor?: components["parameters"]["PageCursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description List maintenance windows */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MaintenancePage"];
+                };
+            };
+            /** @description Request rejected */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    createMaintenance: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MaintenanceWrite"];
+            };
+        };
+        responses: {
+            /** @description Create an explicit-SLO maintenance window */
+            201: {
+                headers: {
+                    ETag?: string;
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MaintenanceWindow"];
+                };
+            };
+            /** @description Request rejected */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getMaintenance: {
+        parameters: {
+            query?: {
+                /** @description Canonical positive signed 64-bit decimal revision. */
+                revision?: string;
+            };
+            header?: never;
+            path: {
+                maintenance_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Read latest or historical maintenance revision */
+            200: {
+                headers: {
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MaintenanceWindow"];
+                };
+            };
+            /** @description Request rejected */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    editMaintenance: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Strong ETag of the maintenance revision. */
+                "If-Match": string;
+                /** @description One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                maintenance_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MaintenanceWrite"];
+            };
+        };
+        responses: {
+            /** @description Replace maintenance window details */
+            200: {
+                headers: {
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MaintenanceWindow"];
+                };
+            };
+            /** @description Request rejected */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    endMaintenance: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Strong ETag of the maintenance revision. */
+                "If-Match": string;
+                /** @description One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                maintenance_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MaintenanceEnd"];
+            };
+        };
+        responses: {
+            /** @description End maintenance prospectively */
+            200: {
+                headers: {
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MaintenanceWindow"];
+                };
+            };
+            /** @description Request rejected */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    cancelMaintenance: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Strong ETag of the maintenance revision. */
+                "If-Match": string;
+                /** @description One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                maintenance_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MaintenanceReason"];
+            };
+        };
+        responses: {
+            /** @description Cancel scheduled maintenance */
+            200: {
+                headers: {
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MaintenanceWindow"];
+                };
+            };
+            /** @description Request rejected */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    withdrawMaintenance: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Strong ETag of the maintenance revision. */
+                "If-Match": string;
+                /** @description One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split. */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                maintenance_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MaintenanceReason"];
+            };
+        };
+        responses: {
+            /** @description Include maintenance events again */
+            200: {
+                headers: {
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MaintenanceWindow"];
+                };
+            };
+            /** @description Request rejected */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listSloMaintenance: {
+        parameters: {
+            query: {
+                limit?: components["parameters"]["PageLimit"];
+                cursor?: components["parameters"]["PageCursor"];
+                start: string;
+                end: string;
+            };
+            header?: never;
+            path: {
+                slo_id: components["parameters"]["SloId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description List effective maintenance overlapping a UTC timeline range */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MaintenancePage"];
                 };
             };
             /** @description Request rejected */
