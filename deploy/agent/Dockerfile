@@ -9,7 +9,9 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY cmd/ ./cmd/
 COPY internal/ ./internal/
-RUN CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/almanac-agent ./cmd/almanac-agent
+# Reuse compiled dependencies from the app image build on the same builder.
+RUN --mount=type=cache,id=almanac-go-build,target=/root/.cache/go-build \
+    CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/almanac-agent ./cmd/almanac-agent
 
 # The agent only needs certificate roots: it dials the backend and the datasources it is assigned.
 FROM debian:bookworm-slim@sha256:99c0b25c46d0214d5a2091092e7908907dcaecd6a962cde0ac700acee222b6f3 AS runtime

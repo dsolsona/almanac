@@ -21,7 +21,9 @@ COPY internal/ ./internal/
 COPY web/assets.go ./web/assets.go
 COPY --from=web /src/web/dist ./web/dist
 ARG ALERT_ACCEPTANCE=false
-RUN case "$ALERT_ACCEPTANCE" in \
+# Keep compiled dependencies on the builder when Go source or embedded assets change.
+RUN --mount=type=cache,id=almanac-go-build,target=/root/.cache/go-build \
+    case "$ALERT_ACCEPTANCE" in \
       false) CGO_ENABLED=0 go build -trimpath -ldflags='-s -w' -o /out/almanac ./cmd/almanac ;; \
       true) CGO_ENABLED=0 go build -tags=alertacceptance -trimpath -ldflags='-s -w' -o /out/almanac ./cmd/almanac ;; \
       *) exit 2 ;; \
