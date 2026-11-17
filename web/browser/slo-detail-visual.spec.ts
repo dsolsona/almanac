@@ -138,3 +138,32 @@ test('maintenance bands identify the whole period and the budget tooltip escapes
  await expect(page.getByRole('link', { name: title, exact: true })).toHaveAttribute('href', `/maintenance/${id}`);
  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
+
+test('long overlapping maintenance titles fit the hover panel on a short mobile viewport', async ({ page }) => {
+ await page.setViewportSize({ width: 360, height: 640 });
+ await installSloFixture(page);
+ const id = '70000000-0000-4000-8000-000000000001';
+ const start = '2026-11-08T02:30:00Z';
+ const end = '2026-11-10T04:45:00Z';
+ const title = 'Checkout '.repeat(55).padEnd(512, 'x');
+ await page.route(`**/api/v1/slos/${sloID}/maintenance?*`, route => route.fulfill({ json: {
+  items: [1, 2, 3].map(number => ({
+   id: id.slice(0, -1) + number, title: title.slice(0, -1) + number, reason: 'Maintenance',
+   start, end, tombstone: false, slo_ids: [sloID], revision: '1', operation: 'create',
+   created_at: start, updated_at: start, creator_id: id, actor_id: id, audit_id: id,
+  })),
+ } }));
+ await page.goto(`/slos/${sloID}?range=7d`);
+ const chart = page.locator('.slo-history-chart.budget');
+ const band = chart.locator('.slo-maintenance-band').first();
+ await band.evaluate(node => node.scrollIntoView({ block: 'center' }));
+ const bounds = (await band.boundingBox())!;
+ await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height - 2);
+ const tooltip = chart.getByRole('tooltip');
+ await expect(tooltip).toContainText('2 more overlapping windows');
+ const placement = (await tooltip.boundingBox())!;
+ expect(placement.y).toBeGreaterThanOrEqual(8);
+ expect(placement.y + placement.height).toBeLessThanOrEqual(632);
+ await page.locator('summary').filter({ hasText: 'Maintenance periods' }).click();
+ await expect(page.getByRole('link', { name: title.slice(0, -1) + 3 })).toBeVisible();
+});

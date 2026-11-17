@@ -10,13 +10,17 @@ export type MaintenanceBand = Pick<components['schemas']['MaintenanceWindow'], '
 const emptyBands: MaintenanceBand[] = [];
 type Props={maintenance?:MaintenanceBand[];kind:'budget'|'burn'|'attainment';samples:Sample[];start:string;end:string;target:string;compact?:boolean;zone?:'UTC'|'local';generation?:string;burnLabel?:string};
 const labels:Record<Sample['state'],string>={observed:'Complete evaluation',missing:'Missing',partial:'Partial data',stale:'Stale',zero_traffic:'Zero traffic',known_empty:'Known empty',expired:'Expired history',not_applicable:'Not applicable',excluded:'Excluded by maintenance'};
+function previewText(value: string, max: number) {
+ const characters = [...value];
+ return characters.length > max ? `${characters.slice(0, max).join('')}…` : value;
+}
 export { pointTime } from './pointInspection.ts';
 export function SloHistoryChart({kind,samples,start,end,target,compact=false,zone='UTC',generation,burnLabel='1 h',maintenance=emptyBands}:Props) {
  const host=useRef<HTMLDivElement>(null),tooltip=useRef<HTMLDivElement>(null);
  const [inspectionTime,setInspectionTime]=useState<number>();
  const [width,setWidth]=useState(980),[index,setIndex]=useState<number|null>(null),[pointerY,setPointerY]=useState<number|undefined>(undefined);
  useLayoutEffect(()=>{const el=host.current;if(!el)return;const resize=()=>setWidth(Math.max(280,el.clientWidth-(innerWidth>700?38:14)));resize();const observer=new ResizeObserver(resize);observer.observe(el);return()=>observer.disconnect();},[start,end]);
- useEffect(()=>{setIndex(null);setInspectionTime(undefined);},[samples,start,end,kind,maintenance]);
+ useEffect(()=>{setIndex(null);setInspectionTime(undefined);},[samples,start,end,kind]);
  useEffect(()=>{const close=(e:globalThis.PointerEvent)=>{if(e.target instanceof Node&&!host.current?.contains(e.target)){setIndex(null);setInspectionTime(undefined);}};const escape=(e:KeyboardEvent)=>{if(e.key==='Escape'){setIndex(null);setInspectionTime(undefined);}};document.addEventListener('pointerdown',close);document.addEventListener('keydown',escape);return()=>{document.removeEventListener('pointerdown',close);document.removeEventListener('keydown',escape);};},[]);
  const height=compact?160:225,left=65,right=width-20,top=16,bottom=height-28;
  const field=kind==='budget'?'remaining_fraction':kind==='burn'?'burn':'attainment';
@@ -88,9 +92,9 @@ export function SloHistoryChart({kind,samples,start,end,target,compact=false,zon
  {samples.length===0&&maintenance.length>0&&<p className="slo-history-empty">No measured history for this period.</p>}
  {showInspection&&<div ref={tooltip} className="slo-point-tooltip" role="tooltip">{selected&&<><span>{pointTime(selected.evaluation_at,zone)}</span><strong>{selectedValue??labels[selected.state]}</strong><span>{label}</span><small>{selected.state==='observed'&&(selected.quality?.state!=='complete'||selected.quality?.freshness!=='fresh')?`Observed · ${selected.quality?.state.replaceAll('_',' ')} · ${selected.quality?.freshness}`:labels[selected.state]}</small>{selected.display_coverage&&<small>Displayed period includes {[...new Set([...selected.display_coverage.states,...selected.display_coverage.quality_states,...selected.display_coverage.freshness])].join(', ').replaceAll('_',' ')}</small>}</>}
  {activeBands.length>0&&<div className="slo-maintenance-inspection"><strong>Maintenance period</strong>
-   {activeBands.slice(0,3).map(window=><span key={window.id}>{window.title} · {pointTime(window.start,zone,true)} to {pointTime(window.end,zone,true)}</span>)}
-   {activeBands.length===1&&<small>{activeBands[0]!.reason.length>160?`${activeBands[0]!.reason.slice(0,160)}…`:activeBands[0]!.reason}</small>}
-   {activeBands.length>3&&<small>{activeBands.length-3} more overlapping windows in the maintenance list below.</small>}
+   {activeBands.slice(0,1).map(window=><span key={window.id}>{previewText(window.title, 90)} · {pointTime(window.start,zone,true)} to {pointTime(window.end,zone,true)}</span>)}
+   {activeBands.length===1&&<small>{previewText(activeBands[0]!.reason, 160)}</small>}
+   {activeBands.length>1&&<small>{activeBands.length-1} more overlapping {activeBands.length===2?'window':'windows'} in the maintenance list below.</small>}
  </div>}
  </div>}
  <span className="sr-only" aria-live="polite">{selected?`${pointTime(selected.evaluation_at,zone)} · ${selectedValue??labels[selected.state]}`:''}{activeBands.length>0&&` · Maintenance: ${activeBands.map(window=>window.title).join(', ')}`}</span>
