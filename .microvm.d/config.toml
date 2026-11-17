@@ -1,0 +1,19 @@
+docker = true
+codex = true
+tern = true
+codex_auth = true
+github_auth = true
+
+# Inputs used by make setup; changes select a new prepared base.
+dependencies = [
+  "Makefile", "compose.dev.yaml", "deploy/dev/Dockerfile", ".dockerignore",
+  "go.mod", "go.sum", "web/package.json", "web/package-lock.json",
+  "tools/openapi/package.json", "tools/openapi/package-lock.json",
+]
+
+[hooks]
+base = "base.sh"
+
+[vm]
+# Match the existing Almanac vm-base capacity; workers inherit the base disk size.
+disk_gib = 80

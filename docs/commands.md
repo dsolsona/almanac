@@ -24,6 +24,30 @@ page for the full workflow and execution rules.
 
 ### Optional Firecracker development host
 
+For the generic microvm-helper launcher, Almanac supplies
+[`.microvm.d/config.toml`](../.microvm.d/config.toml) and a guest base hook.
+From this checkout or a linked worktree:
+
+```sh
+microvm config                   # validate the project profile; no VM changes
+microvm check                    # read-only host prerequisite check
+microvm base                     # reuse a matching base, or build one with make setup
+microvm base --rebuild           # refresh a matching base from a fresh seed
+microvm run api --prompt 'Describe your task'
+cat task.txt | microvm run ui --prompt -
+microvm codex api                # reconnect without replaying the task
+microvm collect api              # retrieve changes without applying them
+microvm stop api                 # preserve disk
+```
+
+The profile enables guest Docker, Codex, Tern and private host login transfer,
+with an 80 GiB sparse disk matching `vm-base`. The hook runs `make setup` and
+`make stop-dev`, refusing application containers or volumes in an adopted seed.
+See [the migration notes](firecracker.md#generic-microvm-helper) for installation,
+state separation and worker paths.
+
+The existing repository-specific commands remain available for older workers:
+
 On x86_64 Linux, [the Firecracker guide](firecracker.md) describes a private
 development VM whose Docker daemon and containers run inside the guest:
 
