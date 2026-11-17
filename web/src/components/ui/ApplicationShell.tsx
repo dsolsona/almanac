@@ -3,11 +3,12 @@ import { Button } from './Button.tsx';
 import './application-shell.css';
 
 const mobileViewport = () => typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 860px)').matches;
-type IconName = 'services' | 'slos' | 'slis' | 'alerts' | 'datasources' | 'agents' | 'settings';
+type IconName = 'services' | 'maintenance' | 'slos' | 'slis' | 'alerts' | 'datasources' | 'agents' | 'settings';
 
 function NavIcon({ name }: { name: IconName }) {
   const paths: Record<IconName, ReactNode> = {
     services:<><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><path d="M17 10V6h-3M7 14v4h3M10 6h7M7 10v8"/></>,
+    maintenance: <><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 10h18m-12 5h6"/></>,
     slos: <><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.5 2"/></>,
     slis: <><path d="M3 12h3l2-6 4 12 2-6h7"/></>,
     alerts: <><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></>,
@@ -36,6 +37,7 @@ export function ApplicationShell({ login, role, pending, showCheckSession, onChe
   const wasOpen = useRef(false);
   const datasourceCurrent = pathname.startsWith('/datasources');
   const sliCurrent = pathname.startsWith('/slis');
+  const maintenanceCurrent = pathname.startsWith('/maintenance');
   const sloCurrent = pathname.startsWith('/slos');
   const serviceCurrent=pathname.startsWith('/services');
   const agentCurrent = embedded || pathname === '/' || pathname.startsWith('/agents');
@@ -80,7 +82,7 @@ export function ApplicationShell({ login, role, pending, showCheckSession, onChe
       return;
     }
     const next = new URL(anchor.href, window.location.href);
-    if (next.origin !== window.location.origin || !(/^\/(?:agents|settings(?:\/account|\/password|\/sessions|\/users(?:\/new|\/[0-9a-f-]{36})?)?|datasources(?:\/new|\/[0-9a-f-]{36})?|slis(?:\/new|\/[0-9a-f-]{36})?|slos(?:\/new|\/[0-9a-f-]{36})?|alerts(?:\/policies(?:\/new|\/[0-9a-f-]{36})?|\/[0-9a-f-]{36})?|services(?:\/new|\/dependencies|\/[0-9a-f-]{36}(?:\/edit)?)?)?$/.test(next.pathname))) return;
+    if (next.origin !== window.location.origin || !(/^\/(?:agents|settings(?:\/account|\/password|\/sessions|\/users(?:\/new|\/[0-9a-f-]{36})?)?|datasources(?:\/new|\/[0-9a-f-]{36})?|slis(?:\/new|\/[0-9a-f-]{36})?|slos(?:\/new|\/[0-9a-f-]{36})?|maintenance(?:\/new|\/[0-9a-f-]{36})?|alerts(?:\/policies(?:\/new|\/[0-9a-f-]{36})?|\/[0-9a-f-]{36})?|services(?:\/new|\/dependencies|\/[0-9a-f-]{36}(?:\/edit)?)?)?$/.test(next.pathname))) return;
     event.preventDefault();
     const query = new URLSearchParams(next.search);
     const path = `${next.pathname === '/' ? '/agents' : next.pathname}${query.size ? `?${query}` : ''}${next.hash}`;
@@ -132,7 +134,9 @@ export function ApplicationShell({ login, role, pending, showCheckSession, onChe
           </div>
         </div>
         <div className="app-navigation__group"><h2>Operations</h2>
-          <div className="app-navigation__items"><a ref={alertCurrent ? currentDestination : undefined} className={alertCurrent ? 'app-navigation__current' : ''} href="/alerts" aria-current={alertCurrent ? 'page' : undefined} onClick={navigate}><NavIcon name="alerts"/>Alerts</a></div>
+          <div className="app-navigation__items"><a ref={alertCurrent ? currentDestination : undefined} className={alertCurrent ? 'app-navigation__current' : ''} href="/alerts" aria-current={alertCurrent ? 'page' : undefined} onClick={navigate}><NavIcon name="alerts"/>Alerts</a>
+            {!embedded && <a ref={maintenanceCurrent ? currentDestination : undefined} className={maintenanceCurrent ? 'app-navigation__current' : ''} href="/maintenance" aria-current={maintenanceCurrent ? 'page' : undefined} onClick={navigate}><NavIcon name="maintenance"/>Maintenance</a>}
+          </div>
         </div>
         <div className="app-navigation__group"><h2>Administration</h2>
           <div className="app-navigation__items">

@@ -209,7 +209,7 @@ export async function request<T>(path: string, init: RequestInit = {}, mutation 
         await waitForReadRetry(signal, 2000);
       }
     }
-  }, init.signal, path.startsWith('/api/v1/services')||path.startsWith('/api/v1/slos/overview')||path.split('?')[0]?.endsWith('/status') ? 0 : 30_000);
+  }, init.signal, path.startsWith('/api/v1/services')||path.startsWith('/api/v1/slos/overview')||path.startsWith('/api/v1/maintenance')||path.split('?')[0]?.endsWith('/status') ? 0 : 30_000);
 }
 async function requestUncached<T>(path: string, init: RequestInit = {}, mutation = false, responseLimit = 4 * 1024 * 1024): Promise<{ value: T; etag: string; serverTime?:string; serverClock?:ServerClock }> {
   let response: Response;
@@ -229,19 +229,26 @@ async function requestUncached<T>(path: string, init: RequestInit = {}, mutation
   if (!response.ok) {
     const code = typeof data === 'object' && data !== null && 'code' in data && typeof data.code === 'string' ? data.code : '';
     const errors = record(data) && Array.isArray(data.field_errors) && data.field_errors.length <= 16 ? data.field_errors : [];
+    const maintenanceGuidance = record(data) && code === 'maintenance_alignment'
+      ? utcTimestamp(data.suggested_start) && utcTimestamp(data.suggested_end)
+        ? `Choose aligned times. The server suggests ${data.suggested_start} through ${data.suggested_end}.`
+        : 'Choose times aligned with all selected SLO observation intervals.'
+      : code === 'maintenance_conflict' ? 'The window changed or this request was already used. Refresh the window before trying again.' : '';
     const guidance = errors.filter(record).map(item => fieldMessages[`${item.field}:${item.code}`]).filter(Boolean).join(' ');
     const listCursor=code==='invalid_request'&&path.split('?')[0]==='/api/v1/slos/overview'&&new URL(path,'https://almanac.invalid').searchParams.has('cursor')
       ? 'The SLO list changed. Refresh to restart from the first page.' : '';
     if(response.status===401 || response.status===403)clearQueryCache(false);
-    throw new SloFailure(guidance || listCursor || (code==='service_in_use'?'Move or remove the referencing SLOs and service dependencies before deleting this service.':messages[code]) || 'The request could not be completed. Try again.', mutation && response.status >= 500, response.status, code);
+    throw new SloFailure(guidance || maintenanceGuidance || listCursor || (code==='service_in_use'?'Move or remove the referencing SLOs and service dependencies before deleting this service.':messages[code]) || 'The request could not be completed. Try again.', mutation && response.status >= 500, response.status, code);
   }
-  const expected = init.method === 'POST' ? 201 : 200;
+  const pathname = path.split('?')[0]!;
+  const maintenanceID = /^\/api\/v1\/maintenance\/([0-9a-f-]{36})(?:\/(?:end|cancel|withdraw))?$/.exec(pathname)?.[1];
+  const isMaintenanceRoot = pathname === '/api/v1/maintenance';
+  const expected = init.method === 'POST' && !maintenanceID ? 201 : 200;
   if (response.status !== expected) throw new SloFailure('The server returned an unexpected response.', mutation, response.status);
   if (!data || typeof data !== 'object') throw new SloFailure('The server returned an invalid response.', mutation, response.status);
   const value = data as Record<string, unknown>;
   const isService = path.startsWith('/api/v1/services');
   const isEvaluation = path.includes('/evaluation');
-  const pathname = path.split('?')[0]!;
   const isOverview=pathname==='/api/v1/slos/overview';
   const operationalID=/^\/api\/v1\/slos\/([0-9a-f-]{36})\/operational$/.exec(pathname)?.[1];
   const statusID=/^\/api\/v1\/slos\/([0-9a-f-]{36})\/status$/.exec(pathname)?.[1];
@@ -258,7 +265,20 @@ async function requestUncached<T>(path: string, init: RequestInit = {}, mutation
     typeof item.rolling_window_seconds === 'number' && Number.isSafeInteger(item.rolling_window_seconds) && item.rolling_window_seconds > 0 &&
     typeof item.cadence_seconds === 'number' && Number.isSafeInteger(item.cadence_seconds) && item.cadence_seconds > 0 &&
     item.rolling_window_seconds % item.cadence_seconds === 0 && uuid(item.service_id) && uuid(item.sli_id);
-  const valid = isOverview ? uuid(value.snapshot_id)&&value.snapshot_id!=='00000000-0000-0000-0000-000000000000'&&validOperationalOverview(value)
+  const maintenance = (item: unknown) => record(item) && uuid(item.id) &&
+    (!maintenanceID || item.id === maintenanceID) && version(item.revision) &&
+    typeof item.title === 'string' && typeof item.reason === 'string' &&
+    Array.isArray(item.slo_ids) && item.slo_ids.every(uuid) &&
+    ['create', 'edit', 'end', 'cancel', 'withdraw'].includes(String(item.operation)) &&
+    typeof item.tombstone === 'boolean' && utcTimestamp(item.start) && utcTimestamp(item.end) &&
+    utcTimestamp(item.created_at) && utcTimestamp(item.updated_at) &&
+    uuid(item.creator_id) && uuid(item.actor_id) && uuid(item.audit_id);
+  const valid = isMaintenanceRoot || maintenanceID
+    ? isMaintenanceRoot && !init.method
+      ? Array.isArray(value.items) && value.items.length <= 200 && value.items.every(maintenance) &&
+        (value.next_cursor === undefined || typeof value.next_cursor === 'string' && value.next_cursor.length <= 512)
+      : maintenance(value) && response.headers.get('ETag') === `"maintenance:${value.id}:${value.revision}"`
+    : isOverview ? uuid(value.snapshot_id)&&value.snapshot_id!=='00000000-0000-0000-0000-000000000000'&&validOperationalOverview(value)
     : valuesPath ? validHistoryValues(value,valuesPath[2]!,valuesPath[1]!,new URLSearchParams(path.split('?')[1]??''))
     : statusID ? validCurrentStatus(value,statusID)
     : operationalID ? validOperationalDetail(value,operationalID)
@@ -266,7 +286,7 @@ async function requestUncached<T>(path: string, init: RequestInit = {}, mutation
     : isList ? Array.isArray(value.items) && value.items.length <= 200 && typeof value.next_cursor === 'string' && value.next_cursor.length <= 512 && value.items.every(isService ? resource : slo)
       : (isService ? resource(value) : slo(value)) && (!pathID || value.id === pathID);
   if (!valid) throw new SloFailure('The server returned an invalid response.', mutation, response.status);
-  if (!isEvaluation && !isList && !operationalID && !statusID && !valuesPath) {
+  if (!isMaintenanceRoot && !maintenanceID && !isEvaluation && !isList && !operationalID && !statusID && !valuesPath) {
     const tag = response.headers.get('ETag');
     if (tag !== `"${isService ? 'service' : 'slo'}:${value.id}:${value.version}"`)
       throw new SloFailure(mutation ? 'The request may have succeeded, but its version could not be confirmed. Check the record before retrying.' : 'The record version could not be confirmed.', mutation, response.status);
