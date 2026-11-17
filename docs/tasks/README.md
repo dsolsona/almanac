@@ -1,3 +1,5 @@
+[F4-T54](F4-T54.md) connects the explicit-SLO maintenance CLI.
+
 [F4-T53](F4-T53.md) proposes the explicit-SLO maintenance API and verification scope.
 
 [F4-T61](F4-T61.md) prepares service maintenance UI mocks and draft contracts before backend implementation.
