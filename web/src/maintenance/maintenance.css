@@ -29,3 +29,8 @@
 
 .maintenance-form { display: grid; gap: 20px; }
 .maintenance-page a.ui-button { text-decoration: none; }
+
+.maintenance-lifecycle-form { display: grid; gap: 16px; }
+.maintenance-lifecycle-form p { margin: 0; }
+
+.maintenance-correction summary { cursor: pointer; font-weight: 600; }

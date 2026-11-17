@@ -115,6 +115,52 @@ test('schedule and inspect explicit SLO maintenance in the deployed app', async 
     await link.press('Enter');
     await expect(page.getByRole('heading', { name: 'Checkout load balancer update', exact: true, level: 1 })).toBeVisible();
 
+    const shortEnd = new Date(historicalEnd.getTime() - 20 * 60_000);
+    await page.getByRole('button', { name: 'End maintenance early', exact: true }).click();
+    let dialog = page.getByRole('dialog', { name: 'End this maintenance early?' });
+    if (shortEnd.toISOString().slice(0, 10) !== new Date().toISOString().slice(0, 10)) {
+      await dialog.getByRole('button', { name: /^New end date/ }).click();
+      const endDay = new Intl.DateTimeFormat('en', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(shortEnd);
+      await page.getByRole('dialog', { name: /Choose New end date/ }).getByRole('button', { name: endDay, exact: true }).click();
+    }
+    await dialog.getByLabel('New end time (UTC)', { exact: true }).fill(shortEnd.toISOString().slice(11, 16));
+    await dialog.getByLabel('Reason for this change', { exact: true }).fill('Traffic switch finished.');
+    await dialog.getByRole('button', { name: 'End maintenance', exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+    const shortened = await expectOk(api(page, 'GET', `/api/v1/maintenance/${active.body.id}`));
+    expect(shortened.body.revision).toBe('2');
+    expect(Date.parse(shortened.body.start)).toBe(historicalStart.getTime());
+    expect(Date.parse(shortened.body.end)).toBe(shortEnd.getTime());
+
+    await page.getByText('Change historical SLO calculations', { exact: true }).click();
+    await page.getByRole('button', { name: 'Include maintenance events…', exact: true }).click();
+    dialog = page.getByRole('dialog', { name: 'Include maintenance events in SLO calculations?' });
+    await expect(dialog).toContainText('Both successful and failed events');
+    await dialog.getByLabel('Reason for this change', { exact: true }).fill('No loss of service occurred.');
+    const correctionShot = testInfo.outputPath('maintenance-historical-correction-dark.png');
+    await page.screenshot({ path: correctionShot });
+    await testInfo.attach('maintenance-historical-correction-dark', { path: correctionShot, contentType: 'image/png' });
+    await dialog.getByRole('button', { name: 'Include maintenance events', exact: true }).click();
+    await expect(page.getByText('Withdrawn', { exact: true })).toBeVisible();
+    const withdrawn = await expectOk(api(page, 'GET', `/api/v1/maintenance/${active.body.id}`));
+    expect(withdrawn.body.operation).toBe('withdraw');
+    expect(withdrawn.body.revision).toBe('3');
+    await page.getByRole('link', { name: 'Previous revision', exact: true }).click();
+    await expect(page.getByText(/Revision 2 ·/)).toBeVisible();
+
+    await page.goto(pathname);
+    await page.getByRole('button', { name: 'Cancel scheduled maintenance', exact: true }).click();
+    dialog = page.getByRole('dialog', { name: 'Cancel this maintenance window?' });
+    await dialog.getByLabel('Reason for this change', { exact: true }).fill('Postpone to a new date.');
+    await expectOk(api(page, 'PUT', `/api/v1${pathname}`, { ...seeded, title: displayName, reason: 'Newer revision.' }, { 'If-Match': saved.etag! }));
+    await dialog.getByRole('button', { name: 'Cancel maintenance', exact: true }).click();
+    await expect(dialog.getByRole('alert')).toContainText('The window changed');
+    await dialog.getByRole('button', { name: 'Read latest revision', exact: true }).click();
+    await expect(dialog.getByLabel('Reason for this change', { exact: true })).toHaveValue('Postpone to a new date.');
+    await dialog.getByRole('button', { name: 'Cancel maintenance', exact: true }).click();
+    await expect(page.getByText('Cancelled', { exact: true })).toBeVisible();
+
+
   } finally {
     stopAgent(agent);
   }

@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { AuthContext } from '../auth/client.ts';
 import { Button, LoadingIndicator, PageHeader, Pager, RefreshButton, StatusChip, Toolbar, ToolbarSpacer, resourceRowClick } from '../components/ui/index.ts';
 import { sloClient, type ServerClock } from '../slos/client.ts';
 import { maintenanceClient, type MaintenancePage as WindowPage, type MaintenanceWindow } from './client.ts';
+import { MaintenanceLifecycle } from './MaintenanceLifecycle.tsx';
 import { ScheduleMaintenance } from './ScheduleMaintenance.tsx';
 import './maintenance.css';
 
@@ -127,7 +128,7 @@ function ScopeLinks({ ids }: { ids: string[] }) {
   </>;
 }
 
-function WindowDetail({ id, revision }: { id: string; revision: string }) {
+function WindowDetail({ id, revision, context }: { id: string; revision: string; context: AuthContext }) {
   const [result, setResult] = useState<Awaited<ReturnType<typeof maintenanceClient.get>>>();
   const [error, setError] = useState('');
   const [refresh, setRefresh] = useState(0);
@@ -145,10 +146,19 @@ function WindowDetail({ id, revision }: { id: string; revision: string }) {
 
   const window = result?.value;
   const now = useWindowClock(result?.serverClock, window ? [window] : []);
+  const heading = useRef<HTMLHeadingElement>(null);
   const previous = window && BigInt(window.revision) - 1n;
+  function applyLifecycleUpdate(next: { value: MaintenanceWindow; etag: string }) {
+    setResult(next);
+    requestAnimationFrame(() => heading.current?.focus());
+    setRefresh(value => value + 1);
+  }
   return <>
-    <PageHeader title={window?.title ?? 'Maintenance window'} breadcrumb={{ href: root, label: 'Maintenance', current: window?.title ?? 'Window' }}
-      actions={<RefreshButton label="Refresh maintenance window" onClick={() => setRefresh(value => value + 1)} />} />
+    <PageHeader headingRef={heading} title={window?.title ?? 'Maintenance window'} breadcrumb={{ href: root, label: 'Maintenance', current: window?.title ?? 'Window' }}
+      actions={<>
+        {!revision && result && <MaintenanceLifecycle context={context} record={result.value} etag={result.etag} now={now} onUpdated={applyLifecycleUpdate} />}
+        <RefreshButton label="Refresh maintenance window" onClick={() => setRefresh(value => value + 1)} />
+      </>} />
     {error && <p className="ui-error" role="alert">{error}</p>}
     {!window && !error && <LoadingIndicator label="Loading maintenance window" />}
     {window && <>
@@ -169,6 +179,7 @@ function WindowDetail({ id, revision }: { id: string; revision: string }) {
           {revision && <a data-app-route href={`${root}/${id}`}>Latest revision</a>}
         </nav>
       </section>
+      {!revision && <MaintenanceLifecycle historical context={context} record={window} etag={result.etag} now={now} onUpdated={applyLifecycleUpdate} />}
     </>}
   </>;
 }
@@ -187,6 +198,6 @@ export function MaintenancePage({ context }: { context: AuthContext }) {
 
   return <div className="maintenance-page">{id === 'new'
     ? canWrite ? <ScheduleMaintenance context={context} /> : <><PageHeader title="Schedule maintenance" /><p role="alert">An editor or administrator can schedule maintenance.</p></>
-    : id ? <WindowDetail key={route} id={id} revision={new URLSearchParams(query).get('revision') ?? ''} />
+    : id ? <WindowDetail key={route} id={id} context={context} revision={new URLSearchParams(query).get('revision') ?? ''} />
       : <WindowList canWrite={canWrite} />}</div>;
 }
