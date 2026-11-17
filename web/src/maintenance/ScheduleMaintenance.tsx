@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import type { AuthContext } from '../auth/client.ts';
-import { Button, ChoiceChips, Combobox, DatePicker, FormActions, FormSection, PageHeader, TextareaField, TextField, type ComboboxOption } from '../components/ui/index.ts';
+import { Button, ChoiceChips, Combobox, DatePicker, FormActions, FormSection, PageHeader, Panel, TextareaField, TextField, type ComboboxOption } from '../components/ui/index.ts';
 import { SloFailure, sloClient } from '../slos/client.ts';
 import { maintenanceClient, type MaintenanceWindow, type MaintenanceWrite } from './client.ts';
 
@@ -26,6 +26,7 @@ export function ScheduleMaintenance({ context, existing }: { context: AuthContex
   const [term, setTerm] = useState('');
   const [options, setOptions] = useState<ComboboxOption[]>([]);
   const [selected, setSelected] = useState<ComboboxOption[]>(() => windowRecord?.slo_ids.map(id => ({ id, label: id })) ?? []);
+  const [scopeNames, setScopeNames] = useState(() => new Map<string, ComboboxOption>());
   const [searchError, setSearchError] = useState('');
   const [searching, setSearching] = useState(true);
   const [day, setDay] = useState(windowRecord?.start.slice(0, 10) ?? '');
@@ -35,10 +36,11 @@ export function ScheduleMaintenance({ context, existing }: { context: AuthContex
   const [saving, setSaving] = useState(false);
   const [etag, setETag] = useState(existing?.etag ?? '');
   const [conflict, setConflict] = useState(false);
-  const [latest, setLatest] = useState<MaintenanceWindow>();
+  const [latest, setLatest] = useState<{ value: MaintenanceWindow; etag?: string }>();
   const route = useRef(location.pathname + location.search);
   const attempt = useRef<{ body: string; key: string } | null>(null);
   const notice = useRef<HTMLParagraphElement>(null);
+  const saveButton = useRef<HTMLButtonElement>(null);
   const mounted = useRef(false);
   const revisionRead = useRef<AbortController | null>(null);
 
@@ -48,20 +50,24 @@ export function ScheduleMaintenance({ context, existing }: { context: AuthContex
   }, []);
 
   useEffect(() => {
-    if (!windowRecord) return;
+    const ids = [...new Set([...(latest?.value.slo_ids ?? []), ...(windowRecord?.slo_ids ?? [])])];
+    if (!ids.length) return;
     const controller = new AbortController();
     async function resolveNames(ids: string[]) {
       for (let offset = 0; offset < ids.length && !controller.signal.aborted; offset += 10) {
         const results = await Promise.allSettled(ids.slice(offset, offset + 10).map(id => sloClient.get(id, controller.signal)));
         if (controller.signal.aborted) return;
-        const names = new Map(results.flatMap(result => result.status === 'fulfilled'
-          ? [[result.value.value.id, result.value.value.display_name] as const] : []));
-        setSelected(current => current.map(option => ({ ...option, label: names.get(option.id) ?? option.label })));
+        const resolved = results.flatMap(result => {
+          if (result.status === 'rejected') return [];
+          const slo = result.value.value;
+          return [{ id: slo.id, label: slo.display_name, detail: slo.service_display_name }];
+        });
+        setScopeNames(current => new Map<string, ComboboxOption>([...current, ...resolved.map(option => [option.id, option] as const)]));
       }
     }
-    void resolveNames(windowRecord.slo_ids);
+    void resolveNames(ids);
     return () => controller.abort();
-  }, [windowRecord]);
+  }, [windowRecord, latest]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -123,6 +129,7 @@ export function ScheduleMaintenance({ context, existing }: { context: AuthContex
       if (failure instanceof SloFailure && !failure.uncertain) {
         attempt.current = null;
         setConflict(!!windowRecord && failure.status === 409);
+        setLatest(undefined);
       }
       setError(failure instanceof Error ? failure.message : 'The maintenance could not be scheduled.');
     } finally {
@@ -138,21 +145,30 @@ export function ScheduleMaintenance({ context, existing }: { context: AuthContex
     try {
       const current = await maintenanceClient.get(windowRecord.id, '', controller.signal);
       if (!mounted.current) return;
-      setLatest(current.value);
       const currentTime = current.serverClock?.time ?? Date.now();
       if (current.value.tombstone || Date.parse(current.value.start) <= currentTime) {
+        setLatest({ value: current.value });
         setError('The latest revision is no longer scheduled. Open the window to see its current state.');
         return;
       }
-      setETag(current.etag);
-      setConflict(false);
-      setError('Latest revision loaded. Check its schedule before saving your changes.');
+      setLatest(current);
+      setError('Review the current revision before keeping your draft.');
     } catch (failure) {
       if (mounted.current) setError(failure instanceof Error ? failure.message : 'The latest revision could not be loaded.');
     } finally {
       if (mounted.current) setSaving(false);
     }
   }
+
+  const latestETag = latest?.etag;
+  const draftScope = new Set(selected.map(option => option.id));
+  const currentScope = new Set(latest?.value.slo_ids);
+  const onlyCurrent = [...currentScope].filter(id => !draftScope.has(id));
+  const onlyDraft = [...draftScope].filter(id => !currentScope.has(id));
+  const labelScope = (ids: string[]) => <ul>{ids.map(id => {
+    const objective = scopeNames.get(id) ?? selected.find(option => option.id === id);
+    return <li key={id}>{objective?.label ?? id}{objective?.detail && <small> · {objective.detail}</small>}</li>;
+  })}</ul>;
 
   return <>
     <PageHeader title={windowRecord ? 'Edit maintenance schedule' : 'Schedule maintenance'}
@@ -165,7 +181,7 @@ export function ScheduleMaintenance({ context, existing }: { context: AuthContex
       <FormSection title="Scope">
         <Combobox id="maintenance-slo" label="Affected SLOs" options={options} value={null} onSearch={setTerm}
           onChange={id => { const option = options.find(item => item.id === id); if (option) setSelected(current => current.length < maxScope ? [...current, option] : current); }}
-          multiple={{ selected, placement: 'below', selectionLabel: 'Selected SLOs', onRemove: id => setSelected(current => current.filter(option => option.id !== id)) }}
+          multiple={{ selected: selected.map(option => scopeNames.get(option.id) ?? option), placement: 'below', selectionLabel: 'Selected SLOs', onRemove: id => setSelected(current => current.filter(option => option.id !== id)) }}
           placeholder="Search SLOs" hint={selected.length === maxScope ? `Remove an SLO before adding another. The limit is ${maxScope}.` : "Measurements in this window are excluded from the selected SLOs."} error={searchError || undefined} disabled={saving}
           noMatch={{ text: () => searching ? 'Searching for SLOs…' : searchError || 'No matching SLOs. Try a different name.' }} />
       </FormSection>
@@ -182,11 +198,27 @@ export function ScheduleMaintenance({ context, existing }: { context: AuthContex
         {validSchedule && <p className="ui-hint">Ends <time dateTime={new Date(end).toISOString()}>{new Date(end).toISOString().slice(0, windowRecord ? 19 : 16).replace('T', ' ')} UTC</time></p>}
       </FormSection>
       {error && <p ref={notice} tabIndex={-1} role="alert" className="ui-error">{error}</p>}
-      {latest && <p className="ui-hint">Current revision {latest.revision} · {latest.title} · {latest.start} to {latest.end} · {latest.slo_ids.length} SLOs</p>}
+      {latest && <Panel heading={`Current revision ${latest.value.revision}`} className="maintenance-detail">
+        <dl>
+          <dt>Name</dt><dd>{latest.value.title}</dd>
+          <dt>Reason</dt><dd className="maintenance-reason">{latest.value.reason}</dd>
+          <dt>Schedule</dt><dd><time>{latest.value.start}</time> to <time>{latest.value.end}</time></dd>
+          {!!onlyCurrent.length && <><dt>Only in the current revision</dt><dd>{labelScope(onlyCurrent)}</dd></>}
+          {!!onlyDraft.length && <><dt>Only in your draft</dt><dd>{labelScope(onlyDraft)}</dd></>}
+        </dl>
+        {latest.etag && <p className="ui-hint">Keeping your draft lets you save it over this revision.</p>}
+      </Panel>}
       <FormActions>
         <a data-app-route href={returnTo} className="ui-button ui-button--outline">Cancel</a>
-        {conflict && <Button variant="outline" disabled={saving} onClick={() => void readCurrentRevision()}>Read latest revision</Button>}
-        <Button type="submit" pending={saving} disabled={conflict}>{windowRecord ? 'Save schedule' : 'Schedule maintenance'}</Button>
+        {conflict && !latestETag && <Button variant="outline" disabled={saving} onClick={() => void readCurrentRevision()}>Read latest revision</Button>}
+        {conflict && latestETag && <Button variant="outline" onClick={() => {
+          setETag(latestETag);
+          setConflict(false);
+          setLatest(undefined);
+          setError('');
+          requestAnimationFrame(() => saveButton.current?.focus());
+        }}>Keep my draft</Button>}
+        <Button ref={saveButton} type="submit" pending={saving} disabled={conflict}>{windowRecord ? 'Save schedule' : 'Schedule maintenance'}</Button>
       </FormActions>
     </form>
   </>;

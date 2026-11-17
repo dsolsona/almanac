@@ -4,7 +4,7 @@ import type { AuthContext } from '../src/auth/client.ts';
 import { MaintenancePage } from '../src/maintenance/MaintenancePage.tsx';
 import { ScheduleMaintenance } from '../src/maintenance/ScheduleMaintenance.tsx';
 import { maintenanceClient, type MaintenanceWindow } from '../src/maintenance/client.ts';
-import { sloClient, type OperationalOverview } from '../src/slos/client.ts';
+import { SloFailure, sloClient, type OperationalOverview } from '../src/slos/client.ts';
 
 vi.mock('../src/components/ui/index.ts', async importActual => {
   const controls = await importActual<typeof import('../src/components/ui/index.ts')>();
@@ -227,4 +227,43 @@ it('preserves the exact bounds of an API-created window when editing its reason'
     start: '2026-11-18T02:00:01.000Z', end: '2026-11-18T02:00:02.000Z',
   }, context, expect.any(String), etag);
   expect(location.pathname + location.search).toBe(`/maintenance/${id}`);
+});
+
+it('reviews a concurrent SLO swap and reason before enabling the retained draft', async () => {
+  const replacement = '70000000-0000-4000-8000-000000000002';
+  const etag = `"maintenance:${id}:1"`;
+  const latestEtag = `"maintenance:${id}:2"`;
+  const latest = { ...record, revision: '2', slo_ids: [replacement], reason: 'Another editor changed the scope.' };
+  vi.spyOn(sloClient, 'get').mockImplementation(async objectiveId => ({
+    value: { id: objectiveId, display_name: objectiveId === sloId ? 'Checkout availability' : 'Orders availability' },
+    etag: '',
+  } as Awaited<ReturnType<typeof sloClient.get>>));
+  vi.spyOn(sloClient, 'overview').mockResolvedValue({ items: [] } as unknown as OperationalOverview);
+  const update = vi.spyOn(maintenanceClient, 'update')
+    .mockRejectedValueOnce(new SloFailure('Schedule changed.', false, 409))
+    .mockResolvedValueOnce({ value: { ...record, revision: '3' }, etag: '' });
+  vi.spyOn(maintenanceClient, 'get').mockResolvedValue({
+    value: latest, etag: latestEtag, serverClock: { time: Date.parse(now), receivedAt: performance.now() },
+  });
+
+  render(<ScheduleMaintenance context={context} existing={{ value: record, etag }} />);
+  fireEvent.change(screen.getByLabelText('Reason'), { target: { value: 'My scheduled work.' } });
+  const save = screen.getByRole('button', { name: 'Save schedule' });
+  fireEvent.click(save);
+  fireEvent.click(await screen.findByRole('button', { name: 'Read latest revision' }));
+  await screen.findByText(latest.reason);
+  expect(await screen.findByText('Orders availability')).toBeVisible();
+  expect(screen.getByText('Only in the current revision')).toBeVisible();
+  expect(screen.getByText('Only in your draft')).toBeVisible();
+  expect(screen.getByLabelText('Reason')).toHaveValue('My scheduled work.');
+  expect(save).toBeDisabled();
+  fireEvent.click(save);
+  expect(update).toHaveBeenCalledTimes(1);
+
+  fireEvent.click(screen.getByRole('button', { name: 'Keep my draft' }));
+  expect(save).toBeEnabled();
+  fireEvent.click(save);
+  await act(async () => {});
+  expect(update).toHaveBeenLastCalledWith(id, expect.objectContaining({ reason: 'My scheduled work.', slo_ids: [sloId] }),
+    context, expect.any(String), latestEtag);
 });
