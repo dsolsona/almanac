@@ -200,13 +200,20 @@ func TestIntegrationAlertProcessorCancellationRecovery(t *testing.T) {
 		t.Fatal(err)
 	}
 	var count, attempts int
-	if err := f.conn.QueryRow(t.Context(), `SELECT (SELECT count(*) FROM almanac_alert_evaluations),failure_attempts FROM almanac_alert_cursors WHERE policy_id=$1`, policy).Scan(&count, &attempts); err != nil || count != 0 || attempts != 0 {
+	// A canceled client can return while PostgreSQL is still rolling back. A plain
+	// MVCC read does not wait for that cleanup, but the next SKIP LOCKED claim
+	// correctly skips its row. Acquire the row before advancing the fixture clock.
+	if err := f.conn.QueryRow(t.Context(), `SELECT (SELECT count(*) FROM almanac_alert_evaluations),failure_attempts FROM almanac_alert_cursors WHERE policy_id=$1 FOR UPDATE`, policy).Scan(&count, &attempts); err != nil || count != 0 || attempts != 0 {
 		t.Fatalf("cancelled publication persisted: eval=%d attempts=%d %v", count, attempts, err)
 	}
 	f.now = f.at.Add(2 * time.Minute)
 	got, err := f.runtime.processAlertTick(t.Context(), f.now, options, f.clock)
 	if err != nil || got.Evaluations != 1 {
 		t.Fatalf("restart did not recover original work: %+v %v", got, err)
+	}
+	var cutoff time.Time
+	if err := f.conn.QueryRow(t.Context(), `SELECT effective_cutoff FROM almanac_alert_evaluations WHERE policy_id=$1`, policy).Scan(&cutoff); err != nil || !cutoff.Equal(f.at) {
+		t.Fatalf("restart changed original cutoff: %s %v", cutoff, err)
 	}
 }
 

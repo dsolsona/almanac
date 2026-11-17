@@ -229,7 +229,7 @@ bin/almanac serve --components=ui --backend-url=http://127.0.0.1:8081
 
 It listens on `127.0.0.1:8080`, serves the embedded UI, and proxies `/api/v1/`
 requests to the configured backend origin. Default server mode is
-`backend,ui,alerts`: it serves the UI/API and runs the alert evaluator under the
+`backend,ui,alerts`: it serves the UI/API and runs alert evaluation and evidence retention under the
 single backend owner. Use `backend,alerts` for the API and evaluator without UI,
 or omit `alerts` to run shared SLO preparation without evaluating alert policies.
 A standalone `alerts` component is not yet supported.

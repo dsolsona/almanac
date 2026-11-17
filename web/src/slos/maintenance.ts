@@ -29,6 +29,16 @@ export function validCalculationProvenance(value: unknown, quality: unknown): bo
 function decimal(value: unknown): value is string {
   return typeof value === 'string' && value.length <= 128 && /^\d+(?:\.\d+)?$/.test(value);
 }
+
+// A displayed graph bucket does not identify the complete rolling input window.
+export function validWindowCalculationProvenance(value: unknown, quality: unknown, requiredStart: unknown, requiredEnd: unknown): boolean {
+  if (!validCalculationProvenance(value, quality)) return false;
+  if (!record(value) || value.compatibility === undefined) return true;
+  const proof = value.compatibility as Record<string, unknown>;
+  const start = instant(requiredStart), end = instant(requiredEnd);
+  const proofStart = instant(proof.start), proofEnd = instant(proof.end);
+  return start !== undefined && end !== undefined && start < end && proofStart !== undefined && proofEnd !== undefined && proofStart <= start && proofEnd >= end;
+}
 function atScale(value: string, scale: number): bigint {
   const [whole, fraction = ''] = value.split('.');
   return BigInt(whole + fraction.padEnd(scale, '0'));

@@ -1,3 +1,16 @@
+Alert review closeout, 2026-11-17: [PR #127](https://github.com/dsolsona/almanac/pull/127)
+is the only open alert implementation PR. All five inline CodeRabbit threads are
+resolved. The additional review-summary proof-window finding is confirmed and
+corrected in both clients for explicit current/burn windows; its outside-diff
+migration-count finding was already corrected. The latest documentation-head CI
+exposes a cancellation-recovery fixture synchronization failure. Its correction
+waits for server rollback before the one-shot reclaim and verifies the original
+cutoff. The completeness audit also connects existing bounded alert retention to
+ordinary startup: 200 rows per stage every ten seconds, with active/latest pins
+preserved. Focused client, cancellation and runtime checks pass; updated broad
+CI/review remains pending. Capacity checks remain deferred. [F4-T51](tasks/F4-T51.md)
+records the dispositions and commands.
+
 Ordinary alert runtime completion, 2026-11-16: the maintainer explicitly requests
 ordinary startup/configuration and enabled local deployment in
 [PR #127](https://github.com/dsolsona/almanac/pull/127), with capacity checks

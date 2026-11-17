@@ -327,7 +327,7 @@ func validOperationalPerformance(value api.SloEvaluationPerformance) bool {
 func validOperationalValue(value api.SloOperationalValue) bool {
 	w := value.Window
 	return !value.EvaluationAt.IsZero() && !w.RequestedStart.IsZero() && !w.EffectiveStart.IsZero() && !w.End.IsZero() && !w.EligibleStart.IsZero() && !w.RetentionStart.IsZero() && !w.ActivatedAt.IsZero() && !w.EvaluationValidFrom.IsZero() &&
-		validCalculationProvenance(value.CalculationProvenance, value.Quality) && validOperationalQuality(value.Quality) && validOperationalPerformance(value.Performance)
+		validWindowCalculationProvenance(value.CalculationProvenance, value.Quality, w.RequestedStart, w.End) && validOperationalQuality(value.Quality) && validOperationalPerformance(value.Performance)
 }
 func validUrgency(value api.SloUrgencyReason) bool {
 	switch value.Code {
@@ -338,7 +338,7 @@ func validUrgency(value api.SloUrgencyReason) bool {
 	}
 }
 func validBurn(value api.SloBurnValue, expected int) bool {
-	return int(value.WindowSeconds) == expected && !value.Start.IsZero() && !value.End.IsZero() && value.End.After(value.Start) && validCalculationProvenance(value.CalculationProvenance, value.Quality) && validOperationalQuality(value.Quality) && validOperationalPerformance(value.Performance)
+	return int(value.WindowSeconds) == expected && !value.Start.IsZero() && !value.End.IsZero() && value.End.After(value.Start) && validWindowCalculationProvenance(value.CalculationProvenance, value.Quality, value.Start, value.End) && validOperationalQuality(value.Quality) && validOperationalPerformance(value.Performance)
 }
 func validExhaustion(value api.SloExhaustionEstimate) bool {
 	stateOK := value.State == "estimated" || value.State == "exhausted" || value.State == "unavailable"

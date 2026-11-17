@@ -17,7 +17,7 @@ type alertRetentionOptions struct {
 }
 type alertRetentionResult struct{ Scanned, CompactedEvaluations, DeletedEvaluations, DeletedOccurrences, DeletedRanges int }
 
-// maintainAlertEvidence is unwired bounded maintenance. Each stage owns a
+// maintainAlertEvidence performs bounded maintenance. Each stage owns a
 // durable keyset over raw rows, before eligibility/pin filters, so a retained
 // prefix cannot starve later policies or cause an unbounded eligibility scan.
 func (r *Runtime) maintainAlertEvidence(ctx context.Context, options alertRetentionOptions, clock func() time.Time) (alertRetentionResult, error) {

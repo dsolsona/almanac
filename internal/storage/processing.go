@@ -58,13 +58,18 @@ func (r *Runtime) startProcessing(ctx context.Context, logger *slog.Logger, aler
 	}
 	logger.InfoContext(ctx, "processing runtime installed", "profile", "runtime-v1", "alerts", alerts, "tick", time.Second, "source_hours", windows.MaxSourceHours, "raw_rows", windows.MaxRawRows, "fragments", windows.MaxFragments, "preparation_requests", admission.MaxRequests, "preparation_source_hours", admission.MaxSourceHours, "retained_proofs", consumer.MaxRetainedProofs, "retention_start", preparation.RetentionStart)
 	logger.InfoContext(ctx, "alert processor bounds", "policies", processor.MaxPolicies, "workers", processor.Concurrency, "lease", processor.Lease, "horizon", processor.Horizon, "pending_retry", processor.PendingRetry, "failure_retry", processor.FailureRetry, "attempts", processor.MaxAttempts, "conditions", processor.Limits.MaxConditions, "decimal_bytes", processor.Limits.MaxDecimalBytes)
+	const retentionBatch = 200
+	const retentionInterval = 10 * time.Second
+	if alerts {
+		logger.InfoContext(ctx, "alert retention bounds", "batch_per_stage", retentionBatch, "tick", retentionInterval, "compact_after", 24*time.Hour, "history", sli.ObservationRetention)
+	}
 	logger.InfoContext(ctx, "preparation processor bounds", "live_jobs", preparation.MaxLive, "historical_jobs", preparation.MaxHistorical, "workers", preparation.Concurrency, "page_limit", preparation.PageLimit, "lease", preparation.Lease, "operation", preparation.OperationBudget, "pending_retry", preparation.PendingRetry, "failure_retry", preparation.FailureRetry, "attempts", preparation.MaxAttempts)
 	logger.InfoContext(ctx, "maintenance authority bounds", "claims", authority.MaxClaims, "changes", authority.MaxChanges, "buckets", authority.MaxBuckets, "scan_hours", authority.MaxScanHours, "lease", authority.Lease, "operation", authority.OperationBudget, "pending_retry", authority.PendingRetry, "failure_retry", authority.FailureRetry, "attempts", authority.MaxAttempts)
 	life, cancel := context.WithCancel(ctx)
 	var workers sync.WaitGroup
-	run := func(kind string, turn func(context.Context, time.Time) error) {
+	run := func(kind string, interval time.Duration, turn func(context.Context, time.Time) error) {
 		workers.Go(func() {
-			timer := time.NewTicker(time.Second)
+			timer := time.NewTicker(interval)
 			defer timer.Stop()
 			for life.Err() == nil {
 				tick := clock().UTC().Truncate(time.Second)
@@ -81,20 +86,25 @@ func (r *Runtime) startProcessing(ctx context.Context, logger *slog.Logger, aler
 			}
 		})
 	}
-	run("authority", func(ctx context.Context, tick time.Time) error {
+	run("authority", time.Second, func(ctx context.Context, tick time.Time) error {
 		options := authority
 		options.RetentionStart = controls.retentionStart(tick)
 		_, err := r.runMaintenanceAuthorityTurn(ctx, tick, options, clock)
 		return err
 	})
-	run("preparation", func(ctx context.Context, tick time.Time) error {
+	run("preparation", time.Second, func(ctx context.Context, tick time.Time) error {
 		options := preparation
 		options.RetentionStart = controls.retentionStart(tick)
 		_, err := r.runMaintenancePreparationTurn(ctx, tick, options, clock)
 		return err
 	})
 	if alerts {
-		run("evaluation", func(ctx context.Context, tick time.Time) error {
+		run("retention", retentionInterval, func(ctx context.Context, tick time.Time) error {
+			options := alertRetentionOptions{Batch: retentionBatch, CompactBefore: tick.Add(-24 * time.Hour), HistoryBefore: tick.Add(-sli.ObservationRetention)}
+			_, err := r.maintainAlertEvidence(ctx, options, clock)
+			return err
+		})
+		run("evaluation", time.Second, func(ctx context.Context, tick time.Time) error {
 			if controls.PauseEvaluation != nil && controls.PauseEvaluation() {
 				return nil
 			}

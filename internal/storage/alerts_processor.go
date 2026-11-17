@@ -13,8 +13,8 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-// All options are explicit internal admission inputs. Production registration
-// and public retry defaults require their own acceptance; this turn is unwired.
+// All options are explicit internal admission inputs. The ordinary runtime owns
+// registration and bounded defaults; this turn does not own its own lifecycle.
 type alertProcessorOptions struct {
 	MaxPolicies, Concurrency                   int
 	Lease, Horizon, PendingRetry, FailureRetry time.Duration

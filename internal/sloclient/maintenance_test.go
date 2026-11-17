@@ -10,9 +10,40 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/dsolsona/almanac/internal/api"
 )
+
+func TestMaintenanceProofCoversValueWindow(t *testing.T) {
+	start := *timestamp("2026-11-15T10:00:00Z")
+	end := start.Add(time.Hour)
+	for _, tc := range []struct {
+		name       string
+		start, end time.Time
+		valid      bool
+	}{
+		{"exact", start, end, true},
+		{"wider", start.Add(-time.Hour), end.Add(time.Hour), true},
+		{"different day", start.Add(-24 * time.Hour), end.Add(-24 * time.Hour), false},
+		{"missing first microsecond", start.Add(time.Microsecond), end, false},
+		{"missing last microsecond", start, end.Add(-time.Microsecond), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			provenance := &api.SloCalculationProvenance{ComputedRevision: "0", RequestedRevision: "2", SourceGeneration: "1", Compatibility: &api.SloMaintenanceCompatibility{Kind: "indexed_absence", ComputedRevision: "0", RequestedRevision: "2", IndexedThrough: "2", Start: tc.start, End: tc.end}}
+			quality := api.SloOperationalQuality{State: "complete", Freshness: "fresh", ExcludedIntervals: new(int64(0)), ExcludedGood: jsontext.Value(`"0"`), ExcludedTotal: jsontext.Value(`"0"`)}
+			performance := api.SloEvaluationPerformance{State: "unknown", BudgetUnit: "events"}
+			burn := api.SloBurnValue{CalculationProvenance: provenance, Start: start, End: end, WindowSeconds: 3600, Quality: quality, Performance: performance}
+			if got := validBurn(burn, 3600); got != tc.valid {
+				t.Errorf("burn accepted=%v, want %v", got, tc.valid)
+			}
+			current := api.SloOperationalValue{CalculationProvenance: provenance, EvaluationAt: end, Window: api.SloEvaluationWindow{RequestedStart: start, EffectiveStart: start, End: end, EligibleStart: start, RetentionStart: start, ActivatedAt: start, EvaluationValidFrom: start}, Quality: quality, Performance: performance}
+			if got := validOperationalValue(current); got != tc.valid {
+				t.Errorf("current accepted=%v, want %v", got, tc.valid)
+			}
+		})
+	}
+}
 
 func TestMaintenanceSampleContract(t *testing.T) {
 	for _, tc := range []struct {

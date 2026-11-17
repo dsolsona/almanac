@@ -88,3 +88,30 @@ func TestIntegrationOrdinaryProcessingWithoutAlerts(t *testing.T) {
 		t.Fatalf("backend without alerts evaluated a policy: %d %v", count, err)
 	}
 }
+
+func TestIntegrationOrdinaryProcessingRetention(t *testing.T) {
+	t.Parallel()
+	f := newAlertTestFixture(t)
+	seedAlertRetentionClear(t, f, 4, 0)
+	// Isolate retained evidence from new evaluation work; disabling scheduling
+	// does not release the cursor's latest-evidence pin.
+	if _, err := f.conn.Exec(t.Context(), `UPDATE almanac_alert_cursors SET schedulable=false`); err != nil {
+		t.Fatal(err)
+	}
+	f.now = f.at.Add(3 * 24 * time.Hour)
+	stop, err := f.runtime.startProcessing(t.Context(), slog.New(slog.NewTextHandler(io.Discard, nil)), true, processingControls{}, f.clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stop()
+	waitProcessingResult(t, func() bool {
+		var count int
+		return f.conn.QueryRow(t.Context(), `SELECT count(*) FROM almanac_alert_ranges WHERE kind='compacted_evaluations'`).Scan(&count) == nil && count > 0
+	})
+	stop()
+	var count int
+	var cutoff time.Time
+	if err := f.conn.QueryRow(t.Context(), `SELECT count(*),max(effective_cutoff) FROM almanac_alert_evaluations`).Scan(&count, &cutoff); err != nil || count != 1 || !cutoff.Equal(f.at.Add(3*time.Minute)) {
+		t.Fatalf("retention failed to preserve latest evidence: count=%d cutoff=%s %v", count, cutoff, err)
+	}
+}

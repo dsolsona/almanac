@@ -1,4 +1,4 @@
-import { validCalculationProvenance, validExcludedPopulation } from './maintenance.ts';
+import { validCalculationProvenance, validWindowCalculationProvenance, validExcludedPopulation } from './maintenance.ts';
 import type { components } from '../api/generated.ts';
 import type { AuthContext } from '../auth/client.ts';
 import { clearQueryCache, sharedRead, waitForReadRetry } from '../queryCache.ts';
@@ -62,7 +62,7 @@ function validOperationalPerformance(value:unknown):boolean {
     ['good','total','bad','attainment','allowed_budget','remaining_budget','consumed_fraction','remaining_fraction','burn'].every(k=>decimal(value[k])) && value.budget_unit==='events';
 }
 function validOperationalValue(value:unknown):boolean {
-  if(!record(value)||!validCalculationProvenance(value.calculation_provenance,value.quality)||!record(value.window)) return false;
+  if(!record(value)||!record(value.window)||!validWindowCalculationProvenance(value.calculation_provenance,value.quality,value.window.requested_start,value.window.end)) return false;
   const w=value.window;
   return utcTimestamp(value.evaluation_at) && ['requested_start','effective_start','end','eligible_start','retention_start','activated_at','evaluation_valid_from'].every(k=>utcTimestamp(w[k])) &&
     (w.historical_requested_by===null||typeof w.historical_requested_by==='string') && (w.historical_requested_at===null||utcTimestamp(w.historical_requested_at)) &&
@@ -127,7 +127,7 @@ function validOperationalOverview(value:unknown):boolean {
   if(!['needs_attention','watch','healthy'].every(k=>nonnegativeInteger(counts[k]))) return false;
   return value.items.every(item=>{
     if(!record(item)||!validSlo(item.slo)||!['needs_attention','watch','healthy'].includes(String(item.urgency))||!validUrgency(item.leading_reason)||!Array.isArray(item.reasons)||item.reasons.length>14||!item.reasons.every(validUrgency)||!validOperationalValue(item.current)||
-      ![item.burn_1h,item.burn_6h].every(v=>record(v)&&validCalculationProvenance(v.calculation_provenance,v.quality)&&(v.window_seconds===3600||v.window_seconds===21600)&&utcTimestamp(v.start)&&utcTimestamp(v.end)&&validOperationalQuality(v.quality)&&validOperationalPerformance(v.performance))||
+      ![item.burn_1h,item.burn_6h].every(v=>record(v)&&validWindowCalculationProvenance(v.calculation_provenance,v.quality,v.start,v.end)&&(v.window_seconds===3600||v.window_seconds===21600)&&utcTimestamp(v.start)&&utcTimestamp(v.end)&&validOperationalQuality(v.quality)&&validOperationalPerformance(v.performance))||
       !record(item.exhaustion)||!Array.isArray(item.budget_sparkline)||item.budget_sparkline.length>120||!item.budget_sparkline.every(validOperationalSample)) return false;
     if(item.current_state!==undefined){
       if(!['ready','stale','failed','unavailable'].includes(String(item.current_state)))return false;
@@ -147,7 +147,7 @@ function validOperationalDetail(value:unknown,pathID:string):boolean {
   if(preparation!==undefined&&(!record(preparation)||!nonnegativeInteger(preparation.ready_seconds)||!nonnegativeInteger(preparation.total_seconds)||preparation.total_seconds===0||Number(preparation.ready_seconds)>Number(preparation.total_seconds)||typeof preparation.failed!=='boolean'))return false;
   if(!['requested_start','requested_end','effective_start','effective_end'].every(k=>utcTimestamp(range[k]))||!nonnegativeInteger(range.source_cadence_seconds)||!nonnegativeInteger(range.resolution_seconds)||typeof range.reduced!=='boolean'||range.max_samples_per_series!==1500||range.bucket_bounds!=='half_open') return false;
   if(typeof c.sli_id!=='string'||typeof c.sli_name!=='string'||typeof c.sli_display_name!=='string'||typeof c.datasource_id!=='string'||typeof c.datasource_display_name!=='string'||typeof c.measurement_revision!=='string'||!nonnegativeInteger(c.polling_interval_seconds)||!nonnegativeInteger(c.settling_delay_seconds)||typeof c.good_query!=='string'||typeof c.total_query!=='string') return false;
-  return [value.burn_1h,value.burn_6h].every(v=>record(v)&&validCalculationProvenance(v.calculation_provenance,v.quality)&&(v.window_seconds===3600||v.window_seconds===21600)&&utcTimestamp(v.start)&&utcTimestamp(v.end)&&validOperationalQuality(v.quality)&&validOperationalPerformance(v.performance))&&
+  return [value.burn_1h,value.burn_6h].every(v=>record(v)&&validWindowCalculationProvenance(v.calculation_provenance,v.quality,v.start,v.end)&&(v.window_seconds===3600||v.window_seconds===21600)&&utcTimestamp(v.start)&&utcTimestamp(v.end)&&validOperationalQuality(v.quality)&&validOperationalPerformance(v.performance))&&
     record(exhaustion)&&['estimated','exhausted','unavailable'].includes(String(exhaustion.state))&&['remaining_events','bad_events_per_hour','hours_until_exhaustion'].every(k=>decimal(exhaustion[k]))&&validOperationalQuality(exhaustion.current_quality)&&validOperationalQuality(exhaustion.one_hour_quality)&&Array.isArray(exhaustion.assumptions)&&
     validOperationalSeries(value.attainment_series,'attainment')&&validOperationalSeries(value.budget_series,'rolling_budget')&&validOperationalSeries(value.burn_series,'burn')&&
     validDailyCompliance(value.compliance_series,value.compliance_summary,value.objective as Record<string,unknown>,range.effective_start as string,range.effective_end as string,value.effective_at as string,range.source_cadence_seconds as number);

@@ -55,6 +55,19 @@ func maintenanceInstant(value time.Time) bool {
 	return !value.IsZero() && offset == 0 && value.Nanosecond()%1000 == 0
 }
 
+// Explicit calculation bounds are distinct from graph buckets, whose width does
+// not identify the complete rolling input window.
+func validWindowCalculationProvenance(value *api.SloCalculationProvenance, quality api.SloOperationalQuality, start, end time.Time) bool {
+	if !validCalculationProvenance(value, quality) {
+		return false
+	}
+	if value == nil || value.Compatibility == nil {
+		return true
+	}
+	proof := value.Compatibility
+	return !start.IsZero() && start.Before(end) && !proof.Start.After(start) && !proof.End.Before(end)
+}
+
 func validExcludedPopulation(value api.SloOperationalQuality) bool {
 	g, total := value.ExcludedGood, value.ExcludedTotal
 	if value.ExcludedIntervals == nil {

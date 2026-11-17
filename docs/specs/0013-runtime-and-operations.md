@@ -24,7 +24,7 @@
 > the existing combined backend/UI/alerts configuration in PR127 and enabling the
 > local deployment, with capacity checks deferred. Ordinary binaries run the
 > shared calculation/preparation processors under the backend owner, and run
-> alert evaluation when `alerts` is selected. The build-tagged fixture adds only
+> alert evaluation and evidence retention when `alerts` is selected. The build-tagged fixture adds only
 > private test controls. This scoped activation direction does not certify
 > 100/200-policy capacity or enable external notification delivery.
 
@@ -228,13 +228,20 @@ patches through ordinary tested dependency updates; do not require a new ADR per
 ### Initial combined processor profile
 
 The ordinary owner runs authority preparation, derived preparation and optional
-alert evaluation with the existing two-connection derived pool. Each processor
+alert evaluation with the existing two-connection derived pool. These processors
 starts at most one turn per second, retains 30-second leases and five-second
 background operation limits, and joins cancellation before pools close. Alert
 turns claim at most 200 policies in waves of two; they preserve original ordered
 cutoffs and the 24-hour catch-up horizon. Pending dependencies retry after one
 second; genuine failures use the implemented two-second retry and five-attempt
 limit, remaining visible for explicit recovery rather than losing work.
+
+With alerts enabled, the same owner also runs bounded evidence retention every
+ten seconds, scanning at most 200 rows per stage. Each stage uses its existing
+five-second transaction bound and durable keyset checkpoint. Eligible unchanged
+outcomes can be compacted after 24 hours; terminal history is retained for 365
+days, with active, transition and latest-evidence pins preserved. The retention
+worker shares admission and joined shutdown with the other workers.
 
 Shared reads use the existing 2,500,000 canonical-fact ceiling, an equally bounded
 mask-fragment ceiling, 960 retained proofs and at most 8,762 physical source hours
