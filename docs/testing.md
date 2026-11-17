@@ -31,6 +31,9 @@ focused local pass does not waive a required CI gate.
 CI uses built-in path filters to skip application jobs
 when all changes are Markdown, `docs/`, `.agents/`, `.codex/` or the CI workflow itself.
 Mixed changes run the existing four application suites; nightly/manual performance runs remain.
+For a smoke check on a hosted runner, open the **CI** workflow in GitHub Actions,
+select **Run workflow**, pick your branch, and choose the **smoke** profile. Its
+separate concurrency group lets regular CI for the same branch continue.
 An explicit manual `alert-cpu-control` profile instead runs two independent
 200-SLO diagnostics, with server/client CPUs shared or split. Both require at
 least four available CPUs and keep the server and client at two CPUs each. This
@@ -94,6 +97,10 @@ The runner reports build, startup and Playwright timings. It starts VictoriaMetr
 VictoriaTraces, the providers needed by this fixture. Run any feature-specific or other
 provider journeys through `make test-e2e` with `ARGS`. Run only one isolated stack target
 at a time because these targets share the deployment name and ports.
+
+The app and agent Docker builds share a builder-local Go compilation cache. Edits to
+source or embedded assets still rebuild the current checkout. Matching compiled
+packages can be reused across image builds while the builder retains its cache.
 
 Normal suites use an in-memory PostgreSQL fixture. For a long retained-history
 experiment whose database and WAL would crowd the host's RAM, explicitly set
