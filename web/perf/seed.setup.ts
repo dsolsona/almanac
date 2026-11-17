@@ -8,8 +8,9 @@ import { resourceSnapshot, writeResources } from './resources.ts';
 // A real agent collects every SLI first, so retained history carries real collection provenance; the
 // history behind that first interval is then written in SQL, and the SLOs are created through the API
 // with a historical start so the backend's own preparation computes every budget and chart.
-const SIZE = 20;
-const DAYS = Number(process.env.PERF_DAYS ?? 35);
+const smoke = process.env.E2E_SMOKE === '1';
+const SIZE = smoke ? 3 : 20;
+const DAYS = smoke ? 1 : Number(process.env.PERF_DAYS ?? 35);
 const TARGET = 0.999;
 // Constant good-of-10,000 ratios, so the expected values are exact: remaining budget = 1 − (1 − r) / (1 − target).
 const TOTAL = 10_000;
@@ -18,8 +19,8 @@ const expectedBudget = (good: number) => `${Math.round((1 - (1 - good / TOTAL) /
 const markObservations = readFileSync(new URL('../../internal/storage/testdata/mark_observation_fixture.sql', import.meta.url), 'utf8');
 
 test('seed the performance fleet', async ({ page }) => {
-  test.setTimeout(30 * 60_000);
-  writeResources({ start: resourceSnapshot() });
+  test.setTimeout((smoke ? 3 : 30) * 60_000);
+  if (!smoke) writeResources({ start: resourceSnapshot() });
   await page.goto('/');
 
   const agentName = unique('perf-agent');
@@ -48,12 +49,14 @@ test('seed the performance fleet', async ({ page }) => {
 
   // Every SLI needs one live interval from the agent before history can borrow its provenance.
   // The message lists each SLI's latest outcome, so a timeout says which ones never reported and why.
+  const collectionStarted = Date.now();
   await expect.poll(async () => {
     const list = await api(page, 'GET', '/api/v1/slis?limit=200');
     return list.body.items.filter((item: { id: string }) => slis.some((sli) => sli.id === item.id))
       .map((item: { name: string; latest_observation: { outcome: string; error_code: string | null } | null }) => `${item.name}:${item.latest_observation ? `${item.latest_observation.outcome}${item.latest_observation.error_code ? `/${item.latest_observation.error_code}` : ''}` : 'none'}`)
       .filter((state: string) => !state.endsWith(':observed'));
-  }, { timeout: 5 * 60_000, intervals: [5_000] }).toEqual([]);
+  }, { timeout: 5 * 60_000, intervals: [smoke ? 1_000 : 5_000] }).toEqual([]);
+  if (smoke) console.log(`First live observations ready in ${Date.now() - collectionStarted} ms`);
 
   if (slis.some((sli) => !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(sli.id))) throw new Error('invalid performance fixture SLI identifier');
   const ids = `ARRAY[${slis.map((sli) => `'${sli.id}'`).join(',')}]::uuid[]`;
@@ -93,7 +96,7 @@ DO $$ DECLARE month date; BEGIN
 END $$;
 UPDATE public.almanac_sli_measurements SET effective_from = '${start}' WHERE sli_id = ANY(${ids});
 `);
-  // One day per call keeps each call short and shows progress; a day is 20 × 1,440 intervals.
+  // One day per call keeps each call short and shows progress.
   for (const [day, chunk] of chunks.entries()) {
     const begun = Date.now();
     psql(chunk);
@@ -115,11 +118,13 @@ UPDATE public.almanac_sli_measurements SET effective_from = '${start}' WHERE sli
   }
 
   // Preparation runs in the backend; measurement starts only once every SLO's history is published.
+  const preparationStarted = Date.now();
   await expect.poll(async () => {
     const overview = await api(page, 'GET', '/api/v1/slos/overview?limit=50');
     return (overview.body.items ?? []).filter((item: { budget_history_state?: string; current: { performance: { remaining_fraction: string | null } } }) =>
       item.budget_history_state === 'ready' && item.current.performance.remaining_fraction !== null).length;
-  }, { timeout: 20 * 60_000, intervals: [10_000] }).toBe(SIZE);
+  }, { timeout: 20 * 60_000, intervals: [smoke ? 1_000 : 10_000] }).toBe(SIZE);
+  if (smoke) console.log(`SLO history ready in ${Date.now() - preparationStarted} ms`);
 
   writeFileSync('perf/.fleet.json', JSON.stringify({ days: DAYS, size: SIZE, slis, slos, agentContainer }, null, 2));
 });

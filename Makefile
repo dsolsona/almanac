@@ -1,4 +1,4 @@
-.PHONY: loki vt tempo sources-start sources-stop setup shell stop-dev build _enter preview generate bootstrap run start stop logs credentials agent agent-seed images publish test test-integration test-browser test-e2e test-perf check verify coverage _test _test_integration _test_browser _coverage _verify_sqlc_generated _verify_generated _report_sizes _ensure_web_assets _disk_check _disk_trim
+.PHONY: loki vt tempo sources-start sources-stop setup shell stop-dev build _enter preview generate bootstrap run start stop logs credentials agent agent-seed images publish test test-integration test-browser test-e2e test-smoke test-perf check verify coverage _test _test_integration _test_browser _coverage _verify_sqlc_generated _verify_generated _report_sizes _ensure_web_assets _disk_check _disk_trim
 
 .DEFAULT_GOAL := setup
 
@@ -33,6 +33,7 @@ Testing (automatically enters the development container)
   test-integration      Integration tests against PostgreSQL and real binaries
   test-browser          UI catalogue/theme/size checks and production build
   test-e2e              Critical journeys on a fresh isolated application stack
+  test-smoke            Exact budgets and SLO/SLI navigation on a small seeded stack
   test-perf             Seeded SLO/SLI browser timings and exact-value checks
   check                 Run test, test-integration and test-browser
   verify                Alias for check
@@ -234,6 +235,7 @@ agent-seed:
 #   make test-integration  Go tests against PostgreSQL and the real binaries, in parallel (RACE=1 adds -race)
 #   make test-browser      the UI catalogue in six theme and size setups, and the production build check
 #   make test-e2e          critical user journeys on a fresh Compose stack of the real images
+#   make test-smoke        exact budgets and a single SLO/SLI browser journey on a small seeded stack
 #   make test-perf         page speed of the SLO and SLI lists and details on a seeded fleet
 #   make check             what a pull request needs: test, test-integration and test-browser (CI adds e2e)
 dev = if [ -n "$${ALMANAC_IN_DEV_CONTAINER:-}" ]; then $(MAKE) --no-print-directory $(1); else $(MAKE) --no-print-directory _enter ENTER_CMD="make --no-print-directory $(1)"; fi
@@ -249,6 +251,10 @@ check verify: test test-integration test-browser
 test-e2e:
 	@$(MAKE) --no-print-directory _disk_check
 	@$(MAKE) --no-print-directory _enter SOCKET=1 ENTER_CMD="sh scripts/e2e.sh $(ARGS)"; status=$$?; $(MAKE) --no-print-directory _disk_trim; exit $$status
+
+test-smoke:
+	@$(MAKE) --no-print-directory _disk_check
+	@$(MAKE) --no-print-directory _enter SOCKET=1 ENTER_CMD="E2E_SMOKE=1 E2E_CONFIG=playwright.perf.config.ts sh scripts/e2e.sh"; status=$$?; $(MAKE) --no-print-directory _disk_trim; exit $$status
 
 # PERF_DAYS sets the history length (default 35) and PERF_RUNS the loads per page (default 10).
 test-perf:

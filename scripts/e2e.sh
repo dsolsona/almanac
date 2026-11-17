@@ -56,11 +56,21 @@ up() {
   if [ "$E2E_ALERT_ACCEPTANCE" = 1 ]; then
     rm -f .local/alert-acceptance/control/pause .local/alert-acceptance/control/pause-source
   fi
+  build_started=$(date +%s)
   compose build --quiet
   compose --profile agent build --quiet agent
   # A rebuild leaves the previous images untagged; remove this project's, never anyone else's.
   docker image prune --force --filter label=com.docker.compose.project="$COMPOSE_PROJECT_NAME" >/dev/null
-  if compose --profile sources up --detach --wait --wait-timeout 120 app loki tempo sources-ready; then
+  if [ "${E2E_SMOKE:-0}" = 1 ]; then
+    printf 'Smoke image builds: %ss\n' "$(( $(date +%s) - build_started ))"
+    stack_started=$(date +%s)
+    if compose up --detach --wait --wait-timeout 120 app; then
+      printf 'Smoke stack readiness: %ss\n' "$(( $(date +%s) - stack_started ))"
+      return 0
+    else
+      startup_status=$?
+    fi
+  elif compose --profile sources up --detach --wait --wait-timeout 120 app loki tempo sources-ready; then
     return 0
   else
     startup_status=$?
@@ -70,8 +80,13 @@ up() {
   startup_evidence=".local/e2e/startup-$(date -u +%Y%m%dT%H%M%SZ)"
   mkdir -p "$startup_evidence" || return "$startup_status"
   compose ps --all >"$startup_evidence/services.txt" 2>&1 || true
-  compose logs --no-color --tail 200 loki tempo sources-ready >"$startup_evidence/providers.log" 2>&1 || true
-  for startup_service in loki tempo sources-ready; do
+  if [ "${E2E_SMOKE:-0}" = 1 ]; then
+    set -- app postgres migrate victoriametrics victoriatraces provider-ready
+  else
+    set -- loki tempo sources-ready
+  fi
+  compose logs --no-color --tail 200 "$@" >"$startup_evidence/providers.log" 2>&1 || true
+  for startup_service in "$@"; do
     startup_container=$(compose ps --all --quiet "$startup_service") || startup_container=''
     if [ -n "$startup_container" ]; then
       docker inspect --format '{{json .State.Health}}' "$startup_container" >"$startup_evidence/$startup_service-health.json" 2>&1 || true
