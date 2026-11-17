@@ -31,7 +31,7 @@ func validCurrentStatusResponse(data []byte, id api.SloId) bool {
 	if !fields(data, "slo", "current", "burn_1h", "burn_6h", "urgency", "leading_reason", "reasons", "exhaustion", "generation") || json.Unmarshal(data, &value) != nil {
 		return false
 	}
-	if value.Slo.Id != id || !validSlo(value.Slo) || !validGeneration(value.Generation) || !validOperationalValue(value.Current) || !validBurn(value.Burn1h, 3600) || !validBurn(value.Burn6h, 21600) || !validExhaustion(value.Exhaustion) || !validUrgency(value.LeadingReason) || len(value.Reasons) == 0 || len(value.Reasons) > 14 {
+	if value.Slo.Id != id || !validSlo(value.Slo) || !validGeneration(value.Generation) || !validOperationalValue(value.Current) || !validBurn(value.Burn1h, 3600) || !validBurn(value.Burn6h, 21600) || !validExhaustion(value.Exhaustion) || !validUrgency(value.LeadingReason) || len(value.Reasons) == 0 || len(value.Reasons) > 15 {
 		return false
 	}
 	for _, reason := range value.Reasons {
@@ -64,7 +64,7 @@ func validHistoryValuesResponse(data []byte, input Input) bool {
 		}
 	}
 	for _, day := range page.Days {
-		if day.SloId.String() != input.ID || day.DefinitionRevision != page.Generation.DefinitionRevision || day.DayEnd.IsZero() || day.Explanation == "" || !validOperationalQuality(day.Quality) || !validOperationalPerformance(day.Performance) {
+		if day.SloId.String() != input.ID || day.DefinitionRevision != page.Generation.DefinitionRevision || day.DayEnd.IsZero() || day.Explanation == "" || !validCalculationProvenance(day.CalculationProvenance, day.Quality) || !validOperationalQuality(day.Quality) || !validOperationalPerformance(day.Performance) {
 			return false
 		}
 	}

@@ -1817,6 +1817,7 @@ export interface components {
             source_generation: string;
             measurement_revision: string;
             definition_revision: string;
+            /** @description Requested exclusion authority captured for this generation. Retained values preserve their actual computed mask in calculation_provenance; pinned generations never substitute a newer authority. */
             exclusion_revision: string;
             calculation_version: string;
             /** Format: date-time */
@@ -1874,10 +1875,11 @@ export interface components {
         };
         SloUrgencyReason: {
             /** @enum {string} */
-            code: "on_track" | "stale_observations" | "no_data" | "expired_history" | "complete_window_violation" | "negative_observed_budget" | "low_observed_budget" | "high_1h_burn" | "evaluation_unavailable" | "not_yet_eligible" | "zero_traffic" | "incomplete_coverage" | "short_burn_unavailable" | "budget_below_half";
+            code: "on_track" | "stale_observations" | "no_data" | "expired_history" | "complete_window_violation" | "negative_observed_budget" | "low_observed_budget" | "high_1h_burn" | "evaluation_unavailable" | "not_yet_eligible" | "zero_traffic" | "incomplete_coverage" | "short_burn_unavailable" | "budget_below_half" | "excluded";
             provisional: boolean;
         };
         SloOperationalValue: {
+            calculation_provenance?: components["schemas"]["SloCalculationProvenance"];
             /**
              * Format: date-time
              * @description Snapshot evaluation time. For live current status the actual measurement endpoint is window.end and may be earlier while collection is pending.
@@ -1887,9 +1889,47 @@ export interface components {
             quality: components["schemas"]["SloOperationalQuality"];
             performance: components["schemas"]["SloEvaluationPerformance"];
         };
+        /** @description Actual enclosing immutable mask and original source snapshot for this value. Requested authority may differ from the computed mask only with a compatibility proof. Legacy revision-zero or no-eligible-time results may omit provenance; unavailable gaps must not fabricate it. Detailed reused-hour certificates remain private. */
+        SloCalculationProvenance: {
+            requested_revision: string;
+            /** @description Actual computed mask C; never greater than requested authority R. */
+            computed_revision: string;
+            /** @description Original calculation snapshot; not a claim that an old retained mark was recalculated at the response generation. */
+            source_generation: string;
+            /**
+             * Format: uuid
+             * @description Complete immutable build. Required for nonzero computed revision; may be absent only for canonical revision zero.
+             */
+            build_id?: string;
+            compatibility?: components["schemas"]["SloMaintenanceCompatibility"];
+        };
+        /** @description Authenticated compatibility over the complete calculation input window, not its displayed bucket. Required when computed revision is older than requested revision. Pending, changed and unavailable checks are not proofs. */
+        SloMaintenanceCompatibility: {
+            /** @enum {string} */
+            kind: "same_revision" | "indexed_absence" | "equal_union";
+            computed_revision: string;
+            requested_revision: string;
+            /** @description Contiguous analyzed history. At least requested_revision for indexed_absence/equal_union; same_revision requires no catch-up. */
+            indexed_through: string;
+            /**
+             * Format: date-time
+             * @description Inclusive UTC source-window start.
+             */
+            start: string;
+            /**
+             * Format: date-time
+             * @description Exclusive UTC source-window end; strictly after start.
+             */
+            end: string;
+            /**
+             * Format: uuid
+             * @description Required only for equal_union; identifies a completed direct immutable-union comparison.
+             */
+            comparison_id?: string;
+        };
         SloOperationalQuality: {
             /** @enum {string} */
-            state: "complete" | "partial" | "no_data" | "zero_traffic" | "expired_history" | "not_yet_eligible" | "not_applicable" | "unavailable";
+            state: "complete" | "partial" | "no_data" | "zero_traffic" | "expired_history" | "not_yet_eligible" | "not_applicable" | "unavailable" | "excluded";
             /** @enum {string} */
             freshness: "unknown" | "fresh" | "stale";
             /** Format: int64 */
@@ -1904,6 +1944,15 @@ export interface components {
             expired_intervals: number;
             /** Format: int64 */
             zero_traffic_intervals: number;
+            /**
+             * Format: int64
+             * @description Removed eligible intervals including expired excluded intervals. Omission means legacy metadata was not supplied. Maintenance-aware calculated values include all three exclusion fields.
+             */
+            excluded_intervals?: number;
+            /** @description Exact excluded good events, paired with excluded_total. Null means unknown full excluded population; omission means legacy metadata was not supplied. Never substitute zero for unknown. */
+            excluded_good?: string | null;
+            /** @description Exact excluded total events, at least excluded_good. Both fields are null or both exact nonnegative strings; exact zero is the string 0. */
+            excluded_total?: string | null;
             /** @description Exact fraction rounded half-even to 12 decimal places at output. */
             coverage: string | null;
             /** Format: date-time */
@@ -1918,6 +1967,7 @@ export interface components {
             reason?: string | null;
         };
         SloBurnValue: {
+            calculation_provenance?: components["schemas"]["SloCalculationProvenance"];
             /** @enum {integer} */
             window_seconds: 3600 | 21600;
             /** Format: date-time */
@@ -1980,6 +2030,7 @@ export interface components {
             days: components["schemas"]["SloDailyComplianceDay"][];
         };
         SloDailyComplianceDay: {
+            calculation_provenance?: components["schemas"]["SloCalculationProvenance"];
             /** Format: date */
             utc_date: string;
             /** Format: date-time */
@@ -2064,6 +2115,7 @@ export interface components {
             samples: components["schemas"]["SloOperationalSample"][];
         };
         SloOperationalSample: {
+            calculation_provenance?: components["schemas"]["SloCalculationProvenance"];
             /** Format: date-time */
             bucket_start: string;
             /** Format: date-time */
@@ -2071,7 +2123,7 @@ export interface components {
             /** Format: date-time */
             evaluation_at: string;
             /** @enum {string} */
-            state: "observed" | "zero_traffic" | "known_empty" | "missing" | "expired" | "not_applicable" | "partial" | "stale";
+            state: "observed" | "zero_traffic" | "known_empty" | "missing" | "expired" | "not_applicable" | "partial" | "stale" | "excluded";
             quality: components["schemas"]["SloOperationalQuality"];
             revision: string;
             good: string | null;
@@ -2091,8 +2143,8 @@ export interface components {
             display_coverage?: components["schemas"]["SloDisplayCoverage"];
         };
         SloDisplayCoverage: {
-            states: ("observed" | "zero_traffic" | "known_empty" | "missing" | "expired" | "not_applicable" | "partial" | "stale")[];
-            quality_states: ("complete" | "partial" | "no_data" | "zero_traffic" | "expired_history" | "not_yet_eligible" | "not_applicable" | "unavailable")[];
+            states: ("observed" | "zero_traffic" | "known_empty" | "missing" | "expired" | "not_applicable" | "partial" | "stale" | "excluded")[];
+            quality_states: ("complete" | "partial" | "no_data" | "zero_traffic" | "expired_history" | "not_yet_eligible" | "not_applicable" | "unavailable" | "excluded")[];
             freshness: ("unknown" | "fresh" | "stale")[];
         };
         SloEvaluation: {

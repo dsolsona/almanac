@@ -1,0 +1,630 @@
+{
+  "date": "2026-11-16",
+  "base": "44a8eab",
+  "defect": "Server-clock nanoseconds were reintroduced by retained graph consumers after worker normalization.",
+  "correction": "Normalize server Now and retention in the common extrema input constructor and preserve base.Now in live-edge repair. External validation and final lease clocks are unchanged.",
+  "verification": {
+    "current_graph_red_seconds": 1.326,
+    "focused_green_seconds": 5.737,
+    "integrated_race_seconds": 13.024,
+    "deployed_numeric_histories_ready": 100,
+    "source_revisions": [
+      0,
+      12
+    ]
+  },
+  "source_sha256": {
+    "internal/storage/slo_extrema.go": "1c59ad9f55e7e5fc5765cd72f7bfb5b819d9586c44bc27c5571744fe77d915ea",
+    "internal/storage/slo_extrema_read.go": "9d72cd2b7b7905940011f64bc3c69da7071b2544ee13cee6bef80eaa756f4cc1",
+    "internal/storage/slo_extrema_worker.go": "458091c966a841e4407a535b335e99c5d42b72cb114e8749c8a4c5d038755461",
+    "internal/storage/maintenance_worker_clock_precision_integration_test.go": "1d23f8b3e8766ea04866d7a9ea8cd700af7a5bc67b86a896f1015db36a540dbf"
+  },
+  "deployed": {
+    "at": "2026-11-16T20:53:03.612Z",
+    "ready": 100,
+    "values": [
+      {
+        "slo": "8fba1620-23e1-41c4-9de2-7f36a8637cc6",
+        "R": 12,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "0d36cae5-041c-4580-8e2f-baee44d0f0a5",
+        "R": 12,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "9336dfaf-5457-471c-a62f-1c98ed36f243",
+        "R": 0,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "80d28964-355c-4b28-9bdb-75c4521c5cc0",
+        "R": 0,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "03b54e5b-f531-4538-a97b-827079411002",
+        "R": 0,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "95f4bea8-5221-49d4-abaf-e403eccee021",
+        "R": 12,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "fa274985-3e46-4cfa-85ab-bc8400cb7ff9",
+        "R": 12,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "81e9ea69-d8e6-4ba3-96a5-7ca3c0f4866e",
+        "R": 0,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "24b705b1-938e-4bb7-987e-8da706c8438b",
+        "R": 12,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "1730b1fc-018e-4b41-aa2c-5e895bbb7c99",
+        "R": 0,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "2647649e-74c2-4812-a238-46f08b73eb58",
+        "R": 0,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "a91b6f7a-4028-4f82-83ea-11836d7d074e",
+        "R": 0,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "d631eb83-7bfb-4d76-9f33-03129efdc927",
+        "R": 0,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "c021f8b9-9887-459a-a091-200115356d33",
+        "R": 0,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "b92e2305-3ed0-4662-a17d-67f9934c32cc",
+        "R": 12,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "10e20607-ae1a-4c29-88d9-c91160f7992e",
+        "R": 0,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "d1d5c50d-bc70-4224-a710-d90c34c60871",
+        "R": 0,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "6fcae580-077b-4ed5-95e2-dce032fa6b8d",
+        "R": 12,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "21cf733d-7d28-4a12-bc31-fef7039024aa",
+        "R": 0,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "109a4d8c-0187-4806-ab8d-7621875512c8",
+        "R": 12,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "edcafbd2-5d5d-4f9c-a9a0-0d2a19a94863",
+        "R": 12,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "c80e45d3-4ac3-451b-9f9e-324b887f9eb1",
+        "R": 0,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "3066bfae-8f14-4fc2-816e-c4fcc6d611f5",
+        "R": 0,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "100f8b74-286b-4ebc-8bbb-3c44573d777f",
+        "R": 12,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "4ea08c6e-f190-467f-9e10-e45c146abfd9",
+        "R": 12,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "b743f639-2ef7-473f-9f61-e1a3cd0d64d2",
+        "R": 12,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "748d7610-2705-4c40-8671-87bc7772894c",
+        "R": 0,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "83e9710f-ba76-45e9-9380-9efad68b4dab",
+        "R": 0,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "321174f9-c37e-4711-b434-d9258d2d8b6a",
+        "R": 12,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "02f179fc-e9f9-4a52-9490-2677fd2cb26b",
+        "R": 0,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "c10866ea-6039-4650-8a0d-9b516c50785a",
+        "R": 12,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "11cdeb05-2de2-48c0-8104-b3a85ecdfc6e",
+        "R": 12,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "41a8f28c-1d5b-4fd2-a459-325557f5efe8",
+        "R": 12,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "f2d625fa-a7a9-4d75-8fd3-b2d9d9306748",
+        "R": 0,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "17b8d92c-18b7-45b4-bef3-5c498af09a78",
+        "R": 12,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "2dcc1f5a-b1a7-4e86-b090-71b26a0383a9",
+        "R": 0,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "3fa1d42a-68ea-4d7e-98a4-21cfe8fcf55e",
+        "R": 12,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "845d4c8b-62ca-4514-abd1-601050d33537",
+        "R": 12,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "c5b09e31-faca-4b78-a603-f168cc2ea394",
+        "R": 0,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "cc6060c4-c0ff-47d4-876d-9e3c83f6a835",
+        "R": 0,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "e7078aa3-99dc-4250-b282-58a6f167dc30",
+        "R": 12,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "32344e7b-2edc-4988-ad7d-6460a547912e",
+        "R": 12,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "7aebab03-bec0-43ca-90ae-9b7eb7624966",
+        "R": 0,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "c9c6851c-c39e-409a-b798-33da0f8798fa",
+        "R": 12,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "4a88575d-c6ca-454f-8241-8657a0086394",
+        "R": 12,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "742db6c0-6474-41aa-a02d-6684fd68ec77",
+        "R": 0,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "153090d7-843f-4d08-a4a3-c4b32cebe05d",
+        "R": 0,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "247d00c1-c2d1-4ec7-9614-986bb763046f",
+        "R": 0,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "f7f38ea9-120f-4030-a205-971039b87a99",
+        "R": 0,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "d363afb7-3e34-4fe5-b14d-0dacc5194b19",
+        "R": 12,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "0de17d28-7f46-4377-8085-6f5644d08ca7",
+        "R": 12,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "d892a243-b6bf-4bf3-a3f5-d03fd768aa00",
+        "R": 12,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "826d862a-a138-426e-a06f-56ea77de99a9",
+        "R": 12,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "e9be23ef-38f3-4366-b375-8d386de4e9d1",
+        "R": 12,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "b2b6e32b-832f-451f-811b-22b19a349b67",
+        "R": 12,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "19b9cd75-f908-43ac-a2dd-0d45e1800bf8",
+        "R": 0,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "312387b9-e7b6-4564-ad17-ecd5465d3ed9",
+        "R": 12,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "b62907bb-e68c-4ea3-acde-901661a6d3a5",
+        "R": 12,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "95fc789d-ac4c-469c-826a-dbcfcfa89821",
+        "R": 0,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "f3341e43-5571-46ea-824e-88bfe46d4725",
+        "R": 0,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "22b72f22-4625-4629-8216-5bac0163205c",
+        "R": 12,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "7ace36a8-332f-4c11-a007-58813171f4b3",
+        "R": 12,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "ed8a0505-99cd-4020-9ee8-aadca753a314",
+        "R": 0,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "e17d541f-6aa9-4526-ad5c-ab397ee89437",
+        "R": 0,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "bd680367-1245-456c-8a8e-714c973373b3",
+        "R": 0,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "8d45bcf4-199a-4e7a-8b36-6bad76411a07",
+        "R": 0,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "3b8c74cd-4464-43d9-9e31-9c5ab56acbec",
+        "R": 0,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "686f41ee-648a-4680-b480-870fead2b723",
+        "R": 12,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "92aabc42-bc8e-408c-a71d-e61b93c315ce",
+        "R": 0,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "019c0278-fef3-41a9-86e0-1e227230cf1f",
+        "R": 12,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "7a9464e6-4e4b-44c5-af59-227db9afa474",
+        "R": 0,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "19be8f9f-1146-444a-a7d9-1bdd1e19a67b",
+        "R": 0,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "1f4b23a2-7269-41eb-b803-703a555483b2",
+        "R": 12,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "a26a2d5c-d967-40b8-af25-d8665b50f8a7",
+        "R": 0,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "1f1ae94f-12db-43d6-9e5f-d4f2c619fc18",
+        "R": 12,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "882e5fcb-905a-405c-92d4-b2750b28c0dc",
+        "R": 0,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "4c54eec6-d907-41eb-b6ad-4797e39048bd",
+        "R": 12,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "8c1c59a8-4088-41cf-a921-83421383816e",
+        "R": 12,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "0eb0a2af-ec84-40f2-a286-5de745b2254a",
+        "R": 12,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "5ea40a31-4459-4026-9d28-daaa7c63de47",
+        "R": 12,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "39a0d66b-8e7e-4d41-9195-b64e09374e33",
+        "R": 0,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "4a0b745b-9073-4934-98e0-54122fa2d2fd",
+        "R": 12,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "b0c99ae3-027e-4de1-80ee-41f933d055ea",
+        "R": 12,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "b62e0bf2-bde2-4f37-bf42-2ee6bb997060",
+        "R": 0,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "b7656003-f4bf-4017-93e1-85e280af008e",
+        "R": 0,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "02a5e553-2274-4ef8-a5d1-6eb2aeda71c8",
+        "R": 0,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "c7385759-03ad-43ba-b06f-1d4ab0ca2545",
+        "R": 0,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "c975c971-041e-4149-b69e-0a8842f15594",
+        "R": 12,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "ca129668-6e50-44f4-aaed-6cdc48dceb86",
+        "R": 0,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "ceb8ea8e-2693-4baa-a91e-811cf276d218",
+        "R": 0,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "3fba1672-b9af-464e-9422-8fe70ffbfaf7",
+        "R": 12,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "73973354-a86d-4395-a5a5-c340c8f60b0e",
+        "R": 0,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "dcdd1958-d132-4cd9-b051-bba2899e6c3d",
+        "R": 0,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "9d6c6aaa-0606-4afe-a1a2-347be54f8cf6",
+        "R": 12,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "e71c78e2-9728-4bf8-a4a0-4dae8d81ef98",
+        "R": 12,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "ed6bfdb7-f944-4bd2-a3cb-8f2a7d471573",
+        "R": 0,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "f2c56d92-bfbb-43ba-adf2-a7d9bac7afb3",
+        "R": 12,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "fcba2daa-ba7b-4110-8d72-45171ba7e835",
+        "R": 12,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "a0ec78c9-979a-46c6-8282-dd95a6c42fdd",
+        "R": 12,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      },
+      {
+        "slo": "aa3861b7-416e-49ea-a121-ef9b0edcd401",
+        "R": 0,
+        "samples": 61,
+        "closedThrough": "2026-11-16T20:00:00Z"
+      }
+    ]
+  },
+  "capacity_acceptance": false,
+  "production_activated": false
+}

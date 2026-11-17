@@ -1,3 +1,81 @@
+Alert review closeout, 2026-11-17: [PR #127](https://github.com/dsolsona/almanac/pull/127)
+is the only open alert implementation PR. All five inline CodeRabbit threads are
+resolved. The additional review-summary proof-window finding is confirmed and
+corrected in both clients for explicit current/burn windows; its outside-diff
+migration-count finding was already corrected. The latest documentation-head CI
+exposes a cancellation-recovery fixture synchronization failure. Its correction
+waits for server rollback before the one-shot reclaim and verifies the original
+cutoff. The completeness audit also connects existing bounded alert retention to
+ordinary startup: 200 rows per stage every ten seconds, with active/latest pins
+preserved. Focused client, cancellation and runtime checks pass; updated broad
+CI/review remains pending. Capacity checks remain deferred. [F4-T51](tasks/F4-T51.md)
+records the dispositions and commands.
+
+Ordinary alert runtime completion, 2026-11-16: the maintainer explicitly requests
+ordinary startup/configuration and enabled local deployment in
+[PR #127](https://github.com/dsolsona/almanac/pull/127), with capacity checks
+deferred. The existing component configuration now supports backend/UI/alerts,
+using one shared processor lifecycle in ordinary and tagged binaries. Focused
+component, HTTP-constructor, ownership/shutdown and disabled-evaluator checks
+pass; independent review finds no actionable startup defect. The normal Docker
+binary passes the single-policy firing/acknowledgement/recovery check in 5.8m,
+using the same occurrence and real provider measurements. The local deployment
+is healthy with alerts enabled; UI navigation, real SLO selection and policy
+create/save/disable flows pass on the identical binary. The isolated test stack
+is stopped. All four application CI checks and CodeRabbit pass on runtime head `6e424ce`,
+with no unresolved review threads. No capacity or performance suite is running.
+[F4-T51](tasks/F4-T51.md) records
+the amended scope, implementation and verification.
+
+Alerting implementation, 2026-11-16: [PR #127](https://github.com/dsolsona/almanac/pull/127)
+contains shared maintenance-aware SLO consumers and the bounded authority
+consumer. The isolated deployed engine creates and globally acknowledges 100
+independent policies, passes initial raw evidence/continuity checks, and survives
+collector handoff and backend restart. Real-clock and raw-edge observation-bound
+defects are corrected with focused regressions. All four application CI checks
+pass on `c03f402`. A partial live run exposes overview/browser and ingestion-ratio
+performance failures; it is stopped with artifacts and data preserved. It is not
+sustained-capacity acceptance.
+
+Two further corrections are integrated for PR review: immutable receipt-decoder
+registry reuse and a source-pause deadline with actual worker acknowledgement
+before rollover. Primary focused race checks pass in 1.118s. The isolated
+acceptance stack is stopped; no continuing soak or benchmark is running. Normal
+production activation, numerical profiles and the complete 100/200-policy gates
+remain open. [F4-T51](tasks/F4-T51.md) distinguishes implemented work, passing
+focused checks and outstanding release acceptance.
+
+Maintenance consumer integration, 2026-11-16: [F4-T51](tasks/F4-T51.md)
+now connects shared current/list calculations, retained hourly production,
+queued daily composition, authenticated targeted repair and pinned exact values
+internally. Real changed-history recovery returns the independently expected
+49,500/50,000 counts with ten excluded intervals and original C/R provenance.
+Current/source publication races reject stale outputs. Review corrections make
+terminal dependencies explicit failed gaps and remove no-eligible provenance that
+could fail client validation. Combined checks pass 90 integration groups / 165 cases; all eleven deployed
+collection/SLO/alert-management journeys pass. Ready [PR #127](https://github.com/dsolsona/almanac/pull/127)
+is open. Its initial integration CI exposes one stale migration-count fixture,
+corrected in focused verification. All four application CI checks now pass on `4d52185`. Ordinary page-performance
+seeding exposed tmpfs OOM and missing host-to-container fixture controls. Their
+forwarding correction is verified. The actual disk-backed 35-day/20-SLO run passes
+all six checks: cold/in-app p95 is 654/321ms for SLO list, 498/114ms for SLO detail,
+496/111ms for SLI list and 522/168ms for SLI detail. All samples meet the <1,000ms
+gate. [Evidence](evidence/maintenance-adoption/2026-11-16-ordinary-pages.json)
+records the ordinary profile and excludes nonzero-mask/live-engine capacity claims. Production
+profiles, preparation/alert runtime registration and live-load/cold-browser release
+gates remain open; these focused checks do not claim capacity or activation.
+
+Maintenance adoption, 2026-11-15: the maintainer approved merging
+[PR #126](https://github.com/dsolsona/almanac/pull/126) at verified `9afc3b8`.
+All four application CI checks passed; it is merged as `90e9af7` and main is
+pulled. The maintainer also accepted SPEC-0020’s scoped current/history/report
+adoption and additive wire contract for implementation. [F4-T51](tasks/F4-T51.md)
+connects those consumers while production activation and release gates remain
+separate. Private retained replay, summary/facts and 100/200-policy correctness
+fixtures pass together in 14.020s. Those policy fixtures share one SLO and do not
+establish live-load capacity or browser performance. API/client support and
+coordinated source/authority publication remain in progress.
+
 Maintenance-aware alert implementation, 2026-11-15:
 [F4-T42](tasks/F4-T42.md) through [F4-T49](tasks/F4-T49.md) are assembled on
 merged main `c78d668`: immutable bounded compilation, indexed coverage and

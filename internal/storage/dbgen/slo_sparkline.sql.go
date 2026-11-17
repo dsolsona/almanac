@@ -13,22 +13,24 @@ import (
 
 const readSloBudgetExtremaState = `-- name: ReadSloBudgetExtremaState :one
 WITH cursor AS (
-    SELECT w.id, w.slo_id, w.definition_revision, w.measurement_revision, w.calculation_version, w.built_through, w.dirty_from, w.dirty_to, w.version, w.attempts, w.lease_epoch, w.lease_until, w.next_attempt_at, w.last_error, w.failing_since, w.manual_retried_at FROM public.almanac_slo_extrema_cursor w
+    SELECT w.id, w.slo_id, w.definition_revision, w.measurement_revision, w.calculation_version, w.built_through, w.dirty_from, w.dirty_to, w.version, w.attempts, w.lease_epoch, w.lease_until, w.next_attempt_at, w.last_error, w.failing_since, w.manual_retried_at, w.exclusion_revision FROM public.almanac_slo_extrema_cursor w
     WHERE w.slo_id=$2 AND w.definition_revision=$3
       AND w.measurement_revision=$4 AND w.calculation_version=$5
 ), hours AS (
-    SELECT e.published_at,e.range_start,
+    SELECT DISTINCT ON (e.range_start) e.published_at,e.range_start,
            (w.built_through>=e.range_end AND NOT coalesce(w.dirty_from<e.range_end AND w.dirty_to>e.range_start,false)) AS ready
     FROM public.almanac_slo_extrema e LEFT JOIN cursor w ON true
     WHERE e.slo_id=$2 AND e.definition_revision=$3
       AND e.measurement_revision=$4 AND e.calculation_version=$5
-      AND e.exclusion_revision=0 AND e.resolution_seconds=3600
-      AND e.range_start>=$6::timestamptz AND e.range_end<=$7::timestamptz
+      AND e.exclusion_revision<=$6::bigint AND e.resolution_seconds=3600
+      AND e.range_start>=$7::timestamptz AND e.range_end<=$8::timestamptz
+    ORDER BY e.range_start,e.exclusion_revision DESC
 ), prior AS (
     SELECT p.payload FROM public.almanac_slo_current_projections p
     JOIN public.almanac_slo_derived_generations g ON g.id=p.generation_id
     WHERE p.slo_id=$2 AND g.definition_revision=$3
       AND g.measurement_revision=$4 AND g.calculation_version=$5
+      AND g.exclusion_revision=$6::bigint
 )
 SELECT (SELECT max(published_at) FROM hours)::timestamptz AS published_at,
        (SELECT count(*) FROM hours WHERE ready AND range_start>=$1::timestamptz)::bigint AS ready_hours,
@@ -43,6 +45,7 @@ type ReadSloBudgetExtremaStateParams struct {
 	DefinitionRevision  int64              `json:"definition_revision"`
 	MeasurementRevision int64              `json:"measurement_revision"`
 	CalculationVersion  string             `json:"calculation_version"`
+	ExclusionRevision   int64              `json:"exclusion_revision"`
 	RangeStart          pgtype.Timestamptz `json:"range_start"`
 	ClosedThrough       pgtype.Timestamptz `json:"closed_through"`
 }
@@ -62,6 +65,7 @@ func (q *Queries) ReadSloBudgetExtremaState(ctx context.Context, arg ReadSloBudg
 		arg.DefinitionRevision,
 		arg.MeasurementRevision,
 		arg.CalculationVersion,
+		arg.ExclusionRevision,
 		arg.RangeStart,
 		arg.ClosedThrough,
 	)

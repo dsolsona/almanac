@@ -113,3 +113,19 @@ FROM (SELECT unnest(sqlc.arg(hours)::timestamptz[]) AS hour_start,unnest(sqlc.ar
 LEFT JOIN public.almanac_maintenance_preparation j ON j.kind='scoped_hour' AND j.slo_id=sqlc.arg(slo_id) AND j.target_revision=sqlc.arg(target_revision) AND j.build_id=sqlc.arg(build_id) AND j.second_build IS NULL
  AND j.sli_id=sqlc.arg(sli_id) AND j.definition_revision=sqlc.arg(definition_revision) AND j.measurement_revision=sqlc.arg(measurement_revision) AND j.hour_start=r.hour_start AND j.source_generation=r.source_generation
 ORDER BY r.ordinal;
+
+-- name: ReadMaintenancePendingSourceWindows :many
+-- Same interior readiness predicate as the canonical batch, in its RR snapshot.
+-- Only unmet distinct spans may consume the caller's bounded preparation prefix.
+WITH requested AS (
+ SELECT unnest(sqlc.arg(starts)::timestamptz[]) AS start_at,
+        unnest(sqlc.arg(ends)::timestamptz[]) AS end_at
+)
+SELECT r.start_at::timestamptz AS start_at,r.end_at::timestamptz AS end_at
+FROM requested r
+WHERE r.start_at<r.end_at AND EXISTS (
+ SELECT 1 FROM public.almanac_derived_dirty_ranges d
+ WHERE d.sli_id=sqlc.arg(sli_id) AND d.measurement_revision=sqlc.arg(measurement_revision)
+  AND d.range_start<r.end_at AND d.range_end>r.start_at
+)
+ORDER BY r.start_at,r.end_at;

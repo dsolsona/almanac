@@ -364,16 +364,25 @@ override for its later commands. Keep that directory outside tracked source and 
 
 ## Preview and retrieve work
 
-The launcher writes a private SSH configuration for each instance. For example,
-forward the guest's normal Almanac preview to an unused host port:
+The launcher writes a private SSH configuration for each instance. A browser's
+`localhost` points at its own machine unless a tunnel forwards that port. To use
+an unused host port, first start Almanac inside the guest on the matching port:
 
 ```sh
-ssh -F .local/firecracker/instances/api/ssh_config -N -L 28088:127.0.0.1:18088 dev
+ALMANAC_PORT=28088 make run
 ```
 
-After running `make run` inside the guest, the application is reachable through
-that tunnel at `https://localhost:28088`. Retrieve the initial password inside
-the guest with `make credentials`.
+Then run the tunnel from the host checkout:
+
+```sh
+ssh -F .local/firecracker/instances/api/ssh_config -N -L 28088:127.0.0.1:28088 dev
+```
+
+The application is reachable at `https://localhost:28088`. Matching both ports
+preserves Almanac's configured HTTPS public origin for authenticated requests.
+Replace `api` with the intended instance name; this does not update an unrelated
+host deployment on port 18088. Retrieve the initial password inside the guest
+with `make credentials`.
 
 To retrieve a named agent's work, quit Codex in its attached terminal first,
 then collect. Collection refuses an existing Codex tmux session so it does not

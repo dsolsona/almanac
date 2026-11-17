@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"errors"
+	"strconv"
 	"time"
 
 	"github.com/dsolsona/almanac/internal/api"
@@ -68,6 +69,7 @@ func ReadSloHistoryValues(ctx context.Context, databaseURL string, input SloHist
 	page := api.SloHistoryValuePage{Lane: api.SloHistoryValuePageLane(input.Lane), Offset: input.Offset, TotalValues: int(row.TotalValues),
 		Generation: generationStamp(row.ID, row.SourceGeneration, row.DefinitionRevision, row.MeasurementRevision, row.CalculationVersion, row.EvaluatedThrough.Time, row.PublishedAt.Time, row.RetentionStart.Time),
 		Samples:    []api.SloOperationalSample{}, Days: []api.SloDailyComplianceDay{}}
+	page.Generation.ExclusionRevision = strconv.FormatInt(row.ExclusionRevision, 10)
 	if input.Lane == "compliance" {
 		err = unmarshalReceiptMetadata(row.PageValues, &page.Days)
 	} else {

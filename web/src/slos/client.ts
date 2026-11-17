@@ -1,3 +1,4 @@
+import { validCalculationProvenance, validWindowCalculationProvenance, validExcludedPopulation } from './maintenance.ts';
 import type { components } from '../api/generated.ts';
 import type { AuthContext } from '../auth/client.ts';
 import { clearQueryCache, sharedRead, waitForReadRetry } from '../queryCache.ts';
@@ -38,7 +39,7 @@ function validEvaluation(x: Record<string, unknown>): boolean {
 }
 const utcTimestamp=(v:unknown) => typeof v==='string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z$/.test(v) && Number.isFinite(Date.parse(v));
 const nonnegativeInteger=(v:unknown) => typeof v==='number' && Number.isSafeInteger(v) && v>=0;
-const urgencyCodes=['on_track','stale_observations','no_data','expired_history','complete_window_violation','negative_observed_budget','low_observed_budget','high_1h_burn','evaluation_unavailable','not_yet_eligible','zero_traffic','incomplete_coverage','short_burn_unavailable','budget_below_half'];
+const urgencyCodes=['on_track','stale_observations','no_data','expired_history','complete_window_violation','negative_observed_budget','low_observed_budget','high_1h_burn','evaluation_unavailable','not_yet_eligible','zero_traffic','incomplete_coverage','short_burn_unavailable','budget_below_half','excluded'];
 function validSlo(value:unknown):value is Record<string,unknown> {
   return record(value) && typeof value.id==='string' && /^[0-9a-f-]{36}$/.test(value.id) && typeof value.name==='string' && value.name.length>0 &&
     typeof value.display_name==='string' && value.display_name.length>0 && typeof value.version==='string' && /^[1-9][0-9]*$/.test(value.version) &&
@@ -49,8 +50,8 @@ function validSlo(value:unknown):value is Record<string,unknown> {
     utcTimestamp(value.activated_at) && utcTimestamp(value.evaluation_valid_from);
 }
 function validOperationalQuality(value:unknown):boolean {
-  if(!record(value)) return false;
-  return ['complete','partial','no_data','zero_traffic','expired_history','not_yet_eligible','not_applicable','unavailable'].includes(String(value.state)) &&
+  if(!record(value)||!validExcludedPopulation(value)) return false;
+  return ['complete','partial','no_data','zero_traffic','expired_history','not_yet_eligible','not_applicable','unavailable','excluded'].includes(String(value.state)) &&
     ['unknown','fresh','stale'].includes(String(value.freshness)) && ['expected_intervals','observed_intervals','known_empty_intervals','missing_intervals','expired_intervals','zero_traffic_intervals'].every(k=>nonnegativeInteger(value[k])) &&
     decimal(value.coverage) && [value.first_observation_at,value.last_observation_at,value.latest_receipt_at].every(v=>v===null||utcTimestamp(v)) && (value.reason===undefined||value.reason===null||typeof value.reason==='string');
 }
@@ -61,19 +62,19 @@ function validOperationalPerformance(value:unknown):boolean {
     ['good','total','bad','attainment','allowed_budget','remaining_budget','consumed_fraction','remaining_fraction','burn'].every(k=>decimal(value[k])) && value.budget_unit==='events';
 }
 function validOperationalValue(value:unknown):boolean {
-  if(!record(value)||!record(value.window)) return false;
+  if(!record(value)||!record(value.window)||!validWindowCalculationProvenance(value.calculation_provenance,value.quality,value.window.requested_start,value.window.end)) return false;
   const w=value.window;
   return utcTimestamp(value.evaluation_at) && ['requested_start','effective_start','end','eligible_start','retention_start','activated_at','evaluation_valid_from'].every(k=>utcTimestamp(w[k])) &&
     (w.historical_requested_by===null||typeof w.historical_requested_by==='string') && (w.historical_requested_at===null||utcTimestamp(w.historical_requested_at)) &&
     validOperationalQuality(value.quality) && validOperationalPerformance(value.performance);
 }
 function validOperationalSample(value:unknown):boolean {
-  if(!record(value)||!utcTimestamp(value.bucket_start)||!utcTimestamp(value.bucket_end)||!utcTimestamp(value.evaluation_at)||!validOperationalQuality(value.quality)||typeof value.revision!=='string' || !Array.isArray(value.retained_extrema)) return false;
-  if(!['observed','zero_traffic','known_empty','missing','expired','not_applicable','partial','stale'].includes(String(value.state))) return false;
+  if(!record(value)||!validCalculationProvenance(value.calculation_provenance,value.quality)||!utcTimestamp(value.bucket_start)||!utcTimestamp(value.bucket_end)||!utcTimestamp(value.evaluation_at)||!validOperationalQuality(value.quality)||typeof value.revision!=='string' || !Array.isArray(value.retained_extrema)) return false;
+  if(!['observed','zero_traffic','known_empty','missing','expired','not_applicable','partial','stale','excluded'].includes(String(value.state))) return false;
   if(value.display_coverage!==undefined){
     const coverage=value.display_coverage;
     if(!record(coverage)||Date.parse(value.bucket_start as string)>=Date.parse(value.bucket_end as string))return false;
-    const allowed={states:['observed','zero_traffic','known_empty','missing','expired','not_applicable','partial','stale'],quality_states:['complete','partial','no_data','zero_traffic','expired_history','not_yet_eligible','not_applicable','unavailable'],freshness:['unknown','fresh','stale']};
+    const allowed={states:['observed','zero_traffic','known_empty','missing','expired','not_applicable','partial','stale','excluded'],quality_states:['complete','partial','no_data','zero_traffic','expired_history','not_yet_eligible','not_applicable','unavailable','excluded'],freshness:['unknown','fresh','stale']};
     for(const [key,states] of Object.entries(allowed)){
       const actual=coverage[key];
       if(!Array.isArray(actual)||actual.length===0||actual.length>states.length||new Set(actual).size!==actual.length||actual.some(state=>typeof state!=='string'||!states.includes(state)))return false;
@@ -107,13 +108,13 @@ function validDailyCompliance(value:unknown,summary:unknown,objective:Record<str
       Date.parse(day.effective_at)!==Math.floor(Date.parse(expected[index]!)/(cadenceSeconds*1000))*cadenceSeconds*1000||
       Date.parse(day.day_start)!==Date.parse(expected[index]!)-86_400_000||Date.parse(day.utc_date+'T00:00:00Z')!==Date.parse(day.day_start)||
       day.slo_id!==objective.id||day.definition_revision!==objective.definition_revision||day.target!==objective.target||typeof day.explanation!=='string'||!day.explanation.trim()||
-      !record(day.quality)||!record(day.performance)||!validOperationalQuality(day.quality)||!validOperationalPerformance(day.performance))return false;
+      !validCalculationProvenance(day.calculation_provenance,day.quality)||!record(day.quality)||!record(day.performance)||!validOperationalQuality(day.quality)||!validOperationalPerformance(day.performance))return false;
     const quality=day.quality,performance=day.performance;
     if(day.status==='met'||day.status==='violated'){
       seen[day.status]++;
       if(quality.state!=='complete'||performance.state!==day.status||performance.provisional)return false;
     }else if(day.status==='unknown'){
-      seen.unknown++;if(performance.state!=='unknown'||!performance.provisional)return false;
+      seen.unknown++;if(performance.state!=='unknown'||(!performance.provisional&&quality.state!=='excluded'))return false;
     }else if(day.status==='not_applicable')seen.not_applicable++;
     else return false;
   }
@@ -126,7 +127,7 @@ function validOperationalOverview(value:unknown):boolean {
   if(!['needs_attention','watch','healthy'].every(k=>nonnegativeInteger(counts[k]))) return false;
   return value.items.every(item=>{
     if(!record(item)||!validSlo(item.slo)||!['needs_attention','watch','healthy'].includes(String(item.urgency))||!validUrgency(item.leading_reason)||!Array.isArray(item.reasons)||item.reasons.length>14||!item.reasons.every(validUrgency)||!validOperationalValue(item.current)||
-      ![item.burn_1h,item.burn_6h].every(v=>record(v)&&(v.window_seconds===3600||v.window_seconds===21600)&&utcTimestamp(v.start)&&utcTimestamp(v.end)&&validOperationalQuality(v.quality)&&validOperationalPerformance(v.performance))||
+      ![item.burn_1h,item.burn_6h].every(v=>record(v)&&validWindowCalculationProvenance(v.calculation_provenance,v.quality,v.start,v.end)&&(v.window_seconds===3600||v.window_seconds===21600)&&utcTimestamp(v.start)&&utcTimestamp(v.end)&&validOperationalQuality(v.quality)&&validOperationalPerformance(v.performance))||
       !record(item.exhaustion)||!Array.isArray(item.budget_sparkline)||item.budget_sparkline.length>120||!item.budget_sparkline.every(validOperationalSample)) return false;
     if(item.current_state!==undefined){
       if(!['ready','stale','failed','unavailable'].includes(String(item.current_state)))return false;
@@ -146,7 +147,7 @@ function validOperationalDetail(value:unknown,pathID:string):boolean {
   if(preparation!==undefined&&(!record(preparation)||!nonnegativeInteger(preparation.ready_seconds)||!nonnegativeInteger(preparation.total_seconds)||preparation.total_seconds===0||Number(preparation.ready_seconds)>Number(preparation.total_seconds)||typeof preparation.failed!=='boolean'))return false;
   if(!['requested_start','requested_end','effective_start','effective_end'].every(k=>utcTimestamp(range[k]))||!nonnegativeInteger(range.source_cadence_seconds)||!nonnegativeInteger(range.resolution_seconds)||typeof range.reduced!=='boolean'||range.max_samples_per_series!==1500||range.bucket_bounds!=='half_open') return false;
   if(typeof c.sli_id!=='string'||typeof c.sli_name!=='string'||typeof c.sli_display_name!=='string'||typeof c.datasource_id!=='string'||typeof c.datasource_display_name!=='string'||typeof c.measurement_revision!=='string'||!nonnegativeInteger(c.polling_interval_seconds)||!nonnegativeInteger(c.settling_delay_seconds)||typeof c.good_query!=='string'||typeof c.total_query!=='string') return false;
-  return [value.burn_1h,value.burn_6h].every(v=>record(v)&&(v.window_seconds===3600||v.window_seconds===21600)&&utcTimestamp(v.start)&&utcTimestamp(v.end)&&validOperationalQuality(v.quality)&&validOperationalPerformance(v.performance))&&
+  return [value.burn_1h,value.burn_6h].every(v=>record(v)&&validWindowCalculationProvenance(v.calculation_provenance,v.quality,v.start,v.end)&&(v.window_seconds===3600||v.window_seconds===21600)&&utcTimestamp(v.start)&&utcTimestamp(v.end)&&validOperationalQuality(v.quality)&&validOperationalPerformance(v.performance))&&
     record(exhaustion)&&['estimated','exhausted','unavailable'].includes(String(exhaustion.state))&&['remaining_events','bad_events_per_hour','hours_until_exhaustion'].every(k=>decimal(exhaustion[k]))&&validOperationalQuality(exhaustion.current_quality)&&validOperationalQuality(exhaustion.one_hour_quality)&&Array.isArray(exhaustion.assumptions)&&
     validOperationalSeries(value.attainment_series,'attainment')&&validOperationalSeries(value.budget_series,'rolling_budget')&&validOperationalSeries(value.burn_series,'burn')&&
     validDailyCompliance(value.compliance_series,value.compliance_summary,value.objective as Record<string,unknown>,range.effective_start as string,range.effective_end as string,value.effective_at as string,range.source_cadence_seconds as number);
@@ -173,7 +174,7 @@ function validHistoryValues(value:unknown,generationID:string,pathID:string,para
   if(!utcTimestamp(stamp.evaluated_through)||!utcTimestamp(stamp.published_at)||typeof stamp.calculation_version!=='string'||typeof stamp.calculation_lag_seconds!=='number'||!Number.isFinite(stamp.calculation_lag_seconds)||stamp.calculation_lag_seconds<0||
     !['source_generation','definition_revision','measurement_revision','exclusion_revision'].every(key=>typeof stamp[key]==='string'&&/^(0|[1-9][0-9]{0,18})$/.test(stamp[key] as string)))return false;
   return value.lane==='compliance'
-    ?value.samples.length===0&&value.days.every(day=>record(day)&&day.slo_id===pathID&&day.definition_revision===stamp.definition_revision&&['met','violated','unknown','not_applicable'].includes(String(day.status))&&utcTimestamp(day.day_end)&&typeof day.explanation==='string'&&validOperationalQuality(day.quality)&&validOperationalPerformance(day.performance))
+    ?value.samples.length===0&&value.days.every(day=>record(day)&&day.slo_id===pathID&&day.definition_revision===stamp.definition_revision&&['met','violated','unknown','not_applicable'].includes(String(day.status))&&utcTimestamp(day.day_end)&&typeof day.explanation==='string'&&validCalculationProvenance(day.calculation_provenance,day.quality)&&validOperationalQuality(day.quality)&&validOperationalPerformance(day.performance))
     :value.days.length===0&&value.samples.every(sample=>validOperationalSample(sample)&&record(sample)&&sample.revision===stamp.definition_revision);
 }
 const messages: Record<string, string> = {

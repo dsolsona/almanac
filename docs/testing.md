@@ -104,3 +104,50 @@ VictoriaTraces while it runs (`E2E_KEEP=1`), for finding where time goes.
 
 `make coverage` runs the unit and integration tests with coverage of `internal/...` and writes
 `.local/coverage/go.html`. Use it to find untested code, not as a target to game.
+
+
+## Isolated alert engine acceptance
+
+Ordinary binaries start the shared calculation/preparation runner and select
+alert evaluation with `components=backend,ui,alerts` or `backend,alerts`. The
+`alertacceptance` build tag adds fixed-retention and private pause controls to
+that same runner; ordinary binaries exclude those fixture controls. `compose.e2e.alerts.yaml` selects this
+build only for the isolated `almanac-e2e` project, using disk-backed PostgreSQL and
+a read-only fixture control directory. It is not a production activation switch.
+
+The initial deployed smoke uses:
+
+```sh
+make shell SOCKET=1 CMD='E2E_ALERT_ACCEPTANCE=1 E2E_ALERT_RETENTION_START=2025-11-16T19:00:00Z E2E_KEEP=1 E2E_CONFIG=playwright.alert-engine.config.ts sh scripts/e2e.sh'
+```
+
+Supply the explicit canonical retention cutoff for the fixture's run date; the
+example corresponds to the recorded 2026-11-16 run and 365-day source retention.
+The default size-one workload proves deployed creation/acknowledgement, not
+capacity. The runner logs its actual bounds before starting. Isolated functional results
+do not establish capacity; the maintainer explicitly deferred capacity checks
+while authorizing ordinary local operation on 2026-11-16.
+
+The private `pause` marker stops evaluation only. `pause-source` stops the source/
+current calculation loop; collection, ingestion and independent processors remain
+running. The rollover scenario requests its source pause 60 seconds before the
+boundary and requires the normal source loop's between-turn acknowledgement within
+30 seconds and before rollover. Late or unconfirmed pauses fail with retained
+request/failure events; installing a marker alone does not certify quiescence.
+Fresh fixture startup clears both markers. Existing queues and immutable
+journals remain the evidence for resumed work; controls cannot advance cursors or
+rewrite calculations. Keep failure artifacts private and publish only allowlisted
+fixture IDs, numerical evidence, timings and source/image identities.
+
+
+The ordinary one-policy functional journey uses the normal binary and existing
+component configuration:
+
+```sh
+E2E_POSTGRES_STORAGE=disk make test-e2e ARGS='e2e/alert-engine.spec.ts --workers=1'
+```
+
+It collects live provider data, fires a supported custom one-minute condition,
+acknowledges through the real UI and resolves the same occurrence after actual
+healthy measurements arrive. Historical setup is limited to the isolated fixture.
+This check neither invokes the 100/200-policy workload nor measures capacity.

@@ -1,0 +1,11 @@
+# Acceptance-only binary, isolated by scripts/e2e.sh. Ordinary images omit its workers.
+services:
+  init:
+    build:
+      args:
+        ALERT_ACCEPTANCE: "true"
+  app:
+    environment:
+      ALMANAC_ALERT_ACCEPTANCE_RETENTION_START: ${E2E_ALERT_RETENTION_START:?explicit canonical fixture retention start required}
+    volumes:
+      - ./.local/alert-acceptance/control:/run/alert-acceptance:ro

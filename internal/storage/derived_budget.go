@@ -12,6 +12,10 @@ import (
 )
 
 type extremaBudgetCache struct {
+	// Only a completely prepared closed sample set may be reused. Source cursor
+	// readiness alone cannot certify maintenance compatibility; completing that
+	// preparation need not change the retained rows' publication timestamps.
+	ClosedReady   bool                       `json:"closed_ready"`
 	ClosedThrough time.Time                  `json:"closed_through"`
 	PublishedAt   time.Time                  `json:"published_at"`
 	RangeStart    time.Time                  `json:"range_start"`
@@ -19,7 +23,7 @@ type extremaBudgetCache struct {
 	Closed        []api.SloOperationalSample `json:"closed"`
 }
 
-func attachExtremaBudget(ctx context.Context, q *dbgen.Queries, item *api.SloOperationalOverviewItem, row dbgen.GetSloRow, source dbgen.GetSloOperationalContextRow, now time.Time) ([]byte, error) {
+func attachExtremaBudget(ctx context.Context, q *dbgen.Queries, item *api.SloOperationalOverviewItem, row dbgen.GetSloRow, source dbgen.GetSloOperationalContextRow, now time.Time, maintenance *maintenanceConsumerSession) ([]byte, error) {
 	cadence := time.Duration(row.CadenceSeconds) * time.Second
 	at := item.Current.EvaluationAt
 	start, closed := floorSliBoundary(at.Add(-7*24*time.Hour), cadence), at.Truncate(time.Hour)
@@ -27,7 +31,7 @@ func attachExtremaBudget(ctx context.Context, q *dbgen.Queries, item *api.SloOpe
 	eligible := maxTime(start.Truncate(time.Hour), maxTime(base.ValidFrom, base.SliValidFrom).Truncate(time.Hour))
 	state, err := q.ReadSloBudgetExtremaState(ctx, dbgen.ReadSloBudgetExtremaStateParams{SloID: row.ID,
 		DefinitionRevision: row.DefinitionRevision, MeasurementRevision: row.MeasurementRevision,
-		CalculationVersion: operationalCalculationVersion, RangeStart: timestamp(start.Truncate(time.Hour)), EligibleStart: timestamp(eligible), ClosedThrough: timestamp(closed)})
+		CalculationVersion: operationalCalculationVersion, ExclusionRevision: row.ExclusionRevision, RangeStart: timestamp(start.Truncate(time.Hour)), EligibleStart: timestamp(eligible), ClosedThrough: timestamp(closed)})
 	if err != nil {
 		return nil, err
 	}
@@ -42,6 +46,7 @@ func attachExtremaBudget(ctx context.Context, q *dbgen.Queries, item *api.SloOpe
 	var previous []api.SloOperationalSample
 	var cache extremaBudgetCache
 	cacheHit := unmarshalReceiptMetadata(state.Cache, &cache) == nil && unmarshalReceiptMetadata(state.Samples, &previous) == nil &&
+		cache.ClosedReady &&
 		len(previous) > 0 && len(previous) <= 120 && len(cache.Closed) <= 120 &&
 		cache.RangeStart.Before(at) && !cache.RangeStart.Before(at.Add(-8*24*time.Hour)) &&
 		cache.ClosedThrough.Equal(closed) && cache.PublishedAt.Equal(state.PublishedAt.Time)
@@ -80,7 +85,7 @@ func attachExtremaBudget(ctx context.Context, q *dbgen.Queries, item *api.SloOpe
 			}
 		}
 		plan.parts = closedParts
-		reader := &extremaReader{retainedSeriesReader: retainedSeriesReader{q: q, row: row, source: source, now: now}}
+		reader := &extremaReader{retainedSeriesReader: retainedSeriesReader{maintenance: maintenance, q: q, row: row, source: source, now: now}}
 		if err := reader.preparePlan(ctx, base, bound, plan); err != nil {
 			if ctx.Err() != nil {
 				return nil, err
@@ -89,12 +94,22 @@ func attachExtremaBudget(ctx context.Context, q *dbgen.Queries, item *api.SloOpe
 			item.BudgetSparkline = []api.SloOperationalSample{}
 			return marshalReceiptMetadata(extremaBudgetCache{ClosedThrough: closed, PublishedAt: state.PublishedAt.Time, RangeStart: start})
 		}
+		if reader.pending {
+			history = "preparing"
+		}
+		if reader.failed {
+			history = "unavailable"
+		}
 		revision := strconv.FormatInt(row.DefinitionRevision, 10)
 		if reader.first != nil {
 			first := reader.first.Current
-			samples = append(samples, retainedWindowSample(start, first.Quality, first.Performance, revision))
+			sample := retainedWindowSample(start, first.Quality, first.Performance, revision)
+			sample.CalculationProvenance = first.CalculationProvenance
+			samples = append(samples, sample)
 		} else {
-			history = "preparing"
+			if history != "unavailable" {
+				history = "preparing"
+			}
 			samples = append(samples, reader.unpreparedTile(base, retainedReadPart{start: start.Add(-cadence), end: start}).Budget...)
 		}
 		for _, sample := range reader.series.Budget {
@@ -102,7 +117,7 @@ func attachExtremaBudget(ctx context.Context, q *dbgen.Queries, item *api.SloOpe
 				samples = append(samples, sample)
 			}
 		}
-		cache = extremaBudgetCache{ClosedThrough: closed, PublishedAt: state.PublishedAt.Time, RangeStart: start, LastStart: lastStart}
+		cache = extremaBudgetCache{ClosedReady: history == "ready", ClosedThrough: closed, PublishedAt: state.PublishedAt.Time, RangeStart: start, LastStart: lastStart}
 		for _, sample := range samples {
 			if sample.EvaluationAt.After(lastStart) {
 				cache.Closed = append(cache.Closed, sample)
@@ -117,14 +132,34 @@ func attachExtremaBudget(ctx context.Context, q *dbgen.Queries, item *api.SloOpe
 		}
 	}
 	current := retainedWindowSample(at, item.Current.Quality, item.Current.Performance, strconv.FormatInt(row.DefinitionRevision, 10))
+	current.CalculationProvenance = item.Current.CalculationProvenance
 	if !item.Current.Window.End.Equal(at) {
 		base.At = at
-		values, evalErr := evaluateDerivedWindows(ctx, q, row.SliID, row.MeasurementRevision, []slo.WindowInput{base})
+		var values []slo.WindowResult
+		var batch maintenanceConsumerBatch
+		var evalErr error
+		if maintenance != nil {
+			batch, evalErr = maintenance.evaluate(ctx, row, []slo.WindowInput{base}, false, false)
+			values = batch.values
+		} else {
+			values, evalErr = evaluateDerivedWindows(ctx, q, row.SliID, row.MeasurementRevision, []slo.WindowInput{base})
+		}
 		switch {
 		case evalErr == nil:
 			current = operationalSample(values[0], at, at, strconv.FormatInt(row.DefinitionRevision, 10))
+			if maintenance != nil {
+				current.CalculationProvenance, err = batch.provenance(0)
+				if err != nil {
+					return nil, err
+				}
+				if current.CalculationProvenance != nil {
+					current.Quality = maintenancePublicQuality(values[0], current.Quality)
+				}
+			}
 		case errors.Is(evalErr, ErrDerivedPending), errors.Is(evalErr, ErrDerivedSourceFailed):
-			history = "preparing"
+			if history != "unavailable" {
+				history = "preparing"
+			}
 			reason := "history_preparing"
 			if errors.Is(evalErr, ErrDerivedSourceFailed) {
 				history, reason = "unavailable", "history_preparation_failed"

@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"path"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -75,7 +76,14 @@ func LoadTLSConfig(certFile, keyFile string) (*tls.Config, error) {
 }
 
 func New(ctx context.Context, cfg config.Config, service *authentication.Service, databaseURL string, tlsConfig *tls.Config, assets http.Handler, runtimes ...*storage.Runtime) (*Server, error) {
-	if ctx == nil || service == nil || databaseURL == "" || (cfg.Components != "backend" && !cfg.BackendUI()) || (cfg.BackendUI() && assets == nil) || (cfg.Components == "backend" && assets != nil) {
+	if ctx == nil || service == nil || databaseURL == "" || !cfg.HasBackend() || (cfg.BackendUI() && assets == nil) || (!cfg.BackendUI() && assets != nil) {
+		return nil, errors.New("backendhttp: invalid configuration")
+	}
+	components := strings.Split(cfg.Components, ",")
+	slices.Sort(components)
+	switch strings.Join(components, ",") {
+	case "backend", "backend,ui", "alerts,backend", "alerts,backend,ui":
+	default:
 		return nil, errors.New("backendhttp: invalid configuration")
 	}
 	if len(runtimes) > 1 {

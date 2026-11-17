@@ -5,6 +5,11 @@
 services:
   dev:
     network_mode: host
+    # These fixture controls must survive the host-to-development-container hop.
+    # Unset values keep scripts/e2e.sh's existing defaults.
+    environment:
+      - E2E_POSTGRES_STORAGE
+      - E2E_KEEP
     group_add:
       - "${ALMANAC_DOCKER_GID:?set by make}"
     working_dir: ${ALMANAC_HOST_CHECKOUT:?set by make}

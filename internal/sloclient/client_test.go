@@ -95,6 +95,25 @@ func TestReadFailureDoesNotEchoBackendData(t *testing.T) {
 	}
 }
 
+func TestLegacyEvaluationUnavailableDoesNotReturnSuccess(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = io.WriteString(w, `{"code":"unavailable","message":"backend detail","request_id":"0123456789abcdef0123456789abcdef","field_errors":[]}`)
+	}))
+	defer server.Close()
+	ops, err := api.NewClient(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, _, err := New(ops, func(context.Context, *http.Request) error { return nil }).Do(t.Context(), Input{Kind: "slos", Action: "evaluate", ID: "11111111-1111-1111-1111-111111111111"})
+	failure, ok := errors.AsType[*datasourceclient.Failure](err)
+	if !ok || failure.Status != http.StatusServiceUnavailable || failure.Code != "management_unavailable" || failure.Unknown || len(data) != 0 || strings.Contains(failure.Message, "backend detail") {
+		t.Fatalf("unavailable evaluation became success or preparation: data=%s failure=%+v", data, failure)
+	}
+}
+
 func TestOperationalOverviewUsesServerFiltersAndValidatesProjection(t *testing.T) {
 	serviceID := "22222222-2222-2222-2222-222222222222"
 	calls := 0

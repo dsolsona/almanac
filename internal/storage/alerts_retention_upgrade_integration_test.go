@@ -15,8 +15,8 @@ import (
 
 func TestIntegrationAlertRetentionUpgrade(t *testing.T) {
 	t.Parallel()
-	if latest := latestTestSchemaVersion(t); latest != 66 {
-		t.Fatalf("update the exact 0058 reconstruction for migration suffix after 0066: latest=%d", latest)
+	if latest := latestTestSchemaVersion(t); latest != 68 {
+		t.Fatalf("update the exact 0058 reconstruction for migration suffix after 0068: latest=%d", latest)
 	}
 	f := newAlertTestFixture(t)
 	active := f.policy(t, "Upgrade active")
@@ -84,15 +84,15 @@ ALTER TABLE public.almanac_alert_ranges ADD CONSTRAINT almanac_alert_ranges_kind
 DROP INDEX public.almanac_canonical_receipt_repair_idx;
 ALTER TABLE public.almanac_sli_hourly_aggregates DROP COLUMN receipt_source_generation,DROP COLUMN certified_receipt_at,ALTER COLUMN latest_receipt_at SET NOT NULL;
 DELETE FROM public.almanac_schema_migrations WHERE version>=59;`)
-	if err != nil || tag.RowsAffected() != 8 {
+	if err != nil || tag.RowsAffected() != 10 {
 		t.Fatalf("reconstruct populated 0058: removed=%d %v", tag.RowsAffected(), err)
 	}
 	if state, err := CheckCompatibility(t.Context(), f.f.databaseURL); err != nil || state != CompatibilityPending {
 		t.Fatalf("0058 compatibility: %v %v", state, err)
 	}
 	result, err := Upgrade(t.Context(), f.f.databaseURL)
-	if err != nil || result.Applied != 8 || result.DatabaseSchemaVersion != 66 {
-		t.Fatalf("populated 0058 through 0066: %+v %v", result, err)
+	if err != nil || result.Applied != 10 || result.DatabaseSchemaVersion != 68 {
+		t.Fatalf("populated 0058 through 0068: %+v %v", result, err)
 	}
 	if after := snapshot(); after != before {
 		t.Fatal("forward upgrade changed occurrence/evaluation/transition/range history or prior migration ledger")

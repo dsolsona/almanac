@@ -41,15 +41,14 @@ func prepareMaintenanceEnqueue(ctx context.Context, tx pgx.Tx, scope maintenance
 	if tx == nil || !scope.SloID.Valid || !scope.SliID.Valid || scope.DefinitionRevision < 1 || scope.MeasurementRevision < 1 || now.IsZero() || limits.MaxRequests < 1 || limits.MaxRequests > derivedWindowBatchLimit || limits.MaxSourceHours < 1 || limits.MaxSourceHours > 10000 {
 		return out, ErrMaintenanceInvalid
 	}
-	if len(requests) > limits.MaxRequests {
-		return out, ErrOperationalResource
-	}
 	if err := ctx.Err(); err != nil {
 		return out, err
 	}
-	// Validate and admit all source expansion before any write or resource lock.
+	// Validate the full request before any write or resource lock. Admit only a
+	// bounded prefix: the evaluator keeps the whole boundary pending and emits
+	// the remaining prerequisites again after these artifacts become ready.
 	hours := map[int64]time.Time{}
-	for _, r := range requests {
+	for i, r := range requests {
 		if r.RequestedRevision < 0 {
 			return out, ErrMaintenanceInvalid
 		}
@@ -59,12 +58,21 @@ func prepareMaintenanceEnqueue(ctx context.Context, tx pgx.Tx, scope maintenance
 			if r.Comparison == nil || !r.Comparison.FirstBuild.Valid || !r.Comparison.SecondBuild.Valid {
 				return out, ErrMaintenanceInvalid
 			}
+		case "extrema_hour", "extrema_day":
+			k := r.Hour
+			duration := time.Hour
+			if r.Kind == "extrema_day" {
+				duration = 24 * time.Hour
+			}
+			if k.SloID != scope.SloID || k.SliID != scope.SliID || k.DefinitionRevision != scope.DefinitionRevision || k.MeasurementRevision != scope.MeasurementRevision || k.SourceGeneration < 0 || !validMaintenanceTime(k.HourStart) || !k.HourStart.Equal(k.HourStart.UTC().Truncate(duration)) || !validMaintenanceTime(k.HourStart.Add(duration)) || r.Comparison != nil || !r.Start.IsZero() || !r.End.IsZero() || (r.BuildID.Valid && k.BuildID.Valid && r.BuildID != k.BuildID) {
+				return out, ErrMaintenanceInvalid
+			}
 		case "scoped_hour", "source_hour":
 			k := r.Hour
 			if k.SloID != scope.SloID || k.SliID != scope.SliID || k.DefinitionRevision != scope.DefinitionRevision || k.MeasurementRevision != scope.MeasurementRevision || !validMaintenanceHourKey(k) {
 				return out, ErrMaintenanceInvalid
 			}
-			if r.Kind == "source_hour" {
+			if r.Kind == "source_hour" && i < limits.MaxRequests {
 				hours[k.HourStart.UnixMicro()] = k.HourStart.UTC()
 			}
 		case "source_window":
@@ -75,8 +83,10 @@ func prepareMaintenanceEnqueue(ctx context.Context, tx pgx.Tx, scope maintenance
 			if n > int64(limits.MaxSourceHours) {
 				return out, ErrOperationalResource
 			}
-			for h := r.Start; h.Before(r.End); h = h.Add(time.Hour) {
-				hours[h.UnixMicro()] = h.UTC()
+			if i < limits.MaxRequests {
+				for h := r.Start; h.Before(r.End); h = h.Add(time.Hour) {
+					hours[h.UnixMicro()] = h.UTC()
+				}
 			}
 		default:
 			return out, ErrMaintenanceInvalid
@@ -109,6 +119,11 @@ func prepareMaintenanceEnqueue(ctx context.Context, tx pgx.Tx, scope maintenance
 	if identity.MeasurementKind != "event_counts" || identity.ComponentMode != "interval_count" {
 		return out, ErrMaintenanceInvalid
 	}
+	for _, r := range requests {
+		if r.RequestedRevision > identity.ExclusionRevision {
+			return out, ErrMaintenanceSnapshotChanged
+		}
+	}
 	// Acquire the canonical queue FK's resource fence before any queue rows.
 	if len(hours) > 0 {
 		_, err = q.FenceAlertSourceGeneration(ctx, dbgen.FenceAlertSourceGenerationParams{SliID: scope.SliID, MeasurementRevision: scope.MeasurementRevision})
@@ -118,15 +133,16 @@ func prepareMaintenanceEnqueue(ctx context.Context, tx pgx.Tx, scope maintenance
 	}
 	// A SLO root serializes its capture sequence. Sort stable resource identities
 	// anyway, so queue/source locks have a consistent order across callers.
-	requests = slices.Clone(requests)
+	requests = slices.Clone(requests[:min(len(requests), limits.MaxRequests)])
 	slices.SortFunc(requests, func(a, b maintenanceEvaluationPreparation) int {
 		return cmp.Or(cmp.Compare(a.RequestedRevision, b.RequestedRevision), cmp.Compare(a.Kind, b.Kind))
 	})
 	needsCompatibility := false
+	targets := map[struct {
+		kind                        string
+		revision, generation, start int64
+	}]bool{}
 	for _, r := range requests {
-		if r.RequestedRevision > identity.ExclusionRevision {
-			return out, ErrMaintenanceSnapshotChanged
-		}
 		p := dbgen.EnqueueMaintenancePreparationParams{ID: maintenanceCompilerID(), Kind: r.Kind, SloID: scope.SloID, TargetRevision: r.RequestedRevision, Now: timestamp(now)}
 		switch r.Kind {
 		case "source_hour", "source_window":
@@ -140,6 +156,30 @@ func prepareMaintenanceEnqueue(ctx context.Context, tx pgx.Tx, scope maintenance
 				return out, err
 			}
 			p.BuildID = b.ID
+		case "extrema_hour", "extrema_day":
+			// Retained bucket work captures the requested immutable mask even
+			// before it completes. It never expands a shared cursor dirty range.
+			b, e := captureMaintenanceBuild(ctx, tx, scope.SloID, &r.RequestedRevision, now)
+			if e != nil {
+				return out, e
+			}
+			if (r.BuildID.Valid && r.BuildID != b.ID) || (r.Hour.BuildID.Valid && r.Hour.BuildID != b.ID) {
+				return out, ErrMaintenanceInvalid
+			}
+			p.BuildID = b.ID
+			p.SliID = scope.SliID
+			p.DefinitionRevision = pgtype.Int8{Int64: scope.DefinitionRevision, Valid: true}
+			p.MeasurementRevision = pgtype.Int8{Int64: scope.MeasurementRevision, Valid: true}
+			p.HourStart = timestamp(r.Hour.HourStart)
+			p.SourceGeneration = pgtype.Int8{Int64: r.Hour.SourceGeneration, Valid: true}
+			key := struct {
+				kind                        string
+				revision, generation, start int64
+			}{r.Kind, r.RequestedRevision, r.Hour.SourceGeneration, r.Hour.HourStart.UnixMicro()}
+			if targets[key] {
+				continue
+			}
+			targets[key] = true
 		case "scoped_hour":
 			b, e := q.LockMaintenanceHourBuild(ctx, r.Hour.BuildID)
 			if e != nil {

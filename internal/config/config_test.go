@@ -121,17 +121,18 @@ func TestValidateComponentsAndBackendOrigin(t *testing.T) {
 }
 
 func TestBackendUIConfiguration(t *testing.T) {
-	for _, components := range []string{"backend,ui", "ui,backend"} {
+	for _, components := range []string{"backend,ui", "ui,backend", "backend,ui,alerts", "backend,alerts,ui", "ui,backend,alerts", "ui,alerts,backend", "alerts,backend,ui", "alerts,ui,backend"} {
 		t.Run(components, func(t *testing.T) {
 			cfg := Defaults()
 			cfg.Components = components
 			cfg.DatabaseURLFile = "/db"
 			cfg.PublicOrigin = "https://example.test"
 			cfg.TrustedProxyCIDRs = []netip.Prefix{netip.MustParsePrefix("127.0.0.1/32")}
+			cfg.MetricsListen = "127.0.0.1:9091"
 			if err := cfg.Validate(); err != nil {
 				t.Fatal(err)
 			}
-			if !cfg.BackendUI() {
+			if !cfg.BackendUI() || !cfg.HasBackend() || cfg.HasAlerts() != strings.Contains(components, "alerts") {
 				t.Fatal("combined mode not recognized")
 			}
 		})
@@ -142,13 +143,52 @@ func TestBackendUIConfiguration(t *testing.T) {
 		func(cfg *Config) { cfg.TrustedProxyCIDRs = nil },
 	} {
 		cfg := Defaults()
-		cfg.Components = "backend,ui"
 		cfg.DatabaseURLFile = "/db"
 		cfg.PublicOrigin = "https://example.test"
 		cfg.TrustedProxyCIDRs = []netip.Prefix{netip.MustParsePrefix("127.0.0.1/32")}
 		mutate(&cfg)
 		if err := cfg.Validate(); err == nil {
 			t.Fatal("invalid combined security/database configuration accepted")
+		}
+	}
+}
+
+func TestBackendAlertsConfiguration(t *testing.T) {
+	for _, components := range []string{"backend,alerts", "alerts,backend"} {
+		cfg := Defaults()
+		cfg.Components = components
+		cfg.DatabaseURLFile = "/db"
+		cfg.PublicOrigin = "https://example.test"
+		cfg.TrustedProxyCIDRs = []netip.Prefix{netip.MustParsePrefix("127.0.0.1/32")}
+		cfg.SourceSecretKeysetFile = "/keyset"
+		cfg.SourceSecretKeysetID = "00000000-0000-4000-8000-000000000001"
+		cfg.MetricsListen = "127.0.0.1:9091"
+		if err := cfg.Validate(); err != nil || !cfg.HasBackend() || !cfg.HasAlerts() || cfg.BackendUI() || cfg.UIOnly() {
+			t.Fatalf("backend/alerts selection %q: %+v %v", components, cfg, err)
+		}
+		for _, mutate := range []func(*Config){
+			func(c *Config) { c.DatabaseURLFile = "" },
+			func(c *Config) { c.PublicOrigin = "" },
+			func(c *Config) { c.TrustedProxyCIDRs = nil },
+			func(c *Config) { c.SourceSecretKeysetID = "" },
+			func(c *Config) { c.MetricsListen = c.Listen },
+		} {
+			invalid := cfg
+			mutate(&invalid)
+			if err := invalid.Validate(); err == nil {
+				t.Fatalf("backend/alerts selection %q bypassed backend security validation", components)
+			}
+		}
+	}
+	for _, components := range []string{"ui", "alerts", "ui,alerts", "alerts,ui"} {
+		cfg := Defaults()
+		cfg.Components, cfg.BackendURL = components, "https://backend.example.test"
+		if cfg.HasBackend() || cfg.BackendUI() || cfg.HasAlerts() != strings.Contains(components, "alerts") {
+			t.Fatalf("non-backend selection misclassified: %q", components)
+		}
+		cfg.DatabaseURLFile = "/private/backend-secret"
+		if err := cfg.Validate(); err == nil {
+			t.Fatalf("non-backend selection %q accepted backend credentials", components)
 		}
 	}
 }

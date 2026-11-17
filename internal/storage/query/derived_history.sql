@@ -5,6 +5,7 @@ SELECT b.payload, b.payload_digest, g.id AS generation_id, g.published_at
 FROM public.almanac_slo_history_blocks b
 JOIN public.almanac_slo_derived_generations g ON g.id=b.generation_id
 WHERE g.slo_id=$1 AND g.definition_revision=$2 AND g.measurement_revision=$3
+  AND g.exclusion_revision=sqlc.arg(exclusion_revision)::bigint
   AND g.calculation_version=sqlc.arg(calculation_version)
   AND g.retention_start=sqlc.arg(retention_start)
   AND g.published_at>=sqlc.arg(now)::timestamptz-interval '5 minutes'
@@ -24,7 +25,7 @@ DELETE FROM public.almanac_slo_history_blocks WHERE generation_id=$1;
 
 -- Exact table pages read only one bounded, immutable prepared generation.
 -- name: ReadPreparedSloValuePage :one
-SELECT g.id,g.source_generation,g.definition_revision,g.measurement_revision,
+SELECT g.id,g.source_generation,g.definition_revision,g.measurement_revision,g.exclusion_revision,
        g.calculation_version,g.evaluated_through,g.published_at,g.retention_start,
        jsonb_array_length(b.payload #> sqlc.arg(series_path)::text[])::integer AS total_values,
        coalesce((

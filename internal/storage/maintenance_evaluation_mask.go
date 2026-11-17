@@ -12,7 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-func evaluateMaintenanceMask(ctx context.Context, tx pgx.Tx, in maintenanceEvaluationInput, mask maintenanceComputedMask, plan maintenanceWindowPlan, sources map[int64]maintenanceEvaluationSource, raw []dbgen.ReadMaintenanceHourRawRow, preparation *[]maintenanceEvaluationPreparation, unavailable []string) ([]slo.WindowResult, []maintenanceReusedHour, error) {
+func evaluateMaintenanceMask(ctx context.Context, tx pgx.Tx, in maintenanceEvaluationInput, mask maintenanceComputedMask, plan maintenanceWindowPlan, sources map[int64]maintenanceEvaluationSource, raw []dbgen.ReadMaintenanceHourRawRow, preparation *[]maintenanceEvaluationPreparation, unavailable []string, facts []maintenanceWindowFacts) ([]slo.WindowResult, []maintenanceReusedHour, error) {
 	if len(plan.Windows) == 0 {
 		return []slo.WindowResult{}, nil, nil
 	}
@@ -69,7 +69,7 @@ func evaluateMaintenanceMask(ctx context.Context, tx pgx.Tx, in maintenanceEvalu
 	if err != nil {
 		return nil, nil, err
 	}
-	if len(unavailable) != len(plan.Windows) {
+	if len(unavailable) != len(plan.Windows) || in.RetainFacts && len(facts) != len(plan.Windows) {
 		return nil, nil, slo.ErrOperationalFacts
 	}
 	for i, w := range plan.Windows {
@@ -159,9 +159,15 @@ func evaluateMaintenanceMask(ctx context.Context, tx pgx.Tx, in maintenanceEvalu
 		return nil, nil, err
 	}
 	for i := range inputs {
-		out[positions[i]], err = slo.EvaluateOperationalCoveredTotals(ctx, inputs[i], totals[i], coverage[i])
+		out[positions[i]], err = slo.EvaluateOperationalCoveredTotalsSummary(ctx, inputs[i], totals[i], coverage[i])
 		if err != nil {
 			return nil, nil, err
+		}
+		if in.RetainFacts {
+			facts[positions[i]] = ownMaintenanceWindowFacts(totals[i], coverage[i])
+		}
+		if !in.Summary {
+			out[positions[i]] = out[positions[i]].WithValues()
 		}
 	}
 	return out, reused, nil

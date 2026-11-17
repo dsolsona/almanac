@@ -27,6 +27,10 @@ type EvaluateSloInput struct {
 // whole transaction when PostgreSQL rejects its repeatable-read snapshot.
 var errReadSerialization = errors.New("storage: read transaction serialization failure")
 
+// The legacy evaluation DTO cannot describe maintenance-adjusted populations.
+// This is unsupported, not a pending preparation job or a retryable failure.
+var ErrSloEvaluationMaintenanceUnsupported = errors.New("storage: legacy SLO evaluation does not support maintenance")
+
 func readTransactionError(ctx context.Context, message string, err error) error {
 	if ctx.Err() == nil {
 		if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok && pgErr.Code == "40001" {
@@ -140,6 +144,9 @@ func evaluateSloAttempt(ctx context.Context, databaseURL string, input EvaluateS
 		if startOffset != 0 || endOffset != 0 || intervalStart.IsZero() || intervalEnd.IsZero() || intervalStart.Before(start) || intervalEnd.After(end) || !intervalEnd.After(intervalStart) || !floorSliBoundary(intervalStart, cadence).Equal(intervalStart) || !floorSliBoundary(intervalEnd, cadence).Equal(intervalEnd) || intervalEnd.Sub(intervalStart) > 1500*cadence {
 			return api.SloEvaluation{}, ErrObjectiveTimelineRange
 		}
+	}
+	if row.ExclusionRevision > 0 {
+		return api.SloEvaluation{}, ErrSloEvaluationMaintenanceUnsupported
 	}
 	aggregate, err := q.AggregateSloObservations(ctx, dbgen.AggregateSloObservationsParams{SliID: row.SliID, MeasurementRevision: row.MeasurementRevision, IntervalStart: timestamp(retainedStart), IntervalEnd: timestamp(end)})
 	if err != nil {
@@ -257,6 +264,15 @@ func evaluateSloAttempt(ctx context.Context, databaseURL string, input EvaluateS
 	result := api.SloEvaluation{EvaluationId: evaluationID, RequestedAt: requested, EffectiveEnd: end, CalculationVersion: "occurrences-v1", SnapshotKind: "current_evaluation", Objective: api.SloEvaluationObjective{SloId: uuid.UUID(row.ID.Bytes), DefinitionRevision: strconv.FormatInt(row.DefinitionRevision, 10), SliId: uuid.UUID(row.SliID.Bytes), MeasurementRevision: strconv.FormatInt(row.MeasurementRevision, 10), Target: sli.NormalizeDecimal(row.Target), Method: "occurrences", RollingWindowSeconds: row.RollingWindowSeconds, CadenceSeconds: int(row.CadenceSeconds)}, Window: api.SloEvaluationWindow{RequestedStart: requestedStart, EffectiveStart: start, End: end, EligibleStart: eligible, RetentionStart: retention, ActivatedAt: row.ActivatedAt.Time.UTC(), EvaluationValidFrom: row.EvaluationValidFrom.Time.UTC(), HistoricalRequestedAt: optionalTime(row.HistoricalRequestedAt)}, Quality: quality, Performance: performance, Timeline: api.SloEvaluationTimeline{Start: intervalStart, End: intervalEnd, CadenceSeconds: int(row.CadenceSeconds), MaxIntervals: 1500, Items: items}}
 	if row.HistoricalRequestedBy.Valid {
 		result.Window.HistoricalRequestedBy = new(uuid.UUID(row.HistoricalRequestedBy.Bytes))
+	}
+	// Acquire authority only after calculation. In RR a concurrent maintenance
+	// commit rejects this old snapshot with 40001; the retry sees the guard above.
+	revision, err := q.FenceMaintenanceState(ctx, row.ID)
+	if err != nil {
+		return api.SloEvaluation{}, readTransactionError(ctx, "storage: SLO evaluation authority fence failed", err)
+	}
+	if revision != 0 {
+		return api.SloEvaluation{}, ErrSloEvaluationMaintenanceUnsupported
 	}
 	if err = finishAgentRead(ctx, tx, input.Now, started, user, installation, session); err != nil {
 		return api.SloEvaluation{}, err

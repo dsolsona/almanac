@@ -15,17 +15,18 @@ const countSloOverviewGroups = `-- name: CountSloOverviewGroups :one
 WITH scope AS (
     SELECT p.urgency AS published_urgency,
            coalesce(g.definition_revision=d.revision AND g.measurement_revision=d.measurement_revision
-             AND g.calculation_version=$1 AND p.slo_id IS NOT NULL AND p.performance_complete
+             AND g.exclusion_revision=exclusion_state.revision AND g.calculation_version=$1 AND p.slo_id IS NOT NULL AND p.performance_complete
              AND g.source_generation<=coalesce(source.generation,0)
              AND g.evaluated_through>=$2::timestamptz-interval '365 days',false)::boolean AS usable,
            coalesce(g.definition_revision=d.revision AND g.measurement_revision=d.measurement_revision
-             AND g.calculation_version=$1 AND p.slo_id IS NOT NULL AND p.performance_complete
+             AND g.exclusion_revision=exclusion_state.revision AND g.calculation_version=$1 AND p.slo_id IS NOT NULL AND p.performance_complete
              AND g.source_generation=coalesce(source.generation,0)
              AND g.retention_start=to_timestamp(ceil(extract(epoch FROM ($2::timestamptz-interval '365 days'))/d.cadence_seconds)*d.cadence_seconds)
              AND g.evaluated_through>=to_timestamp(floor(extract(epoch FROM $2::timestamptz)/d.cadence_seconds)*d.cadence_seconds)
              AND coalesce(public.almanac_projection_deadline(p.current_valid_until),'-infinity'::timestamptz)>$2::timestamptz,false)::boolean AS current
     FROM public.almanac_slos s
     JOIN public.almanac_slo_definitions d ON d.slo_id=s.id AND d.revision=s.definition_revision
+    JOIN public.almanac_slo_exclusion_state exclusion_state ON exclusion_state.slo_id=d.slo_id
     LEFT JOIN public.almanac_slo_current_projections p ON p.slo_id=s.id
     LEFT JOIN public.almanac_slo_derived_generations g ON g.id=p.generation_id
     LEFT JOIN public.almanac_sli_source_generations source ON source.sli_id=d.sli_id AND source.measurement_revision=d.measurement_revision

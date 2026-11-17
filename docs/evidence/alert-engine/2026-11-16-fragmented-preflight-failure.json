@@ -1,0 +1,29 @@
+{
+  "date": "2026-11-16",
+  "candidate": "34b08ce4e9602c9d8b502c4022788bfbda82d5fe",
+  "image": "sha256:f0b3ff96f3cd84626df959fe74a92b02ba85dd782d2a668972058c3801774f34",
+  "profile": "alertacceptance-v1",
+  "configured": {
+    "slis": 100,
+    "slos": 100,
+    "policies": 100,
+    "maintained_slos": 50,
+    "fragments_per_maintained_slo": 12
+  },
+  "result": {
+    "passed": false,
+    "phase": "initial occurrence preflight; live measurement clock never started",
+    "deployed_minutes": 7.0,
+    "r0_occurrences": 50,
+    "r12_exhausted_policies": 50,
+    "pending_original_cutoffs_preserved": true,
+    "frozen_inputs": 875,
+    "changed_inputs": 0
+  },
+  "observed_errors": [
+    "slo: inconsistent operational facts: inconsistent compiled exclusion coverage",
+    "slo: inconsistent operational facts: invalid compiled coverage anchors",
+    "slo: invalid occurrence calculation"
+  ],
+  "investigation": "Shared covered-window population bounds are being reproduced independently; no correction or capacity result is claimed by this artifact."
+}

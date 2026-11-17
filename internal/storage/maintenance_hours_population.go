@@ -84,10 +84,12 @@ func addMaintenanceObservation(p *maintenanceHourPopulation, r dbgen.ReadMainten
 		if v.Sign() == 0 {
 			p.ZeroTraffic++
 		}
-		if p.FirstObservation == nil {
+		if p.FirstObservation == nil || r.IntervalStart.Time.Before(*p.FirstObservation) {
 			p.FirstObservation = new(r.IntervalStart.Time.UTC())
 		}
-		p.LastObservation = new(r.IntervalStart.Time.Add(cadence).UTC())
+		if end := r.IntervalStart.Time.Add(cadence); p.LastObservation == nil || end.After(*p.LastObservation) {
+			p.LastObservation = new(end.UTC())
+		}
 	case "complete_empty":
 		p.KnownEmpty++
 	case "failed", "incomplete":

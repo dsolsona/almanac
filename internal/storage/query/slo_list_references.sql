@@ -4,11 +4,11 @@
 WITH scalar_scope AS MATERIALIZED (
     SELECT s.id,lower(s.name) AS sort_name,p.urgency AS published_urgency,
            coalesce(g.definition_revision=d.revision AND g.measurement_revision=d.measurement_revision
-             AND g.calculation_version=sqlc.arg(calculation_version) AND p.slo_id IS NOT NULL AND p.performance_complete
+             AND g.exclusion_revision=exclusion_state.revision AND g.calculation_version=sqlc.arg(calculation_version) AND p.slo_id IS NOT NULL AND p.performance_complete
              AND g.source_generation<=coalesce(source.generation,0)
              AND g.evaluated_through>=sqlc.arg(now)::timestamptz-interval '365 days',false)::boolean AS usable,
            coalesce(g.definition_revision=d.revision AND g.measurement_revision=d.measurement_revision
-             AND g.calculation_version=sqlc.arg(calculation_version) AND p.slo_id IS NOT NULL AND p.performance_complete
+             AND g.exclusion_revision=exclusion_state.revision AND g.calculation_version=sqlc.arg(calculation_version) AND p.slo_id IS NOT NULL AND p.performance_complete
              AND g.source_generation=coalesce(source.generation,0)
              AND g.retention_start=to_timestamp(ceil(extract(epoch FROM (sqlc.arg(now)::timestamptz-interval '365 days'))/d.cadence_seconds)*d.cadence_seconds)
              AND g.evaluated_through>=to_timestamp(floor(extract(epoch FROM sqlc.arg(now)::timestamptz)/d.cadence_seconds)*d.cadence_seconds)
@@ -21,6 +21,7 @@ WITH scalar_scope AS MATERIALIZED (
            coalesce(f.attempts>=5,false) AS preparation_failed
     FROM public.almanac_slos s
     JOIN public.almanac_slo_definitions d ON d.slo_id=s.id AND d.revision=s.definition_revision
+    JOIN public.almanac_slo_exclusion_state exclusion_state ON exclusion_state.slo_id=d.slo_id
     JOIN public.almanac_services service ON service.id=d.service_id
     JOIN public.almanac_slis measurement ON measurement.id=d.sli_id
     JOIN public.almanac_sli_measurements m ON m.sli_id=d.sli_id AND m.revision=d.measurement_revision

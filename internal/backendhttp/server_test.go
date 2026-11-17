@@ -36,11 +36,15 @@ func TestNewRejectsUnsupportedComponentsAndAssetMismatches(t *testing.T) {
 	}{
 		{name: "combined missing assets", components: "backend,ui"},
 		{name: "backend unexpected assets", components: "backend", assets: assets},
-		{name: "alerts unsupported", components: "backend,ui,alerts", assets: assets},
-		{name: "unsupported pair", components: "backend,alerts", assets: assets},
+		{name: "combined alerts missing assets", components: "backend,ui,alerts"},
+		{name: "backend alerts unexpected assets", components: "backend,alerts", assets: assets},
+		{name: "standalone alerts unsupported", components: "alerts"},
+		{name: "UI alerts unsupported", components: "ui,alerts", assets: assets},
+		{name: "unknown component", components: "backend,bogus"},
+		{name: "duplicate component", components: "backend,backend"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			cfg := config.Config{Components: tc.components}
+			cfg := config.Config{Components: tc.components, PublicOrigin: "https://example.test"}
 			if server, err := New(context.Background(), cfg, service, "postgres://unused", nil, tc.assets); err == nil || server != nil {
 				t.Fatal("invalid component/asset combination was accepted")
 			}
@@ -60,21 +64,48 @@ func TestNewRejectsUnavailableConfiguredSourceSecretKeyset(t *testing.T) {
 }
 
 func TestNewCombinedRegistersAssetFallback(t *testing.T) {
-	cfg := config.Config{Components: "ui,backend", PublicOrigin: "https://example.test"}
 	assets := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
 	databaseURL := "postgres://almanac:password@127.0.0.1:5432/almanac?sslmode=disable"
 	service, err := authentication.New(t.Context(), databaseURL, time.Now)
 	if err != nil {
 		t.Fatal(err)
 	}
-	server, err := New(context.Background(), cfg, service, databaseURL, nil, assets)
+	for _, components := range []string{"ui,backend", "alerts,backend,ui"} {
+		cfg := config.Config{Components: components, PublicOrigin: "https://example.test"}
+		server, err := New(t.Context(), cfg, service, databaseURL, nil, assets)
+		if err != nil {
+			t.Fatal(err)
+		}
+		response := httptest.NewRecorder()
+		server.http.Handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/", nil))
+		if response.Code != http.StatusNoContent {
+			t.Fatalf("combined %q root status = %d", components, response.Code)
+		}
+	}
+}
+
+func TestNewBackendAlertsRequiresNoAssets(t *testing.T) {
+	databaseURL := "postgres://almanac:password@127.0.0.1:5432/almanac?sslmode=disable"
+	service, err := authentication.New(t.Context(), databaseURL, time.Now)
 	if err != nil {
 		t.Fatal(err)
 	}
-	response := httptest.NewRecorder()
-	server.http.Handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/", nil))
-	if response.Code != http.StatusNoContent {
-		t.Fatalf("combined root status = %d", response.Code)
+	for _, components := range []string{"backend,alerts", "alerts,backend"} {
+		cfg := config.Config{Components: components, PublicOrigin: "https://example.test"}
+		server, err := New(t.Context(), cfg, service, databaseURL, nil, nil)
+		if err != nil {
+			t.Fatalf("backend/alerts selection %q rejected: %v", components, err)
+		}
+		for _, route := range []struct {
+			path string
+			code int
+		}{{"/livez", http.StatusOK}, {"/", http.StatusNotFound}} {
+			response := httptest.NewRecorder()
+			server.http.Handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, route.path, nil))
+			if response.Code != route.code {
+				t.Fatalf("backend/alerts selection %q route %s: %d", components, route.path, response.Code)
+			}
+		}
 	}
 }
 

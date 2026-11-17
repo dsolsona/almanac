@@ -9,6 +9,8 @@ import (
 
 const receiptMetadataVersion = 2
 
+var receiptMetadataDecoder = newReceiptMetadataDecoder()
+
 // Receipt markers live on the objects that own the metadata, not only the
 // enclosing payload: PostgreSQL also returns individual history pages and
 // budget sample arrays. Only persistence codecs use these options; API JSON
@@ -18,7 +20,7 @@ func marshalReceiptMetadata(value any) ([]byte, error) {
 }
 
 func unmarshalReceiptMetadata(data []byte, value any) error {
-	return json.Unmarshal(data, value, json.WithUnmarshalers(receiptUnmarshalers()))
+	return receiptMetadataDecoder(data, value)
 }
 
 type receiptOperationalQuality api.SloOperationalQuality
@@ -55,14 +57,21 @@ func receiptMarshalers() *json.Marshalers {
 	)
 }
 
-func receiptUnmarshalers() *json.Unmarshalers {
-	return json.JoinUnmarshalers(
+// Keep one immutable registry so recursive sample/quality decoding reuses its
+// type-dispatch caches. Callbacks capture the local decoder to avoid a package
+// initialization cycle through unmarshalReceiptMetadata.
+func newReceiptMetadataDecoder() func([]byte, any) error {
+	var registry *json.Unmarshalers
+	decode := func(data []byte, value any) error {
+		return json.Unmarshal(data, value, json.WithUnmarshalers(registry))
+	}
+	registry = json.JoinUnmarshalers(
 		json.UnmarshalFunc(func(data []byte, value *api.SloOperationalQuality) error {
 			var saved struct {
 				receiptOperationalQuality
 				ReceiptMetadataVersion jsontext.Value `json:"_receipt_metadata_version"`
 			}
-			if err := unmarshalReceiptMetadata(data, &saved); err != nil {
+			if err := decode(data, &saved); err != nil {
 				return err
 			}
 			*value = api.SloOperationalQuality(saved.receiptOperationalQuality)
@@ -77,7 +86,7 @@ func receiptUnmarshalers() *json.Unmarshalers {
 				receiptEvaluationQuality
 				ReceiptMetadataVersion jsontext.Value `json:"_receipt_metadata_version"`
 			}
-			if err := unmarshalReceiptMetadata(data, &saved); err != nil {
+			if err := decode(data, &saved); err != nil {
 				return err
 			}
 			*value = api.SloEvaluationQuality(saved.receiptEvaluationQuality)
@@ -92,7 +101,7 @@ func receiptUnmarshalers() *json.Unmarshalers {
 				receiptOperationalSample
 				ReceiptMetadataVersion jsontext.Value `json:"_receipt_metadata_version"`
 			}
-			if err := unmarshalReceiptMetadata(data, &saved); err != nil {
+			if err := decode(data, &saved); err != nil {
 				return err
 			}
 			*value = api.SloOperationalSample(saved.receiptOperationalSample)
@@ -107,7 +116,7 @@ func receiptUnmarshalers() *json.Unmarshalers {
 				extremaReceiptMark
 				ReceiptMetadataVersion jsontext.Value `json:"_receipt_metadata_version"`
 			}
-			if err := unmarshalReceiptMetadata(data, &saved); err != nil {
+			if err := decode(data, &saved); err != nil {
 				return err
 			}
 			*value = extremaMark(saved.extremaReceiptMark)
@@ -118,4 +127,5 @@ func receiptUnmarshalers() *json.Unmarshalers {
 			return nil
 		}),
 	)
+	return decode
 }

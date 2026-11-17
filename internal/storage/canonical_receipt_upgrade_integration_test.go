@@ -12,7 +12,7 @@ import (
 
 func TestIntegrationCanonicalReceiptPopulatedUpgrade(t *testing.T) {
 	t.Parallel()
-	if latest := latestTestSchemaVersion(t); latest != 66 {
+	if latest := latestTestSchemaVersion(t); latest != 68 {
 		t.Fatalf("update exact0060 reconstruction: latest=%d", latest)
 	}
 	s := newSelfHealFixture(t, "receipt-upgrade", true)
@@ -45,7 +45,7 @@ func TestIntegrationCanonicalReceiptPopulatedUpgrade(t *testing.T) {
 	}
 	before := snapshot()
 	result, err := Upgrade(t.Context(), s.f.databaseURL)
-	if err != nil || result.Applied != 6 || result.DatabaseSchemaVersion != 66 {
+	if err != nil || result.Applied != 8 || result.DatabaseSchemaVersion != 68 {
 		t.Fatalf("upgrade %+v %v", result, err)
 	}
 	if snapshot() != before {

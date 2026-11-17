@@ -25,6 +25,10 @@ type extremaCompliance struct {
 }
 
 func extremaWindowInput(row dbgen.GetSloRow, source dbgen.GetSloOperationalContextRow, now, retention time.Time) slo.WindowInput {
+	// These are server-owned snapshot times. Keep every retained consumer on
+	// PostgreSQL precision before entering the strict shared calculator.
+	now = now.UTC().Truncate(time.Microsecond)
+	retention = retention.UTC().Truncate(time.Microsecond)
 	cadence := time.Duration(row.CadenceSeconds) * time.Second
 	return slo.WindowInput{Now: now, ValidFrom: row.EvaluationValidFrom.Time.UTC(), SliValidFrom: row.SliValidFrom.Time.UTC(),
 		RetentionStart: retention, Duration: time.Duration(row.RollingWindowSeconds) * time.Second, Cadence: cadence,
@@ -83,6 +87,7 @@ type extremaMark struct {
 	State            api.SloOperationalSampleState             `json:"state"`
 	Quality          api.SloOperationalQualityState            `json:"quality"`
 	Freshness        api.SloOperationalQualityFreshness        `json:"freshness"`
+	Maintenance      *retainedMaintenanceInputs                `json:"maintenance,omitempty"`
 }
 
 type extremaLane struct {
@@ -189,6 +194,15 @@ func (lane extremaLane) samples(ctx context.Context, input slo.WindowInput, star
 			}
 		}
 		sample.RetainedExtrema = mark.Labels
+		if value.Expected != 0 || value.Excluded != 0 {
+			sample.CalculationProvenance, err = mark.Maintenance.publicProvenance()
+			if err != nil {
+				return nil, err
+			}
+		}
+		if sample.CalculationProvenance != nil {
+			sample.Quality = maintenancePublicQuality(value, sample.Quality)
+		}
 		if lane.Coarse {
 			sample.DisplayCoverage = &api.SloDisplayCoverage{States: lane.States, QualityStates: lane.Quality, Freshness: lane.Freshness}
 		}
@@ -210,7 +224,31 @@ func (mark extremaMark) result(ctx context.Context, input slo.WindowInput) (slo.
 	if !mark.RetentionStart.IsZero() {
 		input.RetentionStart = mark.RetentionStart
 	}
-	return slo.EvaluateOperationalTotals(ctx, input, slo.WindowTotals{Good: good, Total: total, Observed: mark.Observed,
+	totals := slo.WindowTotals{Good: good, Total: total, Observed: mark.Observed,
 		KnownEmpty: mark.KnownEmpty, ZeroTraffic: mark.ZeroTraffic, FirstObservation: mark.FirstObservation,
-		LastObservation: mark.LastObservation, LatestReceipt: mark.LatestReceipt})
+		LastObservation: mark.LastObservation, LatestReceipt: mark.LatestReceipt}
+	if mark.Maintenance == nil {
+		return slo.EvaluateOperationalTotals(ctx, input, totals)
+	}
+	if err := mark.Maintenance.validate(input); err != nil {
+		return slo.WindowResult{}, err
+	}
+	if reason := mark.Maintenance.UnavailableReason; reason != "" {
+		if good.Sign() != 0 || total.Sign() != 0 || mark.Observed != 0 || mark.KnownEmpty != 0 || mark.ZeroTraffic != 0 || mark.FirstObservation != nil || mark.LastObservation != nil || mark.LatestReceipt != nil {
+			return slo.WindowResult{}, ErrDerivedFailed
+		}
+		if err := ctx.Err(); err != nil {
+			return slo.WindowResult{}, err
+		}
+		return unavailableMaintenanceWindow(input, reason)
+	}
+	if mark.Maintenance.ComputedRevision == 0 {
+		return slo.EvaluateOperationalTotals(ctx, input, totals)
+	}
+	excluded, err := mark.Maintenance.excludedTotals()
+	if err != nil {
+		return slo.WindowResult{}, err
+	}
+	totals.Excluded = excluded
+	return slo.EvaluateOperationalCoveredTotals(ctx, input, totals, *mark.Maintenance.Coverage)
 }

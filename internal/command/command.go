@@ -157,10 +157,12 @@ func printHelp(w io.Writer) {
 Implemented component modes:
   backend  Serve protected local authentication API with PostgreSQL ownership.
   ui       Serve the embedded web UI and proxy /api/v1/ to --backend-url.
-  backend,ui or ui,backend  Serve the embedded UI and authentication API on one listener.
+  backend,ui              Serve the embedded UI and API on one listener.
+  backend,alerts          Run the API and alert evaluator.
+  backend,ui,alerts       Run the UI, API and alert evaluator (default).
 
 Unsupported modes:
-  alerts and other combined modes are not implemented yet and fail before listening.`)
+  alerts without backend is not implemented and fails before listening.`)
 }
 
 func serve(ctx context.Context, args []string, stdout, stderr io.Writer) int {
@@ -196,7 +198,7 @@ func serve(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	if !cfg.UIOnly() {
-		if cfg.Components != "backend" && !cfg.BackendUI() {
+		if !cfg.HasBackend() {
 			fmt.Fprintf(stderr, "serve: components %q are not implemented; no listener was opened\n", cfg.Components)
 			return 2
 		}
@@ -288,6 +290,12 @@ func serveBackend(parent context.Context, cfg config.Config, stderr io.Writer) (
 	defer storageRuntime.Close()
 	lifeCtx, cancelLife := context.WithCancelCause(context.Background())
 	defer cancelLife(context.Canceled)
+	stopProcessing, err := startBackendProcessing(lifeCtx, storageRuntime, logger, cfg.HasAlerts())
+	if err != nil {
+		logger.Error("backend processing initialization failed")
+		return 1
+	}
+	defer stopProcessing()
 	server, err := backendhttp.New(lifeCtx, cfg, service, databaseURL, tlsConfig, assets, storageRuntime)
 	if err != nil {
 		logger.Error("backend server initialization failed")

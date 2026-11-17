@@ -3,6 +3,7 @@ import { sloClient, SloFailure, sameDerivedInputs } from '../src/slos/client.ts'
 import type { AuthContext } from '../src/auth/client.ts';
 import type { components } from '../src/api/generated.ts';
 import { clearQueryCache } from '../src/queryCache.ts';
+import { vocabulary } from '../src/slos/statusVocabulary.ts';
 const context:AuthContext={csrf_token:'csrf',session:{user_id:'u',login:'editor',role:'editor',restricted:false}};
 const id='11111111-1111-1111-1111-111111111111';
 const service={id,name:'checkout',display_name:'Checkout',version:'1',created_at:'2026-01-01T00:00:00Z',updated_at:'2026-01-01T00:00:00Z'};
@@ -20,6 +21,76 @@ function operationalDetail(objectiveID=id):components['schemas']['SloOperational
  return {evaluation_id:'22222222-2222-2222-2222-222222222222',requested_at:instant,effective_at:instant,calculation_version:'1',snapshot_kind:'current_operational_read',objective,context:{sli_id:id,sli_name:'request-success',sli_display_name:'Request success',datasource_id:'33333333-3333-3333-3333-333333333333',datasource_display_name:'Metrics',measurement_revision:'1',polling_interval_seconds:60,settling_delay_seconds:0,good_query:'good',total_query:'total'},current:value,urgency:'healthy',leading_reason:{code:'on_track',provisional:false},reasons:[{code:'on_track',provisional:false}],burn_1h:burn(3600),burn_6h:burn(21600),exhaustion:{state:'unavailable',remaining_events:null,bad_events_per_hour:null,hours_until_exhaustion:null,current_quality:quality,one_hour_quality:quality,assumptions:[]},range:{requested_start:'2026-10-22T12:00:00Z',requested_end:instant,effective_start:'2026-10-22T12:00:00Z',effective_end:instant,source_cadence_seconds:60,resolution_seconds:60,reduced:false,max_samples_per_series:1500,bucket_bounds:'half_open'},attainment_series:series('attainment',null),budget_series:series('rolling_budget',null),burn_series:series('burn',3600),compliance_series:{kind:'daily_compliance',days},compliance_summary:{met_days:7,violated_days:0,evaluable_days:7,unknown_days:0,not_applicable_days:0}};
 }
 afterEach(()=>vi.unstubAllGlobals());
+it.each(['current','burn'] as const)('checks compatibility covers the complete %s input window',async(carrier)=>{
+ for(const offset of [-86_400_000,0,1]){
+  clearQueryCache();const detail=operationalDetail();
+  const value=carrier==='current'?detail.current:detail.burn_1h;
+  const start=carrier==='current'?detail.current.window.requested_start:detail.burn_1h.start;
+  const end=carrier==='current'?detail.current.window.end:detail.burn_1h.end;
+  value.calculation_provenance={requested_revision:'2',computed_revision:'0',source_generation:'1',compatibility:{kind:'indexed_absence',computed_revision:'0',requested_revision:'2',indexed_through:'2',start:new Date(Date.parse(start)+offset).toISOString(),end:offset<0?new Date(Date.parse(end)+offset).toISOString():end}};
+  Object.assign(value.quality,{excluded_intervals:0,excluded_good:'0',excluded_total:'0'});
+  vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify(detail))));
+  if(offset===0)await expect(sloClient.operational(id)).resolves.toBeDefined();
+  else await expect(sloClient.operational(id)).rejects.toThrow('invalid response');
+ }
+});
+it.each([
+ {name:'missing build',provenance:{requested_revision:'1',computed_revision:'1',source_generation:'1'}},
+ {name:'unproven reuse',provenance:{requested_revision:'2',computed_revision:'0',source_generation:'1'}},
+ {name:'negative revision',provenance:{requested_revision:'1',computed_revision:'-1',source_generation:'1'}},
+])('rejects maintenance provenance: $name',async({provenance})=>{
+ clearQueryCache();const detail=operationalDetail();Object.assign(detail.current,{calculation_provenance:provenance});
+ Object.assign(detail.current.quality,{excluded_intervals:2,excluded_good:null,excluded_total:null});
+ vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify(detail))));
+ await expect(sloClient.operational(id)).rejects.toThrow('invalid response');
+});
+it('preserves exact counts, unknown populations and per-value provenance across all operational carriers',async()=>{
+ clearQueryCache();const detail=operationalDetail();
+ const provenance={requested_revision:'2',computed_revision:'1',source_generation:'9007199254740993',build_id:id,compatibility:{kind:'indexed_absence' as const,computed_revision:'1',requested_revision:'2',indexed_through:'2',start:detail.current.window.requested_start,end:instant}};
+ Object.assign(detail.current.quality,{excluded_intervals:2,excluded_good:null,excluded_total:null});
+ detail.current.calculation_provenance=provenance;
+ detail.burn_1h.calculation_provenance={...provenance,compatibility:{...provenance.compatibility,start:detail.burn_1h.start}};
+ const day=detail.compliance_series.days[0]!;
+ Object.assign(day.quality,{excluded_intervals:2,excluded_good:'9007199254740993',excluded_total:'9007199254740994'});
+ day.calculation_provenance={...provenance,compatibility:{...provenance.compatibility,start:day.day_start,end:day.day_end}};
+ detail.budget_series.samples=[{bucket_start:detail.current.window.requested_start,bucket_end:instant,evaluation_at:instant,state:'excluded',quality:{...detail.current.quality,state:'excluded'},revision:'1',good:null,total:null,attainment:null,allowed_budget:null,remaining_budget:null,remaining_fraction:null,burn:null,received_at:null,retained_extrema:[],calculation_provenance:provenance,display_coverage:{states:['excluded'],quality_states:['excluded'],freshness:['fresh']}}];
+ vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify(detail))));
+ const result=await sloClient.operational(id);
+ expect(result.current.quality.excluded_good).toBeNull();
+ expect(result.compliance_series.days[0]?.quality.excluded_good).toBe('9007199254740993');
+ expect(result.budget_series.samples[0]?.calculation_provenance).toEqual(provenance);
+ expect(vocabulary('watch',{code:'excluded',provisional:false},false)).toMatchObject({label:'Excluded',tone:'none'});
+});
+it.each(['burn','sample','day'] as const)('rejects an invalid compatibility proof on a %s',async(carrier)=>{
+ clearQueryCache();const detail=operationalDetail();
+ const provenance={requested_revision:'2',computed_revision:'0',source_generation:'1',compatibility:{kind:'indexed_absence',computed_revision:'0',requested_revision:'2',indexed_through:'1',start:detail.current.window.requested_start,end:instant}};
+ Object.assign(detail.current.quality,{excluded_intervals:0,excluded_good:'0',excluded_total:'0'});
+ if(carrier==='burn')Object.assign(detail.burn_1h,{calculation_provenance:provenance});
+ else if(carrier==='day'){Object.assign(detail.compliance_series.days[0]!.quality,{excluded_intervals:0,excluded_good:'0',excluded_total:'0'});Object.assign(detail.compliance_series.days[0]!,{calculation_provenance:provenance});}
+ else detail.budget_series.samples=[{bucket_start:detail.current.window.requested_start,bucket_end:instant,evaluation_at:instant,state:'observed',quality:detail.current.quality,revision:'1',good:'1',total:'1',attainment:'1',allowed_budget:'1',remaining_budget:'1',remaining_fraction:'1',burn:'0',received_at:null,retained_extrema:[],calculation_provenance:provenance as components['schemas']['SloCalculationProvenance']}];
+ vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify(detail))));
+ await expect(sloClient.operational(id)).rejects.toThrow('invalid response');
+});
+it('accepts an entirely excluded day as unknown without inventing provisional eligible data',async()=>{
+ clearQueryCache();const detail=operationalDetail(),day=detail.compliance_series.days[0]!;
+ day.quality={...day.quality,state:'excluded',expected_intervals:0,observed_intervals:0,coverage:null,first_observation_at:null,last_observation_at:null,latest_receipt_at:null,excluded_intervals:1440,excluded_good:null,excluded_total:null,reason:'excluded'};
+ day.performance={state:'unknown',observed_state:null,provisional:false,reason:'excluded',good:null,total:null,bad:null,attainment:null,allowed_budget:null,remaining_budget:null,consumed_fraction:null,remaining_fraction:null,burn:null,budget_unit:'events'};
+ day.status='unknown';day.explanation='excluded';
+ day.calculation_provenance={requested_revision:'1',computed_revision:'1',source_generation:'1',build_id:id};
+ detail.compliance_summary={met_days:6,violated_days:0,evaluable_days:6,unknown_days:1,not_applicable_days:0};
+ vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify(detail))));
+ await expect(sloClient.operational(id)).resolves.toMatchObject({compliance_summary:{unknown_days:1,evaluable_days:6}});
+});
+it.each([
+ {excluded_intervals:2,excluded_good:'0'},
+ {excluded_intervals:2,excluded_good:null,excluded_total:'0'},
+ {excluded_intervals:2,excluded_good:'-1',excluded_total:'0'},
+ {excluded_intervals:2,excluded_good:'9007199254740993',excluded_total:'9007199254740992'},
+])('rejects malformed excluded event population %#',async(fields)=>{
+ clearQueryCache();const detail=operationalDetail();Object.assign(detail.current.quality,fields);
+ vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify(detail))));
+ await expect(sloClient.operational(id)).rejects.toThrow('invalid response');
+});
 it('accepts independent current status with UTC generation metadata and rejects a local-offset stamp',async()=>{
  const detail=operationalDetail();
  const generation={generation_id:id,source_generation:'1',definition_revision:'1',measurement_revision:'1',exclusion_revision:'0',calculation_version:'v1',evaluated_through:instant,published_at:instant,calculation_lag_seconds:0};

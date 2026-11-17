@@ -45,6 +45,7 @@ func ReadCurrentSloStatus(ctx context.Context, databaseURL string, input Current
 		return api.SloCurrentStatus{}, err
 	}
 	var result api.SloCurrentStatus
+	var maintenance *maintenanceConsumerSession
 	if row.Current && row.GenerationID.Valid {
 		result, err = publishedCurrentStatus(row)
 		if err != nil {
@@ -75,7 +76,10 @@ func ReadCurrentSloStatus(ctx context.Context, databaseURL string, input Current
 			err = ErrDerivedSourceFailed
 		default:
 			// Clock-only changes still use exact bounded reads when available.
-			result, err = readCurrentSloFromAggregates(ctx, q, definition, now)
+			maintenance, err = captureMaintenanceConsumer(ctx, tx, definition, input.Runtime)
+			if err == nil {
+				result, err = readCurrentSloFromAggregates(ctx, q, definition, now, maintenance)
+			}
 		}
 		if errors.Is(err, ErrDerivedPending) || errors.Is(err, ErrDerivedFailed) || errors.Is(err, ErrDerivedSourceFailed) {
 			result, err = currentStatusDuringPreparation(ctx, q, row, definition, now, err)
@@ -83,6 +87,25 @@ func ReadCurrentSloStatus(ctx context.Context, databaseURL string, input Current
 	}
 	if err != nil {
 		return api.SloCurrentStatus{}, err
+	}
+	if maintenance != nil && len(maintenance.preparation) > 0 {
+		readStarted := started
+		if err := finishAgentRead(ctx, tx, input.Now, started, user, installation, session); err != nil {
+			return api.SloCurrentStatus{}, err
+		}
+		closeInitialOwnerConnection(conn)
+		conn, q, tx, user, installation, session, started, err = beginPooledAgentRead(ctx, databaseURL, input.Runtime, input.Proof.SessionVerifier, input.Now, pgx.TxOptions{IsoLevel: pgx.ReadCommitted}, "administrator", "editor", "viewer")
+		if err != nil {
+			return api.SloCurrentStatus{}, err
+		}
+		defer closeInitialOwnerConnection(conn)
+		defer rollbackTransaction(tx)
+		if started.Before(readStarted) {
+			return api.SloCurrentStatus{}, ErrInvalidSession
+		}
+		if err := publishMaintenanceConsumerPreparation(ctx, tx, maintenance, maintenancePreparationLive, input.Now); err != nil {
+			return api.SloCurrentStatus{}, err
+		}
 	}
 
 	if err := finishAgentRead(ctx, tx, input.Now, started, user, installation, session); err != nil {
@@ -195,16 +218,18 @@ func currentReadGeneration(ctx context.Context, q *dbgen.Queries, row dbgen.GetS
 	if err != nil {
 		return api.DerivedGeneration{}, err
 	}
-	return generationStamp(pgtype.UUID{Bytes: id, Valid: true}, generation, row.DefinitionRevision, row.MeasurementRevision,
-		operationalCalculationVersion, at, now, ceilSliBoundary(now.Add(-sli.ObservationRetention), time.Duration(row.CadenceSeconds)*time.Second)), nil
+	stamp := generationStamp(pgtype.UUID{Bytes: id, Valid: true}, generation, row.DefinitionRevision, row.MeasurementRevision,
+		operationalCalculationVersion, at, now, ceilSliBoundary(now.Add(-sli.ObservationRetention), time.Duration(row.CadenceSeconds)*time.Second))
+	stamp.ExclusionRevision = strconv.FormatInt(row.ExclusionRevision, 10)
+	return stamp, nil
 }
 
-func readCurrentSloFromAggregates(ctx context.Context, q *dbgen.Queries, row dbgen.GetSloRow, now time.Time) (api.SloCurrentStatus, error) {
+func readCurrentSloFromAggregates(ctx context.Context, q *dbgen.Queries, row dbgen.GetSloRow, now time.Time, maintenance *maintenanceConsumerSession) (api.SloCurrentStatus, error) {
 	source, err := q.GetSloOperationalContext(ctx, dbgen.GetSloOperationalContextParams{SliID: row.SliID, Revision: row.MeasurementRevision})
 	if err != nil {
 		return api.SloCurrentStatus{}, err
 	}
-	detail, err := buildSloOperationalDetail(ctx, q, row, source, OperationalDetailInput{currentOnly: true, Now: func() time.Time { return now }, BurnWindow: 3600})
+	detail, err := buildSloOperationalDetail(ctx, q, row, source, OperationalDetailInput{maintenance: maintenance, currentOnly: true, Now: func() time.Time { return now }, BurnWindow: 3600})
 	if err != nil {
 		return api.SloCurrentStatus{}, err
 	}
@@ -301,8 +326,41 @@ func (r *Runtime) refreshCurrentProjection(ctx context.Context, id pgtype.UUID, 
 		return err
 	}
 	now := clock().UTC()
-	detail, err := buildSloOperationalDetail(bounded, q, row, contextRow, OperationalDetailInput{currentOnly: true, Now: func() time.Time { return now }, BurnWindow: 3600})
+	maintenance, err := captureMaintenanceConsumer(bounded, tx, row, r)
 	if err != nil {
+		return err
+	}
+	// All reads and calculations use one RR snapshot. Resource locks and queue/
+	// projection writes belong to a fresh RC transaction, in that order.
+	publishSnapshot := func() error {
+		if err := tx.Rollback(bounded); err != nil {
+			return err
+		}
+		nextTx, beginErr := conn.BeginTx(bounded, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
+		if beginErr != nil {
+			return beginErr
+		}
+		tx = nextTx
+		if _, err := tx.Exec(bounded, "SET LOCAL statement_timeout='5s'; SET LOCAL lock_timeout='250ms'; SET LOCAL jit=off"); err != nil {
+			return err
+		}
+		q = dbgen.New(tx)
+		if len(maintenance.preparation) > 0 {
+			return publishMaintenanceConsumerPreparation(bounded, tx, maintenance, maintenancePreparationLive, clock)
+		}
+		return fenceMaintenanceConsumerSnapshot(bounded, tx, maintenance)
+	}
+	defer func() { rollbackTransaction(tx) }()
+	detail, err := buildSloOperationalDetail(bounded, q, row, contextRow, OperationalDetailInput{maintenance: maintenance, currentOnly: true, Now: func() time.Time { return now }, BurnWindow: 3600})
+	if err != nil {
+		if errors.Is(err, ErrDerivedPending) && maintenance != nil && len(maintenance.preparation) > 0 {
+			if publishErr := publishSnapshot(); publishErr != nil {
+				return errors.Join(ErrDerivedPending, publishErr)
+			}
+			if commitErr := tx.Commit(bounded); commitErr != nil {
+				return commitErr
+			}
+		}
 		return err
 	}
 	sourceGeneration, err := q.GetDerivedSourceGeneration(bounded, dbgen.GetDerivedSourceGenerationParams{SliID: row.SliID, MeasurementRevision: row.MeasurementRevision})
@@ -311,21 +369,31 @@ func (r *Runtime) refreshCurrentProjection(ctx context.Context, id pgtype.UUID, 
 	} else if err != nil {
 		return err
 	}
+	item := api.SloOperationalOverviewItem{Slo: detail.Objective, Current: detail.Current, Urgency: api.SloOperationalOverviewItemUrgency(detail.Urgency),
+		LeadingReason: detail.LeadingReason, Reasons: detail.Reasons, Burn1h: detail.Burn1h, Burn6h: detail.Burn6h, Exhaustion: detail.Exhaustion, BudgetSparkline: []api.SloOperationalSample{}}
+	budgetCache, err := attachExtremaBudget(bounded, q, &item, row, contextRow, now, maintenance)
+	if err != nil {
+		return err
+	}
+	if maintenance != nil {
+		if !maintenance.sourceCaptured || maintenance.sourceGeneration != sourceGeneration {
+			return ErrDerivedPending
+		}
+		if err := publishSnapshot(); err != nil {
+			return errors.Join(ErrDerivedPending, err)
+		}
+	}
 	generationID, err := q.InsertDerivedGeneration(bounded, dbgen.InsertDerivedGenerationParams{
-		SloID: id, DefinitionRevision: row.DefinitionRevision, MeasurementRevision: row.MeasurementRevision, SourceGeneration: sourceGeneration,
+		SloID: id, DefinitionRevision: row.DefinitionRevision, MeasurementRevision: row.MeasurementRevision, SourceGeneration: sourceGeneration, ExclusionRevision: row.ExclusionRevision,
 		CalculationVersion: detail.CalculationVersion, EvaluatedThrough: timestamp(detail.EffectiveAt), RetentionStart: timestamp(ceilSliBoundary(now.Add(-sli.ObservationRetention), time.Duration(row.CadenceSeconds)*time.Second)), PublishedAt: timestamp(now),
 	})
 	if err != nil {
 		return err
 	}
-	item := api.SloOperationalOverviewItem{Slo: detail.Objective, Current: detail.Current, Urgency: api.SloOperationalOverviewItemUrgency(detail.Urgency),
-		LeadingReason: detail.LeadingReason, Reasons: detail.Reasons, Burn1h: detail.Burn1h, Burn6h: detail.Burn6h, Exhaustion: detail.Exhaustion, BudgetSparkline: []api.SloOperationalSample{}}
 	stamp := generationStamp(generationID, sourceGeneration, row.DefinitionRevision, row.MeasurementRevision, detail.CalculationVersion, detail.EffectiveAt, now, ceilSliBoundary(now.Add(-sli.ObservationRetention), time.Duration(row.CadenceSeconds)*time.Second))
+	stamp.ExclusionRevision = strconv.FormatInt(row.ExclusionRevision, 10)
 	item.Generation = &stamp
-	budgetCache, err := attachExtremaBudget(bounded, q, &item, row, contextRow, now)
-	if err != nil {
-		return err
-	}
+	item.BudgetHistoryGeneration = &stamp
 	payload, err := marshalReceiptMetadata(struct {
 		api.SloOperationalOverviewItem
 		ValidUntil time.Time `json:"_current_valid_until"`

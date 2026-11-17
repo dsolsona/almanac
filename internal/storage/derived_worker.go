@@ -23,6 +23,9 @@ func (r *Runtime) RunDerived(ctx context.Context, logger *slog.Logger) {
 // runDerivedTurn returns the next metrics deadline and scheduler wakeup.
 func (r *Runtime) runDerivedTurn(ctx context.Context, logger *slog.Logger, clock func() time.Time, nextMetrics time.Time) (time.Time, time.Time) {
 	now := clock().UTC()
+	if profile := r.maintenanceConsumers.Load(); profile != nil && profile.pauseSource != nil && profile.pauseSource() {
+		return nextMetrics, now.Add(time.Second)
+	}
 	conn, err := r.Acquire(ctx, DerivedTraffic)
 	if err != nil {
 		if ctx.Err() == nil {

@@ -47,12 +47,13 @@ SELECT b.payload, b.payload_digest, g.id AS generation_id, g.published_at
 FROM public.almanac_slo_history_blocks b
 JOIN public.almanac_slo_derived_generations g ON g.id=b.generation_id
 WHERE g.slo_id=$1 AND g.definition_revision=$2 AND g.measurement_revision=$3
-  AND g.calculation_version=$11
-  AND g.retention_start=$12
+  AND g.exclusion_revision=$11::bigint
+  AND g.calculation_version=$12
+  AND g.retention_start=$13
   AND g.published_at>=$10::timestamptz-interval '5 minutes'
   AND g.source_generation=$4 AND g.evaluated_through=$5
   AND b.range_start=$6 AND b.range_end=$7 AND b.burn_window_seconds=$8
-  AND b.kind=$13
+  AND b.kind=$14
 )
 SELECT payload,generation_id,published_at FROM candidates
 WHERE payload->'history_preparation' IS NULL
@@ -73,6 +74,7 @@ type FindPreparedSloHistoryParams struct {
 	BurnWindowSeconds   int32              `json:"burn_window_seconds"`
 	Live                bool               `json:"live"`
 	Now                 pgtype.Timestamptz `json:"now"`
+	ExclusionRevision   int64              `json:"exclusion_revision"`
 	CalculationVersion  string             `json:"calculation_version"`
 	RetentionStart      pgtype.Timestamptz `json:"retention_start"`
 	Kind                string             `json:"kind"`
@@ -97,6 +99,7 @@ func (q *Queries) FindPreparedSloHistory(ctx context.Context, arg FindPreparedSl
 		arg.BurnWindowSeconds,
 		arg.Live,
 		arg.Now,
+		arg.ExclusionRevision,
 		arg.CalculationVersion,
 		arg.RetentionStart,
 		arg.Kind,
@@ -136,7 +139,7 @@ func (q *Queries) InsertPreparedSloHistory(ctx context.Context, arg InsertPrepar
 }
 
 const readPreparedSloValuePage = `-- name: ReadPreparedSloValuePage :one
-SELECT g.id,g.source_generation,g.definition_revision,g.measurement_revision,
+SELECT g.id,g.source_generation,g.definition_revision,g.measurement_revision,g.exclusion_revision,
        g.calculation_version,g.evaluated_through,g.published_at,g.retention_start,
        jsonb_array_length(b.payload #> $1::text[])::integer AS total_values,
        coalesce((
@@ -168,6 +171,7 @@ type ReadPreparedSloValuePageRow struct {
 	SourceGeneration    int64              `json:"source_generation"`
 	DefinitionRevision  int64              `json:"definition_revision"`
 	MeasurementRevision int64              `json:"measurement_revision"`
+	ExclusionRevision   int64              `json:"exclusion_revision"`
 	CalculationVersion  string             `json:"calculation_version"`
 	EvaluatedThrough    pgtype.Timestamptz `json:"evaluated_through"`
 	PublishedAt         pgtype.Timestamptz `json:"published_at"`
@@ -193,6 +197,7 @@ func (q *Queries) ReadPreparedSloValuePage(ctx context.Context, arg ReadPrepared
 		&i.SourceGeneration,
 		&i.DefinitionRevision,
 		&i.MeasurementRevision,
+		&i.ExclusionRevision,
 		&i.CalculationVersion,
 		&i.EvaluatedThrough,
 		&i.PublishedAt,

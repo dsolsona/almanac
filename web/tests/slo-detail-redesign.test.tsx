@@ -19,6 +19,14 @@ it('does not fabricate zero burn or a successful empty chart',()=>{
  render(<SloHistoryChart kind="burn" samples={[]} start="2026-11-06T10:00:00Z" end="2026-11-12T10:00:00Z" target="0.999"/>);
  expect(screen.getByText('No history available for this period.')).toBeVisible();expect(document.querySelector('.curve')).not.toBeInTheDocument();
 });
+it('labels excluded evidence without drawing a successful point',()=>{
+ const point=sample('2026-11-09T10:00:00Z',null,'excluded');point.quality.state='excluded';
+ render(<SloHistoryChart kind="burn" samples={[point]} start="2026-11-06T10:00:00Z" end="2026-11-12T10:00:00Z" target="0.999"/>);
+ fireEvent.keyDown(screen.getByRole('group',{name:/Inspect/}),{key:'Home'});
+ expect(screen.getByRole('tooltip')).toHaveTextContent('Excluded by maintenance');
+ expect(document.querySelector('.inspection-dot')).not.toBeInTheDocument();
+ expect(document.querySelector('.curve')).not.toBeInTheDocument();
+});
 
 import { countExact, errorRateText } from '../src/slos/detailFormat.ts';
 it('preserves exact decimal counts and small error rates without binary rounding',()=>{expect(countExact('9007199254740993.000000000001')).toBe('9,007,199,254,740,993.000000000001');expect(errorRateText('0.999')).toBe('0.1%');expect(errorRateText('0')).toBe('100%');expect(errorRateText('0.999999999999')).toBe('0.0000000001%');});

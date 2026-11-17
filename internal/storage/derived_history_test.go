@@ -83,7 +83,7 @@ func TestPreparedHistoryRejectsCorruptProvenance(t *testing.T) {
 			Range:      api.SloOperationalRange{RequestedStart: start, RequestedEnd: end},
 			BurnSeries: api.SloOperationalSeries{BurnWindowSeconds: new(api.SloOperationalSeriesBurnWindowSeconds(3600))},
 			Generation: &api.DerivedGeneration{GenerationId: generation.Bytes, DefinitionRevision: "3", MeasurementRevision: "4", SourceGeneration: "5",
-				CalculationVersion: operationalCalculationVersion, EvaluatedThrough: end}}
+				ExclusionRevision: "0", CalculationVersion: operationalCalculationVersion, EvaluatedThrough: end}}
 	}
 	if !preparedHistoryMatches(valid(), key, generation) {
 		t.Fatal("matching prepared history was rejected")
@@ -95,6 +95,7 @@ func TestPreparedHistoryRejectsCorruptProvenance(t *testing.T) {
 		"wrong definition":   func(v *api.SloOperationalDetail) { v.Generation.DefinitionRevision = "2" },
 		"wrong measurement":  func(v *api.SloOperationalDetail) { v.Generation.MeasurementRevision = "3" },
 		"wrong source":       func(v *api.SloOperationalDetail) { v.Generation.SourceGeneration = "4" },
+		"wrong exclusion":    func(v *api.SloOperationalDetail) { v.Generation.ExclusionRevision = "1" },
 		"old calculation":    func(v *api.SloOperationalDetail) { v.CalculationVersion = "old" },
 		"wrong endpoint":     func(v *api.SloOperationalDetail) { v.EffectiveAt = end.Add(-time.Minute) },
 		"wrong range":        func(v *api.SloOperationalDetail) { v.Range.RequestedStart = start.Add(time.Minute) },

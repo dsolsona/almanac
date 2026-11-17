@@ -258,7 +258,7 @@ func (c *Client) Do(ctx context.Context, in Input) ([]byte, string, error) {
 	} else if in.Action == "values" {
 		valid = validHistoryValuesResponse(data, in)
 	}
-	if json.Unmarshal(data, &object) != nil || object == nil || !valid {
+	if json.Unmarshal(data, &object) != nil || object == nil || !valid || !validMaintenanceEnvelope(object, 0) {
 		return nil, "", failure("invalid_response", 0, mutation)
 	}
 	if in.Action == "get" || mutation {
@@ -311,11 +311,11 @@ func validSlo(value api.Slo) bool {
 func validOperationalQuality(value api.SloOperationalQuality) bool {
 	stateOK := false
 	switch value.State {
-	case "complete", "partial", "no_data", "zero_traffic", "expired_history", "not_yet_eligible", "not_applicable", "unavailable":
+	case "complete", "partial", "no_data", "zero_traffic", "expired_history", "not_yet_eligible", "not_applicable", "unavailable", "excluded":
 		stateOK = true
 	}
 	freshnessOK := value.Freshness == "unknown" || value.Freshness == "fresh" || value.Freshness == "stale"
-	return stateOK && freshnessOK && value.ExpectedIntervals >= 0 && value.ObservedIntervals >= 0 && value.KnownEmptyIntervals >= 0 && value.MissingIntervals >= 0 && value.ExpiredIntervals >= 0 && value.ZeroTrafficIntervals >= 0 &&
+	return stateOK && freshnessOK && validExcludedPopulation(value) && value.ExpectedIntervals >= 0 && value.ObservedIntervals >= 0 && value.KnownEmptyIntervals >= 0 && value.MissingIntervals >= 0 && value.ExpiredIntervals >= 0 && value.ZeroTrafficIntervals >= 0 &&
 		validDecimal(value.Coverage) && (value.Reason == nil || len(*value.Reason) <= 512)
 }
 func validOperationalPerformance(value api.SloEvaluationPerformance) bool {
@@ -327,18 +327,18 @@ func validOperationalPerformance(value api.SloEvaluationPerformance) bool {
 func validOperationalValue(value api.SloOperationalValue) bool {
 	w := value.Window
 	return !value.EvaluationAt.IsZero() && !w.RequestedStart.IsZero() && !w.EffectiveStart.IsZero() && !w.End.IsZero() && !w.EligibleStart.IsZero() && !w.RetentionStart.IsZero() && !w.ActivatedAt.IsZero() && !w.EvaluationValidFrom.IsZero() &&
-		validOperationalQuality(value.Quality) && validOperationalPerformance(value.Performance)
+		validWindowCalculationProvenance(value.CalculationProvenance, value.Quality, w.RequestedStart, w.End) && validOperationalQuality(value.Quality) && validOperationalPerformance(value.Performance)
 }
 func validUrgency(value api.SloUrgencyReason) bool {
 	switch value.Code {
-	case "on_track", "stale_observations", "no_data", "expired_history", "complete_window_violation", "negative_observed_budget", "low_observed_budget", "high_1h_burn", "evaluation_unavailable", "not_yet_eligible", "zero_traffic", "incomplete_coverage", "short_burn_unavailable", "budget_below_half":
+	case "on_track", "stale_observations", "no_data", "expired_history", "complete_window_violation", "negative_observed_budget", "low_observed_budget", "high_1h_burn", "evaluation_unavailable", "not_yet_eligible", "zero_traffic", "incomplete_coverage", "short_burn_unavailable", "budget_below_half", "excluded":
 		return true
 	default:
 		return false
 	}
 }
 func validBurn(value api.SloBurnValue, expected int) bool {
-	return int(value.WindowSeconds) == expected && !value.Start.IsZero() && !value.End.IsZero() && value.End.After(value.Start) && validOperationalQuality(value.Quality) && validOperationalPerformance(value.Performance)
+	return int(value.WindowSeconds) == expected && !value.Start.IsZero() && !value.End.IsZero() && value.End.After(value.Start) && validWindowCalculationProvenance(value.CalculationProvenance, value.Quality, value.Start, value.End) && validOperationalQuality(value.Quality) && validOperationalPerformance(value.Performance)
 }
 func validExhaustion(value api.SloExhaustionEstimate) bool {
 	stateOK := value.State == "estimated" || value.State == "exhausted" || value.State == "unavailable"
@@ -355,10 +355,10 @@ func validExhaustion(value api.SloExhaustionEstimate) bool {
 func validOperationalSample(value api.SloOperationalSample) bool {
 	stateOK := false
 	switch value.State {
-	case "observed", "zero_traffic", "known_empty", "missing", "expired", "not_applicable", "partial", "stale":
+	case "observed", "zero_traffic", "known_empty", "missing", "expired", "not_applicable", "partial", "stale", "excluded":
 		stateOK = true
 	}
-	if !stateOK || value.BucketStart.IsZero() || value.BucketEnd.IsZero() || !value.BucketEnd.After(value.BucketStart) || value.EvaluationAt.IsZero() || value.Revision == "" || len(value.RetainedExtrema) > 4 || !validOperationalQuality(value.Quality) ||
+	if !stateOK || !validCalculationProvenance(value.CalculationProvenance, value.Quality) || !validMaintenanceDisplay(value.DisplayCoverage) || value.BucketStart.IsZero() || value.BucketEnd.IsZero() || !value.BucketEnd.After(value.BucketStart) || value.EvaluationAt.IsZero() || value.Revision == "" || len(value.RetainedExtrema) > 4 || !validOperationalQuality(value.Quality) ||
 		!validDecimal(value.Good) || !validDecimal(value.Total) || !validDecimal(value.Attainment) || !validDecimal(value.AllowedBudget) || !validDecimal(value.RemainingBudget) || !validDecimal(value.RemainingFraction) || !validDecimal(value.Burn) {
 		return false
 	}
@@ -377,7 +377,7 @@ func validOperationalOverview(data []byte) bool {
 		return false
 	}
 	for _, item := range value.Items {
-		if !validSlo(item.Slo) || item.Urgency != "needs_attention" && item.Urgency != "watch" && item.Urgency != "healthy" || !validUrgency(item.LeadingReason) || len(item.Reasons) > 14 || item.Reasons == nil || !validOperationalValue(item.Current) || !validBurn(item.Burn1h, 3600) || !validBurn(item.Burn6h, 21600) || !validExhaustion(item.Exhaustion) || item.BudgetSparkline == nil || len(item.BudgetSparkline) > 120 {
+		if !validSlo(item.Slo) || item.Urgency != "needs_attention" && item.Urgency != "watch" && item.Urgency != "healthy" || !validUrgency(item.LeadingReason) || len(item.Reasons) > 15 || item.Reasons == nil || !validOperationalValue(item.Current) || !validBurn(item.Burn1h, 3600) || !validBurn(item.Burn6h, 21600) || !validExhaustion(item.Exhaustion) || item.BudgetSparkline == nil || len(item.BudgetSparkline) > 120 {
 			return false
 		}
 		for _, reason := range item.Reasons {
@@ -436,7 +436,7 @@ func validDailyCompliance(value api.SloDailyComplianceSeries, summary api.SloDai
 		canonicalEnd := floorSloCadence(expected[index], cadenceSeconds)
 		if item.SloId != slo.Id || item.DefinitionRevision != slo.DefinitionRevision || item.Target != slo.Target ||
 			!item.DayStart.Equal(dayStart) || !item.DayEnd.Equal(expected[index]) || !item.RequestedAt.Equal(expected[index]) || !item.EffectiveAt.Equal(canonicalEnd) ||
-			!item.UtcDate.Time.UTC().Equal(dayStart) || item.Explanation == "" || !validOperationalQuality(item.Quality) || !validOperationalPerformance(item.Performance) {
+			!item.UtcDate.Time.UTC().Equal(dayStart) || item.Explanation == "" || !validCalculationProvenance(item.CalculationProvenance, item.Quality) || !validOperationalQuality(item.Quality) || !validOperationalPerformance(item.Performance) {
 			return false
 		}
 		switch item.Status {
@@ -452,7 +452,7 @@ func validDailyCompliance(value api.SloDailyComplianceSeries, summary api.SloDai
 			}
 		case api.SloDailyComplianceDayStatusUnknown:
 			unknown++
-			if item.Performance.State != "unknown" || !item.Performance.Provisional {
+			if item.Performance.State != "unknown" || (!item.Performance.Provisional && item.Quality.State != "excluded") {
 				return false
 			}
 		case api.SloDailyComplianceDayStatusNotApplicable:

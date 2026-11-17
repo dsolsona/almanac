@@ -32,7 +32,7 @@ func TestHelpAndUnsupportedModes(t *testing.T) {
 	if code := Run(context.Background(), []string{"--help"}, &stdout, &stderr, BuildInfo{}); code != 0 {
 		t.Fatalf("help exit = %d", code)
 	}
-	if !strings.Contains(stdout.String(), "other combined modes") {
+	if !strings.Contains(stdout.String(), "alerts without backend") || !strings.Contains(stdout.String(), "backend,ui,alerts") {
 		t.Fatalf("help omits limitations: %s", stdout.String())
 	}
 	stdout.Reset()

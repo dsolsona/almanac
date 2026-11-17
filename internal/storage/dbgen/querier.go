@@ -17,6 +17,7 @@ type Querier interface {
 	ActivateSliMeasurement(ctx context.Context, arg ActivateSliMeasurementParams) (int64, error)
 	AdvanceAlertCursor(ctx context.Context, arg AdvanceAlertCursorParams) (int64, error)
 	AdvanceAlertRetentionWork(ctx context.Context, arg AdvanceAlertRetentionWorkParams) (int64, error)
+	AdvanceMaintenanceAuthorityWork(ctx context.Context, arg AdvanceMaintenanceAuthorityWorkParams) (int64, error)
 	AdvanceMaintenanceComparison(ctx context.Context, arg AdvanceMaintenanceComparisonParams) error
 	AdvanceMaintenanceIdentity(ctx context.Context, arg AdvanceMaintenanceIdentityParams) error
 	AdvanceMaintenanceReplay(ctx context.Context, arg AdvanceMaintenanceReplayParams) error
@@ -120,6 +121,7 @@ type Querier interface {
 	FailAlertCursor(ctx context.Context, arg FailAlertCursorParams) (int64, error)
 	FailDerivedBatch(ctx context.Context, arg FailDerivedBatchParams) error
 	FailLoginAttempt(ctx context.Context, arg FailLoginAttemptParams) error
+	FailMaintenanceAuthorityWork(ctx context.Context, arg FailMaintenanceAuthorityWorkParams) (int64, error)
 	FailRetentionWork(ctx context.Context, arg FailRetentionWorkParams) error
 	FailSloExtremaCursor(ctx context.Context, arg FailSloExtremaCursorParams) error
 	FenceAlertSourceGeneration(ctx context.Context, arg FenceAlertSourceGenerationParams) (int64, error)
@@ -170,6 +172,7 @@ type Querier interface {
 	HasCalculatedRetentionRows(ctx context.Context, arg HasCalculatedRetentionRowsParams) (bool, error)
 	HasExhaustedDerivedSource(ctx context.Context, arg HasExhaustedDerivedSourceParams) (bool, error)
 	HasFutureUnrevokedAgentCredential(ctx context.Context, arg HasFutureUnrevokedAgentCredentialParams) (bool, error)
+	HasMaintenanceAuthorityInput(ctx context.Context, arg HasMaintenanceAuthorityInputParams) (bool, error)
 	HasMaintenanceChangedInput(ctx context.Context, arg HasMaintenanceChangedInputParams) (bool, error)
 	HasSLIsForDatasource(ctx context.Context, datasourceID pgtype.UUID) (bool, error)
 	HasSliExecutionAttempt(ctx context.Context, arg HasSliExecutionAttemptParams) (bool, error)
@@ -228,6 +231,7 @@ type Querier interface {
 	InsertUserReceipt(ctx context.Context, arg InsertUserReceiptParams) error
 	LatestDatasourceGrantExpiry(ctx context.Context, arg LatestDatasourceGrantExpiryParams) (pgtype.Timestamptz, error)
 	LatestSliAcceptedAt(ctx context.Context, arg LatestSliAcceptedAtParams) (pgtype.Timestamptz, error)
+	LeaseMaintenanceAuthority(ctx context.Context, arg LeaseMaintenanceAuthorityParams) (AlmanacSloExclusionWork, error)
 	LeaseMaintenanceBuild(ctx context.Context, arg LeaseMaintenanceBuildParams) error
 	LeaseMaintenancePreparation(ctx context.Context, arg LeaseMaintenancePreparationParams) (AlmanacMaintenancePreparation, error)
 	ListAgentCredentials(ctx context.Context, arg ListAgentCredentialsParams) ([]ListAgentCredentialsRow, error)
@@ -302,9 +306,12 @@ type Querier interface {
 	LockLifecycleAgent(ctx context.Context, agentID pgtype.UUID) (AlmanacAgent, error)
 	LockLifecycleCredential(ctx context.Context, arg LockLifecycleCredentialParams) (LockLifecycleCredentialRow, error)
 	LockLoginAttemptForFinish(ctx context.Context, id pgtype.UUID) (AlmanacLoginAttempt, error)
+	LockMaintenanceAuthorityDue(ctx context.Context, arg LockMaintenanceAuthorityDueParams) ([]AlmanacSloExclusionWork, error)
+	LockMaintenanceAuthorityWork(ctx context.Context, sloID pgtype.UUID) (AlmanacSloExclusionWork, error)
 	LockMaintenanceBuild(ctx context.Context, id pgtype.UUID) (AlmanacMaintenanceBuild, error)
 	LockMaintenanceComparison(ctx context.Context, id pgtype.UUID) (AlmanacMaintenanceComparison, error)
 	LockMaintenanceCompatibility(ctx context.Context, sloID pgtype.UUID) (AlmanacMaintenanceCompatibility, error)
+	LockMaintenanceExtremaParent(ctx context.Context, id pgtype.UUID) (AlmanacSloExtremaCursor, error)
 	LockMaintenanceHourBuild(ctx context.Context, id pgtype.UUID) (AlmanacMaintenanceBuild, error)
 	// Preparation uses caller READ COMMITTED; facts are read after authority locks.
 	LockMaintenanceHourSli(ctx context.Context, id pgtype.UUID) (pgtype.UUID, error)
@@ -334,13 +341,21 @@ type Querier interface {
 	// read from the raw observations. Nothing is marked for an SLI with no accepted observations.
 	MarkDerivedHoursDirty(ctx context.Context, arg MarkDerivedHoursDirtyParams) error
 	MarkInitialOwnerProvisioned(ctx context.Context, arg MarkInitialOwnerProvisionedParams) error
+	MarkMaintenanceAuthorityRetarget(ctx context.Context, arg MarkMaintenanceAuthorityRetargetParams) (int64, error)
 	MarkMaintenanceCompatibilityUnavailable(ctx context.Context, arg MarkMaintenanceCompatibilityUnavailableParams) error
 	MarkSliObservation(ctx context.Context, arg MarkSliObservationParams) error
+	NextMaintenanceAuthorityBoundary(ctx context.Context, arg NextMaintenanceAuthorityBoundaryParams) (pgtype.Timestamptz, error)
 	PinAlertCutoff(ctx context.Context, arg PinAlertCutoffParams) (int64, error)
 	// Preview counts stop at 1001; the report labels these as lower bounds.
 	PreviewCalculatedRetention(ctx context.Context, arg PreviewCalculatedRetentionParams) (PreviewCalculatedRetentionRow, error)
 	PruneExpiredLoginAttempts(ctx context.Context, nowAt pgtype.Timestamptz) error
 	PublishDerivedCurrentProjection(ctx context.Context, arg PublishDerivedCurrentProjectionParams) (int64, error)
+	// The resource/source, parent cursor and targeted job fences are held by the
+	// caller. This publication never advances the parent's progress/dirty range.
+	PublishMaintenanceSloExtrema(ctx context.Context, arg PublishMaintenanceSloExtremaParams) (int64, error)
+	// The resource/source, parent cursor and targeted job fences are held by the
+	// caller. This publication never advances the parent's progress/dirty range.
+	PublishMaintenanceSloExtremaDay(ctx context.Context, arg PublishMaintenanceSloExtremaDayParams) (int64, error)
 	PublishSloExtrema(ctx context.Context, arg PublishSloExtremaParams) (int64, error)
 	PutMaintenanceCompilerMember(ctx context.Context, arg PutMaintenanceCompilerMemberParams) error
 	ReadAlertBinding(ctx context.Context, id pgtype.UUID) (ReadAlertBindingRow, error)
@@ -371,6 +386,10 @@ type Querier interface {
 	ReadDerivedWindowTotals(ctx context.Context, arg ReadDerivedWindowTotalsParams) (ReadDerivedWindowTotalsRow, error)
 	ReadExtremaDue(ctx context.Context, arg ReadExtremaDueParams) (ReadExtremaDueRow, error)
 	ReadLocalIdentity(ctx context.Context, login string) (ReadLocalIdentityRow, error)
+	ReadMaintenanceAuthorityChange(ctx context.Context, arg ReadMaintenanceAuthorityChangeParams) (int16, error)
+	ReadMaintenanceAuthorityRanges(ctx context.Context, arg ReadMaintenanceAuthorityRangesParams) ([]ReadMaintenanceAuthorityRangesRow, error)
+	ReadMaintenanceAuthorityRetargets(ctx context.Context, arg ReadMaintenanceAuthorityRetargetsParams) ([]AlmanacMaintenancePreparation, error)
+	ReadMaintenanceAuthorityWork(ctx context.Context, sloID pgtype.UUID) (AlmanacSloExclusionWork, error)
 	ReadMaintenanceBuild(ctx context.Context, id pgtype.UUID) (AlmanacMaintenanceBuild, error)
 	ReadMaintenanceCompatibilityAuthority(ctx context.Context, sloID pgtype.UUID) (ReadMaintenanceCompatibilityAuthorityRow, error)
 	ReadMaintenanceCompilerEvents(ctx context.Context, arg ReadMaintenanceCompilerEventsParams) ([]ReadMaintenanceCompilerEventsRow, error)
@@ -399,6 +418,8 @@ type Querier interface {
 	// Key arrays are admitted before SQL. Prefer exact build; only when absent seek
 	// one older exact-source candidate. Its proof is validated by the same RR reader.
 	ReadMaintenanceEvaluationScopedHours(ctx context.Context, arg ReadMaintenanceEvaluationScopedHoursParams) ([]ReadMaintenanceEvaluationScopedHoursRow, error)
+	ReadMaintenanceExtremaClaim(ctx context.Context, id pgtype.UUID) (AlmanacMaintenancePreparation, error)
+	ReadMaintenanceExtremaParent(ctx context.Context, arg ReadMaintenanceExtremaParentParams) (AlmanacSloExtremaCursor, error)
 	ReadMaintenanceHour(ctx context.Context, arg ReadMaintenanceHourParams) (ReadMaintenanceHourRow, error)
 	ReadMaintenanceHourDefinition(ctx context.Context, arg ReadMaintenanceHourDefinitionParams) (ReadMaintenanceHourDefinitionRow, error)
 	// A backward predecessor plus a bounded forward PK range; never a revision scan.
@@ -406,9 +427,18 @@ type Querier interface {
 	ReadMaintenanceHourIsolation(ctx context.Context) (string, error)
 	ReadMaintenanceHourRaw(ctx context.Context, arg ReadMaintenanceHourRawParams) ([]ReadMaintenanceHourRawRow, error)
 	ReadMaintenanceHourState(ctx context.Context, arg ReadMaintenanceHourStateParams) (ReadMaintenanceHourStateRow, error)
+	// Same interior readiness predicate as the canonical batch, in its RR snapshot.
+	// Only unmet distinct spans may consume the caller's bounded preparation prefix.
+	ReadMaintenancePendingSourceWindows(ctx context.Context, arg ReadMaintenancePendingSourceWindowsParams) ([]ReadMaintenancePendingSourceWindowsRow, error)
 	ReadMaintenanceRevision(ctx context.Context, arg ReadMaintenanceRevisionParams) (ReadMaintenanceRevisionRow, error)
 	ReadMaintenanceSnapshot(ctx context.Context, arg ReadMaintenanceSnapshotParams) ([]AlmanacMaintenanceExclusionRevision, error)
 	ReadMaintenanceState(ctx context.Context, sloID pgtype.UUID) (int64, error)
+	// Caller supplies at most 24 missing exact hour starts from one day snapshot.
+	// An older generation's failure cannot veto a distinct current repair key.
+	ReadMaintenanceTerminalExtremaHours(ctx context.Context, arg ReadMaintenanceTerminalExtremaHoursParams) ([]pgtype.Timestamptz, error)
+	// The caller supplies bounded exact bucket pairs. A terminal target from a
+	// different source snapshot cannot block a newly captured repair.
+	ReadMaintenanceTerminalExtremaTargets(ctx context.Context, arg ReadMaintenanceTerminalExtremaTargetsParams) ([]ReadMaintenanceTerminalExtremaTargetsRow, error)
 	ReadMaintenanceUnionPage(ctx context.Context, arg ReadMaintenanceUnionPageParams) ([]ReadMaintenanceUnionPageRow, error)
 	// Exact table pages read only one bounded, immutable prepared generation.
 	ReadPreparedSloValuePage(ctx context.Context, arg ReadPreparedSloValuePageParams) (ReadPreparedSloValuePageRow, error)
@@ -431,6 +461,7 @@ type Querier interface {
 	RecordMigration(ctx context.Context, arg RecordMigrationParams) error
 	RecordUserSignIn(ctx context.Context, arg RecordUserSignInParams) error
 	RedeemUserPassword(ctx context.Context, arg RedeemUserPasswordParams) (AlmanacUser, error)
+	ReleaseMaintenanceAuthorityWork(ctx context.Context, arg ReleaseMaintenanceAuthorityWorkParams) (int64, error)
 	RemoveMaintenanceCompilerMember(ctx context.Context, arg RemoveMaintenanceCompilerMemberParams) error
 	RenewAgentOwnership(ctx context.Context, arg RenewAgentOwnershipParams) (int64, error)
 	ReplaceServiceDependenciesDelete(ctx context.Context, serviceID pgtype.UUID) error

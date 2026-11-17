@@ -9,6 +9,7 @@ WITH projection_metadata AS MATERIALIZED (
 )
 SELECT s.id FROM public.almanac_slos s
 JOIN public.almanac_slo_definitions d ON d.slo_id=s.id AND d.revision=s.definition_revision
+JOIN public.almanac_slo_exclusion_state exclusion_state ON exclusion_state.slo_id=d.slo_id
 LEFT JOIN projection_metadata p ON p.slo_id=s.id
 LEFT JOIN public.almanac_slo_derived_generations g ON g.id=p.generation_id
 LEFT JOIN public.almanac_sli_source_generations source
@@ -20,14 +21,14 @@ WHERE (f.slo_id IS NULL OR ((f.attempts<5 OR f.failing_since IS NULL OR f.failin
   AND (g.id IS NULL OR g.definition_revision<>d.revision
    OR g.measurement_revision<>d.measurement_revision
    OR p.performance_complete IS NOT TRUE
-   OR g.calculation_version<>sqlc.arg(calculation_version)
+   OR g.exclusion_revision<>exclusion_state.revision OR g.calculation_version<>sqlc.arg(calculation_version)
    OR g.retention_start<>to_timestamp(ceil(extract(epoch FROM (sqlc.arg(now)::timestamptz-interval '365 days'))/d.cadence_seconds)*d.cadence_seconds)
    OR g.source_generation<>coalesce(source.generation,0)
    OR g.evaluated_through<to_timestamp(floor(extract(epoch FROM sqlc.arg(now)::timestamptz)/d.cadence_seconds)*d.cadence_seconds)
           OR coalesce(public.almanac_projection_deadline(p.current_valid_until),'-infinity'::timestamptz)<=sqlc.arg(now)::timestamptz
    OR EXISTS (SELECT 1 FROM public.almanac_slo_extrema e
       WHERE e.slo_id=s.id AND e.definition_revision=d.revision AND e.measurement_revision=d.measurement_revision
-        AND e.calculation_version=sqlc.arg(calculation_version) AND e.exclusion_revision=0 AND e.resolution_seconds=3600
+        AND e.calculation_version=sqlc.arg(calculation_version) AND e.exclusion_revision=exclusion_state.revision AND e.resolution_seconds=3600
         AND e.range_start>=date_trunc('hour',(g.evaluated_through-interval '7 days') AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
         AND e.range_end<=date_trunc('hour',g.evaluated_through AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
         AND e.published_at>coalesce(p.budget_published_at::timestamptz,'-infinity'::timestamptz)))
@@ -80,9 +81,9 @@ SELECT EXISTS (
 
 -- name: InsertDerivedGeneration :one
 INSERT INTO public.almanac_slo_derived_generations
-    (id, slo_id, definition_revision, measurement_revision, source_generation,
+    (id, slo_id, definition_revision, measurement_revision, source_generation, exclusion_revision,
      calculation_version, evaluated_through, retention_start, published_at)
-VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8)
+VALUES (gen_random_uuid(), $1, $2, $3, $4, sqlc.arg(exclusion_revision)::bigint, $5, $6, $7, $8)
 RETURNING id;
 
 -- name: PublishDerivedCurrentProjection :execrows
@@ -102,8 +103,8 @@ WHERE EXISTS (
                   public.almanac_slo_derived_generations new_generation
     WHERE old_generation.id=almanac_slo_current_projections.generation_id
       AND new_generation.id=EXCLUDED.generation_id
-      AND (old_generation.definition_revision, old_generation.source_generation, old_generation.evaluated_through)
-       <= (new_generation.definition_revision, new_generation.source_generation, new_generation.evaluated_through)
+      AND (old_generation.definition_revision, old_generation.measurement_revision, old_generation.exclusion_revision, old_generation.source_generation, old_generation.evaluated_through)
+       <= (new_generation.definition_revision, new_generation.measurement_revision, new_generation.exclusion_revision, new_generation.source_generation, new_generation.evaluated_through)
 );
 
 -- name: GetPublishedCurrentProjection :one
@@ -116,18 +117,19 @@ SELECT s.id AS slo_id, ((p.payload-'budget_sparkline'-'budget_history_generation
        g.calculation_version, g.evaluated_through, g.published_at,g.retention_start,
        coalesce(g.definition_revision=s.definition_revision
          AND g.measurement_revision=d.measurement_revision
-         AND g.exclusion_revision=0 AND g.calculation_version=sqlc.arg(calculation_version)
+         AND g.exclusion_revision=exclusion_state.revision AND g.calculation_version=sqlc.arg(calculation_version)
          AND g.source_generation<=coalesce(source.generation,0)
          AND g.evaluated_through>=sqlc.arg(now)::timestamptz-interval '365 days',false)::boolean AS usable,
        coalesce((g.definition_revision=s.definition_revision
          AND g.measurement_revision=d.measurement_revision
-         AND g.calculation_version=sqlc.arg(calculation_version)
+         AND g.exclusion_revision=exclusion_state.revision AND g.calculation_version=sqlc.arg(calculation_version)
          AND g.retention_start=to_timestamp(ceil(extract(epoch FROM (sqlc.arg(now)::timestamptz-interval '365 days'))/d.cadence_seconds)*d.cadence_seconds)
          AND g.source_generation=coalesce(source.generation,0)
          AND g.evaluated_through>=to_timestamp(floor(extract(epoch FROM sqlc.arg(now)::timestamptz)/d.cadence_seconds)*d.cadence_seconds)
              AND coalesce(public.almanac_projection_deadline(p.current_valid_until),'-infinity'::timestamptz)>sqlc.arg(now)::timestamptz),false)::boolean AS current
 FROM public.almanac_slos s
 JOIN public.almanac_slo_definitions d ON d.slo_id=s.id AND d.revision=s.definition_revision
+JOIN public.almanac_slo_exclusion_state exclusion_state ON exclusion_state.slo_id=d.slo_id
 JOIN public.almanac_services service ON service.id=d.service_id
 JOIN public.almanac_slis measurement ON measurement.id=d.sli_id
 LEFT JOIN public.almanac_slo_current_projections p ON p.slo_id=s.id

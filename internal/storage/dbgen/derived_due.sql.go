@@ -26,14 +26,14 @@ WITH projection_metadata AS MATERIALIZED (
         WHEN f.slo_id IS NOT NULL AND f.attempts>=5 AND f.failing_since<=$1::timestamptz-interval '7 days' THEN NULL
         WHEN g.id IS NULL OR g.definition_revision<>d.revision OR g.measurement_revision<>d.measurement_revision
           OR p.performance_complete IS NOT TRUE
-          OR g.calculation_version<>$2
+          OR g.exclusion_revision<>exclusion_state.revision OR g.calculation_version<>$2
           OR g.source_generation<>coalesce(source.generation,0)
           OR g.retention_start<>to_timestamp(ceil(extract(epoch FROM ($1::timestamptz-interval '365 days'))/d.cadence_seconds)*d.cadence_seconds)
           OR g.evaluated_through<to_timestamp(floor(extract(epoch FROM $1::timestamptz)/d.cadence_seconds)*d.cadence_seconds)
           OR coalesce(public.almanac_projection_deadline(p.current_valid_until),'-infinity'::timestamptz)<=$1::timestamptz
           OR EXISTS (SELECT 1 FROM public.almanac_slo_extrema e
              WHERE e.slo_id=s.id AND e.definition_revision=d.revision AND e.measurement_revision=d.measurement_revision
-               AND e.calculation_version=$2 AND e.exclusion_revision=0 AND e.resolution_seconds=3600
+               AND e.calculation_version=$2 AND e.exclusion_revision=exclusion_state.revision AND e.resolution_seconds=3600
                AND e.range_start>=date_trunc('hour',(g.evaluated_through-interval '7 days') AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
                AND e.range_end<=date_trunc('hour',g.evaluated_through AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
                AND e.published_at>coalesce(p.budget_published_at::timestamptz,'-infinity'::timestamptz))
@@ -42,6 +42,7 @@ WITH projection_metadata AS MATERIALIZED (
         END) AS at
     FROM public.almanac_slos s
     JOIN public.almanac_slo_definitions d ON d.slo_id=s.id AND d.revision=s.definition_revision
+    JOIN public.almanac_slo_exclusion_state exclusion_state ON exclusion_state.slo_id=d.slo_id
     LEFT JOIN projection_metadata p ON p.slo_id=s.id
     LEFT JOIN public.almanac_slo_derived_generations g ON g.id=p.generation_id
     LEFT JOIN public.almanac_sli_source_generations source ON source.sli_id=d.sli_id AND source.measurement_revision=d.measurement_revision
@@ -151,7 +152,7 @@ func (q *Queries) ReadDerivedMaintenanceDue(ctx context.Context, arg ReadDerived
 
 const readExtremaDue = `-- name: ReadExtremaDue :one
 WITH active AS (
-    SELECT w.id, w.slo_id, w.definition_revision, w.measurement_revision, w.calculation_version, w.built_through, w.dirty_from, w.dirty_to, w.version, w.attempts, w.lease_epoch, w.lease_until, w.next_attempt_at, w.last_error, w.failing_since, w.manual_retried_at FROM public.almanac_slo_extrema_cursor w
+    SELECT w.id, w.slo_id, w.definition_revision, w.measurement_revision, w.calculation_version, w.built_through, w.dirty_from, w.dirty_to, w.version, w.attempts, w.lease_epoch, w.lease_until, w.next_attempt_at, w.last_error, w.failing_since, w.manual_retried_at, w.exclusion_revision FROM public.almanac_slo_extrema_cursor w
     JOIN public.almanac_slos s ON s.id=w.slo_id AND s.definition_revision=w.definition_revision
     WHERE w.calculation_version=$2
 ), cursor_due AS (

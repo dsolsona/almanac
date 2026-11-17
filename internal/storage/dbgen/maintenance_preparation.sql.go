@@ -116,7 +116,7 @@ func (q *Queries) FinishMaintenancePreparation(ctx context.Context, arg FinishMa
 }
 
 const leaseMaintenancePreparation = `-- name: LeaseMaintenancePreparation :one
-UPDATE public.almanac_maintenance_preparation SET lease_token=$2,lease_epoch=lease_epoch+1,lease_until=$3,last_tick=$4,updated_at=$5 WHERE id=$1 RETURNING id, kind, slo_id, target_revision, build_id, second_build, sli_id, definition_revision, measurement_revision, hour_start, source_generation, priority, state, available_at, last_tick, lease_token, lease_epoch, lease_until, attempts, reason, created_at, updated_at
+UPDATE public.almanac_maintenance_preparation SET lease_token=$2,lease_epoch=lease_epoch+1,lease_until=$3,last_tick=$4,updated_at=$5 WHERE id=$1 RETURNING id, kind, slo_id, target_revision, build_id, second_build, sli_id, definition_revision, measurement_revision, hour_start, source_generation, priority, state, available_at, last_tick, lease_token, lease_epoch, lease_until, attempts, reason, created_at, updated_at, authority_retargeted_revision
 `
 
 type LeaseMaintenancePreparationParams struct {
@@ -159,12 +159,13 @@ func (q *Queries) LeaseMaintenancePreparation(ctx context.Context, arg LeaseMain
 		&i.Reason,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AuthorityRetargetedRevision,
 	)
 	return i, err
 }
 
 const lockMaintenancePreparation = `-- name: LockMaintenancePreparation :one
-SELECT id, kind, slo_id, target_revision, build_id, second_build, sli_id, definition_revision, measurement_revision, hour_start, source_generation, priority, state, available_at, last_tick, lease_token, lease_epoch, lease_until, attempts, reason, created_at, updated_at FROM public.almanac_maintenance_preparation WHERE id=$1 FOR UPDATE
+SELECT id, kind, slo_id, target_revision, build_id, second_build, sli_id, definition_revision, measurement_revision, hour_start, source_generation, priority, state, available_at, last_tick, lease_token, lease_epoch, lease_until, attempts, reason, created_at, updated_at, authority_retargeted_revision FROM public.almanac_maintenance_preparation WHERE id=$1 FOR UPDATE
 `
 
 func (q *Queries) LockMaintenancePreparation(ctx context.Context, id pgtype.UUID) (AlmanacMaintenancePreparation, error) {
@@ -193,12 +194,13 @@ func (q *Queries) LockMaintenancePreparation(ctx context.Context, id pgtype.UUID
 		&i.Reason,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.AuthorityRetargetedRevision,
 	)
 	return i, err
 }
 
 const lockMaintenancePreparationDue = `-- name: LockMaintenancePreparationDue :many
-SELECT id, kind, slo_id, target_revision, build_id, second_build, sli_id, definition_revision, measurement_revision, hour_start, source_generation, priority, state, available_at, last_tick, lease_token, lease_epoch, lease_until, attempts, reason, created_at, updated_at FROM public.almanac_maintenance_preparation
+SELECT id, kind, slo_id, target_revision, build_id, second_build, sli_id, definition_revision, measurement_revision, hour_start, source_generation, priority, state, available_at, last_tick, lease_token, lease_epoch, lease_until, attempts, reason, created_at, updated_at, authority_retargeted_revision FROM public.almanac_maintenance_preparation
 WHERE state='pending' AND priority=$1 AND available_at<=$2::timestamptz
  AND (lease_until IS NULL OR lease_until<=$2::timestamptz)
  AND (last_tick IS NULL OR last_tick<$3::timestamptz)
@@ -249,6 +251,7 @@ func (q *Queries) LockMaintenancePreparationDue(ctx context.Context, arg LockMai
 			&i.Reason,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.AuthorityRetargetedRevision,
 		); err != nil {
 			return nil, err
 		}

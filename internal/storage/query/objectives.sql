@@ -18,12 +18,13 @@ SELECT s.id, s.name, s.display_name, s.version, s.definition_revision, s.created
        d.service_id, service.display_name AS service_display_name, d.sli_id, sli.display_name AS sli_display_name,
        d.measurement_revision, d.target::text AS target, d.rolling_window_seconds, d.cadence_seconds,
        d.activated_at, d.evaluation_valid_from, d.historical_requested_by, d.historical_requested_at,
-       measurement.effective_from AS sli_valid_from
+       measurement.effective_from AS sli_valid_from, exclusion_state.revision AS exclusion_revision
 FROM public.almanac_slos s
 JOIN public.almanac_slo_definitions d ON d.slo_id=s.id AND d.revision=s.definition_revision
 JOIN public.almanac_services service ON service.id=d.service_id
 JOIN public.almanac_slis sli ON sli.id=d.sli_id
 JOIN public.almanac_sli_measurements measurement ON measurement.sli_id=d.sli_id AND measurement.revision=d.measurement_revision
+JOIN public.almanac_slo_exclusion_state exclusion_state ON exclusion_state.slo_id=s.id
 WHERE s.id=$1;
 
 -- name: ListSlos :many
@@ -31,12 +32,13 @@ SELECT s.id, s.name, s.display_name, s.version, s.definition_revision, s.created
        d.service_id, service.display_name AS service_display_name, d.sli_id, sli.display_name AS sli_display_name,
        d.measurement_revision, d.target::text AS target, d.rolling_window_seconds, d.cadence_seconds,
        d.activated_at, d.evaluation_valid_from, d.historical_requested_by, d.historical_requested_at,
-       measurement.effective_from AS sli_valid_from
+       measurement.effective_from AS sli_valid_from, exclusion_state.revision AS exclusion_revision
 FROM public.almanac_slos s
 JOIN public.almanac_slo_definitions d ON d.slo_id=s.id AND d.revision=s.definition_revision
 JOIN public.almanac_services service ON service.id=d.service_id
 JOIN public.almanac_slis sli ON sli.id=d.sli_id
 JOIN public.almanac_sli_measurements measurement ON measurement.sli_id=d.sli_id AND measurement.revision=d.measurement_revision
+JOIN public.almanac_slo_exclusion_state exclusion_state ON exclusion_state.slo_id=s.id
 WHERE (s.created_at,s.id) > ($1,$2::uuid) AND (sqlc.narg(service_id)::uuid IS NULL OR d.service_id=sqlc.narg(service_id))
 ORDER BY s.created_at,s.id LIMIT $3;
 
