@@ -14,7 +14,7 @@ export type AlertEvidenceWindow = {
 };
 export type AlertConditionEvidence = {
   id: string; name: string; outcome: 'matching' | 'not_matching' | 'unavailable';
-  explanation: string; threshold: string; windows: readonly [AlertEvidenceWindow, AlertEvidenceWindow]; chart: TimelineChart;
+  explanation: string; threshold: string; windows: readonly [AlertEvidenceWindow, AlertEvidenceWindow]; chart: TimelineChart; chartNote?: string;
 };
 export type AlertEvidenceSnapshot = {
   evaluatedAt: string; sloTarget: string; sloWindowSeconds: number; policyRevision: string; sloRevision: string; measurementRevision: string;
@@ -113,11 +113,12 @@ export function AlertOccurrenceDetail({ data, now, backHref, canAcknowledge, onA
     <PageHeader title={data.policyName} headingRef={heading} summary={<><a href={data.slo.href} data-app-route>{data.slo.name}</a><span className="alert-detail-severity">{data.severity[0]!.toUpperCase() + data.severity.slice(1)} severity</span></>}
       actions={data.state === 'firing' && canAcknowledge ? <Button pending={acknowledgement?.pending} onClick={event => { requested.current = event.currentTarget; onAcknowledge(data.id, data.version); }}>Acknowledge</Button> : undefined} />
     {acknowledgement?.error && <div ref={error} className="alert-detail-error" role="alert" tabIndex={-1}><p>{acknowledgement.error}</p>{onRefresh && <Button variant="outline" onClick={() => { heading.current?.focus(); onRefresh(); }}>Refresh alert</Button>}</div>}
-    <section className={`alert-detail-reason alert-detail-reason--${tone}`} aria-label="Current alert state">
-      <div><StatusMark tone={tone} label={states[data.state]} /><p>{data.reason}</p></div>
-      <p className="alert-detail-time">Started <Time value={data.openedAt} /> · {data.closedAt ? 'Duration' : 'Open'} {age(data.openedAt, data.closedAt ?? now)}</p>
-      {data.acknowledged && <p>Acknowledged by <strong>{data.acknowledged.actor}</strong> · <Time value={data.acknowledged.at} /></p>}
-      {data.closedAt && <p>Closed <Time value={data.closedAt} /></p>}{data.terminalCause && <p>{data.terminalCause}</p>}
+    <section className="alert-detail-state" aria-label="Current alert state">
+      <StatusMark tone={tone} label={states[data.state]} />
+      <span className="alert-detail-time" title={`Started ${pointTime(data.openedAt, 'UTC', true)}`}>{data.closedAt ? 'Duration' : 'Open'} {age(data.openedAt, data.closedAt ?? now)}<span className="sr-only"> · Started <Time value={data.openedAt} /></span></span>
+      {data.acknowledged && <span className="alert-detail-ack">Acknowledged by <strong>{data.acknowledged.actor}</strong> · <Time value={data.acknowledged.at} /></span>}
+      {data.closedAt && <span className="alert-detail-time">Closed <Time value={data.closedAt} /></span>}
+      {(data.state === 'disabled' || data.state === 'superseded' ? data.terminalCause || data.reason : data.reason) && <p className="alert-detail-state-note">{data.state === 'disabled' || data.state === 'superseded' ? data.terminalCause || data.reason : data.reason}</p>}
     </section>
     {data.processing.state !== 'current' && <aside className="alert-detail-processing" aria-label="Calculation progress"><strong>{data.processing.reason}</strong><p>Evaluation due <Time value={data.processing.dueAt} /> · Last evaluated <Time value={data.latest.evaluatedAt} /></p><p>Total delay: {data.processing.totalDelaySeconds} seconds{data.processing.aggregateWaitSeconds !== undefined && <> · Aggregate wait: {data.processing.aggregateWaitSeconds} seconds</>}</p><p>The committed alert state is shown above.</p></aside>}
     <section className="alert-detail-card alert-detail-evidence" aria-labelledby={`${id}-evidence`}>
@@ -128,13 +129,16 @@ export function AlertOccurrenceDetail({ data, now, backHref, canAcknowledge, onA
         <div className="alert-detail-chart-title"><h2>Burn rate</h2><Time value={data.latest.evaluatedAt} /></div>
         <p className="sr-only">{selected.chart.summary}</p>
         <TimelineChartView chart={selected.chart} showHeader={false} generation={`${data.version}:${data.latest.evaluatedAt}:${selected.id}`} inspection />
+        {selected.chartNote&&<p className="alert-detail-chart-note">{selected.chartNote}</p>}
         <div className="alert-detail-legend" aria-label="Chart series">{selected.chart.lanes.flatMap(lane => lane.series).map((series, index) => <span key={series.id}><i className={`alert-detail-series--${series.color === 'critical' ? 'critical' : series.color === 'primary' ? 0 : index}`} aria-hidden="true" />{series.label}</span>)}</div>
-        <p className="alert-detail-condition-outcome">{data.latest.conditions.length === 1 && <strong>{outcomes[selected.outcome]} · </strong>}{selected.explanation}</p>
+        {selected.outcome === 'unavailable' && <p className="alert-detail-condition-outcome">{selected.explanation}</p>}
       </> : <p role="alert">Latest condition evidence unavailable.</p>}
-      <details className="alert-detail-disclosure"><summary>Latest evidence provenance</summary><Provenance snapshot={data.latest} /></details>
-      <details className="alert-detail-disclosure"><summary>Original firing evidence</summary><section aria-label="Original firing evidence">{data.original.conditions.map(condition => <div className="alert-detail-original-condition" key={condition.id}><h3>{condition.name} · {outcomes[condition.outcome]}</h3><Windows condition={condition} bounds /><p>{condition.explanation}</p></div>)}<Provenance snapshot={data.original} /></section></details>
     </section>
-    <details className="alert-detail-card alert-detail-expand"><summary>How this is calculated</summary><div>{selected ? <Calculation condition={selected} snapshot={data.latest} /> : <p>Calculation evidence unavailable.</p>}<p className="alert-detail-calculation-time">Evaluated <Time value={data.latest.evaluatedAt} /></p></div></details>
-    <details className="alert-detail-card alert-detail-expand" open><summary>Lifecycle history</summary><p className="alert-detail-detection">Detected <Time value={data.detectedAt} /></p><ol className="alert-detail-history">{data.lifecycle.map(event => <li key={event.id}><Time value={event.at} /><div><h3>{event.title}</h3><p>{event.description}</p>{event.actor && <p>{event.actor}</p>}{event.effectiveAt && event.effectiveAt !== event.at && <p>Effective <Time value={event.effectiveAt} /></p>}{event.cause && <p>{event.cause}</p>}</div></li>)}</ol></details>
+    <details className="alert-detail-card alert-detail-expand"><summary>Evidence details</summary><div>
+      <section className="alert-detail-explanation" aria-labelledby={`${id}-calculation`}><h3 id={`${id}-calculation`}>How this is calculated</h3>{selected ? <Calculation condition={selected} snapshot={data.latest} /> : <p>Calculation evidence unavailable.</p>}<p className="alert-detail-calculation-time">Evaluated <Time value={data.latest.evaluatedAt} /></p></section>
+      <section className="alert-detail-original" aria-labelledby={`${id}-original`}><h3 id={`${id}-original`}>Original firing evidence</h3>{data.original.conditions.map(condition => <div className="alert-detail-original-condition" key={condition.id}><h3>{condition.name} · {outcomes[condition.outcome]}</h3><Windows condition={condition} bounds /><p>{condition.explanation}</p></div>)}</section>
+      <details className="alert-detail-disclosure"><summary>Technical details</summary><h3>Latest evaluation</h3><Provenance snapshot={data.latest} /><h3>Firing evaluation</h3><Provenance snapshot={data.original} /></details>
+    </div></details>
+    <details className="alert-detail-card alert-detail-expand"><summary>Lifecycle history</summary><p className="alert-detail-detection">Detected <Time value={data.detectedAt} /></p><ol className="alert-detail-history">{data.lifecycle.map(event => <li key={event.id}><Time value={event.at} /><div><h3>{event.title}</h3><p>{event.description}</p>{event.actor && <p>{event.actor}</p>}{event.effectiveAt && event.effectiveAt !== event.at && <p>Effective <Time value={event.effectiveAt} /></p>}{event.cause && <p>{event.cause}</p>}</div></li>)}</ol></details>
   </article>;
 }

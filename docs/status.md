@@ -1,3 +1,32 @@
+Alert review correction, 2026-11-17: [PR #129](https://github.com/dsolsona/almanac/pull/129)
+has one valid CodeRabbit finding: identical successive success notices can inherit
+the previous dismissal deadline. Both consumers now assign a fresh notification
+ID, preserving the mounted live region and reading-time guards. Five focused unit
+cases and seven browser cases pass, including exact repeated-message timing.
+[F4-T52](tasks/F4-T52.md) preserves the regression and fixture-clock diagnosis.
+All four application CI gates pass on prior `cae4991`; the correction receives
+fresh CI/review after publication.
+
+Alert UI refinement, 2026-11-17: [PR #129](https://github.com/dsolsona/almanac/pull/129)
+now has a compact status/duration line, shared save toast, one-click supporting
+evidence and a quieter chart-led detail hierarchy. Nineteen focused unit cases,
+the route/design and detail browser selections, and both rebuilt normal Docker
+journeys pass. The original-head CI style-comparison race is corrected by binding
+to the loaded policy cell. A controlled regression also fixes repeated-toast
+keyboard dismissal. [F4-T52](tasks/F4-T52.md) records exact commands and host exit-143
+caveats and both verification rounds. The screenshot bundle was removed at the
+maintainer’s request before merge. Updated broad CI remains required.
+
+Alert UI correction, 2026-11-17: [F4-T52](tasks/F4-T52.md) implements the
+maintainer-approved save-to-list flow, shared policies table, toolbar view selection,
+factual state copy and consolidated evidence disclosures. Forty-seven focused unit
+cases, forty-eight browser cases and both normal Docker onboarding/policy-management
+journeys pass; strict TypeScript, production build and production-exclusion checks
+pass. Visual checks cover before/after theme/mobile layouts, the Services
+reference and the deployed save flow. Independent review's same-URL refresh and maintenance-attribution findings
+are corrected. The candidate is ready for PR review; broad CI remains pending. This UI correction
+does not certify deferred capacity/performance acceptance.
+
 Alert review closeout, 2026-11-17: [PR #127](https://github.com/dsolsona/almanac/pull/127)
 is the only open alert implementation PR. All five inline CodeRabbit threads are
 resolved. The additional review-summary proof-window finding is confirmed and

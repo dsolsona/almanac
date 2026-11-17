@@ -1,6 +1,6 @@
 import {useResourceTable, ResourceTableHead, ResourceTableMobileSort, resourceRowClick, type ResourceColumn} from '../components/ui/ResourceTable.tsx';
-import { useState } from 'react';
-import { Button, ChoiceChips, Combobox, FilterSelect, FormActions, FormSection, LabelChips, Pager, PageHeader, Panel, RefreshButton, RoleChip, SearchField, SegmentedControl, SelectionSummary, StatusChip, StatusMark, TextareaField, TextField, ThemeChoice, Toolbar, ToolbarSpacer, type ComboboxOption } from '../components/ui/index.ts';
+import { useCallback, useState } from 'react';
+import { Button, ChoiceChips, Combobox, FilterSelect, FormActions, FormSection, LabelChips, Pager, PageHeader, Panel, RefreshButton, RoleChip, SearchField, SegmentedControl, SelectionSummary, StatusChip, StatusMark, TextareaField, TextField, ThemeChoice, Toast, Toolbar, ToolbarSpacer, type ComboboxOption } from '../components/ui/index.ts';
 
 // Local catalogue data only; never application records.
 const datasourceExamples: ComboboxOption[] = [
@@ -14,6 +14,8 @@ const resourceExamples = [{id:'a',name:'Request success',count:6},{id:'b',name:'
 const resourceColumns: ResourceColumn<(typeof resourceExamples)[number]>[] = [{id:'name',label:'SLI',value:item=>item.name},{id:'count',label:'SLOs',value:item=>item.count}];
 
 export function OperationalControlsSection() {
+  const [toastNotice,setToastNotice]=useState({id:0,message:''});
+  const dismissToast=useCallback(()=>setToastNotice(current=>({...current,message:''})),[]);
   const resourceTable = useResourceTable({items:resourceExamples,loadPage:async()=>({items:resourceExamples,next_cursor:''}),pageSize:10});
   const [openedResource,setOpenedResource] = useState('');
   const [filter, setFilter] = useState('all');
@@ -38,6 +40,7 @@ export function OperationalControlsSection() {
   return <section className="catalogue-section" id="operational" aria-labelledby="operational-heading">
     <div className="section-heading"><p className="eyebrow mono">08 / OPERATIONAL</p><h2 id="operational-heading">Operational controls</h2><p>Status marks, segmented filters, preset chips, type-ahead pickers and the shared list composition from ADR-0028. Every example keeps its state in this page.</p></div>
 
+    <Panel heading="Success feedback"><p>Transient confirmations stay outside the page layout. Hover or focus pauses dismissal.</p><Button variant="outline" onClick={()=>setToastNotice(current=>({id:current.id+1,message:'Alert policy saved.'}))}>Show success toast</Button><Toast notificationId={toastNotice.id} message={toastNotice.message} onDismiss={dismissToast}/></Panel>
     <Panel heading="Page header, search and pager">
       <div className="operational-list-demo">
         <PageHeader title="SLOs" actions={<Button>New SLO</Button>} />

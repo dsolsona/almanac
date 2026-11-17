@@ -71,6 +71,7 @@
   --control-height: 38px;
   --focus-ring: var(--accent);
   --dialog-scrim: rgb(24 52 64 / 55%);
+  --layer-notice: 15;
   --layer-dialog: 20;
   --space-1: var(--almanac-space-1);
   --space-2: var(--almanac-space-2);

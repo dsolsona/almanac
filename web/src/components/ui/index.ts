@@ -35,3 +35,5 @@ export {useResourceTable, ResourceTableHead, ResourceTableMobileSort, resourceRo
 export type {ResourceColumn} from './ResourceTable.tsx';
 
 export { InlineValue } from './InlineValue.tsx';
+
+export { Toast } from './Toast.tsx';

@@ -24,7 +24,7 @@ function snapshot(at: string, original = false): AlertEvidenceSnapshot {
 const initial: AlertOccurrenceDetailData = {
   id: 'checkout-sustained', version: '11', policyName: 'Checkout sustained burn',
   slo: { id: 'checkout-availability', name: 'Checkout availability', service: 'Checkout', href: '/design-system#alert-detail-slo' },
-  state: 'firing', severity: 'medium', reason: 'Both burn windows exceed the threshold.', openedAt: '2026-11-12T10:32:00Z', detectedAt: '2026-11-12T10:32:08Z', processing: { state: 'current' },
+  state: 'firing', severity: 'medium', reason: '', openedAt: '2026-11-12T10:32:00Z', detectedAt: '2026-11-12T10:32:08Z', processing: { state: 'current' },
   original: snapshot('2026-11-12T10:32:00Z', true), latest: snapshot(now),
   lifecycle: [{ id: 'fired', at: '2026-11-12T10:32:08Z', effectiveAt: '2026-11-12T10:32:00Z', title: 'Alert fired', description: 'Both burn windows exceeded the threshold in the same evaluation.' }],
 };
@@ -34,7 +34,7 @@ function handoff(unavailable = false): AlertOccurrenceDetailData {
     windows: [{ ...latest.windows[0], seconds: 300, start: '2026-11-12T10:37:00Z', total: '5000', bad: '30', observedErrorRate: '0.006', burn: '6' }, { ...latest.windows[1], seconds: 3600, start: '2026-11-12T09:42:00Z', total: '60000', bad: '480', observedErrorRate: '0.008', burn: '8' }],
     chart: { ...latest.chart, summary: 'The supplied fast-burn condition is not matching.', referenceLines: [{ lane: 'burn', value: '14.4', label: '14.4× threshold' }], lanes: [{ id: 'burn', label: 'Burn', unit: '×', series: [{ id: 'short', label: '5 min burn', color: 'critical', points: [{ timestamp: now, value: '6', coverage: 'complete' }] }, { id: 'long', label: '1 h burn', color: 'primary', points: [{ timestamp: now, value: '8', coverage: 'complete' }] }] }] } };
   const slow: AlertConditionEvidence = unavailable ? { ...latest, outcome: 'unavailable', explanation: 'Missing observations prevent recovery.', windows: [{ ...latest.windows[0], bad: null, total: null, observedErrorRate: null, burn: null, reason: 'Missing observations' }, { ...latest.windows[1], bad: null, total: null, observedErrorRate: null, burn: null, reason: 'Missing observations' }], chart: { ...latest.chart, lanes: latest.chart.lanes.map(lane => ({ ...lane, series: lane.series.map(series => ({ ...series, points: series.points.map((point, index) => index < 5 ? point : { ...point, value: null, coverage: 'missing', reason: 'Missing observations' }) })) })) } } : latest;
-  return { ...initial, state: 'acknowledged', acknowledged: { actor: 'Jamie Morgan', at: '2026-11-12T10:34:00Z' }, reason: unavailable ? 'Acknowledged; recovery is not confirmed.' : 'The sustained-burn condition still matches.', latest: { ...initial.latest, primaryConditionId: 'sustained', conditions: [fast, slow] }, lifecycle: [...initial.lifecycle, { id: 'ack', at: '2026-11-12T10:34:00Z', title: 'Alert acknowledged', description: 'Acknowledged globally for this occurrence.', actor: 'Jamie Morgan' }] };
+  return { ...initial, state: 'acknowledged', acknowledged: { actor: 'Jamie Morgan', at: '2026-11-12T10:34:00Z' }, reason: unavailable ? 'Missing observations prevent recovery.' : '', latest: { ...initial.latest, primaryConditionId: 'sustained', conditions: [fast, slow] }, lifecycle: [...initial.lifecycle, { id: 'ack', at: '2026-11-12T10:34:00Z', title: 'Alert acknowledged', description: 'Acknowledged globally for this occurrence.', actor: 'Jamie Morgan' }] };
 }
 
 function clearSnapshot(): AlertEvidenceSnapshot {
@@ -55,12 +55,13 @@ export function AlertDetailExample() {
   function acknowledge(id: string, version: string) {
     if (mode === 'pending') { setAction({ pending: true }); return; }
     if (mode === 'error' || id !== data.id || version !== data.version) { setAction({ pending: false, error: 'The alert changed. Refresh to inspect the committed state.' }); return; }
-    if (mode === 'resolved') { show({ ...data, version: '12', state: 'resolved', latest: clearSnapshot(), closedAt: now, reason: 'All conditions are not matching.', lifecycle: [...data.lifecycle, { id: 'resolved', at: now, title: 'Alert resolved', description: 'All conditions were confirmed not matching before acknowledgement.' }] }); return; }
+    if (mode === 'resolved') { show({ ...data, version: '12', state: 'resolved', latest: clearSnapshot(), closedAt: now, reason: '', lifecycle: [...data.lifecycle, { id: 'resolved', at: now, title: 'Alert resolved', description: 'All conditions were confirmed not matching before acknowledgement.' }] }); return; }
     show({ ...data, version: '12', state: 'acknowledged', acknowledged: { actor: 'Alex Rivera', at: now }, lifecycle: [...data.lifecycle, { id: 'acknowledged', at: now, title: 'Alert acknowledged', description: 'Acknowledged globally for this occurrence.', actor: 'Alex Rivera' }] });
   }
   return <section className="catalogue-section" id="alert-detail" aria-labelledby="alert-detail-title">
     <div className="section-heading"><p className="eyebrow mono">ALERTS / DETAIL</p><h2 id="alert-detail-title">Alert occurrence detail</h2><p>Fictional supplied evidence. Actions simulate committed responses locally and do not change Almanac.</p></div>
     <div className="example-row">
+      <Button variant="outline" onClick={() => show({ ...initial, latest: { ...initial.latest, conditions: initial.latest.conditions.map(condition => ({ ...condition, chartNote: 'The chart shows selected evaluations; brief peaks may not appear. Exact values for the latest evaluation are shown above.' })) } })}>Show reduced chart detail</Button>
       <Button variant="outline" onClick={() => show(handoff())}>Show condition handoff</Button>
       <Button variant="outline" onClick={() => show(handoff(true))}>Show unavailable evidence</Button>
       <Button variant="outline" onClick={() => show({ ...initial, latest: snapshot('2026-11-12T10:37:00Z'), processing: { state: 'waiting', dueAt: '2026-11-12T10:38:00Z', reason: 'Waiting for aggregate preparation', totalDelaySeconds: 240, aggregateWaitSeconds: 180 } })}>Show calculation waiting</Button>

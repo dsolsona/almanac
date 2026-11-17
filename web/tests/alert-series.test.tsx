@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import type { components } from '../src/api/generated.ts';
-import { evidenceChart } from '../src/alerts/detailAdapters.ts';
+import { evidenceChart, occurrenceDetail } from '../src/alerts/detailAdapters.ts';
 import { series as validSeries } from '../src/alerts/validation.ts';
 import { validateTimeline } from '../src/components/charts/timelineModel.ts';
 type Schema=components['schemas'];
@@ -49,4 +49,27 @@ it('rejects wrong condition, duplicate cutoff, dishonest sampling and one-sided 
   expect(validSeries({...value,sampling:{...value.sampling,returned:1}},'fast')).toBe(false);
   const broken=structuredClone(value);broken.points[0]!.condition.short.total=undefined;
   expect(validSeries(broken,'fast')).toBe(false);
+});
+
+
+function detailInput() {
+  const evidence:Schema['AlertEvidence']={id:first.evaluation_id,scheduled_at:first.scheduled_at,committed_at:first.committed_at,objective:value.objective,evaluation:{policy_id:policy,evaluation_revision:'1',snapshot:first.snapshot,truth:'breaching',conditions:[structuredClone(first.condition)]}};
+  const record:Schema['AlertRecord']={id:'alert',policy_id:policy,evaluation_revision:'1',state:'firing',version:'1',sequence:'1',firing_snapshot:first.snapshot,latest_snapshot:first.snapshot,latest_breaching_snapshot:first.snapshot,opened_detected_at:first.scheduled_at,updated_at:first.committed_at,original_policy:{name:'Burn',severity:'medium',slo_name:'Checkout',service_name:'Checkout',target:'0.999',rolling_window_seconds:2592000}};
+  const processing={revision:'1',schedulable:true,exhausted:false,lag_seconds:0} as Schema['AlertProcessing'];
+  return {record,evidence,processing};
+}
+it('distinguishes maintenance resolution from ordinary condition recovery',()=>{
+  const {record,evidence,processing}=detailInput();record.state='resolved';
+  const transitions:Schema['AlertTransitionPage']={items:[{id:'transition',to:'resolved',cause:'resolved_after_maintenance_change',request_id:'evaluation',sequence:'2',effective_at:first.scheduled_at,detected_at:first.scheduled_at}]};
+  const maintenance=occurrenceDetail(record,evidence,evidence,processing,transitions,new Map());
+  expect(maintenance.reason).toBe('Resolved after a maintenance exclusion changed.');
+  expect(occurrenceDetail(record,evidence,evidence,processing,{items:[]},new Map()).reason).toBe('');
+  transitions.items[0]!.cause='conditions_cleared';
+  expect(occurrenceDetail(record,evidence,evidence,processing,transitions,new Map()).reason).toBe('');
+});
+it('keeps an acknowledged alert open when observations are unavailable',()=>{
+  const {record,evidence,processing}=detailInput();record.state='acknowledged';
+  evidence.evaluation.truth='indeterminate';evidence.evaluation.conditions[0]!.outcome='unavailable';
+  const result=occurrenceDetail(record,evidence,evidence,processing,{items:[]},new Map());
+  expect(result.state).toBe('acknowledged');expect(result.reason).toContain('Recovery cannot be confirmed');
 });

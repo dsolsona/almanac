@@ -1,10 +1,7 @@
 .alerts-page { display: grid; gap: var(--space-5); min-width: 0; }
 .alert-page-actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-3); }
 .alert-page-context { color: var(--text-2); margin: 0; font-size: .85rem; }
-.alert-page-view { display: flex; gap: var(--space-5); align-items: center; border-bottom: 1px solid var(--border); padding-bottom: var(--space-3); }
-.alert-page-view a { color: var(--text-2); text-decoration: none; font-size: .85rem; }
-.alert-page-view a[aria-current] { color: var(--text); font-weight: 600; }
-.alert-page-view a:last-child { margin-left: auto; }
-.alert-policy-table td small { display: block; color: var(--text-2); margin-top: var(--space-1); }
-.alert-policy-table tbody tr { cursor: pointer; }
-.alert-policy-table { min-width: 38rem; }
+.alert-policy-table a { color: var(--text); text-underline-offset: 3px; }
+.alerts-page > .ui-resource-panel { margin-bottom: 0; }
+
+.alerts-page .ui-page-head__actions a.ui-button { text-decoration: none; }

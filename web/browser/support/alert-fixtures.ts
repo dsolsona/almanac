@@ -12,7 +12,7 @@ function evidence(cutoff:string):Schema['AlertEvidence']{
  const window=(seconds:number)=>({snapshot,start:new Date(Date.parse(cutoff)-seconds*1000).toISOString(),end:cutoff,quality:'complete' as const,good:'9856',total:'10000',bad:'144',observed_error_rate:'0.0144',allowed_error_rate:'0.001',burn:'14.4'});
  return {id:cutoff===at?'90000000-0000-4000-8000-000000000004':'90000000-0000-4000-8000-000000000005',scheduled_at:cutoff,committed_at:cutoff,evaluation:{policy_id:policyID,evaluation_revision:'1',snapshot,truth:'breaching',conditions:alertPolicy.conditions.map(condition=>({id:condition.id,threshold:condition.threshold,outcome:'matching',short:window(condition.short_window_seconds),long:window(condition.long_window_seconds)}))},objective:{target:'0.999',cadence_seconds:60,definition_valid_from:'2026-10-01T00:00:00Z',measurement_valid_from:'2026-10-01T00:00:00Z',retention_start:'2026-10-01T00:00:00Z'}};
 }
-export async function alertFixture(page:Page,options:{role?:string;uncertainCreate?:boolean;conflictUpdate?:boolean;expiredReceipt?:boolean;tracing?:boolean;listDelay?:Promise<void>;sloDelay?:Promise<void>;sloFailure?:boolean;occurrenceFailure?:boolean}={}){
+export async function alertFixture(page:Page,options:{createDelay?:Promise<void>;sampledSeries?:boolean;role?:string;uncertainCreate?:boolean;conflictUpdate?:boolean;expiredReceipt?:boolean;tracing?:boolean;listDelay?:Promise<void>;sloDelay?:Promise<void>;sloFailure?:boolean;occurrenceFailure?:boolean}={}){
  let sloRequests=0;
  let policy=structuredClone(alertPolicy),acknowledged=false,createCount=0,createKey='',command:Schema['AlertCommandResult']|undefined;
  const requests:{path:string;method:string;body:unknown;key:string|null;etag:string|null}[]=[];
@@ -29,6 +29,7 @@ export async function alertFixture(page:Page,options:{role?:string;uncertainCrea
   requests.push({path:url.pathname+url.search,method,body:request.postDataJSON(),key:request.headers()['idempotency-key']??null,etag:request.headers()['if-match']??null});
   if(path==='/api/v1/alert-commands')return reply(options.expiredReceipt?{status:'expired'}:{status:'committed',result:command});
   if(path==='/api/v1/alert-policies'&&method==='POST'){
+   if(options.createDelay)await options.createDelay;
    createCount++;createKey=request.headers()['idempotency-key'];const body=request.postDataJSON();policy={...policy,...body};command={operation:'alert-policy.create',request_id:'original-create',policy};
    return options.uncertainCreate?reply({code:'internal_error',request_id:'original-create'},500):reply(command,201,`"alert-policy:${policy.id}:${policy.version}"`);
   }
@@ -45,7 +46,7 @@ export async function alertFixture(page:Page,options:{role?:string;uncertainCrea
   if(path===`/api/v1/alerts/${alertID}`)return reply(occurrence(),200,`"alert-occurrence:${alertID}:${acknowledged?'2':'1'}"`);
   if(path===`/api/v1/alerts/${alertID}/acknowledge`){acknowledged=true;return reply({operation:'alert.acknowledge',request_id:'ack',alert:occurrence()},200,`"alert-occurrence:${alertID}:2"`);}
   if(path===`/api/v1/alerts/${alertID}/evidence`)return reply(url.searchParams.get('selection')==='firing'?original:latest);
-  if(path===`/api/v1/alerts/${alertID}/series`){const id=url.searchParams.get('condition_id')!,index=alertPolicy.conditions.findIndex(condition=>condition.id===id);return reply({policy_id:policyID,evaluation_revision:'1',objective:latest.objective,condition:alertPolicy.conditions[index],start:'2026-11-15T10:00:00Z',end:at,points:[original,latest].map(value=>({evaluation_id:value.id,snapshot:value.evaluation.snapshot,scheduled_at:value.scheduled_at,committed_at:value.committed_at,condition:value.evaluation.conditions[index]})),gaps:[],sampling:{total:2,returned:2,reduced:false,omitted_extrema:false,method:'exact'}});}
+  if(path===`/api/v1/alerts/${alertID}/series`){const id=url.searchParams.get('condition_id')!,index=alertPolicy.conditions.findIndex(condition=>condition.id===id);return reply({policy_id:policyID,evaluation_revision:'1',objective:latest.objective,condition:alertPolicy.conditions[index],start:'2026-11-15T10:00:00Z',end:at,points:[original,latest].map(value=>({evaluation_id:value.id,snapshot:value.evaluation.snapshot,scheduled_at:value.scheduled_at,committed_at:value.committed_at,condition:value.evaluation.conditions[index]})),gaps:[],sampling:options.sampledSeries?{total:3,returned:2,reduced:true,omitted_extrema:true,method:'extrema_priority'}:{total:2,returned:2,reduced:false,omitted_extrema:false,method:'exact'}});}
   if(path===`/api/v1/alerts/${alertID}/transitions`)return reply({items:[{id:'90000000-0000-4000-8000-000000000006',to:'firing',cause:'condition_matched',request_id:'evaluate',sequence:'1',effective_at:earlier,detected_at:earlier},...(acknowledged?[{id:'90000000-0000-4000-8000-000000000007',from:'firing',to:'acknowledged',cause:'acknowledged',actor_id:actorID,request_id:'ack',sequence:'2',effective_at:at,detected_at:at}]:[])]});
   return reply({code:'not_found',request_id:'fixture'},404);
  });
