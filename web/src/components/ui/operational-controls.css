@@ -42,6 +42,9 @@
 /* Combobox */
 .ui-combobox { position: relative; }
 .ui-combobox__input { padding-right: 36px; }
+.ui-control.ui-combobox__input--selections-below { padding-right: 36px; }
+.ui-control.ui-combobox__input--selections-below:focus-visible { box-shadow: none; }
+.ui-combobox__selections { max-height: 132px; margin-top: var(--space-2); overflow: auto; }
 .ui-combobox__icon { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--text-3); pointer-events: none; }
 .ui-combobox__list { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 5; margin: 0; padding: 4px; list-style: none; max-height: 280px; overflow: auto; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); box-shadow: var(--shadow); }
 .ui-combobox__list[hidden] { display: none; }

@@ -29,7 +29,13 @@ type Props = {
   noMatch?: { text: (term: string) => string; action?: { label: (term: string) => string; onSelect: (term: string) => void } };
   searchLabelOnly?: boolean;
   selectionPresentation?: 'summary' | 'compact';
-  multiple?: {selected: ComboboxOption[]; onRemove: (id:string)=>void; removeLabel?: (option:ComboboxOption)=>string};
+  multiple?: {
+    selected: ComboboxOption[];
+    onRemove: (id: string) => void;
+    removeLabel?: (option: ComboboxOption) => string;
+    placement?: 'inline' | 'below';
+    selectionLabel?: string;
+  };
   // The caller supplies filtered options when handling search.
   onSearch?: (term:string)=>void;
 };
@@ -117,11 +123,32 @@ export function Combobox({ id, label, options, value, onChange, placeholder, hin
     </div>;
   }
 
+  const selectionsBelow = multiple?.placement === 'below';
+  const selectionTokens = multiple && multiple.selected.length > 0 && (
+    <ul className="ui-input-tokens" aria-label={multiple.selectionLabel ?? 'Selected dependencies'}>
+      {multiple.selected.map(option => (
+        <li className="ui-input-token" key={option.id}>
+          <span>{option.label}</span>
+          <button type="button" disabled={disabled} aria-label={multiple.removeLabel?.(option) ?? `Remove ${option.label}`}
+            onClick={() => {
+              multiple.onRemove(option.id);
+              input.current?.focus();
+              setOpen(false);
+            }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" aria-hidden="true">
+              <path d="m6 6 12 12M18 6 6 18"/>
+            </svg>
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+
   return <div className="ui-field">
     <label className="ui-label" htmlFor={id}>{label}</label>
     <div className="ui-combobox" ref={wrapper} onBlur={(event) => { if (event.relatedTarget instanceof Node && wrapper.current?.contains(event.relatedTarget)) return; setOpen(false); setActive(-1); }}>
-      <div className={multiple?'ui-combobox__tokens':'ui-combobox__control'}>
-      {multiple&&multiple.selected.length>0&&<ul className="ui-input-tokens" aria-label="Selected dependencies">{multiple.selected.map(option=><li className="ui-input-token" key={option.id}><span>{option.label}</span><button type="button" disabled={disabled} aria-label={multiple.removeLabel?.(option)??`Remove ${option.label}`} onClick={()=>{multiple.onRemove(option.id);input.current?.focus();setOpen(false);}}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></li>)}</ul>}
+      <div className={multiple && !selectionsBelow ? 'ui-combobox__tokens' : 'ui-combobox__control'}>
+      {!selectionsBelow && selectionTokens}
       <input
         ref={input}
         id={id}
@@ -133,7 +160,7 @@ export function Combobox({ id, label, options, value, onChange, placeholder, hin
         aria-invalid={error ? true : undefined}
         aria-describedby={describedBy}
         autoComplete="off"
-        className={`ui-control ui-combobox__input ${error ? 'ui-control--invalid' : ''}`.trim()}
+        className={`ui-control ui-combobox__input ${selectionsBelow ? 'ui-combobox__input--selections-below' : ''} ${error ? 'ui-control--invalid' : ''}`.trim()}
         placeholder={placeholder}
         value={term}
         disabled={disabled}
@@ -178,5 +205,8 @@ export function Combobox({ id, label, options, value, onChange, placeholder, hin
     </div>
     {hint && <p className="ui-hint" id={hintId}>{hint}</p>}
     {error && <p className="ui-error" id={errorId}>{error}</p>}
+    {selectionsBelow && selectionTokens && (
+      <div className="ui-combobox__selections">{selectionTokens}</div>
+    )}
   </div>;
 }

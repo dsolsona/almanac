@@ -1,0 +1,1 @@
+{"extends":"../tsconfig.json","include":["./Preview.tsx","../src/vite-env.d.ts"]}

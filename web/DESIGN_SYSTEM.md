@@ -166,6 +166,10 @@ Operational controls (ADR-0028), demonstrated in the catalogue's Operational sec
   and Escape restores the original text. Input and display use matching geometry,
   padded suffixes and associated errors. Invalid values remain visible and cannot
   silently submit the previous value. The alert-policy catalogue demonstrates it.
+  Multi-select callers can show selected chips below search with
+  `multiple.placement: 'below'`. Search retains its width and one focus border,
+  and removing a chip returns focus to search. The Operational catalogue shows
+  both inline dependencies and the search-first maintenance picker.
 - `SelectionSummary` shows status, title, badge, detail, optional message and
   action; the warning variant uses the warning wash.
 - `FormSection` and `FormActions` compose create and edit forms as numbered
