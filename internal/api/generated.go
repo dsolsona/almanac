@@ -4100,6 +4100,9 @@ type MaintenanceAllServicesScopeKind string
 
 // MaintenanceEnd defines model for MaintenanceEnd.
 type MaintenanceEnd struct {
+	// End Use a zero-offset UTC instant at whole-second precision aligned to the applicable observation grids.
+	//
+	// Example: 2027-01-15T16:00:00Z
 	End time.Time `json:"end"`
 
 	// Reason Maximum 4096 UTF-8 bytes.
@@ -4123,9 +4126,11 @@ type MaintenanceImpactMember struct {
 type MaintenanceImpactPage struct {
 	InventoryAt time.Time                 `json:"inventory_at"`
 	Items       []MaintenanceImpactMember `json:"items"`
-	NextCursor  *string                   `json:"next_cursor,omitempty"`
 
-	// Ready False if effective membership is still being prepared.
+	// NextCursor Follow until absent to retrieve all participation intervals. One SLO can have several intervals.
+	NextCursor *string `json:"next_cursor,omitempty"`
+
+	// Ready False for future or preparing effective membership. True for final results including revisions superseded before activation.
 	Ready bool `json:"ready"`
 
 	// Total Exact number of distinct affected SLOs across the inventory or effective membership page set.
@@ -4434,6 +4439,14 @@ type SafeIdentity struct {
 	UserId     string `json:"user_id"`
 }
 
+// ScopedMaintenanceOverflow Chart grouping for the last first-page participation interval and all following intervals. The bounds are clipped to the requested range and enclose the grouped intervals. They do not describe continuous exclusion coverage.
+type ScopedMaintenanceOverflow struct {
+	// Count Exact decimal participation interval count.
+	Count string    `json:"count"`
+	End   time.Time `json:"end"`
+	Start time.Time `json:"start"`
+}
+
 // ScopedMaintenancePage defines model for ScopedMaintenancePage.
 type ScopedMaintenancePage struct {
 	Items      []ScopedMaintenanceWindow `json:"items"`
@@ -4455,8 +4468,8 @@ type ScopedMaintenanceTimelinePage struct {
 	Items      []ScopedMaintenanceTimelineInterval `json:"items"`
 	NextCursor *string                             `json:"next_cursor,omitempty"`
 
-	// Overflow Chart grouping for the last first-page window and all following windows. The bounds are clipped to the requested range and enclose the grouped windows. They do not describe continuous exclusion coverage.
-	Overflow *MaintenanceOverflow `json:"overflow,omitempty"`
+	// Overflow Chart grouping for the last first-page participation interval and all following intervals. The bounds are clipped to the requested range and enclose the grouped intervals. They do not describe continuous exclusion coverage.
+	Overflow *ScopedMaintenanceOverflow `json:"overflow,omitempty"`
 
 	// Pending Some effective memberships in this range are still being prepared.
 	Pending bool `json:"pending"`
@@ -4489,12 +4502,19 @@ type ScopedMaintenanceWindowOperation string
 
 // ScopedMaintenanceWrite defines model for ScopedMaintenanceWrite.
 type ScopedMaintenanceWrite struct {
+	// End Use a zero-offset UTC instant at whole-second precision aligned to the applicable observation grids.
+	//
+	// Example: 2027-01-15T16:00:00Z
 	End time.Time `json:"end"`
 
 	// Reason Maximum 4096 UTF-8 bytes.
 	Reason string           `json:"reason"`
 	Scope  MaintenanceScope `json:"scope"`
-	Start  time.Time        `json:"start"`
+
+	// Start Use a zero-offset UTC instant at whole-second precision aligned to the applicable observation grids.
+	//
+	// Example: 2027-01-15T15:00:00Z
+	Start time.Time `json:"start"`
 
 	// Title Maximum 512 UTF-8 bytes.
 	Title string `json:"title"`
@@ -6941,6 +6961,8 @@ type ClientInterface interface {
 
 	// ListAlertMaintenanceSuppressions Audit retained openings suppressed by maintenance on a policy revision
 	//
+	// Scans a bounded batch of retained policy evaluations. A page may contain no decisions and still include next_cursor when the scanned batch contained no suppressed opening. Follow next_cursor until absent.
+	//
 	// Corresponds with GET /api/v1/alert-policies/{policy_id}/maintenance-suppressions (the `ListAlertMaintenanceSuppressions` operationId).
 	ListAlertMaintenanceSuppressions(ctx context.Context, policyId AlertPolicyId, params *ListAlertMaintenanceSuppressionsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -7298,14 +7320,18 @@ type ClientInterface interface {
 	// Corresponds with GET /api/v1/scoped-maintenance (the `ListScopedMaintenance` operationId).
 	ListScopedMaintenance(ctx context.Context, params *ListScopedMaintenanceParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// CreateScopedMaintenanceWithBody Create an scoped maintenance window
+	// CreateScopedMaintenanceWithBody Create a scoped maintenance window
+	//
+	// Requires one Origin header equal to the configured public HTTPS origin.
 	//
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /api/v1/scoped-maintenance (the `CreateScopedMaintenance` operationId).
 	CreateScopedMaintenanceWithBody(ctx context.Context, params *CreateScopedMaintenanceParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// CreateScopedMaintenance Create an scoped maintenance window
+	// CreateScopedMaintenance Create a scoped maintenance window
+	//
+	// Requires one Origin header equal to the configured public HTTPS origin.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -7314,7 +7340,7 @@ type ClientInterface interface {
 
 	// PreviewMaintenanceScopeWithBody Inspect the current affected SLO inventory for a maintenance selector
 	//
-	// Read-only operation available to Viewers. Scope and pagination are bound to the cursor. An empty valid inventory has a zero total.
+	// Read-only operation available to Viewers. Requires one Origin header equal to the configured public HTTPS origin. Scope and pagination are bound to the cursor. An empty valid inventory has a zero total.
 	//
 	// Takes any type of body and a specified content type.
 	//
@@ -7323,7 +7349,7 @@ type ClientInterface interface {
 
 	// PreviewMaintenanceScope Inspect the current affected SLO inventory for a maintenance selector
 	//
-	// Read-only operation available to Viewers. Scope and pagination are bound to the cursor. An empty valid inventory has a zero total.
+	// Read-only operation available to Viewers. Requires one Origin header equal to the configured public HTTPS origin. Scope and pagination are bound to the cursor. An empty valid inventory has a zero total.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -7337,12 +7363,16 @@ type ClientInterface interface {
 
 	// EditScopedMaintenanceWithBody Replace maintenance window details
 	//
+	// Requires one Origin header equal to the configured public HTTPS origin.
+	//
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with PUT /api/v1/scoped-maintenance/{maintenance_id} (the `EditScopedMaintenance` operationId).
 	EditScopedMaintenanceWithBody(ctx context.Context, maintenanceId openapi_types.UUID, params *EditScopedMaintenanceParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// EditScopedMaintenance Replace maintenance window details
+	//
+	// Requires one Origin header equal to the configured public HTTPS origin.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -7351,12 +7381,16 @@ type ClientInterface interface {
 
 	// CancelScopedMaintenanceWithBody Cancel scheduled maintenance
 	//
+	// Requires one Origin header equal to the configured public HTTPS origin.
+	//
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /api/v1/scoped-maintenance/{maintenance_id}/cancel (the `CancelScopedMaintenance` operationId).
 	CancelScopedMaintenanceWithBody(ctx context.Context, maintenanceId openapi_types.UUID, params *CancelScopedMaintenanceParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// CancelScopedMaintenance Cancel scheduled maintenance
+	//
+	// Requires one Origin header equal to the configured public HTTPS origin.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -7365,12 +7399,16 @@ type ClientInterface interface {
 
 	// EndScopedMaintenanceWithBody End maintenance prospectively
 	//
+	// Requires one Origin header equal to the configured public HTTPS origin.
+	//
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /api/v1/scoped-maintenance/{maintenance_id}/end (the `EndScopedMaintenance` operationId).
 	EndScopedMaintenanceWithBody(ctx context.Context, maintenanceId openapi_types.UUID, params *EndScopedMaintenanceParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// EndScopedMaintenance End maintenance prospectively
+	//
+	// Requires one Origin header equal to the configured public HTTPS origin.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -7379,12 +7417,14 @@ type ClientInterface interface {
 
 	// ReadMaintenanceImpact Read the effective membership of a maintenance revision
 	//
-	// Effective membership includes retained participation bounds. A page with ready false indicates calculation-scope preparation is incomplete.
+	// Effective membership includes retained participation bounds. A page with ready false describes a future or still-preparing population. A revision superseded before activation returns a final, ready, empty result. Continue with next_cursor until absent. On a continuation, an omitted revision uses the revision bound to the cursor. If the inventory changes, restart from the first page.
 	//
 	// Corresponds with GET /api/v1/scoped-maintenance/{maintenance_id}/impact (the `ReadMaintenanceImpact` operationId).
 	ReadMaintenanceImpact(ctx context.Context, maintenanceId openapi_types.UUID, params *ReadMaintenanceImpactParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// WithdrawScopedMaintenanceWithBody Include maintenance events again
+	//
+	// Requires one Origin header equal to the configured public HTTPS origin.
 	//
 	// Takes any type of body and a specified content type.
 	//
@@ -7392,6 +7432,8 @@ type ClientInterface interface {
 	WithdrawScopedMaintenanceWithBody(ctx context.Context, maintenanceId openapi_types.UUID, params *WithdrawScopedMaintenanceParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// WithdrawScopedMaintenance Include maintenance events again
+	//
+	// Requires one Origin header equal to the configured public HTTPS origin.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -8384,6 +8426,8 @@ func (c *Client) EnableAlertPolicy(ctx context.Context, policyId AlertPolicyId, 
 
 // ListAlertMaintenanceSuppressions Audit retained openings suppressed by maintenance on a policy revision
 //
+// Scans a bounded batch of retained policy evaluations. A page may contain no decisions and still include next_cursor when the scanned batch contained no suppressed opening. Follow next_cursor until absent.
+//
 // Corresponds with GET /api/v1/alert-policies/{policy_id}/maintenance-suppressions (the `ListAlertMaintenanceSuppressions` operationId).
 func (c *Client) ListAlertMaintenanceSuppressions(ctx context.Context, policyId AlertPolicyId, params *ListAlertMaintenanceSuppressionsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewListAlertMaintenanceSuppressionsRequest(c.Server, policyId, params)
@@ -9231,7 +9275,9 @@ func (c *Client) ListScopedMaintenance(ctx context.Context, params *ListScopedMa
 	return c.Client.Do(req)
 }
 
-// CreateScopedMaintenanceWithBody Create an scoped maintenance window
+// CreateScopedMaintenanceWithBody Create a scoped maintenance window
+//
+// Requires one Origin header equal to the configured public HTTPS origin.
 //
 // Takes any type of body and a specified content type.
 //
@@ -9248,7 +9294,9 @@ func (c *Client) CreateScopedMaintenanceWithBody(ctx context.Context, params *Cr
 	return c.Client.Do(req)
 }
 
-// CreateScopedMaintenance Create an scoped maintenance window
+// CreateScopedMaintenance Create a scoped maintenance window
+//
+// Requires one Origin header equal to the configured public HTTPS origin.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -9267,7 +9315,7 @@ func (c *Client) CreateScopedMaintenance(ctx context.Context, params *CreateScop
 
 // PreviewMaintenanceScopeWithBody Inspect the current affected SLO inventory for a maintenance selector
 //
-// Read-only operation available to Viewers. Scope and pagination are bound to the cursor. An empty valid inventory has a zero total.
+// Read-only operation available to Viewers. Requires one Origin header equal to the configured public HTTPS origin. Scope and pagination are bound to the cursor. An empty valid inventory has a zero total.
 //
 // Takes any type of body and a specified content type.
 //
@@ -9286,7 +9334,7 @@ func (c *Client) PreviewMaintenanceScopeWithBody(ctx context.Context, params *Pr
 
 // PreviewMaintenanceScope Inspect the current affected SLO inventory for a maintenance selector
 //
-// Read-only operation available to Viewers. Scope and pagination are bound to the cursor. An empty valid inventory has a zero total.
+// Read-only operation available to Viewers. Requires one Origin header equal to the configured public HTTPS origin. Scope and pagination are bound to the cursor. An empty valid inventory has a zero total.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -9320,6 +9368,8 @@ func (c *Client) GetScopedMaintenance(ctx context.Context, maintenanceId openapi
 
 // EditScopedMaintenanceWithBody Replace maintenance window details
 //
+// Requires one Origin header equal to the configured public HTTPS origin.
+//
 // Takes any type of body and a specified content type.
 //
 // Corresponds with PUT /api/v1/scoped-maintenance/{maintenance_id} (the `EditScopedMaintenance` operationId).
@@ -9336,6 +9386,8 @@ func (c *Client) EditScopedMaintenanceWithBody(ctx context.Context, maintenanceI
 }
 
 // EditScopedMaintenance Replace maintenance window details
+//
+// Requires one Origin header equal to the configured public HTTPS origin.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -9354,6 +9406,8 @@ func (c *Client) EditScopedMaintenance(ctx context.Context, maintenanceId openap
 
 // CancelScopedMaintenanceWithBody Cancel scheduled maintenance
 //
+// Requires one Origin header equal to the configured public HTTPS origin.
+//
 // Takes any type of body and a specified content type.
 //
 // Corresponds with POST /api/v1/scoped-maintenance/{maintenance_id}/cancel (the `CancelScopedMaintenance` operationId).
@@ -9370,6 +9424,8 @@ func (c *Client) CancelScopedMaintenanceWithBody(ctx context.Context, maintenanc
 }
 
 // CancelScopedMaintenance Cancel scheduled maintenance
+//
+// Requires one Origin header equal to the configured public HTTPS origin.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -9388,6 +9444,8 @@ func (c *Client) CancelScopedMaintenance(ctx context.Context, maintenanceId open
 
 // EndScopedMaintenanceWithBody End maintenance prospectively
 //
+// Requires one Origin header equal to the configured public HTTPS origin.
+//
 // Takes any type of body and a specified content type.
 //
 // Corresponds with POST /api/v1/scoped-maintenance/{maintenance_id}/end (the `EndScopedMaintenance` operationId).
@@ -9404,6 +9462,8 @@ func (c *Client) EndScopedMaintenanceWithBody(ctx context.Context, maintenanceId
 }
 
 // EndScopedMaintenance End maintenance prospectively
+//
+// Requires one Origin header equal to the configured public HTTPS origin.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -9422,7 +9482,7 @@ func (c *Client) EndScopedMaintenance(ctx context.Context, maintenanceId openapi
 
 // ReadMaintenanceImpact Read the effective membership of a maintenance revision
 //
-// Effective membership includes retained participation bounds. A page with ready false indicates calculation-scope preparation is incomplete.
+// Effective membership includes retained participation bounds. A page with ready false describes a future or still-preparing population. A revision superseded before activation returns a final, ready, empty result. Continue with next_cursor until absent. On a continuation, an omitted revision uses the revision bound to the cursor. If the inventory changes, restart from the first page.
 //
 // Corresponds with GET /api/v1/scoped-maintenance/{maintenance_id}/impact (the `ReadMaintenanceImpact` operationId).
 func (c *Client) ReadMaintenanceImpact(ctx context.Context, maintenanceId openapi_types.UUID, params *ReadMaintenanceImpactParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -9438,6 +9498,8 @@ func (c *Client) ReadMaintenanceImpact(ctx context.Context, maintenanceId openap
 }
 
 // WithdrawScopedMaintenanceWithBody Include maintenance events again
+//
+// Requires one Origin header equal to the configured public HTTPS origin.
 //
 // Takes any type of body and a specified content type.
 //
@@ -9455,6 +9517,8 @@ func (c *Client) WithdrawScopedMaintenanceWithBody(ctx context.Context, maintena
 }
 
 // WithdrawScopedMaintenance Include maintenance events again
+//
+// Requires one Origin header equal to the configured public HTTPS origin.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -16542,6 +16606,8 @@ type ClientWithResponsesInterface interface {
 
 	// ListAlertMaintenanceSuppressionsWithResponse Audit retained openings suppressed by maintenance on a policy revision
 	//
+	// Scans a bounded batch of retained policy evaluations. A page may contain no decisions and still include next_cursor when the scanned batch contained no suppressed opening. Follow next_cursor until absent.
+	//
 	// Returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with GET /api/v1/alert-policies/{policy_id}/maintenance-suppressions (the `ListAlertMaintenanceSuppressions` operationId).
@@ -16929,14 +16995,18 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with GET /api/v1/scoped-maintenance (the `ListScopedMaintenance` operationId).
 	ListScopedMaintenanceWithResponse(ctx context.Context, params *ListScopedMaintenanceParams, reqEditors ...RequestEditorFn) (*ListScopedMaintenanceResponse, error)
 
-	// CreateScopedMaintenanceWithBodyWithResponse Create an scoped maintenance window
+	// CreateScopedMaintenanceWithBodyWithResponse Create a scoped maintenance window
+	//
+	// Requires one Origin header equal to the configured public HTTPS origin.
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/v1/scoped-maintenance (the `CreateScopedMaintenance` operationId).
 	CreateScopedMaintenanceWithBodyWithResponse(ctx context.Context, params *CreateScopedMaintenanceParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateScopedMaintenanceResponse, error)
 
-	// CreateScopedMaintenanceWithResponse Create an scoped maintenance window
+	// CreateScopedMaintenanceWithResponse Create a scoped maintenance window
+	//
+	// Requires one Origin header equal to the configured public HTTPS origin.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -16945,7 +17015,7 @@ type ClientWithResponsesInterface interface {
 
 	// PreviewMaintenanceScopeWithBodyWithResponse Inspect the current affected SLO inventory for a maintenance selector
 	//
-	// Read-only operation available to Viewers. Scope and pagination are bound to the cursor. An empty valid inventory has a zero total.
+	// Read-only operation available to Viewers. Requires one Origin header equal to the configured public HTTPS origin. Scope and pagination are bound to the cursor. An empty valid inventory has a zero total.
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -16954,7 +17024,7 @@ type ClientWithResponsesInterface interface {
 
 	// PreviewMaintenanceScopeWithResponse Inspect the current affected SLO inventory for a maintenance selector
 	//
-	// Read-only operation available to Viewers. Scope and pagination are bound to the cursor. An empty valid inventory has a zero total.
+	// Read-only operation available to Viewers. Requires one Origin header equal to the configured public HTTPS origin. Scope and pagination are bound to the cursor. An empty valid inventory has a zero total.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -16970,12 +17040,16 @@ type ClientWithResponsesInterface interface {
 
 	// EditScopedMaintenanceWithBodyWithResponse Replace maintenance window details
 	//
+	// Requires one Origin header equal to the configured public HTTPS origin.
+	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with PUT /api/v1/scoped-maintenance/{maintenance_id} (the `EditScopedMaintenance` operationId).
 	EditScopedMaintenanceWithBodyWithResponse(ctx context.Context, maintenanceId openapi_types.UUID, params *EditScopedMaintenanceParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*EditScopedMaintenanceResponse, error)
 
 	// EditScopedMaintenanceWithResponse Replace maintenance window details
+	//
+	// Requires one Origin header equal to the configured public HTTPS origin.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -16984,12 +17058,16 @@ type ClientWithResponsesInterface interface {
 
 	// CancelScopedMaintenanceWithBodyWithResponse Cancel scheduled maintenance
 	//
+	// Requires one Origin header equal to the configured public HTTPS origin.
+	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/v1/scoped-maintenance/{maintenance_id}/cancel (the `CancelScopedMaintenance` operationId).
 	CancelScopedMaintenanceWithBodyWithResponse(ctx context.Context, maintenanceId openapi_types.UUID, params *CancelScopedMaintenanceParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CancelScopedMaintenanceResponse, error)
 
 	// CancelScopedMaintenanceWithResponse Cancel scheduled maintenance
+	//
+	// Requires one Origin header equal to the configured public HTTPS origin.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -16998,12 +17076,16 @@ type ClientWithResponsesInterface interface {
 
 	// EndScopedMaintenanceWithBodyWithResponse End maintenance prospectively
 	//
+	// Requires one Origin header equal to the configured public HTTPS origin.
+	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/v1/scoped-maintenance/{maintenance_id}/end (the `EndScopedMaintenance` operationId).
 	EndScopedMaintenanceWithBodyWithResponse(ctx context.Context, maintenanceId openapi_types.UUID, params *EndScopedMaintenanceParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*EndScopedMaintenanceResponse, error)
 
 	// EndScopedMaintenanceWithResponse End maintenance prospectively
+	//
+	// Requires one Origin header equal to the configured public HTTPS origin.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -17012,7 +17094,7 @@ type ClientWithResponsesInterface interface {
 
 	// ReadMaintenanceImpactWithResponse Read the effective membership of a maintenance revision
 	//
-	// Effective membership includes retained participation bounds. A page with ready false indicates calculation-scope preparation is incomplete.
+	// Effective membership includes retained participation bounds. A page with ready false describes a future or still-preparing population. A revision superseded before activation returns a final, ready, empty result. Continue with next_cursor until absent. On a continuation, an omitted revision uses the revision bound to the cursor. If the inventory changes, restart from the first page.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -17021,12 +17103,16 @@ type ClientWithResponsesInterface interface {
 
 	// WithdrawScopedMaintenanceWithBodyWithResponse Include maintenance events again
 	//
+	// Requires one Origin header equal to the configured public HTTPS origin.
+	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/v1/scoped-maintenance/{maintenance_id}/withdraw (the `WithdrawScopedMaintenance` operationId).
 	WithdrawScopedMaintenanceWithBodyWithResponse(ctx context.Context, maintenanceId openapi_types.UUID, params *WithdrawScopedMaintenanceParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*WithdrawScopedMaintenanceResponse, error)
 
 	// WithdrawScopedMaintenanceWithResponse Include maintenance events again
+	//
+	// Requires one Origin header equal to the configured public HTTPS origin.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -23390,6 +23476,8 @@ func (c *ClientWithResponses) EnableAlertPolicyWithResponse(ctx context.Context,
 
 // ListAlertMaintenanceSuppressionsWithResponse Audit retained openings suppressed by maintenance on a policy revision
 //
+// Scans a bounded batch of retained policy evaluations. A page may contain no decisions and still include next_cursor when the scanned batch contained no suppressed opening. Follow next_cursor until absent.
+//
 // Returns a wrapper object for the known response body format(s).
 //
 // Corresponds with GET /api/v1/alert-policies/{policy_id}/maintenance-suppressions (the `ListAlertMaintenanceSuppressions` operationId).
@@ -24071,7 +24159,9 @@ func (c *ClientWithResponses) ListScopedMaintenanceWithResponse(ctx context.Cont
 	return ParseListScopedMaintenanceResponse(rsp)
 }
 
-// CreateScopedMaintenanceWithBodyWithResponse Create an scoped maintenance window
+// CreateScopedMaintenanceWithBodyWithResponse Create a scoped maintenance window
+//
+// Requires one Origin header equal to the configured public HTTPS origin.
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
@@ -24084,7 +24174,9 @@ func (c *ClientWithResponses) CreateScopedMaintenanceWithBodyWithResponse(ctx co
 	return ParseCreateScopedMaintenanceResponse(rsp)
 }
 
-// CreateScopedMaintenanceWithResponse Create an scoped maintenance window
+// CreateScopedMaintenanceWithResponse Create a scoped maintenance window
+//
+// Requires one Origin header equal to the configured public HTTPS origin.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -24099,7 +24191,7 @@ func (c *ClientWithResponses) CreateScopedMaintenanceWithResponse(ctx context.Co
 
 // PreviewMaintenanceScopeWithBodyWithResponse Inspect the current affected SLO inventory for a maintenance selector
 //
-// Read-only operation available to Viewers. Scope and pagination are bound to the cursor. An empty valid inventory has a zero total.
+// Read-only operation available to Viewers. Requires one Origin header equal to the configured public HTTPS origin. Scope and pagination are bound to the cursor. An empty valid inventory has a zero total.
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
@@ -24114,7 +24206,7 @@ func (c *ClientWithResponses) PreviewMaintenanceScopeWithBodyWithResponse(ctx co
 
 // PreviewMaintenanceScopeWithResponse Inspect the current affected SLO inventory for a maintenance selector
 //
-// Read-only operation available to Viewers. Scope and pagination are bound to the cursor. An empty valid inventory has a zero total.
+// Read-only operation available to Viewers. Requires one Origin header equal to the configured public HTTPS origin. Scope and pagination are bound to the cursor. An empty valid inventory has a zero total.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -24142,6 +24234,8 @@ func (c *ClientWithResponses) GetScopedMaintenanceWithResponse(ctx context.Conte
 
 // EditScopedMaintenanceWithBodyWithResponse Replace maintenance window details
 //
+// Requires one Origin header equal to the configured public HTTPS origin.
+//
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with PUT /api/v1/scoped-maintenance/{maintenance_id} (the `EditScopedMaintenance` operationId).
@@ -24154,6 +24248,8 @@ func (c *ClientWithResponses) EditScopedMaintenanceWithBodyWithResponse(ctx cont
 }
 
 // EditScopedMaintenanceWithResponse Replace maintenance window details
+//
+// Requires one Origin header equal to the configured public HTTPS origin.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -24168,6 +24264,8 @@ func (c *ClientWithResponses) EditScopedMaintenanceWithResponse(ctx context.Cont
 
 // CancelScopedMaintenanceWithBodyWithResponse Cancel scheduled maintenance
 //
+// Requires one Origin header equal to the configured public HTTPS origin.
+//
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/v1/scoped-maintenance/{maintenance_id}/cancel (the `CancelScopedMaintenance` operationId).
@@ -24180,6 +24278,8 @@ func (c *ClientWithResponses) CancelScopedMaintenanceWithBodyWithResponse(ctx co
 }
 
 // CancelScopedMaintenanceWithResponse Cancel scheduled maintenance
+//
+// Requires one Origin header equal to the configured public HTTPS origin.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -24194,6 +24294,8 @@ func (c *ClientWithResponses) CancelScopedMaintenanceWithResponse(ctx context.Co
 
 // EndScopedMaintenanceWithBodyWithResponse End maintenance prospectively
 //
+// Requires one Origin header equal to the configured public HTTPS origin.
+//
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/v1/scoped-maintenance/{maintenance_id}/end (the `EndScopedMaintenance` operationId).
@@ -24206,6 +24308,8 @@ func (c *ClientWithResponses) EndScopedMaintenanceWithBodyWithResponse(ctx conte
 }
 
 // EndScopedMaintenanceWithResponse End maintenance prospectively
+//
+// Requires one Origin header equal to the configured public HTTPS origin.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -24220,7 +24324,7 @@ func (c *ClientWithResponses) EndScopedMaintenanceWithResponse(ctx context.Conte
 
 // ReadMaintenanceImpactWithResponse Read the effective membership of a maintenance revision
 //
-// Effective membership includes retained participation bounds. A page with ready false indicates calculation-scope preparation is incomplete.
+// Effective membership includes retained participation bounds. A page with ready false describes a future or still-preparing population. A revision superseded before activation returns a final, ready, empty result. Continue with next_cursor until absent. On a continuation, an omitted revision uses the revision bound to the cursor. If the inventory changes, restart from the first page.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -24235,6 +24339,8 @@ func (c *ClientWithResponses) ReadMaintenanceImpactWithResponse(ctx context.Cont
 
 // WithdrawScopedMaintenanceWithBodyWithResponse Include maintenance events again
 //
+// Requires one Origin header equal to the configured public HTTPS origin.
+//
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/v1/scoped-maintenance/{maintenance_id}/withdraw (the `WithdrawScopedMaintenance` operationId).
@@ -24247,6 +24353,8 @@ func (c *ClientWithResponses) WithdrawScopedMaintenanceWithBodyWithResponse(ctx 
 }
 
 // WithdrawScopedMaintenanceWithResponse Include maintenance events again
+//
+// Requires one Origin header equal to the configured public HTTPS origin.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -29391,7 +29499,7 @@ type ServerInterface interface {
 	// ListScopedMaintenance List maintenance windows
 	// (GET /api/v1/scoped-maintenance)
 	ListScopedMaintenance(w http.ResponseWriter, r *http.Request, params ListScopedMaintenanceParams)
-	// CreateScopedMaintenance Create an scoped maintenance window
+	// CreateScopedMaintenance Create a scoped maintenance window
 	// (POST /api/v1/scoped-maintenance)
 	CreateScopedMaintenance(w http.ResponseWriter, r *http.Request, params CreateScopedMaintenanceParams)
 	// PreviewMaintenanceScope Inspect the current affected SLO inventory for a maintenance selector

@@ -102,6 +102,10 @@ paths:
     get:
       operationId: listAlertMaintenanceSuppressions
       summary: Audit retained openings suppressed by maintenance on a policy revision
+      description: >-
+        Scans a bounded batch of retained policy evaluations. A page may contain no decisions
+        and still include next_cursor when the scanned batch contained no suppressed opening.
+        Follow next_cursor until absent.
       security: [{SessionCookie: []}]
       parameters:
         - {name: revision, in: query, required: true, schema: {$ref: '#/components/schemas/AlertVersion'}}
@@ -1007,14 +1011,15 @@ paths:
         'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
     post:
       operationId: createScopedMaintenance
-      summary: Create an scoped maintenance window
+      summary: Create a scoped maintenance window
+      description: Requires one Origin header equal to the configured public HTTPS origin.
       security: [{SessionCookie: [], CsrfToken: []}]
       parameters:
         - {$ref: '#/components/parameters/IdempotencyKey'}
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ScopedMaintenanceWrite'}}}}
       responses:
         '201':
-          description: Create an scoped maintenance window
+          description: Create a scoped maintenance window
           headers:
             ETag: {schema: {type: string}}
             Location: {schema: {type: string}}
@@ -1038,6 +1043,7 @@ paths:
     put:
       operationId: editScopedMaintenance
       summary: Replace maintenance window details
+      description: Requires one Origin header equal to the configured public HTTPS origin.
       security: [{SessionCookie: [], CsrfToken: []}]
       parameters:
         - {name: maintenance_id, in: path, required: true, schema: {type: string, format: uuid}}
@@ -1055,6 +1061,7 @@ paths:
     post:
       operationId: endScopedMaintenance
       summary: End maintenance prospectively
+      description: Requires one Origin header equal to the configured public HTTPS origin.
       security: [{SessionCookie: [], CsrfToken: []}]
       parameters:
         - {name: maintenance_id, in: path, required: true, schema: {type: string, format: uuid}}
@@ -1072,6 +1079,7 @@ paths:
     post:
       operationId: cancelScopedMaintenance
       summary: Cancel scheduled maintenance
+      description: Requires one Origin header equal to the configured public HTTPS origin.
       security: [{SessionCookie: [], CsrfToken: []}]
       parameters:
         - {name: maintenance_id, in: path, required: true, schema: {type: string, format: uuid}}
@@ -1089,6 +1097,7 @@ paths:
     post:
       operationId: withdrawScopedMaintenance
       summary: Include maintenance events again
+      description: Requires one Origin header equal to the configured public HTTPS origin.
       security: [{SessionCookie: [], CsrfToken: []}]
       parameters:
         - {name: maintenance_id, in: path, required: true, schema: {type: string, format: uuid}}
@@ -1106,7 +1115,10 @@ paths:
     post:
       operationId: previewMaintenanceScope
       summary: Inspect the current affected SLO inventory for a maintenance selector
-      description: Read-only operation available to Viewers. Scope and pagination are bound to the cursor. An empty valid inventory has a zero total.
+      description: >-
+        Read-only operation available to Viewers. Requires one Origin header equal to the
+        configured public HTTPS origin. Scope and pagination are bound to the cursor.
+        An empty valid inventory has a zero total.
       security: [{SessionCookie: [], CsrfToken: []}]
       parameters:
         - {$ref: '#/components/parameters/PageLimit'}
@@ -1119,7 +1131,12 @@ paths:
     get:
       operationId: readMaintenanceImpact
       summary: Read the effective membership of a maintenance revision
-      description: Effective membership includes retained participation bounds. A page with ready false indicates calculation-scope preparation is incomplete.
+      description: >-
+        Effective membership includes retained participation bounds. A page with ready false
+        describes a future or still-preparing population. A revision superseded before
+        activation returns a final, ready, empty result. Continue with next_cursor until absent.
+        On a continuation, an omitted revision uses the revision bound to the cursor.
+        If the inventory changes, restart from the first page.
       security: [{SessionCookie: []}]
       parameters:
         - {name: maintenance_id, in: path, required: true, schema: {type: string, format: uuid}}
@@ -3352,8 +3369,8 @@ components:
       properties:
         title: {type: string, minLength: 1, maxLength: 512, description: Maximum 512 UTF-8 bytes.}
         reason: {type: string, minLength: 1, maxLength: 4096, description: Maximum 4096 UTF-8 bytes.}
-        start: {type: string, format: date-time}
-        end: {type: string, format: date-time}
+        start: {type: string, format: date-time, description: Use a zero-offset UTC instant at whole-second precision aligned to the applicable observation grids., example: '2027-01-15T15:00:00Z'}
+        end: {type: string, format: date-time, description: Use a zero-offset UTC instant at whole-second precision aligned to the applicable observation grids., example: '2027-01-15T16:00:00Z'}
         scope: {$ref: '#/components/schemas/MaintenanceScope'}
     MaintenanceScope:
       oneOf:
@@ -3372,14 +3389,14 @@ components:
       required: [kind, slo_ids]
       properties:
         kind: {type: string, enum: [slos]}
-        slo_ids: {type: array, minItems: 1, maxItems: 100, uniqueItems: true, items: {type: string, format: uuid}}
+        slo_ids: {type: array, minItems: 1, maxItems: 100, uniqueItems: true, items: {type: string, format: uuid, description: Canonical lowercase UUID. The zero UUID is invalid.}}
     MaintenanceServiceScope:
       type: object
       additionalProperties: false
       required: [kind, service_ids]
       properties:
         kind: {type: string, enum: [services]}
-        service_ids: {type: array, minItems: 1, maxItems: 100, uniqueItems: true, items: {type: string, format: uuid}}
+        service_ids: {type: array, minItems: 1, maxItems: 100, uniqueItems: true, items: {type: string, format: uuid, description: Canonical lowercase UUID. The zero UUID is invalid.}}
     MaintenanceAllServicesScope:
       type: object
       additionalProperties: false
@@ -3418,8 +3435,8 @@ components:
         items: {type: array, items: {$ref: '#/components/schemas/MaintenanceImpactMember'}}
         total: {type: string, pattern: '^(0|[1-9][0-9]*)$', description: Exact number of distinct affected SLOs across the inventory or effective membership page set.}
         inventory_at: {type: string, format: date-time}
-        ready: {type: boolean, description: False if effective membership is still being prepared.}
-        next_cursor: {type: string}
+        ready: {type: boolean, description: False for future or preparing effective membership. True for final results including revisions superseded before activation.}
+        next_cursor: {type: string, description: Follow until absent to retrieve all participation intervals. One SLO can have several intervals.}
     MaintenanceReason:
       type: object
       additionalProperties: false
@@ -3432,7 +3449,7 @@ components:
       required: [reason, end]
       properties:
         reason: {type: string, minLength: 1, maxLength: 4096, description: Maximum 4096 UTF-8 bytes.}
-        end: {type: string, format: date-time}
+        end: {type: string, format: date-time, description: Use a zero-offset UTC instant at whole-second precision aligned to the applicable observation grids., example: '2027-01-15T16:00:00Z'}
     ScopedMaintenanceTimelinePage:
       type: object
       additionalProperties: false
@@ -3443,7 +3460,18 @@ components:
           items: {$ref: '#/components/schemas/ScopedMaintenanceTimelineInterval'}
         pending: {type: boolean, description: Some effective memberships in this range are still being prepared.}
         next_cursor: {type: string}
-        overflow: {$ref: '#/components/schemas/MaintenanceOverflow'}
+        overflow: {$ref: '#/components/schemas/ScopedMaintenanceOverflow'}
+    ScopedMaintenanceOverflow:
+      type: object
+      description: >-
+        Chart grouping for the last first-page participation interval and all following
+        intervals. The bounds are clipped to the requested range and enclose the grouped
+        intervals. They do not describe continuous exclusion coverage.
+      required: [start, end, count]
+      properties:
+        start: {type: string, format: date-time}
+        end: {type: string, format: date-time}
+        count: {type: string, pattern: '^[1-9][0-9]*$', description: Exact decimal participation interval count.}
     ScopedMaintenanceTimelineInterval:
       type: object
       additionalProperties: false

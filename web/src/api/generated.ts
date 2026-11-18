@@ -142,7 +142,10 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Audit retained openings suppressed by maintenance on a policy revision */
+        /**
+         * Audit retained openings suppressed by maintenance on a policy revision
+         * @description Scans a bounded batch of retained policy evaluations. A page may contain no decisions and still include next_cursor when the scanned batch contained no suppressed opening. Follow next_cursor until absent.
+         */
         get: operations["listAlertMaintenanceSuppressions"];
         put?: never;
         post?: never;
@@ -1073,7 +1076,10 @@ export interface paths {
         /** List maintenance windows */
         get: operations["listScopedMaintenance"];
         put?: never;
-        /** Create an scoped maintenance window */
+        /**
+         * Create a scoped maintenance window
+         * @description Requires one Origin header equal to the configured public HTTPS origin.
+         */
         post: operations["createScopedMaintenance"];
         delete?: never;
         options?: never;
@@ -1090,7 +1096,10 @@ export interface paths {
         };
         /** Read latest or historical maintenance revision */
         get: operations["getScopedMaintenance"];
-        /** Replace maintenance window details */
+        /**
+         * Replace maintenance window details
+         * @description Requires one Origin header equal to the configured public HTTPS origin.
+         */
         put: operations["editScopedMaintenance"];
         post?: never;
         delete?: never;
@@ -1108,7 +1117,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** End maintenance prospectively */
+        /**
+         * End maintenance prospectively
+         * @description Requires one Origin header equal to the configured public HTTPS origin.
+         */
         post: operations["endScopedMaintenance"];
         delete?: never;
         options?: never;
@@ -1125,7 +1137,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Cancel scheduled maintenance */
+        /**
+         * Cancel scheduled maintenance
+         * @description Requires one Origin header equal to the configured public HTTPS origin.
+         */
         post: operations["cancelScopedMaintenance"];
         delete?: never;
         options?: never;
@@ -1142,7 +1157,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Include maintenance events again */
+        /**
+         * Include maintenance events again
+         * @description Requires one Origin header equal to the configured public HTTPS origin.
+         */
         post: operations["withdrawScopedMaintenance"];
         delete?: never;
         options?: never;
@@ -1161,7 +1179,7 @@ export interface paths {
         put?: never;
         /**
          * Inspect the current affected SLO inventory for a maintenance selector
-         * @description Read-only operation available to Viewers. Scope and pagination are bound to the cursor. An empty valid inventory has a zero total.
+         * @description Read-only operation available to Viewers. Requires one Origin header equal to the configured public HTTPS origin. Scope and pagination are bound to the cursor. An empty valid inventory has a zero total.
          */
         post: operations["previewMaintenanceScope"];
         delete?: never;
@@ -1179,7 +1197,7 @@ export interface paths {
         };
         /**
          * Read the effective membership of a maintenance revision
-         * @description Effective membership includes retained participation bounds. A page with ready false indicates calculation-scope preparation is incomplete.
+         * @description Effective membership includes retained participation bounds. A page with ready false describes a future or still-preparing population. A revision superseded before activation returns a final, ready, empty result. Continue with next_cursor until absent. On a continuation, an omitted revision uses the revision bound to the cursor. If the inventory changes, restart from the first page.
          */
         get: operations["readMaintenanceImpact"];
         put?: never;
@@ -3208,9 +3226,17 @@ export interface components {
             title: string;
             /** @description Maximum 4096 UTF-8 bytes. */
             reason: string;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description Use a zero-offset UTC instant at whole-second precision aligned to the applicable observation grids.
+             * @example 2027-01-15T15:00:00Z
+             */
             start: string;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description Use a zero-offset UTC instant at whole-second precision aligned to the applicable observation grids.
+             * @example 2027-01-15T16:00:00Z
+             */
             end: string;
             scope: components["schemas"]["MaintenanceScope"];
         };
@@ -3269,8 +3295,9 @@ export interface components {
             total: string;
             /** Format: date-time */
             inventory_at: string;
-            /** @description False if effective membership is still being prepared. */
+            /** @description False for future or preparing effective membership. True for final results including revisions superseded before activation. */
             ready: boolean;
+            /** @description Follow until absent to retrieve all participation intervals. One SLO can have several intervals. */
             next_cursor?: string;
         };
         MaintenanceReason: {
@@ -3280,7 +3307,11 @@ export interface components {
         MaintenanceEnd: {
             /** @description Maximum 4096 UTF-8 bytes. */
             reason: string;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description Use a zero-offset UTC instant at whole-second precision aligned to the applicable observation grids.
+             * @example 2027-01-15T16:00:00Z
+             */
             end: string;
         };
         ScopedMaintenanceTimelinePage: {
@@ -3288,7 +3319,16 @@ export interface components {
             /** @description Some effective memberships in this range are still being prepared. */
             pending: boolean;
             next_cursor?: string;
-            overflow?: components["schemas"]["MaintenanceOverflow"];
+            overflow?: components["schemas"]["ScopedMaintenanceOverflow"];
+        };
+        /** @description Chart grouping for the last first-page participation interval and all following intervals. The bounds are clipped to the requested range and enclose the grouped intervals. They do not describe continuous exclusion coverage. */
+        ScopedMaintenanceOverflow: {
+            /** Format: date-time */
+            start: string;
+            /** Format: date-time */
+            end: string;
+            /** @description Exact decimal participation interval count. */
+            count: string;
         };
         ScopedMaintenanceTimelineInterval: {
             window: components["schemas"]["ScopedMaintenanceWindow"];
@@ -6061,7 +6101,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Create an scoped maintenance window */
+            /** @description Create a scoped maintenance window */
             201: {
                 headers: {
                     ETag?: string;

@@ -540,15 +540,6 @@ func ReadMaintenance(ctx context.Context, databaseURL string, input ReadMaintena
 	if !input.Scoped && result.ScopeKind != MaintenanceScopeSlos {
 		return MaintenanceRecord{}, ErrMaintenanceNotFound
 	}
-	if !input.Scoped && input.Revision > 0 {
-		current, err := q.ReadMaintenanceRevision(ctx, dbgen.ReadMaintenanceRevisionParams{ID: id})
-		if err != nil {
-			return MaintenanceRecord{}, err
-		}
-		if current.ScopeKind != string(MaintenanceScopeSlos) {
-			return MaintenanceRecord{}, ErrMaintenanceNotFound
-		}
-	}
 	if err := finishAgentRead(ctx, tx, input.Now, started, user, installation, session); err != nil {
 		return MaintenanceRecord{}, err
 	}
