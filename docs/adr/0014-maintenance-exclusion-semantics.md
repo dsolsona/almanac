@@ -7,6 +7,10 @@
 - Related specs: [SPEC-0016](../specs/0016-maintenance-exclusions.md), [SPEC-0006](../specs/0006-slo-calculation-and-reporting.md)
 - Supersedes / superseded by: replaces only [ADR-0005](0005-measurement-semantics.md)'s initial exclusion deferral; remaining measurement rules stay in force
 
+[ADR-0053](0053-service-maintenance-workflow.md) supersedes the scope and
+suppression decisions for the expanded maintenance workflow. The calculation
+and provenance decisions below still apply.
+
 ## Context
 
 Operators need maintenance periods to stop contributing events to the final SLO

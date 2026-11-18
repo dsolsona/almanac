@@ -54,4 +54,4 @@ feature; mark irrelevant sections as such with a brief reason.
 | [SPEC-0020](0020-cumulative-slo-calculation.md) | Retained SLO extrema over exact hourly aggregates | accepted | not started |
 | [SPEC-0021](0021-alert-policy-engine.md) | Alert policy engine | draft | not started |
 | [SPEC-0022](0022-alert-management-ui.md) | Alert management UI | draft | not started |
-| [SPEC-0023](0023-maintenance-management.md) | Service maintenance management | draft | in progress |
+| [SPEC-0023](0023-maintenance-management.md) | Service maintenance management | accepted | in progress |

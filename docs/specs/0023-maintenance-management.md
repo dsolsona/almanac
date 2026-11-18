@@ -1,13 +1,13 @@
 # SPEC-0023: Service maintenance management
 
-- Status: draft
+- Status: accepted
 - Created: 2026-11-17
-- Accepted: pending detailed contract and mock review
-- Approval: maintainer approved the overall direction on 2026-11-17; proposed details remain identified below
+- Accepted: 2026-11-18
+- Approval: Maintainer approved [PR #137](https://github.com/dsolsona/almanac/pull/137) on 2026-11-18.
 - Implementation: in progress
-- Related ADRs: [ADR-0053](../adr/0053-service-maintenance-workflow.md) (proposed), [ADR-0014](../adr/0014-maintenance-exclusion-semantics.md), [ADR-0052](../adr/0052-compiled-maintenance-populations.md)
+- Related ADRs: [ADR-0053](../adr/0053-service-maintenance-workflow.md), [ADR-0014](../adr/0014-maintenance-exclusion-semantics.md), [ADR-0052](../adr/0052-compiled-maintenance-populations.md)
 - Plan: [0046](../plans/0046-maintenance-management.md)
-- Supersedes / superseded by: proposes amending SPEC-0016 scope and opt-in silencing; unchanged calculation, alignment, permissions, audit and provenance rules remain applicable
+- Supersedes / superseded by: amends SPEC-0016 scope and automatic suppression for this workflow. Retains the calculation, alignment, permissions, audit and provenance rules
 
 ## Purpose
 
@@ -27,12 +27,17 @@ Recurring calendars and external maintenance integrations remain deferred.
 
 ### Scope and scheduling
 
-Choose services, explicit SLOs, or all services. Preview names and affected counts.
-An explicit-SLO selection affects only those objectives, not every consumer of its
-SLI. Service selection covers all objectives belonging to those services.
+Each window uses one scope mode:
 
-Proposed detail: resolve service membership at activation and include later joins
-prospectively. For calculation exclusion, proposed coverage consists of complete
+- **Selected services** covers the SLOs of one or more services.
+- **Selected SLOs** covers one or more individually selected SLOs.
+- **All services** covers the entire installation, including eligible joins during maintenance.
+
+Use a searchable shared picker for each selected mode. All services needs no picker.
+Show the selected scope separately from the affected SLO count and preview.
+
+Resolve service membership at activation and include later joins
+prospectively. For calculation exclusion, coverage consists of complete
 observation intervals contained in both the maintenance window and the recorded
 membership interval. An unaligned join takes effect for calculation at the next
 applicable observation boundary. An unaligned departure leaves the interval
@@ -42,8 +47,30 @@ the join has no calculation effect for that window. Departures retain already
 covered intervals. All-service
 scope includes services created while active. Revisions retain effective membership
 and changes, so moving resources cannot rewrite history. Ordinary membership changes
-must not require administrative retrospective editing. Composite child propagation
-continues to require explicit clarification under SPEC-0016's selected-SLO boundary.
+must not require administrative retrospective editing. Composite child
+propagation follows SPEC-0016's selected-SLO boundary.
+
+First-version scope details
+
+- Use stable service identity. Renaming a service does not interrupt coverage.
+  Archived services cannot be newly selected. Historical coverage survives
+  archival and retains the original identifiers.
+- A service with no objectives can be scheduled. Its preview reports zero
+  objectives and its window covers subsequently eligible joins. Missing inventory is an error,
+  distinct from a successfully resolved empty service.
+- During a window, an eligibility or service assignment change records its
+  effective time. Members joining after the exclusive end receive no coverage.
+  Explicit SLO scope does not follow service membership. A composite selected by
+  service covers its own observations and does not automatically cover child
+  SLOs on other services.
+- The selected scope appears separately from the resolved, paginated impact
+  view. A preview identifies the inventory time used for its counts. Effective
+  history links each objective to its recorded participation interval.
+- Keep the accepted explicit-only resource contract available to existing
+  clients. The extended contract needs a discriminated selector for selected
+  services, all services and explicit SLOs. Never overload the existing
+  `slo_ids` field with an empty sentinel for all services or truncate an
+  effective population into that field.
 
 Store exact UTC `[start,end)` bounds. Show the chosen timezone and exact UTC preview.
 Reject nonexistent/ambiguous local input unless an unambiguous instant is selected.
@@ -87,11 +114,23 @@ Automatically suppress SLO notification delivery within active scope. Exclusion
 alone does not suppress thresholds caused by pre-maintenance eligible failures.
 Preserve existing incidents and evidence; excluded evaluation is not recovery.
 
-Proposed detail: suppress opening, reminder and recovery notifications. After the
+For future external delivery, suppress opening, reminder and recovery notifications. After the
 last covering maintenance ends, resume ordinary evaluation and notification
 eligibility without replaying a suppressed backlog. Independent manual silences
 continue to apply. Collection/agent health remains visible. Maintenance does not
 change unrelated scopes or silence installation-wide health notifications.
+
+In the first stage, Almanac surfaces occurrences in
+the application, API and CLI. A maintenance-aware evaluation still runs and
+retains its evidence. While covered, a matching result does not open a new
+current occurrence. An occurrence already open keeps its identity,
+acknowledgement and evidence. A valid clear result from complete eligible
+data may resolve it. Fully excluded evaluation remains unavailable and cannot
+manufacture recovery. At the first evaluable boundary after the last applicable
+window ends, a continuing match can open an occurrence with that boundary
+as its effective start. Suppressed historical transitions remain auditable and
+do not open a firing occurrence during catch-up. Future external delivery
+follows the suppression and resume policy when that surface exists.
 
 Cancellation or prospective early end changes both effects together. Retrospective
 correction changes new calculations but cannot undo sent notifications or previous
@@ -122,29 +161,29 @@ its persistence/API design is a prerequisite rather than an assumed implementati
   missing eligible and zero-traffic cases without changing raw measurements.
 - AC-03: Inspect maintenance bands, reasons and exact bounds across accepted SLO
   detail composition in both themes, keyboard and mobile layouts.
-- AC-04: Preserve existing incidents, suppress scoped notifications and resume
-  correctly after overlapping windows, with no suppressed backlog.
+- AC-04: Suppress new current occurrences within effective scope, keep
+  pre-existing acknowledgements and evidence, and resume at an evaluable
+  boundary after overlapping windows end. Verify future notification delivery
+  independently once it exists. In both cases, catch-up creates no suppressed
+  backlog.
 - AC-05: Cancel future, end active and audit administrator historical changes;
   conflict and failed-save paths retain drafts and do not partially apply scope.
-- AC-06: Record joins/departures prospectively if that proposal is accepted;
+- AC-06: Record joins and departures prospectively;
   historical scope and report provenance remain stable.
 - AC-07: Bound large/all-service writes and activation, including membership/send
   races, restart, invalidation and ordinary page performance acceptance.
 
 - AC-08: Reuse shared Almanac pickers, calendar, duration presets, form, list and chart patterns. Search service/owner or objective context across the full catalogue; bound suggestions and paginate affected-objective inspection. A 50-service fixture must not render 50 checkbox choices or expand the entire affected population into the form.
 
-## Dependencies and open questions
+## Implementation dependencies
 
-The maintainer reviewed the mock and requested implementation. Proposals requiring detailed acceptance:
-active service membership, all-service bulk protocol, composite implications,
-recovery-notification suppression and resume/cooldown integration. Exact API/CLI
-contracts for the next slice follow [plan 0046](../plans/0046-maintenance-management.md).
-
-## Verification evidence
-
-[Interactive prototype](../design/mocks/maintenance/index.html) uses fictional data.
-Browser checks establish prototype navigation only, not application acceptance.
+The next slice needs an exact API and CLI contract, a bounded bulk publication
+protocol, and application verification. Composite child behavior follows
+SPEC-0016's explicit selection boundary. Exact cooldown and delivery
+deduplication belong to the future external delivery adapter.
+See [plan 0046](../plans/0046-maintenance-management.md).
 
 ## Change notes
 
-- 2026-11-17: Drafted the approved direction and identified detailed proposals.
+- 2026-11-17: Drafted the initial direction.
+- 2026-11-18: Accepted the scope, prospective membership and in-Almanac suppression contract.
