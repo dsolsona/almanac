@@ -20,6 +20,15 @@ func cloneReviewObjectives(t *testing.T, conn *pgx.Conn, template, prefix string
 		t.Fatal(err)
 	}
 	defer rollbackTransaction(tx)
+	// Every clone initially contributes the template's grid, even if a
+	// later fixture changes fields on the clone's definition directly.
+	var service pgtype.UUID
+	var cadence int32
+	if err := tx.QueryRow(t.Context(), `SELECT d.service_id, d.cadence_seconds
+FROM public.almanac_slos s JOIN public.almanac_slo_definitions d
+ON d.slo_id=s.id AND d.revision=s.definition_revision WHERE s.id=$1`, template).Scan(&service, &cadence); err != nil {
+		t.Fatal(err)
+	}
 	ids := make([]pgtype.UUID, count)
 	for i := range count {
 		ids[i] = pgtype.UUID{Bytes: [16]byte{0xee, 0xee, 0xee, 0xee, 0xee, 0xee, 0x4e, 0xee, 0x8e, 0xee, 0, 0, 0, 0, 0, byte(i + 1)}, Valid: true}
@@ -44,7 +53,11 @@ FROM public.almanac_slo_definitions d JOIN public.almanac_slos s ON s.id=d.slo_i
 			return
 		}
 		defer rollbackTransaction(tx)
-		for _, table := range []string{"almanac_slo_extrema", "almanac_slo_extrema_cursor", "almanac_slo_current_projections", "almanac_slo_current_failures", "almanac_slo_derived_generations", "almanac_slo_exclusion_state", "almanac_slo_service_assignments", "almanac_slo_definitions", "almanac_slos"} {
+		if _, err := tx.Exec(t.Context(), "SELECT public.almanac_adjust_maintenance_service_grid($1, $2, $3)", service, cadence, -int64(count)); err != nil {
+			t.Error(err)
+			return
+		}
+		for _, table := range []string{"almanac_slo_extrema", "almanac_slo_extrema_cursor", "almanac_slo_current_projections", "almanac_slo_current_failures", "almanac_slo_derived_generations", "almanac_slo_exclusion_state", "almanac_service_maintenance_membership_work", "almanac_slo_service_assignments", "almanac_slo_definitions", "almanac_slos"} {
 			key := "slo_id"
 			if table == "almanac_slos" {
 				key = "id"
