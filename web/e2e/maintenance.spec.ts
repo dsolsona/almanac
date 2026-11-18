@@ -31,7 +31,7 @@ test('schedule and inspect explicit SLO maintenance in the deployed app', async 
     await expect(page.locator('form > section > header > h2')).toHaveText(['Context', 'Scope', 'Schedule']);
     await page.getByRole('textbox', { name: 'Name', exact: true }).fill(displayName);
     await page.getByRole('textbox', { name: 'Reason', exact: true }).fill('Apply the scheduled database update.');
-    const picker = page.getByRole('combobox', { name: 'Affected SLOs', exact: true });
+    const picker = page.getByRole('combobox', { name: 'Search SLOs', exact: true });
     await picker.fill('Checkout availability');
     await expect(page.getByRole('option', { name: /^Checkout availability/ })).toBeVisible();
     await picker.press('ArrowDown');
@@ -225,4 +225,70 @@ test('schedule and inspect explicit SLO maintenance in the deployed app', async 
   } finally {
     stopAgent(agent);
   }
+});
+
+test('schedule empty service scopes and all services from the full catalogue', async ({ page }) => {
+  const prefix = unique('maintenance-fleet');
+  const services = [];
+  for (let index = 0; index < 50; index++) {
+    services.push(await expectOk(api(page, 'POST', '/api/v1/services', {
+      name: `${prefix}-${index}`, display_name: `${prefix} group ${index}`, owner: `${prefix} owner ${index}`,
+    })));
+  }
+  const first = services[48]!;
+  const second = services[49]!;
+  const start = new Date(Date.now() + 86_400_000);
+  start.setUTCHours(12, 0, 0, 0);
+  const calendarDate = new Intl.DateTimeFormat('en', {
+    weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC',
+  }).format(start);
+
+  async function fillSchedule(title: string) {
+    await page.getByRole('textbox', { name: 'Name', exact: true }).fill(title);
+    await page.getByRole('textbox', { name: 'Reason', exact: true }).fill('Exercise fleet maintenance scheduling.');
+    await page.getByRole('button', { name: /^Start date/ }).click();
+    if (start.getUTCDate() === 1) await page.getByRole('button', { name: 'Next month' }).click();
+    await page.getByRole('button', { name: calendarDate, exact: true }).click();
+    await page.getByLabel('Start time (UTC)', { exact: true }).fill('12:00');
+  }
+
+  await page.goto('/maintenance/new');
+  await page.getByRole('radio', { name: 'Selected services', exact: true }).press('Space');
+  const picker = page.getByRole('combobox', { name: 'Search services', exact: true });
+  await picker.focus();
+  await expect(page.getByRole('option')).toHaveCount(10);
+  for (const service of [first, second]) {
+    await picker.fill(service.body.owner);
+    await expect(page.getByRole('option', { name: new RegExp(service.body.display_name) })).toBeVisible();
+    await picker.press('ArrowDown');
+    await picker.press('Enter');
+    await expect(picker).toBeFocused();
+  }
+  const selected = page.getByRole('list', { name: 'Selected services', exact: true });
+  await expect(selected.getByRole('listitem')).toHaveCount(2);
+  await expect(page.getByRole('region', { name: 'Affected SLO preview' })).toContainText('0 affected SLOs');
+  const title = `${prefix} service scope`;
+  await fillSchedule(title);
+  await page.getByRole('button', { name: 'Schedule maintenance', exact: true }).click();
+  await expect(page.getByRole('heading', { name: title, level: 1 })).toBeVisible();
+  let id = new URL(page.url()).pathname.split('/').at(-1);
+  let saved = await expectOk(api(page, 'GET', `/api/v1/scoped-maintenance/${id}`));
+  expect(saved.body.scope).toEqual({ kind: 'services', service_ids: [first.body.id, second.body.id].sort() });
+
+  await page.evaluate(() => localStorage.setItem('almanac-theme', 'dark'));
+  await page.setViewportSize({ width: 360, height: 820 });
+  await page.goto('/maintenance/new');
+  await expect(page.locator('html')).toHaveCSS('color-scheme', 'dark');
+  await page.getByRole('radio', { name: 'All services', exact: true }).press('Space');
+  await expect(picker).toHaveCount(0);
+  await expect(page.getByRole('combobox', { name: 'Search SLOs', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Affected SLO preview' })).toContainText('Inventory as of');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(360);
+  const all = `${prefix} all services`;
+  await fillSchedule(all);
+  await page.getByRole('button', { name: 'Schedule maintenance', exact: true }).click();
+  await expect(page.getByRole('heading', { name: all, level: 1 })).toBeVisible();
+  id = new URL(page.url()).pathname.split('/').at(-1);
+  saved = await expectOk(api(page, 'GET', `/api/v1/scoped-maintenance/${id}`));
+  expect(saved.body.scope).toEqual({ kind: 'all_services' });
 });

@@ -34,3 +34,11 @@
 .maintenance-lifecycle-form p { margin: 0; }
 
 .maintenance-correction summary { cursor: pointer; font-weight: 600; }
+
+.maintenance-scope-mode { justify-self: start; }
+.maintenance-impact { min-width: 0; overflow-wrap: anywhere; }
+.maintenance-impact h2, .maintenance-impact h3 { margin: 0 0 var(--space-2); font-size: 1rem; }
+.maintenance-impact-list { display: grid; gap: var(--space-2); list-style: none; margin: var(--space-3) 0; padding: 0; }
+.maintenance-impact-list li { border-top: 1px solid var(--border); padding-top: var(--space-2); }
+.maintenance-impact-list .ui-hint { margin: 0; }
+.maintenance-detail dd > p:first-child { margin-top: 0; }

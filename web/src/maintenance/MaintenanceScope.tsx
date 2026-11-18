@@ -1,23 +1,29 @@
 import { useEffect, useState } from 'react';
 import { Button } from '../components/ui/index.ts';
-import { sloClient } from '../slos/client.ts';
+import type { MaintenanceSelector } from './client.ts';
+import { scopeIDs, scopeLabels, scopeOption, type SelectedKind } from './ScopePicker.tsx';
 
-function ScopeName({ id, links }: { id: string; links: boolean }) {
+function ScopeName({ id, kind }: { id: string; kind: SelectedKind }) {
   const [name, setName] = useState('');
   useEffect(() => {
     const controller = new AbortController();
-    sloClient.get(id, controller.signal).then(result => {
-      if (!controller.signal.aborted) setName(result.value.display_name);
+    scopeOption(kind, id, controller.signal).then(option => {
+      if (!controller.signal.aborted) setName(option.label);
     }).catch(() => {});
     return () => controller.abort();
-  }, [id]);
-  return links ? <a href={`/slos/${id}`} data-app-route>{name || id}</a> : <span>{name || id}</span>;
+  }, [id, kind]);
+  return <span>{name || id}</span>;
 }
 
-export function MaintenanceScope({ ids, links = false }: { ids: string[]; links?: boolean }) {
+export function MaintenanceScope({ scope }: { scope: MaintenanceSelector }) {
   const [visible, setVisible] = useState(10);
+  const ids = scopeIDs(scope);
+  if (scope.kind === 'all_services') return <>{scopeLabels.all_services}</>;
+  const kind = scope.kind;
+
   return <>
-    <ul>{ids.slice(0, visible).map(id => <li key={id}><ScopeName id={id} links={links} /></li>)}</ul>
-    {ids.length > visible && <Button variant="ghost" onClick={() => setVisible(value => value + 10)}>Show more SLOs</Button>}
+    <p>{scopeLabels[kind]} · {ids.length}</p>
+    <ul>{ids.slice(0, visible).map(id => <li key={id}><ScopeName id={id} kind={kind} /></li>)}</ul>
+    {ids.length > visible && <Button variant="ghost" onClick={() => setVisible(value => value + 10)}>Show more {kind === 'services' ? 'services' : 'SLOs'}</Button>}
   </>;
 }

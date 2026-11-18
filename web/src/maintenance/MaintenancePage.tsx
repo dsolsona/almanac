@@ -3,6 +3,8 @@ import type { AuthContext } from '../auth/client.ts';
 import { LoadingIndicator, PageHeader, Pager, RefreshButton, StatusChip, Toolbar, ToolbarSpacer, resourceRowClick } from '../components/ui/index.ts';
 import type { ServerClock } from '../slos/client.ts';
 import { maintenanceClient, type MaintenancePage as WindowPage, type MaintenanceWindow } from './client.ts';
+import { MaintenanceWindowImpact } from './MaintenanceImpact.tsx';
+import { scopeIDs, scopeLabels } from './ScopePicker.tsx';
 import { MaintenanceLifecycle } from './MaintenanceLifecycle.tsx';
 import { MaintenanceScope } from './MaintenanceScope.tsx';
 import { ScheduleMaintenance } from './ScheduleMaintenance.tsx';
@@ -98,7 +100,7 @@ function WindowList({ canWrite }: { canWrite: boolean }) {
           <tbody>{page.items.map(window => <tr key={window.id} onClick={event => resourceRowClick(event, () => navigate(`${root}/${window.id}`))}>
             <td data-label="Maintenance"><a href={`${root}/${window.id}`} data-app-route>{window.title}</a></td>
             <td data-label="Status"><StatusChip {...windowStatus(window, now)} /></td>
-            <td data-label="Scope">{window.slo_ids.length} {window.slo_ids.length === 1 ? 'SLO' : 'SLOs'}</td>
+            <td data-label="Scope">{scopeLabels[window.scope.kind]}{window.scope.kind !== 'all_services' && ` · ${scopeIDs(window.scope).length}`}</td>
             <td data-label="Starts (UTC)"><time dateTime={window.start}>{timeLabel(window.start)}</time></td>
             <td data-label="Ends (UTC)"><time dateTime={window.end}>{timeLabel(window.end)}</time></td>
           </tr>)}</tbody>
@@ -172,9 +174,12 @@ function WindowDetail({ id, revision, editing, context }: { id: string; revision
           <dt>Starts (UTC)</dt><dd><time dateTime={window.start}>{timeLabel(window.start)}</time></dd>
           <dt>Ends (UTC)</dt><dd><time dateTime={window.end}>{timeLabel(window.end)}</time></dd>
           <dt>Reason</dt><dd className="maintenance-reason">{window.reason}</dd>
-          <dt>Affected SLOs</dt><dd><MaintenanceScope ids={window.slo_ids} links /></dd>
+          <dt>Scope</dt><dd><MaintenanceScope key={window.revision} scope={window.scope} /></dd>
         </dl>
       </section>
+      <div className="maintenance-panel maintenance-detail">
+        <MaintenanceWindowImpact key={window.revision} id={window.id} revision={window.revision} />
+      </div>
       <section className="maintenance-panel maintenance-detail" aria-labelledby="maintenance-history-heading">
         <h2 id="maintenance-history-heading">Revision history</h2>
         <p>Revision {window.revision} · <time dateTime={window.updated_at}>{timeLabel(window.updated_at)} UTC</time></p>
