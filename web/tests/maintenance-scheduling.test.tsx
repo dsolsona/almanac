@@ -249,6 +249,7 @@ it('preserves the exact bounds of an API-created window when editing its reason'
 });
 
 it('retries an edit after its inventory changes using the same draft and request key', async () => {
+  history.replaceState({}, '', `/maintenance/${id}?edit=1`);
   const etag = `"maintenance:${id}:1"`;
   vi.spyOn(sloClient, 'get').mockRejectedValue(new Error('Name not loaded'));
   vi.spyOn(sloClient, 'overview').mockResolvedValue({ items: [] } as unknown as OperationalOverview);
@@ -266,13 +267,14 @@ it('retries an edit after its inventory changes using the same draft and request
   const save = screen.getByRole('button', { name: 'Save schedule' });
   await waitFor(() => expect(save).toBeEnabled());
   fireEvent.click(save);
-  expect(await screen.findByRole('alert')).toHaveTextContent('The affected SLO inventory changed. Try saving again.');
+  expect(await screen.findByRole('alert')).toHaveTextContent('The affected SLO inventory changed or the scheduled start passed while saving. Try saving again.');
   expect(screen.queryByRole('button', { name: 'Read latest revision' })).toBeNull();
   expect(reason).toHaveValue('Updated reason');
   expect(save).toBeEnabled();
   await act(async () => { fireEvent.click(save); });
   expect(update).toHaveBeenCalledTimes(2);
   expect(update.mock.calls[1]).toEqual(update.mock.calls[0]);
+  expect(location.pathname + location.search).toBe(`/maintenance/${id}`);
 });
 
 it('reviews a concurrent SLO swap and reason before enabling the retained draft', async () => {

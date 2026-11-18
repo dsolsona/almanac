@@ -1164,7 +1164,7 @@ export interface paths {
         put?: never;
         /**
          * Inspect the current affected SLO inventory for a maintenance selector
-         * @description Read-only operation available to Viewers. Scope and pagination are bound to the cursor. Follow next_cursor to retrieve the remaining inventory. An empty valid inventory has a zero total.
+         * @description Read-only operation available to Viewers. Scope and pagination are bound to the cursor. Follow next_cursor to retrieve the remaining inventory. An empty valid inventory has a zero total. After a 409 maintenance_snapshot_changed response, discard the partial inventory and request the first page again with the same selector and no cursor.
          */
         post: operations["previewMaintenanceScope"];
         delete?: never;
@@ -6106,7 +6106,7 @@ export interface operations {
                     "application/json": components["schemas"]["ScopedMaintenanceWindow"];
                 };
             };
-            /** @description A revision or request key conflicted (maintenance_conflict), or affected inventory changed during validation (maintenance_write_retry). For maintenance_write_retry, retry the same request with the same idempotency key. */
+            /** @description A revision or request key conflicted (maintenance_conflict). If the affected SLO inventory changed or the scheduled start passed during validation (maintenance_write_retry), retry the same request with the same idempotency key. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -6195,7 +6195,7 @@ export interface operations {
                     "application/json": components["schemas"]["ScopedMaintenanceWindow"];
                 };
             };
-            /** @description A revision or request key conflicted (maintenance_conflict), or affected inventory changed during validation (maintenance_write_retry). For maintenance_write_retry, retry the same request with the same idempotency key. */
+            /** @description A revision or request key conflicted (maintenance_conflict). If the affected SLO inventory changed or the scheduled start passed during validation (maintenance_write_retry), retry the same request with the same idempotency key. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -6378,6 +6378,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MaintenanceImpactPage"];
+                };
+            };
+            /** @description The affected SLO inventory changed (maintenance_snapshot_changed). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
             /** @description Request rejected */

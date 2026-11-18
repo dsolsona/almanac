@@ -66,7 +66,7 @@ func TestMaintenanceSnapshotProblemsDistinguishReadAndWriteRecovery(t *testing.T
 		revision      *string
 	}{
 		{maintenanceError, storage.ErrMaintenanceSnapshotChanged, "maintenance_snapshot_changed", "The maintenance inventory changed. Reload the first page.", nil},
-		{maintenanceWriteError, storage.ErrMaintenanceSnapshotChanged, "maintenance_write_retry", "The affected SLO inventory changed. Retry the same request with the same idempotency key.", nil},
+		{maintenanceWriteError, storage.ErrMaintenanceSnapshotChanged, "maintenance_write_retry", "The affected SLO inventory changed or the scheduled start passed during validation. Retry the same request with the same idempotency key.", nil},
 		{maintenanceWriteError, &storage.MaintenanceConflictError{CurrentRevision: 5}, "maintenance_conflict", "The window changed or the request key was already used.", new("5")},
 	} {
 		w := httptest.NewRecorder()

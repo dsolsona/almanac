@@ -291,7 +291,7 @@ func writeMaintenancePage(w http.ResponseWriter, page storage.MaintenancePage, e
 func maintenanceWriteError(w http.ResponseWriter, err error, requestID string) {
 	if errors.Is(err, storage.ErrMaintenanceSnapshotChanged) {
 		writeMaintenanceProblem(w, http.StatusConflict, api.Problem{
-			Code: "maintenance_write_retry", Message: "The affected SLO inventory changed. Retry the same request with the same idempotency key.",
+			Code: "maintenance_write_retry", Message: "The affected SLO inventory changed or the scheduled start passed during validation. Retry the same request with the same idempotency key.",
 			RequestId: requestID,
 		})
 		return

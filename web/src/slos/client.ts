@@ -189,7 +189,7 @@ const messages: Record<string, string> = {
   derived_data_failed: 'Preparation failed. An administrator or editor can retry it.',
   conflict: 'This name or version conflicts with an existing record. Review it and try again.',
   snapshot_expired: 'This SLO list snapshot expired. Restart from the first page.',
-  maintenance_write_retry: 'The affected SLO inventory changed. Try saving again.',
+  maintenance_write_retry: 'The affected SLO inventory changed or the scheduled start passed while saving. Try saving again.',
   resource_limit: 'The operational result exceeds the server resource limit. Narrow the requested range.',
   range_too_dense: 'This operational range is too dense to return. Choose a shorter range.',
   invalid_request: 'Review the fields, target and window alignment, then try again.',

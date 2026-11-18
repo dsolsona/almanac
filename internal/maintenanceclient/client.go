@@ -306,7 +306,7 @@ func problemFailure(ctx context.Context, mutation bool, status int, data []byte)
 			}
 		case status == 409 && mutation && problem.Code == "maintenance_write_retry":
 			failure.BackendCode = problem.Code
-			failure.Message = "The affected SLO inventory changed. Retry the same request with the same idempotency key."
+			failure.Message = "The affected SLO inventory changed or the scheduled start passed during validation. Retry the same request with the same idempotency key."
 		case status == 409 && !mutation && problem.Code == "maintenance_snapshot_changed":
 			failure.BackendCode = problem.Code
 			failure.Message = "The maintenance inventory changed. Restart from the first page."

@@ -7240,7 +7240,7 @@ type ClientInterface interface {
 
 	// PreviewMaintenanceScopeWithBody Inspect the current affected SLO inventory for a maintenance selector
 	//
-	// Read-only operation available to Viewers. Scope and pagination are bound to the cursor. Follow next_cursor to retrieve the remaining inventory. An empty valid inventory has a zero total.
+	// Read-only operation available to Viewers. Scope and pagination are bound to the cursor. Follow next_cursor to retrieve the remaining inventory. An empty valid inventory has a zero total. After a 409 maintenance_snapshot_changed response, discard the partial inventory and request the first page again with the same selector and no cursor.
 	//
 	// Takes any type of body and a specified content type.
 	//
@@ -7249,7 +7249,7 @@ type ClientInterface interface {
 
 	// PreviewMaintenanceScope Inspect the current affected SLO inventory for a maintenance selector
 	//
-	// Read-only operation available to Viewers. Scope and pagination are bound to the cursor. Follow next_cursor to retrieve the remaining inventory. An empty valid inventory has a zero total.
+	// Read-only operation available to Viewers. Scope and pagination are bound to the cursor. Follow next_cursor to retrieve the remaining inventory. An empty valid inventory has a zero total. After a 409 maintenance_snapshot_changed response, discard the partial inventory and request the first page again with the same selector and no cursor.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -9195,7 +9195,7 @@ func (c *Client) CreateScopedMaintenance(ctx context.Context, params *CreateScop
 
 // PreviewMaintenanceScopeWithBody Inspect the current affected SLO inventory for a maintenance selector
 //
-// Read-only operation available to Viewers. Scope and pagination are bound to the cursor. Follow next_cursor to retrieve the remaining inventory. An empty valid inventory has a zero total.
+// Read-only operation available to Viewers. Scope and pagination are bound to the cursor. Follow next_cursor to retrieve the remaining inventory. An empty valid inventory has a zero total. After a 409 maintenance_snapshot_changed response, discard the partial inventory and request the first page again with the same selector and no cursor.
 //
 // Takes any type of body and a specified content type.
 //
@@ -9214,7 +9214,7 @@ func (c *Client) PreviewMaintenanceScopeWithBody(ctx context.Context, params *Pr
 
 // PreviewMaintenanceScope Inspect the current affected SLO inventory for a maintenance selector
 //
-// Read-only operation available to Viewers. Scope and pagination are bound to the cursor. Follow next_cursor to retrieve the remaining inventory. An empty valid inventory has a zero total.
+// Read-only operation available to Viewers. Scope and pagination are bound to the cursor. Follow next_cursor to retrieve the remaining inventory. An empty valid inventory has a zero total. After a 409 maintenance_snapshot_changed response, discard the partial inventory and request the first page again with the same selector and no cursor.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -16987,7 +16987,7 @@ type ClientWithResponsesInterface interface {
 
 	// PreviewMaintenanceScopeWithBodyWithResponse Inspect the current affected SLO inventory for a maintenance selector
 	//
-	// Read-only operation available to Viewers. Scope and pagination are bound to the cursor. Follow next_cursor to retrieve the remaining inventory. An empty valid inventory has a zero total.
+	// Read-only operation available to Viewers. Scope and pagination are bound to the cursor. Follow next_cursor to retrieve the remaining inventory. An empty valid inventory has a zero total. After a 409 maintenance_snapshot_changed response, discard the partial inventory and request the first page again with the same selector and no cursor.
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -16996,7 +16996,7 @@ type ClientWithResponsesInterface interface {
 
 	// PreviewMaintenanceScopeWithResponse Inspect the current affected SLO inventory for a maintenance selector
 	//
-	// Read-only operation available to Viewers. Scope and pagination are bound to the cursor. Follow next_cursor to retrieve the remaining inventory. An empty valid inventory has a zero total.
+	// Read-only operation available to Viewers. Scope and pagination are bound to the cursor. Follow next_cursor to retrieve the remaining inventory. An empty valid inventory has a zero total. After a 409 maintenance_snapshot_changed response, discard the partial inventory and request the first page again with the same selector and no cursor.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -20657,6 +20657,8 @@ type PreviewMaintenanceScopeResponse struct {
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *MaintenanceImpactPage
+	// ApplicationproblemJSON409 the response for an HTTP 409 `application/problem+json` response
+	ApplicationproblemJSON409 *Problem
 	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
 	ApplicationproblemJSONDefault *Problem
 }
@@ -20664,6 +20666,11 @@ type PreviewMaintenanceScopeResponse struct {
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r PreviewMaintenanceScopeResponse) GetJSON200() *MaintenanceImpactPage {
 	return r.JSON200
+}
+
+// GetApplicationproblemJSON409 returns the response for an HTTP 409 `application/problem+json` response
+func (r PreviewMaintenanceScopeResponse) GetApplicationproblemJSON409() *Problem {
+	return r.ApplicationproblemJSON409
 }
 
 // GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
@@ -24164,7 +24171,7 @@ func (c *ClientWithResponses) CreateScopedMaintenanceWithResponse(ctx context.Co
 
 // PreviewMaintenanceScopeWithBodyWithResponse Inspect the current affected SLO inventory for a maintenance selector
 //
-// Read-only operation available to Viewers. Scope and pagination are bound to the cursor. Follow next_cursor to retrieve the remaining inventory. An empty valid inventory has a zero total.
+// Read-only operation available to Viewers. Scope and pagination are bound to the cursor. Follow next_cursor to retrieve the remaining inventory. An empty valid inventory has a zero total. After a 409 maintenance_snapshot_changed response, discard the partial inventory and request the first page again with the same selector and no cursor.
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
@@ -24179,7 +24186,7 @@ func (c *ClientWithResponses) PreviewMaintenanceScopeWithBodyWithResponse(ctx co
 
 // PreviewMaintenanceScopeWithResponse Inspect the current affected SLO inventory for a maintenance selector
 //
-// Read-only operation available to Viewers. Scope and pagination are bound to the cursor. Follow next_cursor to retrieve the remaining inventory. An empty valid inventory has a zero total.
+// Read-only operation available to Viewers. Scope and pagination are bound to the cursor. Follow next_cursor to retrieve the remaining inventory. An empty valid inventory has a zero total. After a 409 maintenance_snapshot_changed response, discard the partial inventory and request the first page again with the same selector and no cursor.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -27545,6 +27552,13 @@ func ParsePreviewMaintenanceScopeResponse(rsp *http.Response) (*PreviewMaintenan
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON409 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
 		var dest Problem

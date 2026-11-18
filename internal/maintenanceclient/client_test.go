@@ -195,7 +195,7 @@ func TestMaintenanceSnapshotRecoveryGuidance(t *testing.T) {
 		code, message string
 		mutation      bool
 	}{
-		{"maintenance_write_retry", "The affected SLO inventory changed. Retry the same request with the same idempotency key.", true},
+		{"maintenance_write_retry", "The affected SLO inventory changed or the scheduled start passed during validation. Retry the same request with the same idempotency key.", true},
 		{"maintenance_snapshot_changed", "The maintenance inventory changed. Restart from the first page.", false},
 	} {
 		body := []byte(`{"code":"` + tc.code + `"}`)
