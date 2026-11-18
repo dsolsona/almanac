@@ -136,20 +136,26 @@ WHERE NOT p.complete
 ORDER BY p.exclusion_id LIMIT 1 FOR UPDATE OF e SKIP LOCKED;
 
 -- name: ListServiceMaintenanceProjectionSlos :many
-SELECT s.id FROM public.almanac_slos s
-WHERE s.id > sqlc.arg(after_slo)::uuid
-  AND (
-      EXISTS (
-          SELECT 1 FROM public.almanac_service_maintenance_intervals(
-              sqlc.arg(exclusion_id)::uuid, sqlc.arg(revision)::bigint, s.id, NULL
-          )
-      ) OR (
-          SELECT c.included FROM public.almanac_slo_exclusion_changes c
-          WHERE c.slo_id = s.id AND c.exclusion_id = sqlc.arg(exclusion_id)
-          ORDER BY c.revision DESC LIMIT 1
-      )
-  )
-ORDER BY s.id LIMIT sqlc.arg(page_limit)::integer;
+WITH slo_page AS MATERIALIZED (
+    SELECT s.id
+    FROM public.almanac_slos s
+    WHERE s.id > sqlc.arg(after_slo)::uuid
+    ORDER BY s.id
+    LIMIT sqlc.arg(page_limit)::integer
+)
+SELECT s.id, (
+    EXISTS (
+        SELECT 1 FROM public.almanac_service_maintenance_intervals(
+            sqlc.arg(exclusion_id)::uuid, sqlc.arg(revision)::bigint, s.id, NULL
+        )
+    ) OR COALESCE((
+        SELECT c.included FROM public.almanac_slo_exclusion_changes c
+        WHERE c.slo_id = s.id AND c.exclusion_id = sqlc.arg(exclusion_id)
+        ORDER BY c.revision DESC LIMIT 1
+    ), false)
+)::boolean AS relevant
+FROM slo_page s
+ORDER BY s.id;
 
 -- name: ApplyServiceMaintenanceProjectionMember :one
 SELECT public.almanac_project_service_maintenance_member(

@@ -4,6 +4,8 @@ package storage
 
 import (
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -429,4 +431,104 @@ func createProjectionFixtureSLO(t *testing.T, f maintenanceFixture, serviceID st
 		t.Fatal(err)
 	}
 	return slo.ID
+}
+
+func TestIntegrationMaintenanceServiceProjectionAdvancesThroughSparseTail(t *testing.T) {
+	t.Parallel()
+	f := newMaintenanceFixture(t)
+	subject, err := dbgen.New(f.conn).GetSlo(t.Context(), mustPGUUID(f.ids[1]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, _, err := CreateObjective(t.Context(), f.f.databaseURL, CreateObjectiveInput{
+		Proof: f.proof, Name: "sparse-projection-destination", DisplayName: "Outside selection",
+		IdempotencyKey: "sparse-projection-destination", RequestID: "sparse-projection-destination", Now: f.clock,
+	}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	moveMaintenanceSLO(t, f, other.ID, 2, f.at.Add(time.Minute))
+	const tailSize = 130
+	tailID := func(i int) string { return fmt.Sprintf("ffffffff-ffff-ffff-ffff-%012d", i) }
+	compilerTx(t, f, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(t.Context(), `
+INSERT INTO almanac_slos(id, name, display_name, definition_revision, created_at, updated_at)
+SELECT ('ffffffff-ffff-ffff-ffff-' || lpad(i::text, 12, '0'))::uuid,
+    'sparse-tail-' || i, 'Sparse tail ' || i, 1, $2, $2
+FROM generate_series(1, $1::integer) i`, tailSize, f.at); err != nil {
+			return err
+		}
+		_, err := tx.Exec(t.Context(), `
+INSERT INTO almanac_slo_definitions(slo_id, revision, service_id, sli_id, measurement_revision, target,
+    rolling_window_seconds, cadence_seconds, activated_at, evaluation_valid_from)
+SELECT s.id, 1, $2, d.sli_id, d.measurement_revision, d.target, d.rolling_window_seconds,
+    d.cadence_seconds, d.activated_at, d.evaluation_valid_from
+FROM almanac_slos s CROSS JOIN almanac_slo_definitions d
+WHERE s.id BETWEEN $3 AND $4 AND d.slo_id=$1 AND d.revision=1`, subject.ID, other.ID, tailID(1), tailID(tailSize))
+		return err
+	})
+	input := f.input("sparse-projection")
+	input.ScopeKind, input.SloIDs, input.ServiceIDs = MaintenanceScopeServices, nil, []string{subject.ServiceID.String()}
+	input.Start, input.End = f.at.Add(5*time.Minute), f.at.Add(10*time.Minute)
+	window, err := CreateMaintenance(t.Context(), f.f.databaseURL, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The first unmatched tail row is locked by an independent transaction.
+	// Scanning its ID must not require a row lock or delay cursor advancement.
+	conn := integrationConnect(t, f.f.databaseURL)
+	defer closeIntegrationConn(conn)
+	held, err := conn.Begin(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rollbackTransaction(held)
+	if _, err := dbgen.New(held).LockMaintenanceSlo(t.Context(), mustPGUUID(tailID(1))); err != nil {
+		t.Fatal(err)
+	}
+
+	for i, step := range []struct {
+		limit    int
+		through  string
+		complete bool
+	}{
+		{2, max(f.ids[0], f.ids[1]), false},
+		{64, tailID(64), false},
+		{64, tailID(128), false},
+		{64, tailID(tailSize), true},
+	} {
+		if err := f.runtime.runServiceMaintenanceProjection(t.Context(), step.limit, time.Second, f.clock); err != nil {
+			t.Fatalf("projection turn %d: %v", i+1, err)
+		}
+		var through string
+		var complete bool
+		if err := f.conn.QueryRow(t.Context(), `SELECT through_slo, complete FROM almanac_service_maintenance_projection WHERE exclusion_id=$1`,
+			window.ID).Scan(&through, &complete); err != nil || through != step.through || complete != step.complete {
+			t.Fatalf("turn %d through=%s complete=%v, want %s/%v: %v", i+1, through, complete, step.through, step.complete, err)
+		}
+	}
+	var installed []string
+	if err := f.conn.QueryRow(t.Context(), `SELECT array_agg(slo_id::text ORDER BY slo_id)
+FROM almanac_slo_exclusion_changes WHERE exclusion_id=$1`, window.ID).Scan(&installed); err != nil || len(installed) != 1 || installed[0] != subject.ID.String() {
+		t.Fatalf("scope installed for %v, want only %s: %v", installed, subject.ID, err)
+	}
+
+	compilerTx(t, f, func(tx pgx.Tx) error {
+		queries := &evaluationQueryTx{Tx: tx}
+		if _, err := dbgen.New(queries).ListServiceMaintenanceProjectionSlos(t.Context(), dbgen.ListServiceMaintenanceProjectionSlosParams{
+			ExclusionID: mustPGUUID(window.ID), Revision: 1, AfterSlo: uuidOrZero(""), PageLimit: 2,
+		}); err != nil {
+			return err
+		}
+		query := queries.calls[0]
+		var plan string
+		if err := tx.QueryRow(t.Context(), "EXPLAIN (ANALYZE, COSTS OFF, FORMAT JSON) "+query.sql, query.args...).Scan(&plan); err != nil {
+			return err
+		}
+		if !strings.Contains(plan, "almanac_slos_pkey") {
+			t.Fatalf("raw page did not use the SLO UUID primary key: %s", plan)
+		}
+		return nil
+	})
 }

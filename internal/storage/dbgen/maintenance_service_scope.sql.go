@@ -676,47 +676,58 @@ func (q *Queries) ListServiceMaintenanceMembershipTargets(ctx context.Context, a
 }
 
 const listServiceMaintenanceProjectionSlos = `-- name: ListServiceMaintenanceProjectionSlos :many
-SELECT s.id FROM public.almanac_slos s
-WHERE s.id > $1::uuid
-  AND (
-      EXISTS (
-          SELECT 1 FROM public.almanac_service_maintenance_intervals(
-              $2::uuid, $3::bigint, s.id, NULL
-          )
-      ) OR (
-          SELECT c.included FROM public.almanac_slo_exclusion_changes c
-          WHERE c.slo_id = s.id AND c.exclusion_id = $2
-          ORDER BY c.revision DESC LIMIT 1
-      )
-  )
-ORDER BY s.id LIMIT $4::integer
+WITH slo_page AS MATERIALIZED (
+    SELECT s.id
+    FROM public.almanac_slos s
+    WHERE s.id > $3::uuid
+    ORDER BY s.id
+    LIMIT $4::integer
+)
+SELECT s.id, (
+    EXISTS (
+        SELECT 1 FROM public.almanac_service_maintenance_intervals(
+            $1::uuid, $2::bigint, s.id, NULL
+        )
+    ) OR COALESCE((
+        SELECT c.included FROM public.almanac_slo_exclusion_changes c
+        WHERE c.slo_id = s.id AND c.exclusion_id = $1
+        ORDER BY c.revision DESC LIMIT 1
+    ), false)
+)::boolean AS relevant
+FROM slo_page s
+ORDER BY s.id
 `
 
 type ListServiceMaintenanceProjectionSlosParams struct {
-	AfterSlo    pgtype.UUID `json:"after_slo"`
 	ExclusionID pgtype.UUID `json:"exclusion_id"`
 	Revision    int64       `json:"revision"`
+	AfterSlo    pgtype.UUID `json:"after_slo"`
 	PageLimit   int32       `json:"page_limit"`
 }
 
-func (q *Queries) ListServiceMaintenanceProjectionSlos(ctx context.Context, arg ListServiceMaintenanceProjectionSlosParams) ([]pgtype.UUID, error) {
+type ListServiceMaintenanceProjectionSlosRow struct {
+	ID       pgtype.UUID `json:"id"`
+	Relevant bool        `json:"relevant"`
+}
+
+func (q *Queries) ListServiceMaintenanceProjectionSlos(ctx context.Context, arg ListServiceMaintenanceProjectionSlosParams) ([]ListServiceMaintenanceProjectionSlosRow, error) {
 	rows, err := q.db.Query(ctx, listServiceMaintenanceProjectionSlos,
-		arg.AfterSlo,
 		arg.ExclusionID,
 		arg.Revision,
+		arg.AfterSlo,
 		arg.PageLimit,
 	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []pgtype.UUID{}
+	items := []ListServiceMaintenanceProjectionSlosRow{}
 	for rows.Next() {
-		var id pgtype.UUID
-		if err := rows.Scan(&id); err != nil {
+		var i ListServiceMaintenanceProjectionSlosRow
+		if err := rows.Scan(&i.ID, &i.Relevant); err != nil {
 			return nil, err
 		}
-		items = append(items, id)
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

@@ -294,7 +294,7 @@ type Querier interface {
 	ListScopedSloMaintenanceOverlaps(ctx context.Context, arg ListScopedSloMaintenanceOverlapsParams) ([]ListScopedSloMaintenanceOverlapsRow, error)
 	ListServiceMaintenanceCadences(ctx context.Context, arg ListServiceMaintenanceCadencesParams) ([]int32, error)
 	ListServiceMaintenanceMembershipTargets(ctx context.Context, arg ListServiceMaintenanceMembershipTargetsParams) ([]ListServiceMaintenanceMembershipTargetsRow, error)
-	ListServiceMaintenanceProjectionSlos(ctx context.Context, arg ListServiceMaintenanceProjectionSlosParams) ([]pgtype.UUID, error)
+	ListServiceMaintenanceProjectionSlos(ctx context.Context, arg ListServiceMaintenanceProjectionSlosParams) ([]ListServiceMaintenanceProjectionSlosRow, error)
 	ListServiceSloStates(ctx context.Context, arg ListServiceSloStatesParams) ([]ListServiceSloStatesRow, error)
 	ListServices(ctx context.Context, arg ListServicesParams) ([]AlmanacService, error)
 	ListSliConfigurationForAgent(ctx context.Context, agentID pgtype.UUID) ([]ListSliConfigurationForAgentRow, error)

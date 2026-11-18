@@ -16,7 +16,7 @@ func (r *Runtime) runServiceMaintenanceProjection(ctx context.Context, pageLimit
 		return ErrMaintenanceInvalid
 	}
 	windowErr := r.maintenancePreparationTransaction(ctx, budget, func(ctx context.Context, tx pgx.Tx) error {
-		return projectServiceMaintenancePage(ctx, tx, pageLimit, clock)
+		return projectServiceMaintenancePage(ctx, tx, int32(pageLimit), clock)
 	})
 	memberErr := r.maintenancePreparationTransaction(ctx, budget, func(ctx context.Context, tx pgx.Tx) error {
 		return projectServiceMaintenanceMembershipPage(ctx, tx, pageLimit, clock)
@@ -24,7 +24,7 @@ func (r *Runtime) runServiceMaintenanceProjection(ctx context.Context, pageLimit
 	return errors.Join(windowErr, memberErr)
 }
 
-func projectServiceMaintenancePage(ctx context.Context, tx pgx.Tx, pageLimit int, clock func() time.Time) error {
+func projectServiceMaintenancePage(ctx context.Context, tx pgx.Tx, pageLimit int32, clock func() time.Time) error {
 	q := dbgen.New(tx)
 	claim, err := q.LockNextServiceMaintenanceProjection(ctx)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -33,12 +33,23 @@ func projectServiceMaintenancePage(ctx context.Context, tx pgx.Tx, pageLimit int
 	if err != nil {
 		return err
 	}
-	ids, err := q.ListServiceMaintenanceProjectionSlos(ctx, dbgen.ListServiceMaintenanceProjectionSlosParams{
-		ExclusionID: claim.ExclusionID, Revision: claim.DesiredRevision, AfterSlo: claim.ThroughSlo, PageLimit: int32(pageLimit),
+	page, err := q.ListServiceMaintenanceProjectionSlos(ctx, dbgen.ListServiceMaintenanceProjectionSlosParams{
+		ExclusionID: claim.ExclusionID, Revision: claim.DesiredRevision, AfterSlo: claim.ThroughSlo, PageLimit: pageLimit,
 	})
 	if err != nil {
 		return err
 	}
+	// Advance past every examined UUID, even when there are no relevant SLOs.
+	// Root and state locks are reserved for current or prior members.
+	after := claim.ThroughSlo
+	ids := make([]pgtype.UUID, 0, len(page))
+	for _, slo := range page {
+		after = slo.ID
+		if slo.Relevant {
+			ids = append(ids, slo.ID)
+		}
+	}
+	complete := len(page) < int(pageLimit)
 	// The expiry work and explicit writer take the same order. Holding the
 	// root locks first also prevents a definition move during projection.
 	for _, id := range ids {
@@ -67,17 +78,15 @@ func projectServiceMaintenancePage(ctx context.Context, tx pgx.Tx, pageLimit int
 	if now.IsZero() {
 		return ErrMaintenanceInvalid
 	}
-	after := claim.ThroughSlo
 	for _, id := range ids {
 		if _, err := q.ApplyServiceMaintenanceProjectionMember(ctx, dbgen.ApplyServiceMaintenanceProjectionMemberParams{
 			SloID: id, ExclusionID: claim.ExclusionID, Revision: claim.DesiredRevision, NowAt: timestamp(now),
 		}); err != nil {
 			return err
 		}
-		after = id
 	}
 	n, err := q.AdvanceServiceMaintenanceProjection(ctx, dbgen.AdvanceServiceMaintenanceProjectionParams{
-		ExclusionID: claim.ExclusionID, Revision: claim.DesiredRevision, ThroughSlo: after, Complete: len(ids) < pageLimit,
+		ExclusionID: claim.ExclusionID, Revision: claim.DesiredRevision, ThroughSlo: after, Complete: complete,
 	})
 	if err != nil {
 		return err
@@ -85,7 +94,7 @@ func projectServiceMaintenancePage(ctx context.Context, tx pgx.Tx, pageLimit int
 	if n != 1 {
 		return ErrMaintenanceSnapshotChanged
 	}
-	if len(ids) < pageLimit {
+	if complete {
 		return q.CompleteServiceMaintenanceProjection(ctx, dbgen.CompleteServiceMaintenanceProjectionParams{
 			ExclusionID: claim.ExclusionID, Revision: claim.DesiredRevision,
 		})
