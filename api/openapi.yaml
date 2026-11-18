@@ -97,6 +97,19 @@ paths:
       responses:
         '200': {description: Revision-bound history ranges, content: {application/json: {schema: {$ref: '#/components/schemas/AlertRangePage'}}}}
         default: {$ref: '#/components/responses/AlertProblem'}
+  /api/v1/alert-policies/{policy_id}/maintenance-suppressions:
+    parameters: [{$ref: '#/components/parameters/AlertPolicyId'}]
+    get:
+      operationId: listAlertMaintenanceSuppressions
+      summary: Audit retained openings suppressed by maintenance on a policy revision
+      security: [{SessionCookie: []}]
+      parameters:
+        - {name: revision, in: query, required: true, schema: {$ref: '#/components/schemas/AlertVersion'}}
+        - {$ref: '#/components/parameters/AlertLimit'}
+        - {$ref: '#/components/parameters/AlertCursor'}
+      responses:
+        '200': {description: Retained decisions ordered newest first, content: {application/json: {schema: {$ref: '#/components/schemas/AlertMaintenanceSuppressionPage'}}}}
+        default: {$ref: '#/components/responses/AlertProblem'}
   /api/v1/alerts:
     get:
       operationId: listAlerts
@@ -1836,6 +1849,23 @@ components:
         start: {$ref: '#/components/schemas/AlertTimestamp'}
         end: {$ref: '#/components/schemas/AlertTimestamp'}
         opening_suppressed: {type: boolean, description: A matching decision would otherwise have opened an occurrence.}
+    AlertMaintenanceSuppressionPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/AlertMaintenanceSuppressionRecord'}}
+        next_cursor: {type: string}
+    AlertMaintenanceSuppressionRecord:
+      type: object
+      additionalProperties: false
+      required: [evaluation_id, effective_cutoff, scheduled_at, committed_at, maintenance]
+      properties:
+        evaluation_id: {type: string, format: uuid}
+        effective_cutoff: {$ref: '#/components/schemas/AlertTimestamp'}
+        scheduled_at: {$ref: '#/components/schemas/AlertTimestamp'}
+        committed_at: {$ref: '#/components/schemas/AlertTimestamp'}
+        maintenance: {$ref: '#/components/schemas/AlertMaintenanceSuppression'}
     AlertObjective:
       type: object
       additionalProperties: false

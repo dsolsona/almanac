@@ -515,6 +515,9 @@ type Querier interface {
 	RevokeAgentCredential(ctx context.Context, arg RevokeAgentCredentialParams) (RevokeAgentCredentialRow, error)
 	RevokeAndAuditUnrevokedAgentCredentials(ctx context.Context, arg RevokeAndAuditUnrevokedAgentCredentialsParams) (int64, error)
 	RotateLocalPassword(ctx context.Context, arg RotateLocalPasswordParams) (int64, error)
+	// Read a bounded range through the existing policy/revision/cutoff key,
+	// then inspect JSON for only those evaluations. A page can be sparse.
+	ScanAlertMaintenanceSuppressions(ctx context.Context, arg ScanAlertMaintenanceSuppressionsParams) ([]ScanAlertMaintenanceSuppressionsRow, error)
 	ScanAlertRetainedEvaluations(ctx context.Context, arg ScanAlertRetainedEvaluationsParams) ([]ScanAlertRetainedEvaluationsRow, error)
 	ScanAlertRetentionRanges(ctx context.Context, arg ScanAlertRetentionRangesParams) ([]AlmanacAlertRange, error)
 	ScanAlertTerminalOccurrences(ctx context.Context, arg ScanAlertTerminalOccurrencesParams) ([]AlmanacAlertOccurrence, error)

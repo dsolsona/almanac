@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"strconv"
 	"strings"
 	"time"
 
@@ -45,6 +44,14 @@ type MaintenanceImpactPage struct {
 	Ready       bool
 }
 
+// The authority revision commits with membership and selector changes. The
+// window revision and projection completion bind the impact page to its exact projection.
+type maintenanceCursorSnapshot struct {
+	AuthorityRevision  int64 `json:"authority_revision"`
+	WindowRevision     int64 `json:"window_revision,omitzero"`
+	ProjectionComplete bool  `json:"projection_complete,omitzero"`
+}
+
 func PreviewMaintenanceScope(ctx context.Context, databaseURL string, input MaintenanceScopePreviewInput) (MaintenanceImpactPage, error) {
 	var page MaintenanceImpactPage
 	kind, slos, services, err := normalizeMaintenanceSelector(input.ScopeKind, input.SloIDs, input.ServiceIDs)
@@ -65,14 +72,18 @@ func PreviewMaintenanceScope(ctx context.Context, databaseURL string, input Main
 	}
 	defer closeInitialOwnerConnection(conn)
 	defer rollbackTransaction(tx)
-	at := started
-	if !cursor.Time.IsZero() {
-		if cursor.Time.After(started) {
-			return page, ErrMaintenanceInvalid
-		}
-		at = cursor.Time
+	authority, err := q.ObserveServiceMaintenanceAuthority(ctx)
+	if err != nil {
+		return page, err
 	}
-	page, err = readMaintenancePreview(ctx, q, kind, slos, services, at, uuidOrZero(cursor.ID), limit, cursorKind, cursorScope)
+	snapshot := maintenanceCursorSnapshot{AuthorityRevision: authority}
+	if cursor.Time.IsZero() {
+		cursor.Time = started
+	} else if cursor.MaintenanceSnapshot == nil || *cursor.MaintenanceSnapshot != snapshot || cursor.Time.After(started) {
+		return page, ErrMaintenanceSnapshotChanged
+	}
+	cursor.MaintenanceSnapshot = &snapshot
+	page, err = readMaintenancePreview(ctx, q, kind, slos, services, limit, cursor)
 	if err != nil {
 		return MaintenanceImpactPage{}, err
 	}
@@ -82,8 +93,9 @@ func PreviewMaintenanceScope(ctx context.Context, databaseURL string, input Main
 	return page, nil
 }
 
-func readMaintenancePreview(ctx context.Context, q *dbgen.Queries, kind MaintenanceScopeKind, slos, services []string, at time.Time, after pgtype.UUID, limit int, cursorKind, cursorScope string) (MaintenanceImpactPage, error) {
+func readMaintenancePreview(ctx context.Context, q *dbgen.Queries, kind MaintenanceScopeKind, slos, services []string, limit int, cursor agentCursor) (MaintenanceImpactPage, error) {
 	var page MaintenanceImpactPage
+	at := cursor.Time
 	sloIDs, serviceIDs := maintenanceSelectorUUIDs(slos), maintenanceSelectorUUIDs(services)
 	if kind == MaintenanceScopeServices {
 		count, err := q.CountMaintenancePreviewServices(ctx, dbgen.CountMaintenancePreviewServicesParams{ServiceIds: serviceIDs, InventoryAt: timestamp(at)})
@@ -104,7 +116,7 @@ func readMaintenancePreview(ctx context.Context, q *dbgen.Queries, kind Maintena
 		return page, ErrMaintenanceNotFound
 	}
 	rows, err := q.ListMaintenancePreviewMembers(ctx, dbgen.ListMaintenancePreviewMembersParams{
-		InventoryAt: timestamp(at), ScopeKind: string(kind), SloIds: sloIDs, ServiceIds: serviceIDs, AfterSlo: after, PageLimit: int32(limit + 1),
+		InventoryAt: timestamp(at), ScopeKind: string(kind), SloIds: sloIDs, ServiceIds: serviceIDs, AfterSlo: uuidOrZero(cursor.ID), PageLimit: int32(limit + 1),
 	})
 	if err != nil {
 		return page, err
@@ -112,7 +124,8 @@ func readMaintenancePreview(ctx context.Context, q *dbgen.Queries, kind Maintena
 	page = MaintenanceImpactPage{Total: count, InventoryAt: at, Ready: true}
 	if len(rows) > limit {
 		rows = rows[:limit]
-		page.NextCursor, err = encodeAgentCursor(agentCursor{Version: 1, Kind: cursorKind, AgentID: cursorScope, Time: at, ID: rows[len(rows)-1].SloID.String()})
+		cursor.ID = rows[len(rows)-1].SloID.String()
+		page.NextCursor, err = encodeAgentCursor(cursor)
 		if err != nil {
 			return page, err
 		}
@@ -146,15 +159,22 @@ func ReadMaintenanceImpact(ctx context.Context, databaseURL string, input Mainte
 	}
 	defer closeInitialOwnerConnection(conn)
 	defer rollbackTransaction(tx)
-	record, err := readMaintenanceRecord(ctx, q, id, input.Revision)
-	if err != nil {
-		return MaintenanceImpactPage{}, err
-	}
 	const cursorKind = "maintenance-impact"
-	cursorScope := input.ID + "/" + strconv.FormatInt(record.Revision, 10)
-	limit, cursor, err := validateAgentPage(cursorKind, cursorScope, input.Limit, input.Cursor)
+	limit, cursor, err := validateAgentPage(cursorKind, input.ID, input.Limit, input.Cursor)
 	if err != nil {
 		return MaintenanceImpactPage{}, ErrMaintenanceInvalid
+	}
+	revision := input.Revision
+	if !cursor.Time.IsZero() {
+		if cursor.MaintenanceSnapshot == nil || cursor.MaintenanceSnapshot.WindowRevision < 1 ||
+			revision != 0 && revision != cursor.MaintenanceSnapshot.WindowRevision {
+			return MaintenanceImpactPage{}, ErrMaintenanceInvalid
+		}
+		revision = cursor.MaintenanceSnapshot.WindowRevision
+	}
+	record, err := readMaintenanceRecord(ctx, q, id, revision)
+	if err != nil {
+		return MaintenanceImpactPage{}, err
 	}
 	at := started
 	superseded, err := q.FindMaintenanceSupersededAt(ctx, dbgen.FindMaintenanceSupersededAtParams{ExclusionID: id, Revision: record.Revision})
@@ -167,10 +187,39 @@ func ReadMaintenanceImpact(ctx context.Context, databaseURL string, input Mainte
 	}
 	afterTime := time.Unix(0, 0).UTC()
 	if !cursor.Time.IsZero() {
-		if !validMaintenanceOverlayTime(cursor.SnapshotAt) || cursor.SnapshotAt.After(at) {
+		if !validMaintenanceOverlayTime(cursor.SnapshotAt) {
 			return MaintenanceImpactPage{}, ErrMaintenanceInvalid
 		}
+		if cursor.SnapshotAt.After(at) {
+			return MaintenanceImpactPage{}, ErrMaintenanceSnapshotChanged
+		}
 		at, afterTime = cursor.SnapshotAt, cursor.Time
+	}
+	authority, err := q.ObserveServiceMaintenanceAuthority(ctx)
+	if err != nil {
+		return MaintenanceImpactPage{}, err
+	}
+	terminalEmpty := record.Tombstone || superseded.Valid && !superseded.Time.After(record.Start)
+	snapshot := maintenanceCursorSnapshot{AuthorityRevision: authority, WindowRevision: record.Revision, ProjectionComplete: true}
+	ready := true
+	if isServiceMaintenanceScope(record.ScopeKind) && !terminalEmpty {
+		snapshot.ProjectionComplete, err = q.ReadMaintenanceProjectionReady(ctx, dbgen.ReadMaintenanceProjectionReadyParams{ExclusionID: id, Revision: record.Revision})
+		if err != nil {
+			return MaintenanceImpactPage{}, err
+		}
+		// A superseded revision has no remaining projection to prepare. Its
+		// recorded impact is reconstructed from the immutable membership journal.
+		ready = !at.Before(record.Start) && (snapshot.ProjectionComplete || superseded.Valid)
+	}
+	if !cursor.Time.IsZero() && (cursor.MaintenanceSnapshot == nil || *cursor.MaintenanceSnapshot != snapshot) {
+		return MaintenanceImpactPage{}, ErrMaintenanceSnapshotChanged
+	}
+
+	if terminalEmpty {
+		if err := finishAgentRead(ctx, tx, input.Now, started, user, installation, session); err != nil {
+			return MaintenanceImpactPage{}, err
+		}
+		return MaintenanceImpactPage{InventoryAt: at, Ready: true, Items: []MaintenanceImpactMember{}}, nil
 	}
 
 	count, err := q.CountMaintenanceImpactMembers(ctx, dbgen.CountMaintenanceImpactMembersParams{
@@ -186,19 +235,13 @@ func ReadMaintenanceImpact(ctx context.Context, databaseURL string, input Mainte
 	if err != nil {
 		return MaintenanceImpactPage{}, err
 	}
-	page := MaintenanceImpactPage{InventoryAt: at, Total: count, Ready: true}
-	if isServiceMaintenanceScope(record.ScopeKind) {
-		page.Ready, err = q.ReadMaintenanceProjectionReady(ctx, dbgen.ReadMaintenanceProjectionReadyParams{ExclusionID: id, Revision: record.Revision})
-		if err != nil {
-			return MaintenanceImpactPage{}, err
-		}
-		page.Ready = page.Ready && !at.Before(record.Start)
-	}
+	page := MaintenanceImpactPage{InventoryAt: at, Total: count, Ready: ready}
 	if len(rows) > limit {
 		rows = rows[:limit]
 		last := rows[len(rows)-1]
 		page.NextCursor, err = encodeAgentCursor(agentCursor{
-			Version: 1, Kind: cursorKind, AgentID: cursorScope, SnapshotAt: at, Time: last.StartsAt.Time.UTC(), ID: last.SloID.String(),
+			Version: 1, Kind: cursorKind, AgentID: input.ID, SnapshotAt: at, Time: last.StartsAt.Time.UTC(), ID: last.SloID.String(),
+			MaintenanceSnapshot: &snapshot,
 		})
 		if err != nil {
 			return MaintenanceImpactPage{}, err

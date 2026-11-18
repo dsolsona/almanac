@@ -105,20 +105,22 @@ func TestIntegrationMaintenanceServicePreviewIsPaged(t *testing.T) {
 		t.Fatalf("first preview = %+v, err = %v", first, err)
 	}
 	preview.Cursor = first.NextCursor
-	f.now = f.at.Add(time.Minute)
-	_, third, err := CreateObjective(t.Context(), f.f.databaseURL, CreateObjectiveInput{
+	second, err := PreviewMaintenanceScope(t.Context(), f.f.databaseURL, preview)
+	if err != nil || second.Total != 2 || len(second.Items) != 1 || second.NextCursor != "" || !second.InventoryAt.Equal(first.InventoryAt) ||
+		second.Items[0].SloID == first.Items[0].SloID {
+		t.Fatalf("next preview page = %+v, err = %v", second, err)
+	}
+	// Commit the join at the same wall-clock instant as the first inventory.
+	// A time-only cursor includes this new SLO in the second page.
+	_, _, err = CreateObjective(t.Context(), f.f.databaseURL, CreateObjectiveInput{
 		Proof: f.proof, Name: "third-preview-slo", DisplayName: "Third SLO", ServiceID: objective.ServiceID.String(),
 		SliID: f.sliID, Target: "0.99", RollingWindowSeconds: 3600, IdempotencyKey: "third-preview-slo", RequestID: "third-preview-slo", Now: f.clock,
 	}, true)
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := PreviewMaintenanceScope(t.Context(), f.f.databaseURL, preview)
-	if err != nil || second.Total != 2 || len(second.Items) != 1 || second.NextCursor != "" || !second.InventoryAt.Equal(first.InventoryAt) {
-		t.Fatalf("next page is not from the same inventory: %+v, err = %v", second, err)
-	}
-	if second.Items[0].SloID == first.Items[0].SloID || second.Items[0].SloID == third.ID {
-		t.Fatalf("unstable membership between pages: %+v; %+v", first, second)
+	if changed, err := PreviewMaintenanceScope(t.Context(), f.f.databaseURL, preview); !errors.Is(err, ErrMaintenanceSnapshotChanged) {
+		t.Fatalf("continuation mixed membership after same-time join: %+v, err = %v", changed, err)
 	}
 	preview.Cursor = ""
 	latest, err := PreviewMaintenanceScope(t.Context(), f.f.databaseURL, preview)

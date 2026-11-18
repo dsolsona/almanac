@@ -122,3 +122,67 @@ func (q *Queries) ReadAlertPolicy(ctx context.Context, id pgtype.UUID) (ReadAler
 	)
 	return i, err
 }
+
+const scanAlertMaintenanceSuppressions = `-- name: ScanAlertMaintenanceSuppressions :many
+WITH source_batch AS MATERIALIZED (
+    SELECT id, effective_cutoff, scheduled_at, committed_at, evidence
+    FROM public.almanac_alert_evaluations
+    WHERE policy_id = $1 AND revision = $2
+      AND effective_cutoff < coalesce($3::timestamptz, 'infinity'::timestamptz)
+    ORDER BY effective_cutoff DESC
+    LIMIT $4::integer
+)
+SELECT id, effective_cutoff, scheduled_at, committed_at,
+       coalesce(CASE WHEN evidence @> '{"Evaluation":{"Maintenance":{"OpeningSuppressed":true}}}'::jsonb
+                THEN (evidence #> '{Evaluation,Maintenance}')::text END, '')::text AS suppression
+FROM source_batch
+ORDER BY effective_cutoff DESC
+`
+
+type ScanAlertMaintenanceSuppressionsParams struct {
+	PolicyID    pgtype.UUID        `json:"policy_id"`
+	Revision    int64              `json:"revision"`
+	AfterCutoff pgtype.Timestamptz `json:"after_cutoff"`
+	ScanLimit   int32              `json:"scan_limit"`
+}
+
+type ScanAlertMaintenanceSuppressionsRow struct {
+	ID              pgtype.UUID        `json:"id"`
+	EffectiveCutoff pgtype.Timestamptz `json:"effective_cutoff"`
+	ScheduledAt     pgtype.Timestamptz `json:"scheduled_at"`
+	CommittedAt     pgtype.Timestamptz `json:"committed_at"`
+	Suppression     string             `json:"suppression"`
+}
+
+// Read a bounded range through the existing policy/revision/cutoff key,
+// then inspect JSON for only those evaluations. A page can be sparse.
+func (q *Queries) ScanAlertMaintenanceSuppressions(ctx context.Context, arg ScanAlertMaintenanceSuppressionsParams) ([]ScanAlertMaintenanceSuppressionsRow, error) {
+	rows, err := q.db.Query(ctx, scanAlertMaintenanceSuppressions,
+		arg.PolicyID,
+		arg.Revision,
+		arg.AfterCutoff,
+		arg.ScanLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ScanAlertMaintenanceSuppressionsRow{}
+	for rows.Next() {
+		var i ScanAlertMaintenanceSuppressionsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.EffectiveCutoff,
+			&i.ScheduledAt,
+			&i.CommittedAt,
+			&i.Suppression,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

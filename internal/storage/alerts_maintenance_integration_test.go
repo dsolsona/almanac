@@ -241,6 +241,17 @@ func TestIntegrationAlertMaintenanceSuppressesOnInclusiveStart(t *testing.T) {
 	if evidence.Evaluation.PolicyID != policy || evidence.Evaluation.Truth != alert.Breaching {
 		t.Fatalf("suppression changed the numerical evaluation: %+v", evidence.Evaluation)
 	}
+	listed, err := ListAlertMaintenanceSuppressions(t.Context(), f.f.databaseURL, ListAlertMaintenanceSuppressionsInput{
+		ReadAlertInput: ReadAlertInput{Runtime: f.runtime, Proof: m.proof, ID: policy, Now: clock},
+		Revision:       1, Limit: 10,
+	})
+	if err != nil || len(listed.Items) != 1 || listed.NextCursor != "" {
+		t.Fatalf("could not audit a suppressed opening without an occurrence: %+v %v", listed, err)
+	}
+	item := listed.Items[0]
+	if item.EvaluationID != saved.EvaluationID || !item.Cutoff.Equal(f.at) || item.Suppression.WindowID != window.ID {
+		t.Fatalf("audit did not preserve the evaluated decision: %+v", item)
+	}
 }
 
 func TestIntegrationAlertMaintenanceRejectsUnprojectedPopulation(t *testing.T) {
@@ -275,5 +286,124 @@ func TestIntegrationAlertMaintenanceRejectsUnprojectedPopulation(t *testing.T) {
 	}
 	if result, err := f.runtime.commitAlertEvaluation(t.Context(), claim, stale, f.limits, clock); !errors.Is(err, ErrAlertStale) || result.EvaluationID != "" {
 		t.Fatalf("reused pre-maintenance evidence after membership advanced: %+v %v", result, err)
+	}
+}
+
+func TestIntegrationAlertMaintenanceOverlapResumesAtFirstUncoveredCutoff(t *testing.T) {
+	t.Parallel()
+	f := newAlertTestFixture(t)
+	policy := f.policy(t, "Overlapping maintenance")
+	m := alertMaintenanceFixture(f)
+	row, err := dbgen.New(f.conn).GetSlo(t.Context(), mustPGUUID(f.sloID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	end := f.at.Add(3 * time.Minute)
+	resumeAt := end.Add(time.Minute)
+	if _, err := execObservationFixture(t, f.conn, f.sliID, `
+WITH source AS (SELECT * FROM almanac_sli_observations WHERE sli_id=$1 LIMIT 1)
+INSERT INTO almanac_sli_observations
+    (interval_start,sli_id,measurement_revision,outcome,good_count,total_count,result_digest,missing_components,
+     execution_id,delivery_id,agent_id,session_generation,configuration_revision,lease_id,agent_created_at,recorded_at)
+SELECT point, s.sli_id,1,'observed',990,1000,s.result_digest,'{}',
+       gen_random_uuid(),gen_random_uuid(),s.agent_id,s.session_generation,s.configuration_revision,s.lease_id,point,point+interval '1 minute'
+FROM source s CROSS JOIN generate_series($2::timestamptz,$3::timestamptz-interval '1 minute',interval '1 minute') point`,
+		f.sliID, f.at, resumeAt); err != nil {
+		t.Fatal(err)
+	}
+	f.drain(t, "overlapping maintenance source")
+	request := m.input("selected-service-suppression")
+	request.Scoped, request.ScopeKind, request.SloIDs = true, MaintenanceScopeServices, nil
+	request.ServiceIDs = []string{row.ServiceID.String()}
+	request.Start, request.End = f.at, f.at.Add(2*time.Minute)
+	selected, err := CreateMaintenance(t.Context(), f.f.databaseURL, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.IdempotencyKey = "all-service-suppression"
+	request.ScopeKind, request.ServiceIDs = MaintenanceScopeAllServices, nil
+	request.Start, request.End = f.at.Add(time.Minute), end
+	all, err := CreateMaintenance(t.Context(), f.f.databaseURL, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		if err := f.runtime.runServiceMaintenanceProjection(t.Context(), 4, time.Second, f.clock); err != nil {
+			t.Fatal(err)
+		}
+	}
+	build := compilerCapture(t, m, nil)
+	compilerFinish(t, m, build.ID, 2)
+	for offset := range 5 {
+		f.now = f.at.Add(time.Duration(offset) * time.Minute)
+		claim := f.claim(t, f.now)
+		prepared, err := alertMaintenancePrepare(t, f, claim)
+		if err != nil {
+			t.Fatalf("prepare cutoff %s: %v", f.now, err)
+		}
+		ev, err := alert.Evaluate(prepared.Input, f.limits)
+		want := alert.Breaching
+		if f.now.Equal(end) {
+			// The first cutoff outside the window still lacks recent eligible data.
+			want = alert.Indeterminate
+		}
+		if err != nil || ev.Truth != want {
+			t.Fatalf("evaluation at %s is %s, want %s: %+v %v", f.now, ev.Truth, want, ev, err)
+		}
+		result, err := f.runtime.commitAlertEvaluation(t.Context(), claim, prepared.Input, f.limits, f.clock)
+		if err != nil {
+			t.Fatalf("publish cutoff %s: %v", f.now, err)
+		}
+		if f.now.Before(resumeAt) {
+			if result.Occurrence != nil {
+				t.Fatalf("maintenance opened an occurrence at %s: %+v", f.now, result)
+			}
+		} else if result.Occurrence == nil || !result.Occurrence.FiringSnapshot.Cutoff.Equal(resumeAt) {
+			t.Fatalf("the first uncovered cutoff did not open its own occurrence: %+v", result)
+		}
+	}
+	cursor := ""
+	for i := 2; i >= 0; i-- {
+		page, err := ListAlertMaintenanceSuppressions(t.Context(), f.f.databaseURL, ListAlertMaintenanceSuppressionsInput{
+			ReadAlertInput: ReadAlertInput{Runtime: f.runtime, Proof: m.proof, ID: policy, Now: f.clock},
+			Revision:       1, Limit: 1, Cursor: cursor,
+		})
+		if err != nil || len(page.Items) != 1 || !page.Items[0].Cutoff.Equal(f.at.Add(time.Duration(i)*time.Minute)) {
+			t.Fatalf("audit cutoff %d: %+v %v", i, page, err)
+		}
+		if i == 2 && page.Items[0].Suppression.WindowID != all.ID || i == 0 && page.Items[0].Suppression.WindowID != selected.ID {
+			t.Fatalf("audit cutoff %d recorded the wrong scope: %+v", i, page.Items[0])
+		}
+		cursor = page.NextCursor
+	}
+	if cursor != "" {
+		t.Fatal("audit included a resumed evaluation")
+	}
+	// A sparse page still advances to older matching evidence. A large stretch
+	// of ordinary evaluations must not be scanned in a single API request.
+	_, err = f.conn.Exec(t.Context(), `
+INSERT INTO almanac_alert_evaluations
+    (id, policy_id, revision, scheduled_at, effective_cutoff, truth, source_generation, exclusion_revision,
+     claim_epoch, claim_token, input_digest, evidence, result, committed_at)
+SELECT gen_random_uuid(), prior.policy_id, prior.revision, boundary, boundary, 'clear',
+       prior.source_generation, prior.exclusion_revision, prior.claim_epoch, gen_random_uuid(),
+       prior.input_digest, prior.evidence #- '{Evaluation,Maintenance}', prior.result, boundary
+FROM (SELECT * FROM almanac_alert_evaluations WHERE policy_id = $1 ORDER BY effective_cutoff DESC LIMIT 1) prior
+CROSS JOIN generate_series($2::timestamptz + interval '1 minute', $2 + interval '500 minutes', interval '1 minute') boundary`, policy, resumeAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := ListAlertMaintenanceSuppressionsInput{
+		ReadAlertInput: ReadAlertInput{Runtime: f.runtime, Proof: m.proof, ID: policy, Now: f.clock},
+		Revision:       1, Limit: 1,
+	}
+	empty, err := ListAlertMaintenanceSuppressions(t.Context(), f.f.databaseURL, input)
+	if err != nil || len(empty.Items) != 0 || empty.NextCursor == "" {
+		t.Fatalf("audit did not bound a sparse source page: %+v %v", empty, err)
+	}
+	input.Cursor = empty.NextCursor
+	recovered, err := ListAlertMaintenanceSuppressions(t.Context(), f.f.databaseURL, input)
+	if err != nil || len(recovered.Items) != 1 || !recovered.Items[0].Cutoff.Equal(end.Add(-time.Minute)) {
+		t.Fatalf("sparse page skipped retained evidence: %+v %v", recovered, err)
 	}
 }

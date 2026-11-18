@@ -55,12 +55,16 @@ func evaluationDTO(value alert.Evaluation, target string) api.AlertEvaluation {
 		result.RecoveryComparison = &api.AlertRecoveryComparison{Snapshot: snapshotDTO(value.RecoveryComparison.Snapshot), Truth: api.AlertTruth(value.RecoveryComparison.Truth), Conditions: conditionResultsDTO(value.RecoveryComparison.Conditions, target)}
 	}
 	if coverage := value.Maintenance; coverage != nil {
-		result.MaintenanceSuppression = &api.AlertMaintenanceSuppression{
-			WindowId: wireID(coverage.WindowID), Revision: strconv.FormatInt(coverage.Revision, 10),
-			Start: coverage.Start.UTC(), End: coverage.End.UTC(), OpeningSuppressed: coverage.OpeningSuppressed,
-		}
+		result.MaintenanceSuppression = new(maintenanceSuppressionDTO(*coverage))
 	}
 	return result
+}
+
+func maintenanceSuppressionDTO(value alert.MaintenanceSuppression) api.AlertMaintenanceSuppression {
+	return api.AlertMaintenanceSuppression{
+		WindowId: wireID(value.WindowID), Revision: strconv.FormatInt(value.Revision, 10),
+		Start: value.Start.UTC(), End: value.End.UTC(), OpeningSuppressed: value.OpeningSuppressed,
+	}
 }
 
 func policyDTO(value storage.AlertPolicyRecord) api.AlertPolicy {
