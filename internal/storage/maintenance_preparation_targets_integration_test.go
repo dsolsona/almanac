@@ -3,6 +3,7 @@
 package storage
 
 import (
+	"encoding/hex"
 	"errors"
 	"reflect"
 	"testing"
@@ -316,5 +317,99 @@ func TestIntegrationMaintenancePreparationTargetPopulatedUpgrade(t *testing.T) {
 	}
 	if err := dbgen.New(f.conn).EnqueueMaintenancePreparation(t.Context(), p); err != nil {
 		t.Fatalf("upgraded queue rejected target: %v", err)
+	}
+}
+
+func TestIntegrationMaintenanceUpgradeFromPublishedScopeChecksums(t *testing.T) {
+	t.Parallel()
+	migrations, err := LoadMigrations(embeddedMigrations)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The bytes published at 7f5bec5 must remain acceptable to the upgrader.
+	checksums := []string{
+		"2fee5962fd29b7a140b9f7862ce66bb44b3f5b9ab2e09ec6eda3b42f3aba034c",
+		"c8dc3f2b8a6a58cb383b3f17e74fb6ad4799c4f9f00ab44afe36cf9fc067f518",
+		"3520b72123b54e47aa0f43c7b6594a23d22f5f55f4ed8a1ab2446932b9a0e110",
+		"68e4d7d62f9a90dc30ed0ab9581badf9a930b06635e599ab2e6401ee0d59aeca",
+		"0f99f3c5653da67d43c02d9b4dc1777cea63ea4901592d5bb8f4a54b99cb2b70",
+	}
+	const lastPublished = 74
+	for offset, want := range checksums {
+		m := migrations[69+offset]
+		if got := hex.EncodeToString(m.Checksum[:]); got != want {
+			t.Fatalf("published migration %d changed: got %s want %s", m.Version, got, want)
+		}
+	}
+	databaseURL := integrationDatabase(t)
+	installed, err := UpgradeWithMigrations(t.Context(), databaseURL, migrations[:lastPublished])
+	if err != nil || installed.DatabaseSchemaVersion != lastPublished {
+		t.Fatalf("install prior published scope schema: %+v %v", installed, err)
+	}
+	conn := integrationConnect(t, databaseURL)
+	defer closeIntegrationConn(conn)
+	nodes := func() [3]int64 {
+		t.Helper()
+		var result [3]int64
+		if err := conn.QueryRow(t.Context(), `
+			SELECT pg_relation_filenode('public.almanac_maintenance_change_sets')::bigint,
+			       pg_relation_filenode('public.almanac_maintenance_changed_inputs')::bigint,
+			       pg_relation_filenode('public.almanac_slo_exclusion_work')::bigint
+		`).Scan(&result[0], &result[1], &result[2]); err != nil {
+			t.Fatal(err)
+		}
+		return result
+	}
+	before := nodes()
+	upgraded, err := Upgrade(t.Context(), databaseURL)
+	if err != nil || upgraded.DatabaseSchemaVersion != len(migrations) || upgraded.Applied != len(migrations)-lastPublished {
+		t.Fatalf("upgrade rejected the published ledger: %+v %v", upgraded, err)
+	}
+	if after := nodes(); after != before {
+		t.Fatalf("upgrade rewrote authority relations: before %v after %v", before, after)
+	}
+}
+
+func TestIntegrationMaintenanceCompatibilityOrdinalOverflowRetainsExactCoverage(t *testing.T) {
+	t.Parallel()
+	f := newMaintenanceFixture(t)
+	input := f.input("compatibility-overflow")
+	input.ScopeKind, input.SloIDs = MaintenanceScopeAllServices, nil
+	input.End = input.Start.Add(24 * time.Hour)
+	window, err := CreateMaintenance(t.Context(), f.f.databaseURL, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := mustPGUUID(f.ids[0])
+	const parts = 32768
+	if _, err := f.conn.Exec(t.Context(), `
+		WITH state AS (
+			UPDATE public.almanac_slo_exclusion_state SET revision=1 WHERE slo_id=$1 RETURNING slo_id
+		), pieces AS (
+			SELECT $3::timestamptz + n * interval '2 seconds' AS start_at
+			FROM generate_series(0, $4::integer - 1) n
+		)
+		INSERT INTO almanac_slo_exclusion_changes(slo_id,revision,exclusion_id,exclusion_revision,included,coverage_changed,recorded_at,effective_coverage)
+		SELECT state.slo_id,1,$2,1,true,true,$3,
+		       range_agg(tstzrange(pieces.start_at,pieces.start_at+interval '1 second','[)'))
+		FROM state CROSS JOIN pieces GROUP BY state.slo_id
+	`, id, window.ID, window.Start, parts); err != nil {
+		t.Fatal(err)
+	}
+	q := dbgen.New(f.conn)
+	state, err := q.ReadMaintenanceCompatibilityAuthority(t.Context(), id)
+	if err != nil || state.Unavailable || state.IndexedThrough != 1 {
+		t.Fatalf("overflow disabled exact recomputation: %+v %v", state, err)
+	}
+	gapStart, gapEnd := window.Start.Add(time.Second), window.Start.Add(2*time.Second)
+	requiresRebuild, err := q.HasMaintenanceAuthorityInput(t.Context(), dbgen.HasMaintenanceAuthorityInputParams{
+		SloID: id, ScopeOrdinal: state.ScopeOrdinal, Revision: 1, StartAt: timestamp(gapStart), EndAt: timestamp(gapEnd),
+	})
+	if err != nil || !requiresRebuild {
+		t.Fatalf("overflow allowed reuse within the conservative envelope: changed=%t %v", requiresRebuild, err)
+	}
+	snapshot, err := readSloExclusionSnapshotAt(t.Context(), q, id, 1, window.Start, gapEnd)
+	if err != nil || len(snapshot.Intervals) != 1 || !snapshot.Intervals[0].Start.Equal(window.Start) || !snapshot.Intervals[0].End.Equal(gapStart) {
+		t.Fatalf("exact coverage lost its gap: %+v %v", snapshot, err)
 	}
 }

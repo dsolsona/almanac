@@ -70,33 +70,38 @@ BEGIN
     END IF;
 END $$;
 
--- The membership journal selects only the committed definition and already
--- holds the singleton fence. Its immutable row provides both grid identities.
 CREATE FUNCTION public.almanac_record_maintenance_grid() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
     previous_grid record;
-    next_cadence integer;
+    next_grid record;
 BEGIN
-    SELECT cadence_seconds INTO STRICT next_cadence
-    FROM public.almanac_slo_definitions
-    WHERE slo_id = NEW.slo_id AND revision = NEW.definition_revision;
+    SELECT service_id, cadence_seconds INTO STRICT next_grid
+    FROM public.almanac_slo_definitions WHERE slo_id = NEW.id AND revision = NEW.definition_revision;
+    IF TG_OP = 'UPDATE' THEN
+        SELECT service_id, cadence_seconds INTO STRICT previous_grid
+        FROM public.almanac_slo_definitions WHERE slo_id = OLD.id AND revision = OLD.definition_revision;
+        IF previous_grid = next_grid THEN
+            RETURN NULL;
+        END IF;
+    END IF;
 
-    SELECT a.service_id, d.cadence_seconds INTO previous_grid
-    FROM public.almanac_slo_service_assignments a
-    JOIN public.almanac_slo_definitions d ON d.slo_id = a.slo_id AND d.revision = a.definition_revision
-    WHERE a.slo_id = NEW.slo_id
-      AND (a.effective_at, a.definition_revision) < (NEW.effective_at, NEW.definition_revision)
-    ORDER BY a.effective_at DESC, a.definition_revision DESC LIMIT 1;
-
-    IF FOUND THEN
+    PERFORM revision FROM public.almanac_service_maintenance_authority WHERE singleton FOR UPDATE;
+    IF TG_OP = 'UPDATE' THEN
         PERFORM public.almanac_adjust_maintenance_service_grid(previous_grid.service_id, previous_grid.cadence_seconds, -1);
     END IF;
-    PERFORM public.almanac_adjust_maintenance_service_grid(NEW.service_id, next_cadence, 1);
+    PERFORM public.almanac_adjust_maintenance_service_grid(next_grid.service_id, next_grid.cadence_seconds, 1);
     RETURN NULL;
 END $$;
-CREATE TRIGGER almanac_slo_grid_assignment
-    AFTER INSERT ON public.almanac_slo_service_assignments
+
+CREATE CONSTRAINT TRIGGER almanac_slo_grid_initial
+    AFTER INSERT ON public.almanac_slos
+    DEFERRABLE INITIALLY DEFERRED
     FOR EACH ROW EXECUTE FUNCTION public.almanac_record_maintenance_grid();
+CREATE CONSTRAINT TRIGGER almanac_slo_grid_changed
+    AFTER UPDATE OF definition_revision ON public.almanac_slos
+    DEFERRABLE INITIALLY DEFERRED
+    FOR EACH ROW WHEN (OLD.definition_revision IS DISTINCT FROM NEW.definition_revision)
+    EXECUTE FUNCTION public.almanac_record_maintenance_grid();
 
 CREATE FUNCTION public.almanac_record_maintenance_grid_service_state() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE

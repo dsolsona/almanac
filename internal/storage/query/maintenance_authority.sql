@@ -20,7 +20,7 @@ SELECT range_count FROM public.almanac_maintenance_change_sets WHERE slo_id=$1 A
 -- name: ReadMaintenanceAuthorityRanges :many
 SELECT part,lower(input_range)::timestamptz AS starts_at,upper(input_range)::timestamptz AS ends_at
 FROM public.almanac_maintenance_changed_inputs WHERE slo_id=$1 AND revision=$2
- AND part>sqlc.arg(after_part)::integer ORDER BY part LIMIT sqlc.arg(row_limit)::integer;
+ AND part>sqlc.arg(after_part)::smallint ORDER BY part LIMIT sqlc.arg(row_limit)::integer;
 -- name: NextMaintenanceAuthorityBoundary :one
 SELECT least(
  (SELECT lower(input_range) FROM public.almanac_maintenance_changed_inputs WHERE almanac_maintenance_changed_inputs.slo_id=sqlc.arg(slo_id) AND lower(input_range)>sqlc.arg(after_at)::timestamptz AND revision<=sqlc.arg(revision)::bigint ORDER BY lower(input_range) LIMIT 1),

@@ -423,7 +423,7 @@ type Querier interface {
 	ReadDerivedWindowTotals(ctx context.Context, arg ReadDerivedWindowTotalsParams) (ReadDerivedWindowTotalsRow, error)
 	ReadExtremaDue(ctx context.Context, arg ReadExtremaDueParams) (ReadExtremaDueRow, error)
 	ReadLocalIdentity(ctx context.Context, login string) (ReadLocalIdentityRow, error)
-	ReadMaintenanceAuthorityChange(ctx context.Context, arg ReadMaintenanceAuthorityChangeParams) (int32, error)
+	ReadMaintenanceAuthorityChange(ctx context.Context, arg ReadMaintenanceAuthorityChangeParams) (int16, error)
 	ReadMaintenanceAuthorityRanges(ctx context.Context, arg ReadMaintenanceAuthorityRangesParams) ([]ReadMaintenanceAuthorityRangesRow, error)
 	ReadMaintenanceAuthorityRetargets(ctx context.Context, arg ReadMaintenanceAuthorityRetargetsParams) ([]AlmanacMaintenancePreparation, error)
 	ReadMaintenanceAuthorityWork(ctx context.Context, sloID pgtype.UUID) (AlmanacSloExclusionWork, error)

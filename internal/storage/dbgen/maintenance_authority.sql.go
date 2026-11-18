@@ -22,7 +22,7 @@ WHERE slo_id=$9 AND desired_revision=$10 AND work_version=$11
 
 type AdvanceMaintenanceAuthorityWorkParams struct {
 	ProcessedRevision int64              `json:"processed_revision"`
-	ProgressPart      int32              `json:"progress_part"`
+	ProgressPart      int16              `json:"progress_part"`
 	ProgressHour      pgtype.Timestamptz `json:"progress_hour"`
 	ProgressUntil     pgtype.Timestamptz `json:"progress_until"`
 	ScheduledThrough  pgtype.Timestamptz `json:"scheduled_through"`
@@ -315,9 +315,9 @@ type ReadMaintenanceAuthorityChangeParams struct {
 	Revision int64       `json:"revision"`
 }
 
-func (q *Queries) ReadMaintenanceAuthorityChange(ctx context.Context, arg ReadMaintenanceAuthorityChangeParams) (int32, error) {
+func (q *Queries) ReadMaintenanceAuthorityChange(ctx context.Context, arg ReadMaintenanceAuthorityChangeParams) (int16, error) {
 	row := q.db.QueryRow(ctx, readMaintenanceAuthorityChange, arg.SloID, arg.Revision)
-	var range_count int32
+	var range_count int16
 	err := row.Scan(&range_count)
 	return range_count, err
 }
@@ -325,18 +325,18 @@ func (q *Queries) ReadMaintenanceAuthorityChange(ctx context.Context, arg ReadMa
 const readMaintenanceAuthorityRanges = `-- name: ReadMaintenanceAuthorityRanges :many
 SELECT part,lower(input_range)::timestamptz AS starts_at,upper(input_range)::timestamptz AS ends_at
 FROM public.almanac_maintenance_changed_inputs WHERE slo_id=$1 AND revision=$2
- AND part>$3::integer ORDER BY part LIMIT $4::integer
+ AND part>$3::smallint ORDER BY part LIMIT $4::integer
 `
 
 type ReadMaintenanceAuthorityRangesParams struct {
 	SloID     pgtype.UUID `json:"slo_id"`
 	Revision  int64       `json:"revision"`
-	AfterPart int32       `json:"after_part"`
+	AfterPart int16       `json:"after_part"`
 	RowLimit  int32       `json:"row_limit"`
 }
 
 type ReadMaintenanceAuthorityRangesRow struct {
-	Part     int32              `json:"part"`
+	Part     int16              `json:"part"`
 	StartsAt pgtype.Timestamptz `json:"starts_at"`
 	EndsAt   pgtype.Timestamptz `json:"ends_at"`
 }
