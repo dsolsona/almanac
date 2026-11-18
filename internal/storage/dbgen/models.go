@@ -425,6 +425,7 @@ type AlmanacMaintenanceExclusionRevision struct {
 	RecordedAt  pgtype.Timestamptz `json:"recorded_at"`
 	RequestID   string             `json:"request_id"`
 	AuditID     pgtype.UUID        `json:"audit_id"`
+	ScopeKind   string             `json:"scope_kind"`
 }
 
 type AlmanacMaintenanceExclusionScope struct {
@@ -471,6 +472,12 @@ type AlmanacMaintenancePreparation struct {
 	CreatedAt                   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt                   pgtype.Timestamptz `json:"updated_at"`
 	AuthorityRetargetedRevision int64              `json:"authority_retargeted_revision"`
+}
+
+type AlmanacMaintenanceServiceSelector struct {
+	ExclusionID pgtype.UUID `json:"exclusion_id"`
+	Revision    int64       `json:"revision"`
+	ServiceID   pgtype.UUID `json:"service_id"`
 }
 
 type AlmanacManagementReceipt struct {
@@ -534,6 +541,18 @@ type AlmanacService struct {
 type AlmanacServiceDependency struct {
 	ServiceID    pgtype.UUID `json:"service_id"`
 	DependencyID pgtype.UUID `json:"dependency_id"`
+}
+
+type AlmanacServiceMaintenanceAuthority struct {
+	Singleton bool  `json:"singleton"`
+	Revision  int64 `json:"revision"`
+}
+
+type AlmanacServiceMaintenanceProjection struct {
+	ExclusionID     pgtype.UUID `json:"exclusion_id"`
+	DesiredRevision int64       `json:"desired_revision"`
+	ThroughSlo      pgtype.UUID `json:"through_slo"`
+	Complete        bool        `json:"complete"`
 }
 
 type AlmanacSession struct {
@@ -853,6 +872,13 @@ type AlmanacSloMaintenanceHour struct {
 	ExcludedFirstObservation pgtype.Timestamptz `json:"excluded_first_observation"`
 	ExcludedLastObservation  pgtype.Timestamptz `json:"excluded_last_observation"`
 	ExcludedLatestReceipt    pgtype.Timestamptz `json:"excluded_latest_receipt"`
+}
+
+type AlmanacSloServiceAssignment struct {
+	SloID              pgtype.UUID        `json:"slo_id"`
+	DefinitionRevision int64              `json:"definition_revision"`
+	ServiceID          pgtype.UUID        `json:"service_id"`
+	EffectiveAt        pgtype.Timestamptz `json:"effective_at"`
 }
 
 type AlmanacUser struct {
