@@ -291,6 +291,12 @@ func mutateMaintenance(ctx context.Context, databaseURL string, input CreateMain
 		}
 	}
 	broad := isServiceMaintenanceScope(old.ScopeKind) || isServiceMaintenanceScope(input.ScopeKind)
+	if !broad && op != "create" {
+		broad, err = q.HasServiceMaintenanceProjection(ctx, id)
+		if err != nil {
+			return empty, err
+		}
+	}
 	if broad {
 		if _, err := q.AdvanceServiceMaintenanceAuthority(ctx); err != nil {
 			return empty, err

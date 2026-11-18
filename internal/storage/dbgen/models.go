@@ -559,11 +559,21 @@ type AlmanacServiceMaintenanceAuthority struct {
 	Revision  int64 `json:"revision"`
 }
 
+type AlmanacServiceMaintenanceMembershipWork struct {
+	SloID            pgtype.UUID `json:"slo_id"`
+	ThroughExclusion pgtype.UUID `json:"through_exclusion"`
+}
+
 type AlmanacServiceMaintenanceProjection struct {
 	ExclusionID     pgtype.UUID `json:"exclusion_id"`
 	DesiredRevision int64       `json:"desired_revision"`
 	ThroughSlo      pgtype.UUID `json:"through_slo"`
 	Complete        bool        `json:"complete"`
+}
+
+type AlmanacServiceMaintenanceProjectionCompleted struct {
+	ExclusionID pgtype.UUID `json:"exclusion_id"`
+	Revision    int64       `json:"revision"`
 }
 
 type AlmanacSession struct {
@@ -768,13 +778,14 @@ type AlmanacSloDerivedGeneration struct {
 }
 
 type AlmanacSloExclusionChange struct {
-	SloID             pgtype.UUID        `json:"slo_id"`
-	Revision          int64              `json:"revision"`
-	ExclusionID       pgtype.UUID        `json:"exclusion_id"`
-	ExclusionRevision int64              `json:"exclusion_revision"`
-	Included          bool               `json:"included"`
-	CoverageChanged   bool               `json:"coverage_changed"`
-	RecordedAt        pgtype.Timestamptz `json:"recorded_at"`
+	SloID             pgtype.UUID                                         `json:"slo_id"`
+	Revision          int64                                               `json:"revision"`
+	ExclusionID       pgtype.UUID                                         `json:"exclusion_id"`
+	ExclusionRevision int64                                               `json:"exclusion_revision"`
+	Included          bool                                                `json:"included"`
+	CoverageChanged   bool                                                `json:"coverage_changed"`
+	RecordedAt        pgtype.Timestamptz                                  `json:"recorded_at"`
+	EffectiveCoverage pgtype.Multirange[pgtype.Range[pgtype.Timestamptz]] `json:"effective_coverage"`
 }
 
 type AlmanacSloExclusionState struct {

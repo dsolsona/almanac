@@ -225,6 +225,10 @@ func currentReadGeneration(ctx context.Context, q *dbgen.Queries, row dbgen.GetS
 }
 
 func readCurrentSloFromAggregates(ctx context.Context, q *dbgen.Queries, row dbgen.GetSloRow, now time.Time, maintenance *maintenanceConsumerSession) (api.SloCurrentStatus, error) {
+	start := now.Add(-time.Duration(max(row.RollingWindowSeconds, 21600)) * time.Second)
+	if err := requireServiceMaintenanceReady(ctx, q, row.ID, start, now); err != nil {
+		return api.SloCurrentStatus{}, err
+	}
 	source, err := q.GetSloOperationalContext(ctx, dbgen.GetSloOperationalContextParams{SliID: row.SliID, Revision: row.MeasurementRevision})
 	if err != nil {
 		return api.SloCurrentStatus{}, err

@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"sync"
 	"time"
@@ -89,8 +90,9 @@ func (r *Runtime) startProcessing(ctx context.Context, logger *slog.Logger, aler
 	run("authority", time.Second, func(ctx context.Context, tick time.Time) error {
 		options := authority
 		options.RetentionStart = controls.retentionStart(tick)
+		projectionErr := r.runServiceMaintenanceProjection(ctx, 32, options.OperationBudget, clock)
 		_, err := r.runMaintenanceAuthorityTurn(ctx, tick, options, clock)
-		return err
+		return errors.Join(projectionErr, err)
 	})
 	run("preparation", time.Second, func(ctx context.Context, tick time.Time) error {
 		options := preparation

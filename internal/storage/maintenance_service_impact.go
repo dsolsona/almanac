@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
+	"strconv"
 	"strings"
 	"time"
 
@@ -130,4 +132,87 @@ func maintenanceSelectorUUIDs(ids []string) []pgtype.UUID {
 		result[i], _ = canonicalUUID(id)
 	}
 	return result
+}
+
+func ReadMaintenanceImpact(ctx context.Context, databaseURL string, input MaintenanceImpactInput) (MaintenanceImpactPage, error) {
+	id, ok := canonicalUUID(input.ID)
+	if !ok || input.Revision < 0 || input.Now == nil || input.Proof.SessionVerifier == ([32]byte{}) {
+		return MaintenanceImpactPage{}, ErrMaintenanceInvalid
+	}
+	conn, q, tx, user, installation, session, started, err := beginAgentReadWithOptions(ctx, databaseURL, input.Proof.SessionVerifier, input.Now,
+		pgx.TxOptions{IsoLevel: pgx.RepeatableRead}, "administrator", "editor", "viewer")
+	if err != nil {
+		return MaintenanceImpactPage{}, err
+	}
+	defer closeInitialOwnerConnection(conn)
+	defer rollbackTransaction(tx)
+	record, err := readMaintenanceRecord(ctx, q, id, input.Revision)
+	if err != nil {
+		return MaintenanceImpactPage{}, err
+	}
+	const cursorKind = "maintenance-impact"
+	cursorScope := input.ID + "/" + strconv.FormatInt(record.Revision, 10)
+	limit, cursor, err := validateAgentPage(cursorKind, cursorScope, input.Limit, input.Cursor)
+	if err != nil {
+		return MaintenanceImpactPage{}, ErrMaintenanceInvalid
+	}
+	at := started
+	superseded, err := q.FindMaintenanceSupersededAt(ctx, dbgen.FindMaintenanceSupersededAtParams{ExclusionID: id, Revision: record.Revision})
+	if err == nil {
+		if superseded.Time.Before(at) {
+			at = superseded.Time.UTC()
+		}
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return MaintenanceImpactPage{}, err
+	}
+	afterTime := time.Unix(0, 0).UTC()
+	if !cursor.Time.IsZero() {
+		if !validMaintenanceOverlayTime(cursor.SnapshotAt) || cursor.SnapshotAt.After(at) {
+			return MaintenanceImpactPage{}, ErrMaintenanceInvalid
+		}
+		at, afterTime = cursor.SnapshotAt, cursor.Time
+	}
+
+	count, err := q.CountMaintenanceImpactMembers(ctx, dbgen.CountMaintenanceImpactMembersParams{
+		ExclusionID: id, Revision: record.Revision, InventoryAt: timestamp(at),
+	})
+	if err != nil {
+		return MaintenanceImpactPage{}, err
+	}
+	rows, err := q.ListMaintenanceImpactMembers(ctx, dbgen.ListMaintenanceImpactMembersParams{
+		ExclusionID: id, Revision: record.Revision, InventoryAt: timestamp(at),
+		AfterSlo: uuidOrZero(cursor.ID), AfterTime: timestamp(afterTime), PageLimit: int32(limit + 1),
+	})
+	if err != nil {
+		return MaintenanceImpactPage{}, err
+	}
+	page := MaintenanceImpactPage{InventoryAt: at, Total: count, Ready: true}
+	if isServiceMaintenanceScope(record.ScopeKind) {
+		page.Ready, err = q.ReadMaintenanceProjectionReady(ctx, dbgen.ReadMaintenanceProjectionReadyParams{ExclusionID: id, Revision: record.Revision})
+		if err != nil {
+			return MaintenanceImpactPage{}, err
+		}
+		page.Ready = page.Ready && !at.Before(record.Start)
+	}
+	if len(rows) > limit {
+		rows = rows[:limit]
+		last := rows[len(rows)-1]
+		page.NextCursor, err = encodeAgentCursor(agentCursor{
+			Version: 1, Kind: cursorKind, AgentID: cursorScope, SnapshotAt: at, Time: last.StartsAt.Time.UTC(), ID: last.SloID.String(),
+		})
+		if err != nil {
+			return MaintenanceImpactPage{}, err
+		}
+	}
+	page.Items = make([]MaintenanceImpactMember, 0, len(rows))
+	for _, row := range rows {
+		page.Items = append(page.Items, MaintenanceImpactMember{
+			SloID: row.SloID.String(), SloName: row.SloName, ServiceID: row.ServiceID.String(), ServiceName: row.ServiceName,
+			Start: row.StartsAt.Time.UTC(), End: row.EndsAt.Time.UTC(),
+		})
+	}
+	if err := finishAgentRead(ctx, tx, input.Now, started, user, installation, session); err != nil {
+		return MaintenanceImpactPage{}, err
+	}
+	return page, nil
 }

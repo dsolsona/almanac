@@ -75,6 +75,8 @@ sql:
       - internal/storage/migrations/0070_service_maintenance_membership.sql
       - internal/storage/migrations/0071_service_maintenance_selectors.sql
       - internal/storage/migrations/0072_service_maintenance_grid_inventory.sql
+      - internal/storage/migrations/0073_service_maintenance_coverage.sql
+      - internal/storage/migrations/0074_service_maintenance_projection.sql
     gen:
       go:
         package: dbgen

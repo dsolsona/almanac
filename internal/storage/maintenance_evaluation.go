@@ -106,6 +106,10 @@ func evaluateMaintenanceWindows(ctx context.Context, tx pgx.Tx, in maintenanceEv
 		return
 	}
 	q := dbgen.New(tx)
+	start, end := serviceMaintenanceWindowRange(all)
+	if err := requireServiceMaintenanceReady(ctx, q, in.SloID, start, end); err != nil {
+		return result, err
+	}
 	identity, e := q.ReadMaintenanceEvaluationIdentity(ctx, in.SloID)
 	if e != nil {
 		return result, e

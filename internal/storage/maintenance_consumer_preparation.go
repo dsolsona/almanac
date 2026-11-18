@@ -66,5 +66,15 @@ func checkMaintenanceConsumerSnapshot(ctx context.Context, tx pgx.Tx, session *m
 	if generation != session.sourceGeneration {
 		return errReadSerialization
 	}
+	if !session.serviceRangeStart.IsZero() {
+		if _, err := q.FenceServiceMaintenanceAuthority(ctx); err != nil {
+			return err
+		}
+		err := requireServiceMaintenanceReady(ctx, q, session.scope.SloID, session.serviceRangeStart, session.serviceRangeEnd)
+		if errors.Is(err, ErrDerivedPending) {
+			return errReadSerialization
+		}
+		return err
+	}
 	return nil
 }

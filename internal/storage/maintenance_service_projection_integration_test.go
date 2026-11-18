@@ -1,0 +1,221 @@
+//go:build integration
+
+package storage
+
+import (
+	"errors"
+	"testing"
+	"time"
+
+	"github.com/dsolsona/almanac/internal/storage/dbgen"
+	"github.com/jackc/pgx/v5"
+)
+
+func TestIntegrationMaintenanceServiceProjectionPreservesMembership(t *testing.T) {
+	t.Parallel()
+	f := newMaintenanceFixture(t)
+	q := dbgen.New(f.conn)
+	subject, err := q.GetSlo(t.Context(), mustPGUUID(f.ids[0]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := f.input("project-service")
+	input.ScopeKind, input.SloIDs, input.ServiceIDs = MaintenanceScopeServices, nil, []string{subject.ServiceID.String()}
+	input.Start, input.End = f.at.Add(5*time.Minute), f.at.Add(20*time.Minute)
+	window, err := CreateMaintenance(t.Context(), f.f.databaseURL, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, _, err := CreateObjective(t.Context(), f.f.databaseURL, CreateObjectiveInput{
+		Proof: f.proof, Name: "project-destination", DisplayName: "Outside selection",
+		IdempotencyKey: "project-destination", RequestID: "project-destination", Now: f.clock,
+	}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	overlayInput := ListSloMaintenanceInput{
+		ListMaintenanceInput: ListMaintenanceInput{Scoped: true, Proof: f.proof, Now: f.clock},
+		SloID:                f.ids[0], Start: window.Start, End: window.End,
+	}
+	pending, err := ListSloMaintenance(t.Context(), f.f.databaseURL, overlayInput)
+	if err != nil || !pending.Pending || len(pending.Items) != 0 {
+		t.Fatalf("unprojected overlay is advertised as ready: %+v: %v", pending, err)
+	}
+	if err := requireServiceMaintenanceReady(t.Context(), q, subject.ID, window.Start.Add(-time.Minute), window.Start); err != nil {
+		t.Fatalf("past range was held up by future projection: %v", err)
+	}
+	if err := requireServiceMaintenanceReady(t.Context(), q, subject.ID, window.Start, window.End); !errors.Is(err, ErrDerivedPending) {
+		t.Fatalf("fresh calculations admitted incomplete authority: %v", err)
+	}
+
+	step := func() {
+		t.Helper()
+		if err := f.runtime.runServiceMaintenanceProjection(t.Context(), 1, time.Second, f.clock); err != nil {
+			t.Fatal(err)
+		}
+	}
+	step()
+	var installed int
+	if err := f.conn.QueryRow(t.Context(), `SELECT count(*) FROM almanac_slo_exclusion_changes WHERE exclusion_id=$1`, window.ID).Scan(&installed); err != nil || installed != 1 {
+		t.Fatalf("first page installed %d SLOs: %v", installed, err)
+	}
+	step()
+	step()
+	if err := f.conn.QueryRow(t.Context(), `SELECT count(*) FROM almanac_slo_exclusion_changes WHERE exclusion_id=$1`, window.ID).Scan(&installed); err != nil || installed != 2 {
+		t.Fatalf("resumed pagination installed %d SLOs: %v", installed, err)
+	}
+
+	departure := window.Start.Add(2*time.Minute + 30*time.Second)
+	rejoin := window.Start.Add(7*time.Minute + 30*time.Second)
+	moveMaintenanceSLO(t, f, other.ID, 2, departure)
+	if witness := serviceSuppressionAt(t, f, f.ids[0], departure); witness != nil {
+		t.Fatalf("departed SLO kept direct suppression: %+v", witness)
+	}
+	moveMaintenanceSLO(t, f, subject.ServiceID.String(), 3, rejoin)
+	if witness := serviceSuppressionAt(t, f, f.ids[0], rejoin); witness == nil || !witness.Start.Equal(rejoin) {
+		t.Fatalf("unaligned rejoin has no direct suppression: %+v", witness)
+	}
+	f.now = rejoin
+	if err := requireServiceMaintenanceReady(t.Context(), q, subject.ID, window.Start, window.End); !errors.Is(err, ErrDerivedPending) {
+		t.Fatalf("prospective moves left stale coverage advertised as current: %v", err)
+	}
+	step()
+	step()
+
+	state, err := q.ReadMaintenanceState(t.Context(), subject.ID)
+	if err != nil || state != 2 {
+		t.Fatalf("membership recomputation revision=%d: %v", state, err)
+	}
+	snapshot, err := readSloExclusionSnapshotAt(t.Context(), q, subject.ID, state, window.Start, window.End)
+	if err != nil || len(snapshot.Intervals) != 2 {
+		t.Fatalf("current snapshot = %+v: %v", snapshot, err)
+	}
+	a, b := snapshot.Intervals[0], snapshot.Intervals[1]
+	if !a.Start.Equal(window.Start) || !a.End.Equal(window.Start.Add(2*time.Minute)) ||
+		!b.Start.Equal(window.Start.Add(8*time.Minute)) || !b.End.Equal(window.End) {
+		t.Fatalf("unaligned assignment boundaries excluded partial observations: %+v", snapshot.Intervals)
+	}
+	old, err := readSloExclusionSnapshotAt(t.Context(), q, subject.ID, 1, window.Start, window.End)
+	if err != nil || len(old.Intervals) != 1 || !old.Intervals[0].Start.Equal(window.Start) || !old.Intervals[0].End.Equal(window.End) {
+		t.Fatalf("membership rewrite changed pinned history: %+v, %v", old, err)
+	}
+
+	overlay, err := ListSloMaintenance(t.Context(), f.f.databaseURL, overlayInput)
+	if err != nil || overlay.Pending || len(overlay.Items) != 2 {
+		t.Fatalf("overlay = %+v: %v", overlay, err)
+	}
+	if !overlay.Items[0].EffectiveStart.Equal(a.Start) || !overlay.Items[0].EffectiveEnd.Equal(a.End) ||
+		!overlay.Items[1].EffectiveStart.Equal(b.Start) || !overlay.Items[1].EffectiveEnd.Equal(b.End) ||
+		overlay.Items[1].ID != window.ID || !overlay.Items[1].Start.Equal(window.Start) {
+		t.Fatalf("overlay lost declaration context or exact coverage: %+v", overlay.Items)
+	}
+	impact, err := ReadMaintenanceImpact(t.Context(), f.f.databaseURL, MaintenanceImpactInput{
+		Proof: f.proof, ID: window.ID, Revision: window.Revision, Now: f.clock, Limit: 1,
+	})
+	if err != nil || !impact.Ready || impact.Total != 2 || len(impact.Items) != 1 || impact.NextCursor == "" {
+		t.Fatalf("first impact page = %+v: %v", impact, err)
+	}
+
+	build := compilerCapture(t, f, nil)
+	compilerFinish(t, f, build.ID, 1)
+	coverage, err := readMaintenanceCoverage(t.Context(), q, build.ID, window.Start, window.End)
+	wantUS := (9 * time.Minute).Microseconds()
+	if err != nil || coverage.ExcludedMicroseconds != wantUS {
+		t.Fatalf("compiled service coverage = %+v, want %dµs: %v", coverage, wantUS, err)
+	}
+
+	shorter, err := EndMaintenance(t.Context(), f.f.databaseURL, EndMaintenanceInput{
+		Scoped: true, Proof: f.proof, ID: window.ID, Revision: 1, End: window.Start.Add(10 * time.Minute),
+		Reason: "Done early", IdempotencyKey: "project-service-end", RequestID: "project-service-end", Now: f.clock,
+	})
+	if err != nil || shorter.Revision != 2 {
+		t.Fatalf("early end = %+v, %v", shorter, err)
+	}
+	compilerTx(t, f, func(tx pgx.Tx) error {
+		stale, err := dbgen.New(tx).ApplyServiceMaintenanceProjectionMember(t.Context(), dbgen.ApplyServiceMaintenanceProjectionMemberParams{
+			SloID: subject.ID, ExclusionID: mustPGUUID(window.ID), Revision: 1, NowAt: timestamp(f.now),
+		})
+		if err == nil && stale {
+			t.Fatal("superseded projection wrote old coverage")
+		}
+		return err
+	})
+	historical, err := ReadMaintenanceImpact(t.Context(), f.f.databaseURL, MaintenanceImpactInput{
+		Proof: f.proof, ID: window.ID, Revision: 1, Now: f.clock,
+	})
+	endsAtOriginalBoundary := 0
+	for _, member := range historical.Items {
+		if member.End.Equal(window.End) {
+			endsAtOriginalBoundary++
+		}
+	}
+	if err != nil || !historical.Ready || historical.Total != 2 || len(historical.Items) != 3 || endsAtOriginalBoundary != 2 {
+		t.Fatalf("historical impact substituted a newer revision: %+v, %v", historical, err)
+	}
+}
+
+func moveMaintenanceSLO(t *testing.T, f maintenanceFixture, serviceID string, revision int64, at time.Time) {
+	t.Helper()
+	tx, err := f.conn.Begin(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rollbackTransaction(tx)
+	if _, err := tx.Exec(t.Context(), `
+		INSERT INTO almanac_slo_definitions(slo_id,revision,service_id,sli_id,measurement_revision,target,rolling_window_seconds,cadence_seconds,activated_at,evaluation_valid_from)
+		SELECT slo_id,$3,$2,sli_id,measurement_revision,target,rolling_window_seconds,cadence_seconds,$4,$4
+		FROM almanac_slo_definitions WHERE slo_id=$1 AND revision=$3::bigint-1
+	`, f.ids[0], serviceID, revision, at); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(t.Context(), `UPDATE almanac_slos SET definition_revision=$2, updated_at=$3 WHERE id=$1`, f.ids[0], revision, at); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestIntegrationMaintenanceAllServicesIncludesProspectiveJoins(t *testing.T) {
+	t.Parallel()
+	f := newMaintenanceFixture(t)
+	input := f.input("project-all-services")
+	input.ScopeKind, input.SloIDs = MaintenanceScopeAllServices, nil
+	input.Start, input.End = f.at.Add(5*time.Minute), f.at.Add(10*time.Minute)
+	window, err := CreateMaintenance(t.Context(), f.f.databaseURL, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.runtime.runServiceMaintenanceProjection(t.Context(), 64, time.Second, f.clock); err != nil {
+		t.Fatal(err)
+	}
+	f.now = window.Start.Add(30 * time.Second)
+	service, _, err := CreateObjective(t.Context(), f.f.databaseURL, CreateObjectiveInput{
+		Proof: f.proof, Name: "during-window-service", DisplayName: "During-window service",
+		IdempotencyKey: "during-window-service", RequestID: "during-window-service", Now: f.clock,
+	}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, objective, err := CreateObjective(t.Context(), f.f.databaseURL, CreateObjectiveInput{
+		Proof: f.proof, Name: "during-window-slo", DisplayName: "During-window SLO", ServiceID: service.ID,
+		SliID: f.sliID, Target: "0.99", RollingWindowSeconds: 3600, IdempotencyKey: "during-window-slo", RequestID: "during-window-slo", Now: f.clock,
+	}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if witness := serviceSuppressionAt(t, f, objective.ID, window.Start); witness != nil {
+		t.Fatalf("joined SLO was suppressed before its existence: %+v", witness)
+	}
+	if witness := serviceSuppressionAt(t, f, objective.ID, f.now); witness == nil || !witness.Start.Equal(f.now) {
+		t.Fatalf("new service membership is absent before fanout: %+v", witness)
+	}
+	if err := f.runtime.runServiceMaintenanceProjection(t.Context(), 64, time.Second, f.clock); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := readSloExclusionSnapshot(t.Context(), dbgen.New(f.conn), mustPGUUID(objective.ID), window.Start, window.End)
+	if err != nil || len(snapshot.Intervals) != 1 || !snapshot.Intervals[0].Start.Equal(window.Start.Add(time.Minute)) ||
+		!snapshot.Intervals[0].End.Equal(window.End) {
+		t.Fatalf("all-services membership lost prospective start: %+v, %v", snapshot, err)
+	}
+}

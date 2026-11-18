@@ -72,11 +72,12 @@ type AgentRuntimeStatus struct {
 }
 
 type agentCursor struct {
-	Version int       `json:"version"`
-	Kind    string    `json:"kind"`
-	Time    time.Time `json:"time"`
-	ID      string    `json:"id"`
-	AgentID string    `json:"agent_id,omitempty"`
+	Version    int       `json:"version"`
+	Kind       string    `json:"kind"`
+	Time       time.Time `json:"time"`
+	ID         string    `json:"id"`
+	AgentID    string    `json:"agent_id,omitempty"`
+	SnapshotAt time.Time `json:"snapshot_at,omitzero"`
 }
 
 func GetAgent(ctx context.Context, databaseURL string, input AgentReadInput) (AgentRecord, error) {

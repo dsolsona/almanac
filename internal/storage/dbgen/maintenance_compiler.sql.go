@@ -158,28 +158,21 @@ func (q *Queries) LockMaintenanceBuild(ctx context.Context, id pgtype.UUID) (Alm
 }
 
 const putMaintenanceCompilerMember = `-- name: PutMaintenanceCompilerMember :exec
-INSERT INTO public.almanac_maintenance_members(build_id,exclusion_id,exclusion_revision,slo_id,starts_at,ends_at) VALUES($1,$2,$3,$4,$5,$6)
-ON CONFLICT(build_id,exclusion_id) DO UPDATE SET exclusion_revision=excluded.exclusion_revision,starts_at=excluded.starts_at,ends_at=excluded.ends_at
+INSERT INTO public.almanac_maintenance_members(build_id, exclusion_id, exclusion_revision, slo_id, starts_at, ends_at)
+SELECT $1::uuid, c.exclusion_id, c.exclusion_revision, c.slo_id, lower(segment), upper(segment)
+FROM public.almanac_slo_exclusion_changes c
+CROSS JOIN LATERAL unnest(public.almanac_effective_maintenance_coverage(c.slo_id, c.exclusion_id, c.exclusion_revision, c.effective_coverage)) AS segment
+WHERE c.slo_id = $2::uuid AND c.revision = $3::bigint
 `
 
 type PutMaintenanceCompilerMemberParams struct {
-	BuildID           pgtype.UUID        `json:"build_id"`
-	ExclusionID       pgtype.UUID        `json:"exclusion_id"`
-	ExclusionRevision int64              `json:"exclusion_revision"`
-	SloID             pgtype.UUID        `json:"slo_id"`
-	StartsAt          pgtype.Timestamptz `json:"starts_at"`
-	EndsAt            pgtype.Timestamptz `json:"ends_at"`
+	BuildID  pgtype.UUID `json:"build_id"`
+	SloID    pgtype.UUID `json:"slo_id"`
+	Revision int64       `json:"revision"`
 }
 
 func (q *Queries) PutMaintenanceCompilerMember(ctx context.Context, arg PutMaintenanceCompilerMemberParams) error {
-	_, err := q.db.Exec(ctx, putMaintenanceCompilerMember,
-		arg.BuildID,
-		arg.ExclusionID,
-		arg.ExclusionRevision,
-		arg.SloID,
-		arg.StartsAt,
-		arg.EndsAt,
-	)
+	_, err := q.db.Exec(ctx, putMaintenanceCompilerMember, arg.BuildID, arg.SloID, arg.Revision)
 	return err
 }
 
@@ -211,10 +204,10 @@ func (q *Queries) ReadMaintenanceBuild(ctx context.Context, id pgtype.UUID) (Alm
 
 const readMaintenanceCompilerEvents = `-- name: ReadMaintenanceCompilerEvents :many
 WITH page AS MATERIALIZED (
- SELECT c.slo_id, c.revision, c.exclusion_id, c.exclusion_revision, c.included, c.coverage_changed, c.recorded_at FROM public.almanac_slo_exclusion_changes c WHERE c.slo_id=$1 AND c.revision>$2::bigint AND c.revision<=$3::bigint ORDER BY c.revision LIMIT $4::integer
+ SELECT c.slo_id, c.revision, c.exclusion_id, c.exclusion_revision, c.included, c.coverage_changed, c.recorded_at, c.effective_coverage FROM public.almanac_slo_exclusion_changes c WHERE c.slo_id=$1 AND c.revision>$2::bigint AND c.revision<=$3::bigint ORDER BY c.revision LIMIT $4::integer
 )
-SELECT p.slo_id, p.revision, p.exclusion_id, p.exclusion_revision, p.included, p.coverage_changed, p.recorded_at,r.starts_at,r.ends_at,r.tombstone,
- EXISTS(SELECT 1 FROM public.almanac_maintenance_exclusion_scopes s WHERE s.exclusion_id=p.exclusion_id AND s.revision=p.exclusion_revision AND s.slo_id=p.slo_id) AS scoped
+SELECT p.slo_id, p.revision, p.exclusion_id, p.exclusion_revision, p.included, p.coverage_changed, p.recorded_at, p.effective_coverage,r.starts_at,r.ends_at,r.tombstone,
+ (public.almanac_effective_maintenance_coverage(p.slo_id, p.exclusion_id, p.exclusion_revision, p.effective_coverage) IS NOT NULL)::boolean AS scoped
 FROM page p LEFT JOIN public.almanac_maintenance_exclusion_revisions r ON r.exclusion_id=p.exclusion_id AND r.revision=p.exclusion_revision ORDER BY p.revision
 `
 
@@ -226,17 +219,18 @@ type ReadMaintenanceCompilerEventsParams struct {
 }
 
 type ReadMaintenanceCompilerEventsRow struct {
-	SloID             pgtype.UUID        `json:"slo_id"`
-	Revision          int64              `json:"revision"`
-	ExclusionID       pgtype.UUID        `json:"exclusion_id"`
-	ExclusionRevision int64              `json:"exclusion_revision"`
-	Included          bool               `json:"included"`
-	CoverageChanged   bool               `json:"coverage_changed"`
-	RecordedAt        pgtype.Timestamptz `json:"recorded_at"`
-	StartsAt          pgtype.Timestamptz `json:"starts_at"`
-	EndsAt            pgtype.Timestamptz `json:"ends_at"`
-	Tombstone         pgtype.Bool        `json:"tombstone"`
-	Scoped            bool               `json:"scoped"`
+	SloID             pgtype.UUID                                         `json:"slo_id"`
+	Revision          int64                                               `json:"revision"`
+	ExclusionID       pgtype.UUID                                         `json:"exclusion_id"`
+	ExclusionRevision int64                                               `json:"exclusion_revision"`
+	Included          bool                                                `json:"included"`
+	CoverageChanged   bool                                                `json:"coverage_changed"`
+	RecordedAt        pgtype.Timestamptz                                  `json:"recorded_at"`
+	EffectiveCoverage pgtype.Multirange[pgtype.Range[pgtype.Timestamptz]] `json:"effective_coverage"`
+	StartsAt          pgtype.Timestamptz                                  `json:"starts_at"`
+	EndsAt            pgtype.Timestamptz                                  `json:"ends_at"`
+	Tombstone         pgtype.Bool                                         `json:"tombstone"`
+	Scoped            bool                                                `json:"scoped"`
 }
 
 func (q *Queries) ReadMaintenanceCompilerEvents(ctx context.Context, arg ReadMaintenanceCompilerEventsParams) ([]ReadMaintenanceCompilerEventsRow, error) {
@@ -261,6 +255,7 @@ func (q *Queries) ReadMaintenanceCompilerEvents(ctx context.Context, arg ReadMai
 			&i.Included,
 			&i.CoverageChanged,
 			&i.RecordedAt,
+			&i.EffectiveCoverage,
 			&i.StartsAt,
 			&i.EndsAt,
 			&i.Tombstone,

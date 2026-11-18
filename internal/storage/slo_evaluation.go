@@ -274,6 +274,15 @@ func evaluateSloAttempt(ctx context.Context, databaseURL string, input EvaluateS
 	if revision != 0 {
 		return api.SloEvaluation{}, ErrSloEvaluationMaintenanceUnsupported
 	}
+	if _, err := q.FenceServiceMaintenanceAuthority(ctx); err != nil {
+		return api.SloEvaluation{}, readTransactionError(ctx, "storage: SLO evaluation service maintenance fence failed", err)
+	}
+	if err := requireServiceMaintenanceReady(ctx, q, row.ID, start, end); err != nil {
+		if errors.Is(err, ErrDerivedPending) {
+			return api.SloEvaluation{}, ErrSloEvaluationMaintenanceUnsupported
+		}
+		return api.SloEvaluation{}, err
+	}
 	if err = finishAgentRead(ctx, tx, input.Now, started, user, installation, session); err != nil {
 		return api.SloEvaluation{}, err
 	}
