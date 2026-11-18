@@ -69,6 +69,22 @@ jobs:
       - uses: ./.github/actions/dev-image
       - name: ${{ matrix.suite }}
         run: ${{ matrix.command }}
+      - name: Keep maintenance design screenshots
+        if: success() && matrix.suite == 'test-e2e'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: maintenance-design
+          path: .local/e2e/maintenance-design/
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Keep maintenance chart screenshots
+        if: success() && matrix.suite == 'test-browser'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: maintenance-chart-design
+          path: .local/maintenance-chart-design/
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Keep end-to-end results
         if: failure() && matrix.suite == 'test-e2e'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

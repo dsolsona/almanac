@@ -38,7 +38,7 @@ function validEvaluation(x: Record<string, unknown>): boolean {
       (item.state==='observed' ? typeof item.attainment==='string' : item.attainment===null));
 }
 const utcTimestamp=(v:unknown): v is string => typeof v==='string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z$/.test(v) && Number.isFinite(Date.parse(v));
-function maintenanceTimeKey(value: unknown): string | undefined {
+export function maintenanceTimeKey(value: unknown): string | undefined {
   if (!utcTimestamp(value)) return undefined;
   const fraction = value.slice(20, -1);
   if (fraction.length > 6) return undefined;
@@ -218,7 +218,18 @@ export async function request<T>(path: string, init: RequestInit = {}, mutation 
     }
   }, init.signal, path.startsWith('/api/v1/services')||path.startsWith('/api/v1/slos/overview')||path.startsWith('/api/v1/maintenance')||path.split('?')[0]?.endsWith('/maintenance')||path.split('?')[0]?.endsWith('/status') ? 0 : 30_000);
 }
-async function requestUncached<T>(path: string, init: RequestInit = {}, mutation = false, responseLimit = 4 * 1024 * 1024): Promise<{ value: T; etag: string; serverTime?:string; serverClock?:ServerClock }> {
+type ResponseContract<T> = {
+  status: number;
+  validate: (data: unknown, headers: Headers) => data is T;
+};
+
+export async function requestValidated<T>(path: string, init: RequestInit, contract: ResponseContract<T>, mutation = false) {
+  if (mutation) clearQueryCache();
+  try { return await requestUncached(path, init, mutation, undefined, contract); }
+  finally { if (mutation) clearQueryCache(); }
+}
+
+async function requestUncached<T>(path: string, init: RequestInit = {}, mutation = false, responseLimit = 4 * 1024 * 1024, contract?: ResponseContract<T>): Promise<{ value: T; etag: string; serverTime?:string; serverClock?:ServerClock }> {
   let response: Response;
   try { response = await fetch(path, { ...init, credentials: 'same-origin', mode: 'same-origin', cache: 'no-store', redirect: 'error' }); }
   catch { throw new SloFailure(mutation ? 'The request may have succeeded. Check the list before deliberately retrying the same request.' : 'Almanac could not be reached.', mutation); }
@@ -246,6 +257,17 @@ async function requestUncached<T>(path: string, init: RequestInit = {}, mutation
       ? 'The SLO list changed. Refresh to restart from the first page.' : '';
     if(response.status===401 || response.status===403)clearQueryCache(false);
     throw new SloFailure(guidance || maintenanceGuidance || listCursor || (code==='service_in_use'?'Move or remove the referencing SLOs and service dependencies before deleting this service.':messages[code]) || 'The request could not be completed. Try again.', mutation && response.status >= 500, response.status, code);
+  }
+  function accepted(value: T) {
+    const serverTime = response.headers.get('Date');
+    const time = Date.parse(serverTime ?? '');
+    return { value, etag: response.headers.get('ETag') ?? '', ...(serverTime ? { serverTime } : {}),
+      ...(Number.isFinite(time) ? { serverClock: { time, receivedAt } } : {}) };
+  }
+  if (contract) {
+    if (response.status !== contract.status) throw new SloFailure('The server returned an unexpected response.', mutation, response.status);
+    if (!contract.validate(data, response.headers)) throw new SloFailure('The server returned an invalid response.', mutation, response.status);
+    return accepted(data);
   }
   const pathname = path.split('?')[0]!;
   const maintenanceID = /^\/api\/v1\/maintenance\/([0-9a-f-]{36})(?:\/(?:end|cancel|withdraw))?$/.exec(pathname)?.[1];
@@ -314,9 +336,7 @@ async function requestUncached<T>(path: string, init: RequestInit = {}, mutation
     if (tag !== `"${isService ? 'service' : 'slo'}:${value.id}:${value.version}"`)
       throw new SloFailure(mutation ? 'The request may have succeeded, but its version could not be confirmed. Check the record before retrying.' : 'The record version could not be confirmed.', mutation, response.status);
   }
-  const serverTime=response.headers.get('Date');
-  const time=Date.parse(serverTime??'');
-  return { value: data as T, etag: response.headers.get('ETag') ?? '',...(serverTime?{serverTime}:{}),...(Number.isFinite(time)?{serverClock:{time,receivedAt}}:{}) };
+  return accepted(data as T);
 }
 export function write(context: AuthContext, body: unknown, key?: string, etag?: string): RequestInit {
   return { method: etag ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': context.csrf_token, ...(key ? { 'Idempotency-Key': key } : {}), ...(etag ? { 'If-Match': etag } : {}) }, body: JSON.stringify(body) };

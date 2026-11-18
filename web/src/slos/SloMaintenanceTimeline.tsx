@@ -1,11 +1,9 @@
 import { useEffect, useState } from 'react';
-import type { components } from '../api/generated.ts';
 import { Button } from '../components/ui/index.ts';
 import { pointTime } from '../components/charts/pointInspection.ts';
-import { sloClient } from './client.ts';
+import { readSloMaintenance, type OverlayPage } from './maintenanceOverlay.ts';
 
-type Page = components['schemas']['MaintenancePage'];
-type Layer = { key: string; page?: Page; error?: boolean };
+type Layer = { key: string; page?: OverlayPage; error?: boolean };
 
 export function openSloMaintenanceList() {
   const list = document.querySelector<HTMLDetailsElement>('#slo-maintenance-periods');
@@ -21,7 +19,7 @@ export function useSloMaintenance(id: string, start: string | undefined, end: st
   useEffect(() => {
     if (!start || !end || Date.parse(start) >= Date.parse(end)) return;
     const controller = new AbortController();
-    sloClient.maintenance(id, start, end, '', controller.signal)
+    readSloMaintenance(id, start, end, '', controller.signal)
       .then(page => { if (!controller.signal.aborted) setLayer({ key, page }); })
       .catch(() => { if (!controller.signal.aborted) setLayer({ key, error: true }); });
     return () => controller.abort();
@@ -34,18 +32,21 @@ type ListProps = {
   start: string;
   end: string;
   zone: 'UTC' | 'local';
-  page?: Page;
+  page?: OverlayPage;
   error?: boolean;
 };
 
 export function SloMaintenanceList({ id, start, end, zone, page, error }: ListProps) {
   if (error) return <p className="slo-detail-notice" role="status">Maintenance periods could not be loaded. Refresh objective history to try again.</p>;
-  if (!page?.items.length) return null;
-  return <MaintenancePages key={JSON.stringify([id, start, end, page.items[0]?.id, page.next_cursor])} id={id} start={start} end={end} zone={zone} first={page} />;
+  return <>
+    {page?.pending && <p className="slo-detail-notice" role="status">Some maintenance periods are still being prepared.</p>}
+    {!!page?.items.length && <MaintenancePages key={JSON.stringify([id, start, end, page.source, page.items[0], page.next_cursor])}
+      id={id} start={start} end={end} zone={zone} first={page} />}
+  </>;
 }
 
-function MaintenancePages({ id, start, end, zone, first }: Omit<ListProps, 'page' | 'error'> & { first: Page }) {
-  const [loaded, setLoaded] = useState<{ cursor: string; result: Page }>();
+function MaintenancePages({ id, start, end, zone, first }: Omit<ListProps, 'page' | 'error'> & { first: OverlayPage }) {
+  const [loaded, setLoaded] = useState<{ cursor: string; result: OverlayPage }>();
   const [cursors, setCursors] = useState(['']);
   const [error, setError] = useState(false);
   const cursor = cursors.at(-1) ?? '';
@@ -55,11 +56,11 @@ function MaintenancePages({ id, start, end, zone, first }: Omit<ListProps, 'page
     if (!cursor || page) return;
     const controller = new AbortController();
     setError(false);
-    sloClient.maintenance(id, start, end, cursor, controller.signal)
+    readSloMaintenance(id, start, end, cursor, controller.signal, first.source)
       .then(result => { if (!controller.signal.aborted) setLoaded({ cursor, result }); })
       .catch(() => { if (!controller.signal.aborted) setError(true); });
     return () => controller.abort();
-  }, [cursor, page, id, start, end]);
+  }, [cursor, page, id, start, end, first.source]);
 
   return <details id="slo-maintenance-periods" className="slo-detail-disclosure">
     <summary>Maintenance periods{first.overflow ? <span>{first.overflow.count} grouped on the graphs</span>
@@ -70,7 +71,7 @@ function MaintenancePages({ id, start, end, zone, first }: Omit<ListProps, 'page
       {first.next_cursor && !first.overflow && <p className="small">Browse additional windows here or choose a shorter graph range.</p>}
       {error && !page && <p role="status">This page could not be loaded. Go back and try again.</p>}
       {!page && !error && <p role="status">Loading maintenance periods…</p>}
-      {page && <ul className="slo-maintenance-events">{page.items.map(window => <li key={window.id}>
+      {page && <ul className="slo-maintenance-events">{page.items.map(window => <li key={`${window.id}:${window.start}:${window.end}`}>
         <a href={`/maintenance/${window.id}`} data-app-route>{window.title}</a>
         <span><time dateTime={window.start}>{pointTime(window.start, zone, true)}</time> to <time dateTime={window.end}>{pointTime(window.end, zone, true)}</time></span>
       </li>)}</ul>}

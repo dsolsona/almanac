@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent, type ReactNode } from 'react';
 import type { components } from '../../api/generated.ts';
 import { traceChartRender } from '../../telemetry/client.ts';
 import { percentExact } from '../../slos/detailFormat.ts';
@@ -18,10 +18,22 @@ export { pointTime } from './pointInspection.ts';
 export function SloHistoryChart({kind,samples,start,end,target,compact=false,zone='UTC',generation,burnLabel='1 h',maintenance=emptyBands,maintenanceOverflow}:Props) {
  const host=useRef<HTMLDivElement>(null),tooltip=useRef<HTMLDivElement>(null);
  const [inspectionTime,setInspectionTime]=useState<number>();
+ const [pinned,setPinned]=useState(false);
  const [width,setWidth]=useState(980),[index,setIndex]=useState<number|null>(null),[pointerY,setPointerY]=useState<number|undefined>(undefined);
  useLayoutEffect(()=>{const el=host.current;if(!el)return;const resize=()=>setWidth(Math.max(280,el.clientWidth-(innerWidth>700?38:14)));resize();const observer=new ResizeObserver(resize);observer.observe(el);return()=>observer.disconnect();},[start,end]);
- useEffect(()=>{setIndex(null);setInspectionTime(undefined);},[samples,start,end,kind]);
- useEffect(()=>{const close=(e:globalThis.PointerEvent)=>{if(e.target instanceof Node&&!host.current?.contains(e.target)){setIndex(null);setInspectionTime(undefined);}};const escape=(e:KeyboardEvent)=>{if(e.key==='Escape'){setIndex(null);setInspectionTime(undefined);}};document.addEventListener('pointerdown',close);document.addEventListener('keydown',escape);return()=>{document.removeEventListener('pointerdown',close);document.removeEventListener('keydown',escape);};},[]);
+ function dismiss() {
+  setIndex(null);
+  setInspectionTime(undefined);
+  setPinned(false);
+ }
+ useEffect(dismiss,[samples,start,end,kind]);
+ useEffect(()=>{
+  const close=(event:globalThis.PointerEvent)=>{if(event.target instanceof Node&&!host.current?.contains(event.target))dismiss();};
+  const escape=(event:KeyboardEvent)=>{if(event.key==='Escape')dismiss();};
+  document.addEventListener('pointerdown',close);
+  document.addEventListener('keydown',escape);
+  return()=>{document.removeEventListener('pointerdown',close);document.removeEventListener('keydown',escape);};
+ },[]);
  const height=compact?160:225,left=65,right=width-20,top=16,bottom=height-28;
  const field=kind==='budget'?'remaining_fraction':kind==='burn'?'burn':'attainment';
  const numeric=(p:Sample)=>p[field]===null?null:Number(p[field])*(kind==='burn'?1:100);
@@ -42,7 +54,9 @@ export function SloHistoryChart({kind,samples,start,end,target,compact=false,zon
  },[samples,kind,width,start,end,target,compact,zone,generation]);
  const selected=index===null?undefined:samples[index];
  const selectedTime=inspectionTime??(selected?Date.parse(selected.evaluation_at):undefined);
- const activeBands=selectedTime===undefined?emptyBands:maintenance.filter(window=>Date.parse(window.start)<=selectedTime&&selectedTime<Date.parse(window.end));
+ const covers=(window:MaintenanceBand,time:number)=>Date.parse(window.start)<=time&&time<Date.parse(window.end);
+ const activeBands=selectedTime===undefined?emptyBands:maintenance.filter(window=>covers(window,selectedTime));
+ const activeWindow=activeBands[0];
  const showInspection=Boolean(selected||activeBands.length);
  useLayoutEffect(()=>{
   const frame=host.current,panel=tooltip.current,svg=frame?.querySelector('svg');
@@ -71,17 +85,55 @@ export function SloHistoryChart({kind,samples,start,end,target,compact=false,zon
   window.addEventListener('resize',position);
   return()=>{window.removeEventListener('scroll',position,true);window.removeEventListener('resize',position);};
  });
- function inspect(e:PointerEvent<HTMLDivElement>){setPointerY(e.clientY);const svg=e.currentTarget.querySelector('svg');if(!svg)return;const r=svg.getBoundingClientRect(),value=min+((e.clientX-r.left)/r.width*width-left)/(right-left)*(max-min);setInspectionTime(value>=min&&value<=max?value:undefined);if(!samples.length)return;let nearest=0;for(let i=1;i<samples.length;i++)if(Math.abs(Date.parse(samples[i]!.evaluation_at)-value)<Math.abs(Date.parse(samples[nearest]!.evaluation_at)-value))nearest=i;setIndex(nearest);}
+ function inspect(event:PointerEvent<HTMLDivElement>|MouseEvent<HTMLDivElement>) {
+  const svg=event.currentTarget.querySelector('svg');
+  if(!svg)return false;
+  const bounds=svg.getBoundingClientRect();
+  const x=(event.clientX-bounds.left)/bounds.width*width;
+  const y=(event.clientY-bounds.top)/bounds.height*height;
+  const time=min+(x-left)/(right-left)*(max-min);
+  setPointerY(event.clientY);
+  setInspectionTime(time>=min&&time<=max?time:undefined);
+  if(samples.length) {
+   let nearest=0;
+   for(let i=1;i<samples.length;i++) {
+    if(Math.abs(Date.parse(samples[i]!.evaluation_at)-time)<Math.abs(Date.parse(samples[nearest]!.evaluation_at)-time))nearest=i;
+   }
+   setIndex(nearest);
+  }
+  return y>=top&&y<=bottom&&time>=min&&time<=max&&maintenance.some(window=>covers(window,time));
+ }
  const tickFractions=width<480?[0,6/11,1]:[0,4/11,8/11,1];
  const selectedValue=selected&&allowed(selected)?(kind==='burn'?`${selected.burn}×`:percentExact(selected[field])):null;
  if(!Number.isFinite(min)||!Number.isFinite(max)||max<=min)return <p role="alert">Chart unavailable: Timeline range must have end after start</p>;
- return <div ref={host} className={`slo-history-chart ${kind}`} data-chart-ready="true" data-rendered-generation={generation} data-rendered-zone={zone} role="group" aria-label={`Inspect ${label}. Use arrow keys, Home, End, Escape.`} tabIndex={samples.length?0:undefined}
- onPointerMove={e=>{if(e.pointerType!=='touch')inspect(e);}} onPointerDown={e=>{if(e.pointerType==='touch')inspect(e);}} onPointerLeave={e=>{if(e.pointerType!=='touch'){setIndex(null);setInspectionTime(undefined);}}} onBlur={()=>{setIndex(null);setInspectionTime(undefined);}}
- onKeyDown={e=>{setPointerY(undefined);setInspectionTime(undefined);if(e.key==='Escape'){setIndex(null);return;}if(!samples.length||!['Home','End','ArrowLeft','ArrowRight'].includes(e.key))return;e.preventDefault();setIndex(i=>inspectionIndex(e.key,i,samples.length));}}>
+ return <div ref={host} className={`slo-history-chart ${kind}`} data-chart-ready="true" data-rendered-generation={generation} data-rendered-zone={zone}
+ role="group" aria-label={`Inspect ${label}. Use arrow keys, Home, End, Escape.${maintenance.length?' Press Enter on a maintenance period for details.':''}`} tabIndex={samples.length?0:undefined}
+ onPointerMove={event=>{if(!pinned&&event.pointerType!=='touch')inspect(event);}}
+ onPointerDown={event=>{if(!pinned&&event.pointerType==='touch')inspect(event);}}
+ onPointerLeave={event=>{if(!pinned&&event.pointerType!=='touch')dismiss();}}
+ onClick={event=>{
+  if(event.target instanceof Element&&event.target.closest('svg'))setPinned(inspect(event));
+ }}
+ onBlur={event=>{if(!(event.relatedTarget instanceof Node&&event.currentTarget.contains(event.relatedTarget)))dismiss();}}
+ onKeyDown={event=>{
+  if(event.key==='Escape'){
+   if(pinned&&event.target!==event.currentTarget)event.currentTarget.focus();
+   dismiss();
+   return;
+  }
+  if(event.target!==event.currentTarget)return;
+  if(event.key==='Enter'&&activeWindow){event.preventDefault();setPinned(true);return;}
+  if(!samples.length||!['Home','End','ArrowLeft','ArrowRight'].includes(event.key))return;
+  event.preventDefault();
+  setPinned(false);
+  setPointerY(undefined);
+  setInspectionTime(undefined);
+  setIndex(index=>inspectionIndex(event.key,index,samples.length));
+ }}>
  {samples.length===0&&!maintenance.length?<p className="slo-history-empty">No history available for this period.</p>:<svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${label}; unavailable measurements are gaps.`}>
  {maintenance.map(window=>{
    const from=Math.max(min,Date.parse(window.start)),to=Math.min(max,Date.parse(window.end));
-   return from<to&&<rect key={window.id} className="slo-maintenance-band" x={timeX(from)} y={top} width={timeX(to)-timeX(from)} height={bottom-top} aria-hidden="true"/>;
+   return from<to&&<rect key={`${window.id}:${window.start}:${window.end}`} className="slo-maintenance-band" x={timeX(from)} y={top} width={timeX(to)-timeX(from)} height={bottom-top} aria-hidden="true"/>;
  })}
  {ticks.map((t,i)=><g key={i}><line className="gridline" x1={left} x2={right} y1={y(t)} y2={y(t)}/><text className="axis" x="55" y={y(t)+4} textAnchor="end">{Number(t.toFixed(kind==='attainment'?3:2))}{unit}</text></g>)}
  <line className="ref" x1={left} x2={right} y1={y(kind==='budget'?0:kind==='burn'?1:Number(target)*100)} y2={y(kind==='budget'?0:kind==='burn'?1:Number(target)*100)}/>
@@ -93,11 +145,14 @@ export function SloHistoryChart({kind,samples,start,end,target,compact=false,zon
  {selected&&<g><line className="cursor" x1={x(selected)} x2={x(selected)} y1={top} y2={bottom}/>{allowed(selected)&&<circle className="inspection-dot" cx={x(selected)} cy={y(numeric(selected)!)} r="4.5"/>}</g>}
  </svg>}
  {samples.length===0&&maintenance.length>0&&<p className="slo-history-empty">No measured history for this period.</p>}
- {showInspection&&<div ref={tooltip} className="slo-point-tooltip" role="tooltip">{selected&&<><span>{pointTime(selected.evaluation_at,zone)}</span><strong>{selectedValue??labels[selected.state]}</strong><span>{label}</span><small>{selected.state==='observed'&&(selected.quality?.state!=='complete'||selected.quality?.freshness!=='fresh')?`Observed · ${selected.quality?.state.replaceAll('_',' ')} · ${selected.quality?.freshness}`:labels[selected.state]}</small>{selected.display_coverage&&<small>Displayed period includes {[...new Set([...selected.display_coverage.states,...selected.display_coverage.quality_states,...selected.display_coverage.freshness])].join(', ').replaceAll('_',' ')}</small>}</>}
- {activeBands.length>0&&<div className="slo-maintenance-inspection"><strong>Maintenance period</strong>
-   {activeBands.slice(0,1).map(window=><span key={window.id}>{previewText(window.title, 90)} · {pointTime(window.start,zone,true)} to {pointTime(window.end,zone,true)}</span>)}
-   {activeBands.length===1&&<small>{previewText(activeBands[0]!.reason, 160)}</small>}
+ {showInspection&&<div ref={tooltip} className={`slo-point-tooltip${pinned&&activeWindow?' slo-point-tooltip--interactive':''}`} role={pinned&&activeWindow?'group':'tooltip'} aria-label={pinned&&activeWindow?'Maintenance inspection':undefined}>{selected&&<><span>{pointTime(selected.evaluation_at,zone)}</span><strong>{selectedValue??labels[selected.state]}</strong><span>{label}</span><small>{selected.state==='observed'&&(selected.quality?.state!=='complete'||selected.quality?.freshness!=='fresh')?`Observed · ${selected.quality?.state.replaceAll('_',' ')} · ${selected.quality?.freshness}`:labels[selected.state]}</small>{selected.display_coverage&&<small>Displayed period includes {[...new Set([...selected.display_coverage.states,...selected.display_coverage.quality_states,...selected.display_coverage.freshness])].join(', ').replaceAll('_',' ')}</small>}</>}
+ {activeWindow&&<div className="slo-maintenance-inspection"><strong>Maintenance period</strong>
+   <span>{previewText(activeWindow.title, 90)} · {pointTime(activeWindow.start,zone,true)} to {pointTime(activeWindow.end,zone,true)}</span>
+   {activeBands.length===1&&<small>{previewText(activeWindow.reason, 160)}</small>}
    {activeBands.length>1&&<small>{activeBands.length-1} more overlapping {activeBands.length===2?'window':'windows'} in the maintenance list below.</small>}
+   {pinned
+    ? <a href={`/maintenance/${activeWindow.id}`} data-app-route>View maintenance details</a>
+    : <small>Select the period to view details.</small>}
  </div>}
  </div>}
  <span className="sr-only" aria-live="polite">{selected?`${pointTime(selected.evaluation_at,zone)} · ${selectedValue??labels[selected.state]}`:''}{activeBands.length>0&&` · Maintenance: ${activeBands.map(window=>window.title).join(', ')}`}</span>

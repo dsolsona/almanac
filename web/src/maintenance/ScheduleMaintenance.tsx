@@ -1,10 +1,12 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import type { AuthContext } from '../auth/client.ts';
-import { Button, ChoiceChips, Combobox, DatePicker, FormActions, FormSection, PageHeader, Panel, TextareaField, TextField, type ComboboxOption } from '../components/ui/index.ts';
-import { SloFailure, sloClient } from '../slos/client.ts';
-import { maintenanceClient, type MaintenanceWindow, type MaintenanceWrite } from './client.ts';
+import { Button, ChoiceChips, DatePicker, FormActions, FormSection, PageHeader, Panel, TextareaField, TextField, type ComboboxOption } from '../components/ui/index.ts';
+import { SloFailure } from '../slos/client.ts';
+import { maintenanceClient, type MaintenanceSelector, type MaintenanceWindow, type MaintenanceWrite } from './client.ts';
+import { MaintenanceImpactPreview } from './MaintenanceImpact.tsx';
+import { maxScope, scopeIDs, scopeLabels, scopeOption, scopeSelector, ScopeMode, ScopePicker, type SelectedKind } from './ScopePicker.tsx';
 
-const maxScope = 100;
+const emptySelection: ComboboxOption[] = [];
 
 const durations = [
   { value: '15', label: '15 min' },
@@ -23,12 +25,16 @@ export function ScheduleMaintenance({ context, existing }: { context: AuthContex
   const returnTo = windowRecord ? `/maintenance/${windowRecord.id}` : '/maintenance';
   const [title, setTitle] = useState(windowRecord?.title ?? '');
   const [reason, setReason] = useState(windowRecord?.reason ?? '');
-  const [term, setTerm] = useState('');
-  const [options, setOptions] = useState<ComboboxOption[]>([]);
-  const [selected, setSelected] = useState<ComboboxOption[]>(() => windowRecord?.slo_ids.map(id => ({ id, label: id })) ?? []);
+  const [kind, setKind] = useState<MaintenanceSelector['kind']>(windowRecord?.scope.kind ?? 'slos');
+  const [selections, setSelections] = useState<Partial<Record<SelectedKind, ComboboxOption[]>>>(() => {
+    const scope = windowRecord?.scope;
+    return scope && scope.kind !== 'all_services' ? { [scope.kind]: scopeIDs(scope).map(id => ({ id, label: id })) } : {};
+  });
   const [scopeNames, setScopeNames] = useState(() => new Map<string, ComboboxOption>());
-  const [searchError, setSearchError] = useState('');
-  const [searching, setSearching] = useState(true);
+  const selected = kind === 'all_services' ? emptySelection : selections[kind] ?? emptySelection;
+  const scope = useMemo(() => scopeSelector(kind, selected.map(option => option.id).sort()), [kind, selected]);
+  const [reviewedScope, setReviewedScope] = useState<MaintenanceSelector>();
+  const scopeValid = kind === 'all_services' || selected.length > 0 && selected.length <= maxScope;
   const [day, setDay] = useState(windowRecord?.start.slice(0, 10) ?? '');
   const [time, setTime] = useState(windowRecord?.start.slice(11, 19) ?? '');
   const [duration, setDuration] = useState(initialDuration);
@@ -51,42 +57,27 @@ export function ScheduleMaintenance({ context, existing }: { context: AuthContex
   }, []);
 
   useEffect(() => {
-    const ids = [...new Set([...(latest?.value.slo_ids ?? []), ...(windowRecord?.slo_ids ?? [])])];
-    if (!ids.length) return;
+    const selections = new Map<string, { kind: SelectedKind; id: string }>();
+    for (const scope of [windowRecord?.scope, latest?.value.scope]) {
+      if (!scope || scope.kind === 'all_services') continue;
+      for (const id of scopeIDs(scope)) selections.set(`${scope.kind}:${id}`, { kind: scope.kind, id });
+    }
+    if (!selections.size) return;
     const controller = new AbortController();
-    async function resolveNames(ids: string[]) {
-      for (let offset = 0; offset < ids.length && !controller.signal.aborted; offset += 10) {
-        const results = await Promise.allSettled(ids.slice(offset, offset + 10).map(id => sloClient.get(id, controller.signal)));
+    const entries = [...selections];
+    async function resolveNames() {
+      for (let offset = 0; offset < entries.length && !controller.signal.aborted; offset += 10) {
+        const results = await Promise.allSettled(entries.slice(offset, offset + 10).map(async ([key, { kind, id }]) => {
+          return [key, await scopeOption(kind, id, controller.signal)] as const;
+        }));
         if (controller.signal.aborted) return;
-        const resolved = results.flatMap(result => {
-          if (result.status === 'rejected') return [];
-          const slo = result.value.value;
-          return [{ id: slo.id, label: slo.display_name, detail: slo.service_display_name }];
-        });
-        setScopeNames(current => new Map<string, ComboboxOption>([...current, ...resolved.map(option => [option.id, option] as const)]));
+        const resolved = results.flatMap(result => result.status === 'fulfilled' ? [result.value] : []);
+        setScopeNames(current => new Map([...current, ...resolved]));
       }
     }
-    void resolveNames(ids);
+    void resolveNames();
     return () => controller.abort();
   }, [windowRecord, latest]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    setSearching(true);
-    setSearchError('');
-    setOptions([]);
-    const timer = window.setTimeout(() => {
-      sloClient.overview({ q: term.trim(), limit: 10 }, controller.signal).then(page => {
-        if (controller.signal.aborted) return;
-        setOptions(page.items.map(({ slo }) => ({ id: slo.id, label: slo.display_name, detail: slo.service_display_name })));
-      }).catch(() => {
-        if (!controller.signal.aborted) setSearchError('SLO search is unavailable. Change your search to try again.');
-      }).finally(() => {
-        if (!controller.signal.aborted) setSearching(false);
-      });
-    }, term ? 180 : 0);
-    return () => { window.clearTimeout(timer); controller.abort(); };
-  }, [term]);
 
   useEffect(() => { if (error) notice.current?.focus(); }, [error]);
   const editing = Boolean(windowRecord);
@@ -109,11 +100,18 @@ export function ScheduleMaintenance({ context, existing }: { context: AuthContex
       setError('Enter a name and reason within the allowed lengths.');
       return;
     }
-    if (!selected.length || selected.length > maxScope) { setError(`Select between 1 and ${maxScope} SLOs.`); return; }
+    if (!scopeValid) {
+      setError(`Select between 1 and ${maxScope} ${kind === 'services' ? 'services' : 'SLOs'}.`);
+      return;
+    }
+    if (reviewedScope !== scope) {
+      setError('Wait for the affected SLO preview before saving.');
+      return;
+    }
     if (!validSchedule) { setError('Choose a valid start time and duration.'); return; }
 
     const body: MaintenanceWrite = {
-      title: title.trim(), reason: reason.trim(), slo_ids: selected.map(option => option.id).sort(),
+      title: title.trim(), reason: reason.trim(), scope,
       start: new Date(start).toISOString(), end: new Date(end).toISOString(),
     };
     const serialized = JSON.stringify([etag, body]);
@@ -164,14 +162,19 @@ export function ScheduleMaintenance({ context, existing }: { context: AuthContex
   }
 
   const latestETag = latest?.etag;
-  const draftScope = new Set(selected.map(option => option.id));
-  const currentScope = new Set(latest?.value.slo_ids);
-  const onlyCurrent = [...currentScope].filter(id => !draftScope.has(id));
-  const onlyDraft = [...draftScope].filter(id => !currentScope.has(id));
-  const labelScope = (ids: string[]) => <ul>{ids.map(id => {
-    const objective = scopeNames.get(id) ?? selected.find(option => option.id === id);
-    return <li key={id}>{objective?.label ?? id}{objective?.detail && <small> · {objective.detail}</small>}</li>;
-  })}</ul>;
+  const latestScope = latest?.value.scope;
+  const sameKind = latestScope?.kind === kind;
+  const draftIDs = scopeIDs(scope);
+  const currentIDs = latestScope ? scopeIDs(latestScope) : [];
+  const onlyCurrent = sameKind ? currentIDs.filter(id => !draftIDs.includes(id)) : currentIDs;
+  const onlyDraft = sameKind ? draftIDs.filter(id => !currentIDs.includes(id)) : draftIDs;
+  const labelScope = (mode: MaintenanceSelector['kind'], ids: string[], showMode: boolean) => <>
+    {showMode && <p>{scopeLabels[mode]}</p>}
+    {ids.length > 0 && <ul>{ids.map(id => {
+      const option = scopeNames.get(`${mode}:${id}`) ?? (mode === kind ? selected.find(option => option.id === id) : undefined);
+      return <li key={id}>{option?.label ?? id}{option?.detail && <small> · {option.detail}</small>}</li>;
+    })}</ul>}
+  </>;
 
   return <>
     <PageHeader headingRef={heading} title={windowRecord ? 'Edit maintenance schedule' : 'Schedule maintenance'}
@@ -182,11 +185,12 @@ export function ScheduleMaintenance({ context, existing }: { context: AuthContex
         <TextareaField id="maintenance-reason" label="Reason" value={reason} onChange={event => setReason(event.target.value)} maxLength={4096} required disabled={saving} />
       </FormSection>
       <FormSection title="Scope">
-        <Combobox id="maintenance-slo" label="Affected SLOs" options={options} value={null} onSearch={setTerm}
-          onChange={id => { const option = options.find(item => item.id === id); if (option) setSelected(current => current.length < maxScope ? [...current, option] : current); }}
-          multiple={{ selected: selected.map(option => scopeNames.get(option.id) ?? option), placement: 'below', selectionLabel: 'Selected SLOs', onRemove: id => setSelected(current => current.filter(option => option.id !== id)) }}
-          placeholder="Search SLOs" hint={selected.length === maxScope ? `Remove an SLO before adding another. The limit is ${maxScope}.` : "Measurements in this window are excluded from the selected SLOs."} error={searchError || undefined} disabled={saving}
-          noMatch={{ text: () => searching ? 'Searching for SLOs…' : searchError || 'No matching SLOs. Try a different name.' }} />
+        <ScopeMode kind={kind} onChange={setKind} disabled={saving} />
+        {kind === 'all_services'
+          ? <p className="ui-hint">Covers all services and eligible SLOs that join during the window.</p>
+          : <ScopePicker key={kind} kind={kind} selected={selected.map(option => scopeNames.get(`${kind}:${option.id}`) ?? option)}
+            onChange={options => setSelections(current => ({ ...current, [kind]: options }))} disabled={saving} />}
+        {scopeValid && <MaintenanceImpactPreview key={JSON.stringify(scope)} scope={scope} context={context} onReady={setReviewedScope} />}
       </FormSection>
       <FormSection title="Schedule" hint="UTC">
         <div className="maintenance-schedule-row">
@@ -206,8 +210,8 @@ export function ScheduleMaintenance({ context, existing }: { context: AuthContex
           <dt>Name</dt><dd>{latest.value.title}</dd>
           <dt>Reason</dt><dd className="maintenance-reason">{latest.value.reason}</dd>
           <dt>Schedule</dt><dd><time>{latest.value.start}</time> to <time>{latest.value.end}</time></dd>
-          {!!onlyCurrent.length && <><dt>Only in the current revision</dt><dd>{labelScope(onlyCurrent)}</dd></>}
-          {!!onlyDraft.length && <><dt>Only in your draft</dt><dd>{labelScope(onlyDraft)}</dd></>}
+          {latestScope && (!sameKind || onlyCurrent.length > 0) && <><dt>Only in the current revision</dt><dd>{labelScope(latestScope.kind, onlyCurrent, !sameKind)}</dd></>}
+          {(!sameKind || onlyDraft.length > 0) && <><dt>Only in your draft</dt><dd>{labelScope(kind, onlyDraft, !sameKind)}</dd></>}
         </dl>
         {latest.etag && <p className="ui-hint">Keeping your draft lets you save it over this revision.</p>}
       </Panel>}
@@ -221,7 +225,7 @@ export function ScheduleMaintenance({ context, existing }: { context: AuthContex
           setError('');
           requestAnimationFrame(() => saveButton.current?.focus());
         }}>Keep my draft</Button>}
-        <Button ref={saveButton} type="submit" pending={saving} disabled={conflict}>{windowRecord ? 'Save schedule' : 'Schedule maintenance'}</Button>
+        <Button ref={saveButton} type="submit" pending={saving} disabled={conflict || scopeValid && reviewedScope !== scope}>{windowRecord ? 'Save schedule' : 'Schedule maintenance'}</Button>
       </FormActions>
     </form>
   </>;

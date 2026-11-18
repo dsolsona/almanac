@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState, type FormEvent, type RefObject } from 'react';
-import type { components } from '../api/generated.ts';
 import type { AuthContext } from '../auth/client.ts';
 import { Button, DatePicker, Dialog, FormActions, TextareaField, TextField } from '../components/ui/index.ts';
-import { request, SloFailure, write, type ServerClock } from '../slos/client.ts';
+import { SloFailure, type ServerClock } from '../slos/client.ts';
+import { maintenanceClient, type MaintenanceWindow as Window } from './client.ts';
 import { MaintenanceScope } from './MaintenanceScope.tsx';
 
-type Window = components['schemas']['MaintenanceWindow'];
 type WindowRevision = { value: Window; etag: string; serverClock?: ServerClock };
 type Action = 'cancel' | 'end' | 'withdraw';
 
@@ -134,8 +133,7 @@ function LifecycleDialog({ action, context, record, etag, readNow, trigger, onCl
     setError('');
     setValidation(undefined);
     try {
-      const result = await request<Window>(`/api/v1/maintenance/${record.id}/${action}`,
-        { ...write(context, body, attempt.current.key, revision), method: 'POST' }, true);
+      const result = await maintenanceClient.transition(record.id, action, body, context, attempt.current.key, revision);
       onUpdated(result);
     } catch (failure) {
       const uncertain = failure instanceof SloFailure && failure.uncertain;
@@ -155,7 +153,7 @@ function LifecycleDialog({ action, context, record, etag, readNow, trigger, onCl
     revisionRead.current = controller;
     setReading(true);
     try {
-      const result = await request<Window>(`/api/v1/maintenance/${record.id}`, { signal: AbortSignal.any([controller.signal, timeout]) });
+      const result = await maintenanceClient.get(record.id, '', AbortSignal.any([controller.signal, timeout]));
       if (controller.signal.aborted) return;
       setLatest(result.value);
       setRevision(result.etag);
@@ -182,8 +180,7 @@ function LifecycleDialog({ action, context, record, etag, readNow, trigger, onCl
       <p>{operation.explanation}</p>
       {latest && <section aria-label="Current revision">
         <p>Current schedule <time dateTime={latest.start}>{latest.start}</time> to <time dateTime={latest.end}>{latest.end}</time></p>
-        <p>Affected SLOs</p>
-        <MaintenanceScope ids={latest.slo_ids} />
+        <MaintenanceScope key={latest.revision} scope={latest.scope} />
       </section>}
       {latest && !unavailable && <p role="status">Latest revision {latest.revision} loaded. Check the dates before confirming your change.</p>}
       {unavailable && error !== unavailableMessage && <p role="status">{unavailableMessage}</p>}
