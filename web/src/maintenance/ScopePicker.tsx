@@ -55,7 +55,8 @@ export function ScopePicker({ kind, selected, onChange, disabled }: {
   onChange: (selected: ComboboxOption[]) => void;
   disabled: boolean;
 }) {
-  const [term, setTerm] = useState('');
+  const [{ term, cursor }, setSearch] = useState({ term: '', cursor: '' });
+  const [nextCursor, setNextCursor] = useState('');
   const [options, setOptions] = useState<ComboboxOption[]>([]);
   const [error, setError] = useState('');
   const [searching, setSearching] = useState(true);
@@ -65,35 +66,47 @@ export function ScopePicker({ kind, selected, onChange, disabled }: {
 
   useEffect(() => {
     const controller = new AbortController();
-    const query = { q: term.trim(), limit: 10 };
+    const query = { q: term.trim(), limit: 10, ...(cursor ? { cursor } : {}) };
     setSearching(true);
     setError('');
     setOptions([]);
+    setNextCursor('');
     const timer = window.setTimeout(async () => {
       try {
-        const matches = kind === 'services'
-          ? (await serviceClient.list(query, controller.signal)).items
-            .map(service => ({ id: service.id, label: service.display_name, detail: service.owner }))
-          : (await sloClient.overview(query, controller.signal)).items
-            .map(({ slo }) => ({ id: slo.id, label: slo.display_name, detail: slo.service_display_name }));
-        if (!controller.signal.aborted) setOptions(matches);
+        if (kind === 'services') {
+          const result = await serviceClient.list(query, controller.signal);
+          if (controller.signal.aborted) return;
+          setOptions(result.items.map(service => ({ id: service.id, label: service.display_name, detail: service.owner })));
+          setNextCursor(result.next_cursor ?? '');
+        } else {
+          const result = await sloClient.overview(query, controller.signal);
+          if (controller.signal.aborted) return;
+          setOptions(result.items.map(({ slo }) => ({ id: slo.id, label: slo.display_name, detail: slo.service_display_name })));
+          setNextCursor(result.next_cursor ?? '');
+        }
       } catch {
         if (!controller.signal.aborted) setError(`${noun === 'SLOs' ? 'SLO' : 'Service'} search is unavailable. Change your search to try again.`);
       } finally {
         if (!controller.signal.aborted) setSearching(false);
       }
-    }, term ? 180 : 0);
+    }, term && !cursor ? 180 : 0);
     return () => { window.clearTimeout(timer); controller.abort(); };
-  }, [kind, noun, term]);
+  }, [kind, noun, term, cursor]);
 
   return <Combobox id={`maintenance-${kind}`} label={label} placeholder={kind === 'services' ? 'Name or owner' : 'Name or service'}
-    options={options.map(option => atLimit ? { ...option, disabled: true } : option)} value={null} onSearch={setTerm}
+    options={options.map(option => atLimit ? { ...option, disabled: true } : option)} value={null}
+    onSearch={term => setSearch({ term, cursor: '' })}
+    resultsAction={nextCursor || cursor ? {
+      label: nextCursor ? 'Next search results' : 'First search results',
+      onSelect: () => setSearch({ term, cursor: nextCursor }),
+      disabled: searching,
+    } : undefined}
     onChange={id => {
       const option = options.find(item => item.id === id);
       if (option && !atLimit) onChange([...selected, option]);
     }}
-    multiple={{ selected, placement: 'below', selectionLabel: scopeLabels[kind], onRemove: id => onChange(selected.filter(option => option.id !== id)) }}
+    multiple={{ selected, keepSearch: true, placement: 'below', selectionLabel: scopeLabels[kind], onRemove: id => onChange(selected.filter(option => option.id !== id)) }}
     hint={atLimit ? `Remove a selection before adding another. The limit is ${maxScope}.` : undefined}
     error={error || undefined} disabled={disabled}
-    noMatch={{ text: () => searching ? `Searching for ${noun}…` : error || `No matching ${noun}. Try a different search.` }} />;
+    noMatch={{ text: () => searching ? `Searching for ${noun}…` : error || (nextCursor ? 'More matches are available. Choose Next search results.' : `No matching ${noun} on this page.`) }} />;
 }
