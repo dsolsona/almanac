@@ -193,6 +193,7 @@ type Querier interface {
 	HasSLIsForDatasource(ctx context.Context, datasourceID pgtype.UUID) (bool, error)
 	HasServiceMaintenanceProjection(ctx context.Context, exclusionID pgtype.UUID) (bool, error)
 	HasSliExecutionAttempt(ctx context.Context, arg HasSliExecutionAttemptParams) (bool, error)
+	HasUncertainHistoricalServiceMaintenanceGrid(ctx context.Context, arg HasUncertainHistoricalServiceMaintenanceGridParams) (bool, error)
 	InsertAgent(ctx context.Context, arg InsertAgentParams) (AlmanacAgent, error)
 	InsertAgentAudit(ctx context.Context, arg InsertAgentAuditParams) error
 	InsertAgentConfigurationRevision(ctx context.Context, arg InsertAgentConfigurationRevisionParams) error

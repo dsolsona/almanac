@@ -19,11 +19,12 @@ import (
 )
 
 var (
-	ErrMaintenanceInvalid         = errors.New("storage: invalid maintenance request")
-	ErrMaintenanceNotFound        = errors.New("storage: maintenance resource not found")
-	ErrMaintenanceConflict        = errors.New("storage: maintenance revision or replay conflict")
-	ErrMaintenanceAlignment       = errors.New("storage: maintenance bounds are not aligned")
-	ErrMaintenanceSnapshotChanged = errors.New("storage: maintenance snapshot changed")
+	ErrMaintenanceInvalid                   = errors.New("storage: invalid maintenance request")
+	ErrMaintenanceNotFound                  = errors.New("storage: maintenance resource not found")
+	ErrMaintenanceConflict                  = errors.New("storage: maintenance revision or replay conflict")
+	ErrMaintenanceAlignment                 = errors.New("storage: maintenance bounds are not aligned")
+	ErrMaintenanceHistoricalGridUnavailable = errors.New("storage: observation grid history is unavailable for the selected services and time range")
+	ErrMaintenanceSnapshotChanged           = errors.New("storage: maintenance snapshot changed")
 )
 
 type MaintenanceConflictError struct{ CurrentRevision int64 }
@@ -311,9 +312,19 @@ func mutateMaintenance(ctx context.Context, databaseURL string, input CreateMain
 		if err != nil {
 			return empty, err
 		}
+		allServices, services := input.ScopeKind == MaintenanceScopeAllServices, maintenanceSelectorUUIDs(input.ServiceIDs)
+		startsAt, endsAt := timestamp(input.Start), timestamp(input.End)
+		uncertain, err := q.HasUncertainHistoricalServiceMaintenanceGrid(ctx, dbgen.HasUncertainHistoricalServiceMaintenanceGridParams{
+			AllServices: allServices, ServiceIds: services, StartsAt: startsAt, EndsAt: endsAt,
+		})
+		if err != nil {
+			return empty, err
+		}
+		if uncertain {
+			return empty, ErrMaintenanceHistoricalGridUnavailable
+		}
 		historicalCadences, err = q.ListHistoricalServiceMaintenanceCadences(ctx, dbgen.ListHistoricalServiceMaintenanceCadencesParams{
-			AllServices: input.ScopeKind == MaintenanceScopeAllServices, ServiceIds: maintenanceSelectorUUIDs(input.ServiceIDs),
-			StartsAt: timestamp(input.Start), EndsAt: timestamp(input.End),
+			AllServices: allServices, ServiceIds: services, StartsAt: startsAt, EndsAt: endsAt,
 		})
 		if err != nil {
 			return empty, err

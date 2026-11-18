@@ -304,6 +304,35 @@ func (q *Queries) HasServiceMaintenanceProjection(ctx context.Context, exclusion
 	return column_1, err
 }
 
+const hasUncertainHistoricalServiceMaintenanceGrid = `-- name: HasUncertainHistoricalServiceMaintenanceGrid :one
+SELECT EXISTS (
+    SELECT 1 FROM public.almanac_service_maintenance_uncertain_grids u
+    JOIN public.almanac_services s ON s.id = u.service_id
+    WHERE ($1::boolean OR u.service_id = ANY($2::uuid[]))
+      AND u.uncertain_at && tstzrange($3::timestamptz,
+          greatest($3, least($4::timestamptz, s.archived_at)), '[)')
+)::boolean
+`
+
+type HasUncertainHistoricalServiceMaintenanceGridParams struct {
+	AllServices bool               `json:"all_services"`
+	ServiceIds  []pgtype.UUID      `json:"service_ids"`
+	StartsAt    pgtype.Timestamptz `json:"starts_at"`
+	EndsAt      pgtype.Timestamptz `json:"ends_at"`
+}
+
+func (q *Queries) HasUncertainHistoricalServiceMaintenanceGrid(ctx context.Context, arg HasUncertainHistoricalServiceMaintenanceGridParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasUncertainHistoricalServiceMaintenanceGrid,
+		arg.AllServices,
+		arg.ServiceIds,
+		arg.StartsAt,
+		arg.EndsAt,
+	)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const insertMaintenanceServiceSelector = `-- name: InsertMaintenanceServiceSelector :exec
 INSERT INTO public.almanac_maintenance_service_selectors(exclusion_id, revision, service_id)
 VALUES ($1, $2, $3)

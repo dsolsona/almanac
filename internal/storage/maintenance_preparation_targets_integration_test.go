@@ -413,3 +413,132 @@ func TestIntegrationMaintenanceCompatibilityOrdinalOverflowRetainsExactCoverage(
 		t.Fatalf("exact coverage lost its gap: %+v %v", snapshot, err)
 	}
 }
+
+func TestIntegrationMaintenanceUpgradePreservesUnknownHistoricalGrid(t *testing.T) {
+	t.Parallel()
+	f := newMaintenanceFixture(t)
+	q := dbgen.New(f.conn)
+	id := mustPGUUID(f.ids[0])
+	subject, err := q.GetSlo(t.Context(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := f.input("published-legacy-grid")
+	input.ScopeKind, input.SloIDs, input.ServiceIDs = MaintenanceScopeServices, nil, []string{subject.ServiceID.String()}
+	input.Start, input.End = f.at.Add(time.Minute), f.at.Add(3*time.Minute)
+	window, err := CreateMaintenance(t.Context(), f.f.databaseURL, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dropServiceMaintenanceFixtureAfter(t, f.conn, 74)
+	if _, err := f.conn.Exec(t.Context(), `DELETE FROM almanac_schema_migrations WHERE version>74`); err != nil {
+		t.Fatal(err)
+	}
+	// Publish an exclusion before either staged definition is selected.
+	if _, err := f.conn.Exec(t.Context(), `
+		SELECT public.almanac_project_service_maintenance_member($1,$2,1,$3);
+	`, id, window.ID, f.at); err != nil {
+		t.Fatal(err)
+	}
+	legacy, err := readSloExclusionSnapshot(t.Context(), q, id, window.Start, window.End)
+	if err != nil || len(legacy.Intervals) != 1 || !legacy.Intervals[0].Start.Equal(window.Start) || !legacy.Intervals[0].End.Equal(window.End) {
+		t.Fatalf("legacy 60s coverage missing: %+v %v", legacy, err)
+	}
+	move := func(revision int64, cadence int, stagedAt, selectedAt time.Time) {
+		t.Helper()
+		if _, err := f.conn.Exec(t.Context(), `
+			INSERT INTO almanac_slo_definitions(slo_id,revision,service_id,sli_id,measurement_revision,target,rolling_window_seconds,cadence_seconds,activated_at,evaluation_valid_from)
+			SELECT slo_id,$2,service_id,sli_id,measurement_revision,target,rolling_window_seconds,$3,$4,$4
+			FROM almanac_slo_definitions WHERE slo_id=$1 AND revision=$2::bigint-1
+		`, id, revision, cadence, stagedAt); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := f.conn.Exec(t.Context(), `UPDATE almanac_slos SET definition_revision=$2, updated_at=$3 WHERE id=$1`, id, revision, selectedAt); err != nil {
+			t.Fatal(err)
+		}
+	}
+	move(2, 90, f.at.Add(time.Minute+45*time.Second), f.at.Add(5*time.Minute))
+	move(3, 120, f.at.Add(6*time.Minute), f.at.Add(10*time.Minute))
+	f.now = f.at.Add(11 * time.Minute)
+	var beforeRepair time.Time
+	if err := f.conn.QueryRow(t.Context(), `SELECT clock_timestamp()`).Scan(&beforeRepair); err != nil {
+		t.Fatal(err)
+	}
+
+	// While an old reader holds the SLO table, the upgrader waits before
+	// locking singleton authority. The old reader can still complete.
+	readerConn := integrationConnect(t, f.f.databaseURL)
+	defer closeIntegrationConn(readerConn)
+	reader, err := readerConn.Begin(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rollbackTransaction(reader)
+	if _, err := reader.Exec(t.Context(), `LOCK TABLE public.almanac_slos IN ACCESS SHARE MODE`); err != nil {
+		t.Fatal(err)
+	}
+	upgraded := make(chan error, 1)
+	go func() {
+		_, err := Upgrade(t.Context(), f.f.databaseURL)
+		upgraded <- err
+	}()
+	waitForAgentQueryWait(t, f.conn, "%LOCK TABLE public.almanac_slos IN ACCESS EXCLUSIVE MODE%")
+	if _, err := reader.Exec(t.Context(), `LOCK TABLE public.almanac_service_maintenance_authority IN ACCESS SHARE MODE NOWAIT`); err != nil {
+		t.Fatalf("migration locked singleton authority before draining the SLO reader: %v", err)
+	}
+	if err := reader.Commit(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-upgraded; err != nil {
+		t.Fatal(err)
+	}
+
+	var repairedAt time.Time
+	var assigned int
+	if err := f.conn.QueryRow(t.Context(), `
+		SELECT (SELECT count(*) FROM almanac_slo_service_assignments WHERE slo_id=$1),
+		       (SELECT effective_at FROM almanac_slo_service_assignments WHERE slo_id=$1 AND definition_revision=3)
+	`, id).Scan(&assigned, &repairedAt); err != nil || assigned != 2 || repairedAt.Before(beforeRepair) {
+		t.Fatalf("repair inferred a staged or intermediate selection: count=%d cutoff=%s err=%v", assigned, repairedAt, err)
+	}
+	unknown := input
+	unknown.IdempotencyKey = "unknown-intermediate-legacy-grid"
+	unknown.Start, unknown.End = f.at.Add(7*time.Minute), f.at.Add(8*time.Minute)
+	if _, err := CreateMaintenance(t.Context(), f.f.databaseURL, unknown); !errors.Is(err, ErrMaintenanceHistoricalGridUnavailable) {
+		t.Fatalf("historical declaration used the 60s grid in its unknown 90s period: %v", err)
+	}
+	uncertain, err := q.HasUncertainHistoricalServiceMaintenanceGrid(t.Context(), dbgen.HasUncertainHistoricalServiceMaintenanceGridParams{
+		ServiceIds: []pgtype.UUID{subject.ServiceID}, StartsAt: timestamp(repairedAt), EndsAt: timestamp(repairedAt.Add(time.Hour)),
+	})
+	if err != nil || uncertain {
+		t.Fatalf("repair boundary should end uncertainty exclusively: uncertain=%t %v", uncertain, err)
+	}
+
+	var preservedStart, preservedEnd time.Time
+	if err := f.conn.QueryRow(t.Context(), `
+		SELECT lower(range_merge(preserve_at)), upper(range_merge(preserve_at))
+		FROM almanac_service_maintenance_uncertain_grids WHERE slo_id=$1 AND service_id=$2
+	`, id, subject.ServiceID).Scan(&preservedStart, &preservedEnd); err != nil ||
+		preservedStart.Unix()%360 != 0 || preservedEnd.Unix()%360 != 0 {
+		t.Fatalf("preservation cut through a possible observation grid: %s–%s %v", preservedStart, preservedEnd, err)
+	}
+
+	f.now = repairedAt.Add(time.Second)
+	if err := f.runtime.runServiceMaintenanceProjection(t.Context(), 64, time.Second, f.clock); err != nil {
+		t.Fatal(err)
+	}
+	after, err := readSloExclusionSnapshot(t.Context(), q, id, window.Start, window.End)
+	if err != nil || !reflect.DeepEqual(after.Intervals, legacy.Intervals) {
+		t.Fatalf("repair removed published elapsed coverage: after=%+v before=%+v err=%v", after, legacy, err)
+	}
+	if _, err := f.conn.Exec(t.Context(), `UPDATE almanac_services SET archived_at=$2 WHERE id=$1`, subject.ServiceID, f.at.Add(9*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	afterArchive, err := q.HasUncertainHistoricalServiceMaintenanceGrid(t.Context(), dbgen.HasUncertainHistoricalServiceMaintenanceGridParams{
+		AllServices: true, StartsAt: timestamp(f.at.Add(9 * time.Minute)), EndsAt: timestamp(f.at.Add(10 * time.Minute)),
+	})
+	if err != nil || afterArchive {
+		t.Fatalf("archived service affected an unrelated later window: uncertain=%t %v", afterArchive, err)
+	}
+
+}

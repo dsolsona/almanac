@@ -578,6 +578,13 @@ type AlmanacServiceMaintenanceProjectionCompleted struct {
 	Revision    int64       `json:"revision"`
 }
 
+type AlmanacServiceMaintenanceUncertainGrid struct {
+	SloID       pgtype.UUID                                         `json:"slo_id"`
+	ServiceID   pgtype.UUID                                         `json:"service_id"`
+	UncertainAt pgtype.Multirange[pgtype.Range[pgtype.Timestamptz]] `json:"uncertain_at"`
+	PreserveAt  pgtype.Multirange[pgtype.Range[pgtype.Timestamptz]] `json:"preserve_at"`
+}
+
 type AlmanacSession struct {
 	ID                 pgtype.UUID        `json:"id"`
 	UserID             pgtype.UUID        `json:"user_id"`

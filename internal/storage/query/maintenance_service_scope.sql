@@ -267,6 +267,15 @@ WHERE w.slo_id = sqlc.arg(slo_id) AND w.through_exclusion = sqlc.arg(through_exc
   AND w.affected_from = sqlc.arg(affected_from)::timestamptz
 FOR UPDATE SKIP LOCKED;
 
+-- name: HasUncertainHistoricalServiceMaintenanceGrid :one
+SELECT EXISTS (
+    SELECT 1 FROM public.almanac_service_maintenance_uncertain_grids u
+    JOIN public.almanac_services s ON s.id = u.service_id
+    WHERE (sqlc.arg(all_services)::boolean OR u.service_id = ANY(sqlc.arg(service_ids)::uuid[]))
+      AND u.uncertain_at && tstzrange(sqlc.arg(starts_at)::timestamptz,
+          greatest(sqlc.arg(starts_at), least(sqlc.arg(ends_at)::timestamptz, s.archived_at)), '[)')
+)::boolean;
+
 -- Historical declarations validate against the grids of assignments that
 -- actually overlapped the requested range, even if those SLOs later moved.
 -- name: ListHistoricalServiceMaintenanceCadences :many

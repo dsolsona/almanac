@@ -125,7 +125,12 @@ DROP COLUMN lease_until,DROP COLUMN claimed_version,DROP COLUMN claimed_revision
 // restores its historical schema and trims the migration ledger before upgrading.
 func dropServiceMaintenanceFixture(t *testing.T, conn *pgx.Conn) {
 	t.Helper()
-	for version := latestTestSchemaVersion(t); version >= 70; version-- {
+	dropServiceMaintenanceFixtureAfter(t, conn, 69)
+}
+
+func dropServiceMaintenanceFixtureAfter(t *testing.T, conn *pgx.Conn, retainedVersion int) {
+	t.Helper()
+	for version := latestTestSchemaVersion(t); version > retainedVersion; version-- {
 		var statement string
 		switch version {
 		case 70:
@@ -193,6 +198,7 @@ ALTER TABLE public.almanac_slo_exclusion_work
 			statement = `DROP TRIGGER almanac_slo_grid_assignment ON public.almanac_slo_service_assignments;
 DROP FUNCTION public.almanac_service_maintenance_work_pending(),
     public.almanac_service_maintenance_intervals(uuid, bigint, uuid, timestamptz);
+DROP TABLE public.almanac_service_maintenance_uncertain_grids;
 ALTER TABLE public.almanac_service_maintenance_authority DROP COLUMN inventory_revision;
 ALTER TABLE public.almanac_service_maintenance_membership_work DROP COLUMN affected_from;
 ` + serviceMaintenanceFixtureFunctions(t, "0070_service_maintenance_membership.sql",
