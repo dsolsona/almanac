@@ -62,18 +62,18 @@ func TestIntegrationMaintenanceCurrentnessUsesMeasuredCutoff(t *testing.T) {
 		t.Fatalf("unedited measurements through cutoff %s were not ready: state=%v cutoff=%s err=%v", f.at, current.CurrentState, current.Current.Window.End, err)
 	}
 
-	if _, err := execObservationFixture(t, f.conn, f.sliID, `
+	if tag, err := execObservationFixture(t, f.conn, f.sliID, `
 INSERT INTO almanac_sli_observations
  (interval_start,sli_id,measurement_revision,outcome,good_count,total_count,result_digest,missing_components,
   execution_id,delivery_id,agent_id,session_generation,configuration_revision,lease_id,agent_created_at,recorded_at)
 SELECT $2::timestamptz,sli_id,measurement_revision,outcome,good_count,total_count,result_digest,missing_components,
        gen_random_uuid(),gen_random_uuid(),agent_id,session_generation,configuration_revision,lease_id,$2,$3
 FROM almanac_sli_observations
-WHERE sli_id=$1 AND interval_start=$2::timestamptz-interval '1 minute'`, f.sliID, f.at, f.now); err != nil {
-		t.Fatal(err)
+WHERE sli_id=$1 AND interval_start=$2::timestamptz-interval '1 minute'`, f.sliID, f.at, f.now); err != nil || tag.RowsAffected() != 1 {
+		t.Fatalf("advance measured cutoff: wrote %d observations: %v", tag.RowsAffected(), err)
 	}
 	if _, err := readCurrentSloFromAggregates(t.Context(), q, definition, f.now, nil); !errors.Is(err, ErrDerivedPending) {
-		t.Fatalf("live read missed pending work inside the measured range: %v", err)
+		t.Fatalf("live read missed pending maintenance after extending the measured range: %v", err)
 	}
 
 	if _, err := CancelMaintenance(t.Context(), f.f.databaseURL, MaintenanceCommandInput{
@@ -112,6 +112,46 @@ WHERE sli_id=$1 AND interval_start=$2::timestamptz-interval '1 minute'`, f.sliID
 	after, err := q.GetPublishedCurrentProjection(t.Context(), key)
 	if err != nil || after.Current || !after.Usable {
 		t.Fatalf("stored generation ignored pending measurement coverage: current=%t usable=%t err=%v", after.Current, after.Usable, err)
+	}
+}
+
+func TestIntegrationMaintenanceCurrentnessWaitsForMeasuredObservationWork(t *testing.T) {
+	t.Parallel()
+	f := newMaintenanceFixture(t)
+	f.drain(t, "measured observation work source")
+	ctx := t.Context()
+	id := mustPGUUID(f.ids[0])
+	q := dbgen.New(f.conn)
+	definition, err := q.GetSlo(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	requested := f.at.Add(90 * time.Second)
+	current, err := readCurrentSloFromAggregates(ctx, q, definition, requested, nil)
+	if err != nil || current.CurrentState == nil || *current.CurrentState != "ready" || !current.Current.Window.End.Equal(f.at) {
+		t.Fatalf("baseline measured cutoff: state=%v cutoff=%s err=%v", current.CurrentState, current.Current.Window.End, err)
+	}
+
+	// Pick a complete interior hour so pending work cannot be handled as raw edges.
+	hour := f.historyStart.Truncate(time.Hour).Add(time.Hour)
+	var observed int64
+	if err := f.conn.QueryRow(ctx, `
+SELECT observed_intervals FROM almanac_sli_hourly_aggregates
+WHERE sli_id=$1 AND measurement_revision=$2 AND hour_start=$3`, f.sliID, definition.MeasurementRevision, hour).Scan(&observed); err != nil || observed != 60 {
+		t.Fatalf("fixture hour %s contains %d observed minutes: %v", hour, observed, err)
+	}
+	tag, err := execObservationFixture(t, f.conn, f.sliID, `
+UPDATE almanac_sli_observations SET ingestion_generation=0
+WHERE sli_id=$1 AND interval_start=$2 AND measurement_revision=$3 AND outcome='observed'`,
+		f.sliID, hour, definition.MeasurementRevision)
+	if err != nil || tag.RowsAffected() != 1 {
+		t.Fatalf("mark measured source hour dirty: touched %d observations: %v", tag.RowsAffected(), err)
+	}
+	if err := requireServiceMaintenanceReady(ctx, q, id, f.at.Add(-6*time.Hour), f.at); err != nil {
+		t.Fatalf("unexpected maintenance work in the measured range: %v", err)
+	}
+	if _, err := readCurrentSloFromAggregates(ctx, q, definition, requested, nil); !errors.Is(err, ErrDerivedPending) {
+		t.Fatalf("live read missed pending observation work inside a fully measured hour: %v", err)
 	}
 }
 
