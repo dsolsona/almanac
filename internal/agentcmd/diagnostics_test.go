@@ -197,6 +197,44 @@ func TestDiagnosticRunnerUsesBackendTimeEstimateWhenLocalClockIsSkewed(t *testin
 	}
 }
 
+func TestDiagnosticRunnerAcceptsDeadlineWithinBackendClockBounds(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"success","data":{"resultType":"vector","result":[]}}`))
+	}))
+	defer server.Close()
+	assignment := testDiagnosticAssignment(server.URL)
+	agent := testDiagnosticClient(testAgentID, []agentprotocol.DatasourceAssignment{assignment})
+	receivedAt := time.Now()
+	backendSample := receivedAt.Add(-2 * time.Second).UTC().Truncate(time.Microsecond)
+	agent.setServerTimeAt(backendSample, receivedAt.Add(-4*time.Second), receivedAt)
+	runner := newDiagnosticRunner(agent)
+	defer runner.close()
+	request := agentprotocol.DiagnosticRequest{
+		DiagnosticID: "00000000-0000-4000-8000-000000000020",
+		AgentID:      testAgentID,
+		Operation:    "connection_test",
+		DeadlineAt:   backendSample.Add(32 * time.Second),
+		Datasource:   assignment,
+	}
+	tooFar := request
+	tooFar.DeadlineAt = backendSample.Add(40 * time.Second)
+	if err := runner.start(t.Context(), tooFar); err == nil {
+		t.Fatal("accepted a deadline beyond the backend clock's upper bound")
+	}
+	if err := runner.start(t.Context(), request); err != nil {
+		t.Fatalf("rejected a 30-second backend deadline within the clock bounds: %v", err)
+	}
+	select {
+	case result := <-runner.results:
+		if result.result.State != "succeeded" {
+			t.Fatalf("diagnostic result = %+v", result)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("backend-deadline diagnostic did not complete")
+	}
+}
+
 func TestDiagnosticRunnerCancelsWhenAssignmentIsRevoked(t *testing.T) {
 	started := make(chan struct{})
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
