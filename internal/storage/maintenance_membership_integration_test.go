@@ -10,6 +10,10 @@ import (
 func TestIntegrationMaintenanceServiceMembershipVersionsAssignments(t *testing.T) {
 	f := newMaintenanceFixture(t)
 	id := f.ids[0]
+	var expectedService string
+	if err := f.conn.QueryRow(t.Context(), `SELECT id FROM almanac_services WHERE name='maintenance-a-service'`).Scan(&expectedService); err != nil {
+		t.Fatal(err)
+	}
 	var original string
 	var initialAt time.Time
 	if err := f.conn.QueryRow(t.Context(), `
@@ -18,8 +22,8 @@ func TestIntegrationMaintenanceServiceMembershipVersionsAssignments(t *testing.T
 	`, id).Scan(&original, &initialAt); err != nil {
 		t.Fatal(err)
 	}
-	if !initialAt.Equal(f.at) {
-		t.Fatalf("initial membership time = %s, want %s", initialAt, f.at)
+	if original != expectedService || !initialAt.Equal(f.at) {
+		t.Fatalf("initial membership = %s at %s, want %s at %s", original, initialAt, expectedService, f.at)
 	}
 
 	service, _, err := CreateObjective(t.Context(), f.f.databaseURL, CreateObjectiveInput{
