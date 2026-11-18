@@ -1,8 +1,14 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page, type TestInfo } from '@playwright/test';
 import { api, expectOk, unique } from './support/api.ts';
 import { startAgent, stopAgent } from './support/stack.ts';
 
-test('schedule and inspect explicit SLO maintenance in the deployed app', async ({ page }, testInfo) => {
+async function captureMaintenanceDesign(page: Page, info: TestInfo, name: string) {
+  const path = `../.local/e2e/maintenance-design/${name}.png`;
+  await page.screenshot({ path, fullPage: true });
+  await info.attach(name, { path, contentType: 'image/png' });
+}
+
+test('schedule and inspect explicit SLO and service maintenance in the deployed app', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1440, height: 1120 });
   const name = unique('maintenance-journey');
   const displayName = 'Checkout database upgrade';
@@ -221,13 +227,55 @@ test('schedule and inspect explicit SLO maintenance in the deployed app', async 
     await dialog.getByRole('button', { name: 'Cancel maintenance', exact: true }).click();
     await expect(page.getByText('Cancelled', { exact: true })).toBeVisible();
 
+    const serviceTitle = 'Checkout service maintenance';
+    await page.goto('/maintenance/new');
+    await page.getByRole('textbox', { name: 'Name', exact: true }).fill(serviceTitle);
+    await page.getByRole('textbox', { name: 'Reason', exact: true }).fill('Update the equipment used by Checkout.');
+    await page.getByRole('radio', { name: 'Selected services', exact: true }).press('Space');
+    const services = page.getByRole('combobox', { name: 'Search services', exact: true });
+    await services.fill(service.body.id);
+    await expect(page.getByRole('option', { name: /^Checkout/ })).toHaveCount(1);
+    await services.press('ArrowDown');
+    await services.press('Enter');
+    const preview = page.getByRole('region', { name: 'Affected SLO preview' });
+    await expect(preview).toContainText('2 affected SLOs');
+    await expect(preview).toContainText('Checkout availability');
+    await expect(preview).toContainText('Checkout latency');
+    await calendar.click();
+    if (start.getUTCDate() === 1) await page.getByRole('button', { name: 'Next month' }).click();
+    await day.click();
+    await page.getByLabel('Start time (UTC)', { exact: true }).fill('12:00');
+    await captureMaintenanceDesign(page, testInfo, 'maintenance-selected-service-preview');
+    await page.getByRole('button', { name: 'Schedule maintenance', exact: true }).click();
+    await expect(page.getByRole('heading', { name: serviceTitle, level: 1 })).toBeVisible();
+    const serviceID = new URL(page.url()).pathname.split('/').at(-1);
+    const scheduledService = await expectOk(api(page, 'GET', `/api/v1/scoped-maintenance/${serviceID}`));
+    expect(scheduledService.body.scope).toEqual({ kind: 'services', service_ids: [service.body.id] });
+    await expect(page.getByRole('region', { name: 'Affected SLOs' })).toContainText('Recorded SLO participation will appear when the window starts.');
 
+    const currentService = await expectOk(api(page, 'POST', '/api/v1/scoped-maintenance', {
+      scope: scheduledService.body.scope,
+      title: 'Checkout active maintenance', reason: 'Inspect recorded service participation.',
+      start: historicalStart.toISOString(), end: historicalEnd.toISOString(),
+    }));
+    await expect.poll(async () => {
+      const impact = await api(page, 'GET', `/api/v1/scoped-maintenance/${currentService.body.id}/impact`);
+      return impact.body.ready && impact.body.items.some((item: { slo_id: string; start?: string; end?: string }) =>
+        item.slo_id === slo.body.id && item.start && item.end);
+    }).toBeTruthy();
+    await page.goto(`/maintenance/${currentService.body.id}`);
+    const affected = page.getByRole('region', { name: 'Affected SLOs' });
+    const objective = affected.getByRole('link', { name: 'Checkout availability', exact: true });
+    await expect(objective).toHaveAttribute('href', `/slos/${slo.body.id}`);
+    await captureMaintenanceDesign(page, testInfo, 'maintenance-recorded-service-impact');
+    await objective.press('Enter');
+    await expect(page.getByRole('heading', { name: 'Checkout availability', level: 1 })).toBeVisible();
   } finally {
     stopAgent(agent);
   }
 });
 
-test('schedule empty service scopes and all services from the full catalogue', async ({ page }) => {
+test('schedule empty service scopes and all services from the full catalogue', async ({ page }, testInfo) => {
   const prefix = unique('maintenance-fleet');
   const services = [];
   for (let index = 0; index < 50; index++) {
@@ -286,6 +334,7 @@ test('schedule empty service scopes and all services from the full catalogue', a
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(360);
   const all = `${prefix} all services`;
   await fillSchedule(all);
+  await captureMaintenanceDesign(page, testInfo, 'maintenance-all-services-dark-mobile');
   await page.getByRole('button', { name: 'Schedule maintenance', exact: true }).click();
   await expect(page.getByRole('heading', { name: all, level: 1 })).toBeVisible();
   id = new URL(page.url()).pathname.split('/').at(-1);

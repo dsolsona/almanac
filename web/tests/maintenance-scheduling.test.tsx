@@ -341,3 +341,24 @@ it('pages the all-services preview and distinguishes an unavailable inventory fr
   expect(screen.queryByText('0 affected SLOs')).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Retry affected SLOs' })).toBeEnabled();
 });
+
+it('shows scheduled scope before displaying recorded participation at activation', async () => {
+  const serviceID = '80000000-0000-4000-8000-000000000001';
+  const impact = vi.mocked(maintenanceClient.impact).mockResolvedValue({
+    inventory_at: now, ready: true, total: '1',
+    items: [{ slo_id: sloId, slo_name: 'Checkout availability', service_id: serviceID, service_name: 'Checkout', start: record.start, end: record.end }],
+  });
+  vi.spyOn(serviceClient, 'get').mockResolvedValue({
+    value: { id: serviceID, name: 'checkout', display_name: 'Checkout', version: '1', created_at: now, updated_at: now },
+    etag: '',
+  });
+  await showDetail({ ...record, scope: { kind: 'services', service_ids: [serviceID] } });
+
+  expect(screen.getByRole('link', { name: 'Checkout' })).toHaveAttribute('href', `/services/${serviceID}`);
+  expect(screen.getByText('Recorded SLO participation will appear when the window starts.')).toBeVisible();
+  expect(impact).not.toHaveBeenCalled();
+
+  await act(async () => { vi.advanceTimersByTime(1000); });
+  expect(screen.getByRole('link', { name: 'Checkout availability' })).toHaveAttribute('href', `/slos/${sloId}`);
+  expect(screen.getByText('2026-11-18 02:00:01 UTC')).toBeVisible();
+});

@@ -174,12 +174,17 @@ function WindowDetail({ id, revision, editing, context }: { id: string; revision
           <dt>Starts (UTC)</dt><dd><time dateTime={window.start}>{timeLabel(window.start)}</time></dd>
           <dt>Ends (UTC)</dt><dd><time dateTime={window.end}>{timeLabel(window.end)}</time></dd>
           <dt>Reason</dt><dd className="maintenance-reason">{window.reason}</dd>
-          <dt>Scope</dt><dd><MaintenanceScope key={window.revision} scope={window.scope} /></dd>
+          <dt>Scope</dt><dd><MaintenanceScope key={window.revision} scope={window.scope} links /></dd>
         </dl>
       </section>
-      <div className="maintenance-panel maintenance-detail">
-        <MaintenanceWindowImpact key={window.revision} id={window.id} revision={window.revision} />
-      </div>
+      {isFuture
+        ? <section className="maintenance-panel maintenance-detail" aria-labelledby="maintenance-impact-heading">
+          <h2 id="maintenance-impact-heading">Affected SLOs</h2>
+          <p className="ui-hint">Recorded SLO participation will appear when the window starts.</p>
+        </section>
+        : <div className="maintenance-panel maintenance-detail">
+          <MaintenanceWindowImpact key={window.revision} id={window.id} revision={window.revision} />
+        </div>}
       <section className="maintenance-panel maintenance-detail" aria-labelledby="maintenance-history-heading">
         <h2 id="maintenance-history-heading">Revision history</h2>
         <p>Revision {window.revision} · <time dateTime={window.updated_at}>{timeLabel(window.updated_at)} UTC</time></p>

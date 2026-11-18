@@ -168,6 +168,7 @@ test('maintenance bands identify the whole period and the budget tooltip escapes
    await expect(detail).toHaveAttribute('href', `/maintenance/${id}`);
    await detail.hover();
    await expect(detail).toBeVisible();
+   await info.attach('maintenance-inspected-band', { body: await page.screenshot(), contentType: 'image/png' });
    await page.keyboard.press('Escape');
    await expect(detail).toHaveCount(0);
   }

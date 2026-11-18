@@ -3,7 +3,7 @@ import { Button } from '../components/ui/index.ts';
 import type { MaintenanceSelector } from './client.ts';
 import { scopeIDs, scopeLabels, scopeOption, type SelectedKind } from './ScopePicker.tsx';
 
-function ScopeName({ id, kind }: { id: string; kind: SelectedKind }) {
+function ScopeName({ id, kind, links }: { id: string; kind: SelectedKind; links: boolean }) {
   const [name, setName] = useState('');
   useEffect(() => {
     const controller = new AbortController();
@@ -12,10 +12,10 @@ function ScopeName({ id, kind }: { id: string; kind: SelectedKind }) {
     }).catch(() => {});
     return () => controller.abort();
   }, [id, kind]);
-  return <span>{name || id}</span>;
+  return links ? <a href={`/${kind}/${id}`} data-app-route>{name || id}</a> : <span>{name || id}</span>;
 }
 
-export function MaintenanceScope({ scope }: { scope: MaintenanceSelector }) {
+export function MaintenanceScope({ scope, links = false }: { scope: MaintenanceSelector; links?: boolean }) {
   const [visible, setVisible] = useState(10);
   const ids = scopeIDs(scope);
   if (scope.kind === 'all_services') return <>{scopeLabels.all_services}</>;
@@ -23,7 +23,7 @@ export function MaintenanceScope({ scope }: { scope: MaintenanceSelector }) {
 
   return <>
     <p>{scopeLabels[kind]} · {ids.length}</p>
-    <ul>{ids.slice(0, visible).map(id => <li key={id}><ScopeName id={id} kind={kind} /></li>)}</ul>
+    <ul>{ids.slice(0, visible).map(id => <li key={id}><ScopeName id={id} kind={kind} links={links} /></li>)}</ul>
     {ids.length > visible && <Button variant="ghost" onClick={() => setVisible(value => value + 10)}>Show more {kind === 'services' ? 'services' : 'SLOs'}</Button>}
   </>;
 }
