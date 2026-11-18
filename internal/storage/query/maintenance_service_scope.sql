@@ -18,13 +18,15 @@ ON CONFLICT (exclusion_id) DO UPDATE
 SET desired_revision = excluded.desired_revision, through_slo = DEFAULT, complete = DEFAULT;
 
 -- name: ListServiceMaintenanceCadences :many
-SELECT DISTINCT d.cadence_seconds
-FROM public.almanac_slo_definitions d
-JOIN public.almanac_slos slo ON slo.id = d.slo_id AND slo.definition_revision = d.revision
-JOIN public.almanac_services s ON s.id = d.service_id
-WHERE s.archived_at IS NULL
-  AND (sqlc.arg(all_services)::boolean OR d.service_id = ANY(sqlc.arg(service_ids)::uuid[]))
-ORDER BY d.cadence_seconds;
+SELECT cadence_seconds FROM public.almanac_maintenance_installation_grids
+WHERE sqlc.arg(all_services)::boolean
+UNION
+SELECT g.cadence_seconds
+FROM public.almanac_maintenance_service_grids g
+JOIN public.almanac_services s ON s.id = g.service_id
+WHERE NOT sqlc.arg(all_services)::boolean AND s.archived_at IS NULL
+  AND g.service_id = ANY(sqlc.arg(service_ids)::uuid[])
+ORDER BY cadence_seconds;
 
 -- A witness is sufficient to suppress an occurrence. Look up the membership
 -- and immutable selector revision effective at the evaluation cutoff. Projection

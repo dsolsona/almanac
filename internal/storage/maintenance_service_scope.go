@@ -49,12 +49,20 @@ func validateServiceMaintenanceSelector(ctx context.Context, q *dbgen.Queries, i
 	if err != nil {
 		return err
 	}
+	alignment := int64(1)
 	for _, cadence := range cadences {
-		if err := maintenanceAlignment(int64(cadence), input.Start, input.End, nil); err != nil {
-			return err
+		var ok bool
+		alignment, ok = mergeMaintenanceCadence(alignment, int64(cadence))
+		if !ok {
+			return &MaintenanceAlignmentError{}
 		}
 	}
-	return nil
+	if operation == "end" && input.End.Unix()%alignment == 0 {
+		// A service may have joined since the window opened on another grid.
+		// Only the prospective change needs to align with its current boundary.
+		return nil
+	}
+	return maintenanceAlignment(alignment, input.Start, input.End, nil)
 }
 
 type maintenanceSuppressionEvidence struct {
