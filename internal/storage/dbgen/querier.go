@@ -274,6 +274,9 @@ type Querier interface {
 	// Keep timestamp parsing in its conditional predicate so unrelated due/backoff
 	// branches retain their existing behavior for malformed cache metadata.
 	ListDueDerivedObjectives(ctx context.Context, arg ListDueDerivedObjectivesParams) ([]pgtype.UUID, error)
+	// Historical declarations validate against the grids of assignments that
+	// actually overlapped the requested range, even if those SLOs later moved.
+	ListHistoricalServiceMaintenanceCadences(ctx context.Context, arg ListHistoricalServiceMaintenanceCadencesParams) ([]int32, error)
 	ListLegacyReceiptHours(ctx context.Context, pageLimit int32) ([]ListLegacyReceiptHoursRow, error)
 	ListMaintenanceGrids(ctx context.Context, sloID pgtype.UUID) ([]ListMaintenanceGridsRow, error)
 	ListMaintenanceIdentities(ctx context.Context, arg ListMaintenanceIdentitiesParams) ([]ListMaintenanceIdentitiesRow, error)

@@ -260,3 +260,20 @@ FROM public.almanac_service_maintenance_membership_work w
 WHERE w.slo_id = sqlc.arg(slo_id) AND w.through_exclusion = sqlc.arg(through_exclusion)
   AND w.affected_from = sqlc.arg(affected_from)::timestamptz
 FOR UPDATE SKIP LOCKED;
+
+-- Historical declarations validate against the grids of assignments that
+-- actually overlapped the requested range, even if those SLOs later moved.
+-- name: ListHistoricalServiceMaintenanceCadences :many
+SELECT DISTINCT d.cadence_seconds
+FROM public.almanac_slo_service_assignments a
+JOIN public.almanac_slo_definitions d ON d.slo_id = a.slo_id AND d.revision = a.definition_revision
+JOIN public.almanac_services s ON s.id = a.service_id
+WHERE (sqlc.arg(all_services)::boolean OR a.service_id = ANY(sqlc.arg(service_ids)::uuid[]))
+  AND greatest(a.effective_at, sqlc.arg(starts_at)::timestamptz) < least(s.archived_at, sqlc.arg(ends_at)::timestamptz)
+  AND NOT EXISTS (
+      SELECT 1 FROM public.almanac_slo_service_assignments next
+      WHERE next.slo_id = a.slo_id
+        AND (next.effective_at, next.definition_revision) > (a.effective_at, a.definition_revision)
+        AND next.effective_at <= greatest(a.effective_at, sqlc.arg(starts_at)::timestamptz)
+  )
+ORDER BY d.cadence_seconds;

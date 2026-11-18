@@ -135,3 +135,36 @@ func TestIntegrationMaintenanceCadenceEarlyEndPreservesOriginalStart(t *testing.
 		t.Fatalf("suggested early end was rejected: %+v (%v)", shortened, err)
 	}
 }
+
+func TestIntegrationMaintenanceCadenceHistoricalSelectorChecksDepartedGrid(t *testing.T) {
+	t.Parallel()
+	f := newMaintenanceFixture(t)
+	q := dbgen.New(f.conn)
+	original, err := q.GetSlo(t.Context(), mustPGUUID(f.ids[0]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, _, err := CreateObjective(t.Context(), f.f.databaseURL, CreateObjectiveInput{
+		Proof: f.proof, Name: "retired-grid-service", DisplayName: "Retired grid destination",
+		IdempotencyKey: "retired-grid-service", RequestID: "retired-grid-service", Now: f.clock,
+	}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := f.at.Truncate(2 * time.Minute).Add(2 * time.Minute)
+	moveMaintenanceSLOAtCadence(t, f, original.ServiceID.String(), 2, base, 120)
+	moveMaintenanceSLOAtCadence(t, f, other.ID, 3, base.Add(4*time.Minute), 120)
+	f.now = base.Add(5 * time.Minute)
+	input := f.input("historical-selector-grid")
+	input.ScopeKind, input.SloIDs, input.ServiceIDs = MaintenanceScopeServices, nil, []string{original.ServiceID.String()}
+	input.Start, input.End = base.Add(2*time.Minute), base.Add(3*time.Minute)
+	_, err = CreateMaintenance(t.Context(), f.f.databaseURL, input)
+	alignment, ok := errors.AsType[*MaintenanceAlignmentError](err)
+	if !ok || !alignment.SuggestedStart.Equal(input.Start) || !alignment.SuggestedEnd.Equal(base.Add(4*time.Minute)) {
+		t.Fatalf("historical selector failed to require its former grid: %+v (%v)", alignment, err)
+	}
+	input.End = alignment.SuggestedEnd
+	if _, err := CreateMaintenance(t.Context(), f.f.databaseURL, input); err != nil {
+		t.Fatalf("common historical bounds rejected: %v", err)
+	}
+}

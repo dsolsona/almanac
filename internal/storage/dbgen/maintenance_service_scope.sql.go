@@ -277,6 +277,56 @@ func (q *Queries) InsertMaintenanceServiceSelector(ctx context.Context, arg Inse
 	return err
 }
 
+const listHistoricalServiceMaintenanceCadences = `-- name: ListHistoricalServiceMaintenanceCadences :many
+SELECT DISTINCT d.cadence_seconds
+FROM public.almanac_slo_service_assignments a
+JOIN public.almanac_slo_definitions d ON d.slo_id = a.slo_id AND d.revision = a.definition_revision
+JOIN public.almanac_services s ON s.id = a.service_id
+WHERE ($1::boolean OR a.service_id = ANY($2::uuid[]))
+  AND greatest(a.effective_at, $3::timestamptz) < least(s.archived_at, $4::timestamptz)
+  AND NOT EXISTS (
+      SELECT 1 FROM public.almanac_slo_service_assignments next
+      WHERE next.slo_id = a.slo_id
+        AND (next.effective_at, next.definition_revision) > (a.effective_at, a.definition_revision)
+        AND next.effective_at <= greatest(a.effective_at, $3::timestamptz)
+  )
+ORDER BY d.cadence_seconds
+`
+
+type ListHistoricalServiceMaintenanceCadencesParams struct {
+	AllServices bool               `json:"all_services"`
+	ServiceIds  []pgtype.UUID      `json:"service_ids"`
+	StartsAt    pgtype.Timestamptz `json:"starts_at"`
+	EndsAt      pgtype.Timestamptz `json:"ends_at"`
+}
+
+// Historical declarations validate against the grids of assignments that
+// actually overlapped the requested range, even if those SLOs later moved.
+func (q *Queries) ListHistoricalServiceMaintenanceCadences(ctx context.Context, arg ListHistoricalServiceMaintenanceCadencesParams) ([]int32, error) {
+	rows, err := q.db.Query(ctx, listHistoricalServiceMaintenanceCadences,
+		arg.AllServices,
+		arg.ServiceIds,
+		arg.StartsAt,
+		arg.EndsAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []int32{}
+	for rows.Next() {
+		var cadence_seconds int32
+		if err := rows.Scan(&cadence_seconds); err != nil {
+			return nil, err
+		}
+		items = append(items, cadence_seconds)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMaintenanceImpactMembers = `-- name: ListMaintenanceImpactMembers :many
 SELECT slo.id AS slo_id, slo.display_name AS slo_name, s.id AS service_id, s.display_name AS service_name,
        p.starts_at::timestamptz AS starts_at, p.ends_at::timestamptz AS ends_at
