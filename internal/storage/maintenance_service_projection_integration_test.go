@@ -273,3 +273,55 @@ func TestIntegrationMaintenanceServiceProjectionRejectsStaleMembershipCursor(t *
 		t.Fatalf("fresh claim failed to preserve the departure: %+v, %v", snapshot, err)
 	}
 }
+
+func TestIntegrationMaintenanceServiceImpactCursorFencesProjectionAndRevision(t *testing.T) {
+	t.Parallel()
+	f := newMaintenanceFixture(t)
+	input := f.input("impact-paging")
+	input.ScopeKind, input.SloIDs = MaintenanceScopeAllServices, nil
+	input.Start, input.End = f.at.Add(5*time.Minute), f.at.Add(10*time.Minute)
+	window, err := CreateMaintenance(t.Context(), f.f.databaseURL, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.now = window.Start
+	impact := MaintenanceImpactInput{Proof: f.proof, ID: window.ID, Now: f.clock, Limit: 1}
+	first, err := ReadMaintenanceImpact(t.Context(), f.f.databaseURL, impact)
+	if err != nil || first.Ready || first.Total != 2 || first.NextCursor == "" {
+		t.Fatalf("pending impact first page: %+v, %v", first, err)
+	}
+	impact.Cursor = first.NextCursor
+	if err := f.runtime.runServiceMaintenanceProjection(t.Context(), 64, time.Second, f.clock); err != nil {
+		t.Fatal(err)
+	}
+	if page, err := ReadMaintenanceImpact(t.Context(), f.f.databaseURL, impact); !errors.Is(err, ErrMaintenanceSnapshotChanged) {
+		t.Fatalf("continuation followed a completed projection: %+v, %v", page, err)
+	}
+	impact.Cursor = ""
+	ready, err := ReadMaintenanceImpact(t.Context(), f.f.databaseURL, impact)
+	if err != nil || !ready.Ready || ready.Total != 2 || ready.NextCursor == "" {
+		t.Fatalf("ready impact first page: %+v, %v", ready, err)
+	}
+	f.now = window.Start.Add(time.Minute)
+	_, err = EndMaintenance(t.Context(), f.f.databaseURL, EndMaintenanceInput{
+		Scoped: true, Proof: f.proof, ID: window.ID, Revision: window.Revision, End: window.Start.Add(3 * time.Minute),
+		Reason: "Done", IdempotencyKey: "impact-paging-end", RequestID: "impact-paging-end", Now: f.clock,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	impact.Cursor = ready.NextCursor
+	if page, err := ReadMaintenanceImpact(t.Context(), f.f.databaseURL, impact); !errors.Is(err, ErrMaintenanceSnapshotChanged) {
+		t.Fatalf("continuation followed a different window revision: %+v, %v", page, err)
+	}
+	impact.Cursor, impact.Revision = "", window.Revision
+	historical, err := ReadMaintenanceImpact(t.Context(), f.f.databaseURL, impact)
+	if err != nil || !historical.Ready || historical.NextCursor == "" || !historical.Items[0].End.Equal(window.End) {
+		t.Fatalf("historical impact lost its original bounds: %+v, %v", historical, err)
+	}
+	impact.Cursor = historical.NextCursor
+	next, err := ReadMaintenanceImpact(t.Context(), f.f.databaseURL, impact)
+	if err != nil || !next.Ready || len(next.Items) != 1 || next.NextCursor != "" || !next.Items[0].End.Equal(window.End) {
+		t.Fatalf("historical impact did not page its own revision: %+v, %v", next, err)
+	}
+}
