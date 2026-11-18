@@ -213,7 +213,11 @@ func writeScopedMaintenance(stdout, stderr io.Writer, operation string, jsonOut 
 		}
 		cursor = result.Page.NextCursor
 	case result.Impact != nil:
-		fmt.Fprintf(stdout, "Affected SLO entries: %s (inventory at %s)\n", result.Impact.Total, result.Impact.InventoryAt.Format(time.RFC3339Nano))
+		countContext := ""
+		if operation == "maintenance impact" {
+			countContext = "distinct SLOs, "
+		}
+		fmt.Fprintf(stdout, "Affected SLOs: %s (%sinventory at %s)\n", result.Impact.Total, countContext, result.Impact.InventoryAt.Format(time.RFC3339Nano))
 		if !result.Impact.Ready {
 			fmt.Fprintln(stdout, "Effective maintenance membership is being prepared.")
 		}
@@ -230,8 +234,8 @@ func writeScopedMaintenance(stdout, stderr io.Writer, operation string, jsonOut 
 			fmt.Fprintln(stdout, "Some effective maintenance intervals are being prepared.")
 		}
 		for _, item := range result.Timeline.Items {
-			fmt.Fprintf(stdout, "%s\t%q\t%s\t%s\n", item.Window.Id, item.Window.Title,
-				item.Start.Format(time.RFC3339Nano), item.End.Format(time.RFC3339Nano))
+			fmt.Fprintf(stdout, "%s\t%q\t%s\t%s\trevision %s\n", item.Window.Id, item.Window.Title,
+				item.Start.Format(time.RFC3339Nano), item.End.Format(time.RFC3339Nano), item.Window.Revision)
 		}
 		cursor = result.Timeline.NextCursor
 	default:

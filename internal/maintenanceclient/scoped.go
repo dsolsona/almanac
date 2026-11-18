@@ -138,10 +138,11 @@ func validScopedWindow(item api.ScopedMaintenanceWindow) bool {
 
 func validImpact(page api.MaintenanceImpactPage, in Input) bool {
 	count, err := strconv.ParseInt(page.Total, 10, 64)
-	if err != nil || count < int64(len(page.Items)) || strconv.FormatInt(count, 10) != page.Total ||
+	if err != nil || count < 0 || strconv.FormatInt(count, 10) != page.Total ||
 		page.Items == nil || len(page.Items) > in.Limit || !validCursor(page.NextCursor) || !validTimelineTime(page.InventoryAt) {
 		return false
 	}
+	slos := make(map[openapi.UUID]struct{}, len(page.Items))
 	for _, member := range page.Items {
 		if member.SloId == (openapi.UUID{}) || member.ServiceId == (openapi.UUID{}) ||
 			member.SloName == "" || member.ServiceName == "" || (member.Start == nil) != (member.End == nil) {
@@ -151,8 +152,12 @@ func validImpact(page api.MaintenanceImpactPage, in Input) bool {
 			!validTimelineTime(*member.End) || !member.Start.Before(*member.End)) {
 			return false
 		}
+		slos[member.SloId] = struct{}{}
 	}
-	return true
+	if in.Action == "preview" {
+		return count >= int64(len(page.Items))
+	}
+	return count >= int64(len(slos))
 }
 
 func validSelector(body []byte) bool {
