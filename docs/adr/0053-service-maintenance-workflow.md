@@ -1,11 +1,11 @@
 # ADR-0053: Coordinate maintenance exclusion and notification suppression
 
-- Status: proposed
+- Status: accepted
 - Created: 2026-11-17
-- Accepted: pending detailed contract and mock review
-- Approval: maintainer approved the direction on 2026-11-17: exclusion, service/SLO/all-service scope and automatic suppression; detailed rules below remain proposed
+- Accepted: 2026-11-18
+- Approval: Maintainer approved [PR #137](https://github.com/dsolsona/almanac/pull/137) on 2026-11-18.
 - Related specs: [SPEC-0023](../specs/0023-maintenance-management.md), [SPEC-0016](../specs/0016-maintenance-exclusions.md), [SPEC-0017](../specs/0017-slo-timeline-annotations.md)
-- Supersedes / superseded by: proposes replacing ADR-0014's separate opt-in silence workflow and initial explicit-SLO-only scope; exclusion arithmetic and immutable provenance remain unchanged
+- Supersedes / superseded by: supersedes ADR-0014 for the scope selector and automatic suppression in this workflow. Retains exclusion arithmetic and immutable provenance
 
 ## Context
 
@@ -16,18 +16,19 @@ because of eligible failures before maintenance.
 
 The maintainer approved excluding observations rather than counting failures as
 successes, retaining raw measurements and showing maintenance on SLO timelines.
-This extends the existing maintenance authority. The reviewed mock and
+This extends the existing maintenance authority. The
 [implementation plan](../plans/0046-maintenance-management.md) show how the work
 can proceed in stages.
 
 ## Decision
 
-Propose one maintenance workflow with two coordinated effects: calculation
+Use one maintenance workflow with two coordinated effects: calculation
 exclusion and notification suppression. Preserve separate typed semantics and
 authorities internally. A contextual annotation still cannot change either.
 
-Support selected services, explicit SLOs, or all services. Preview affected SLOs.
-Propose resolving service membership at activation and recording subsequent
+Each window uses one scope mode: selected services, individually selected SLOs,
+or all services. Preview affected SLOs. Resolve service membership at activation
+and record subsequent
 membership changes prospectively while active. A new SLO receives coverage only
 from joining; a departing SLO retains elapsed coverage. All-service selection
 includes new services and their SLOs during the window. Historical reads use the
@@ -39,7 +40,7 @@ manufacture recovery. Resume ordinary eligibility after the last overlapping
 window ends, without replaying suppressed notifications. Exact cooldown and
 notification deduplication integration require the detailed contract before code.
 
-### Proposed publication and alert boundary
+### Publication and alert boundary
 
 An installation-wide scope may cover more SLOs than one existing maintenance
 revision can safely fan out to. Publish the scheduled selector and its authority
@@ -51,7 +52,7 @@ not move the scheduled start. Retries of an older revision cannot publish over
 a cancellation, shortening or newer selector revision.
 
 Opening a new occurrence is currently the user-visible trigger, independent of
-external transport. The proposed first stage reads effective suppression at
+external transport. The first stage reads effective suppression at
 the occurrence decision transaction's authority boundary. That read must not
 wait for scope fanout, and uncommitted work under a stale authority must retry.
 If an already-open occurrence remains breaching, it stays open. A fully
@@ -83,12 +84,10 @@ notification delivery, which remains a later adapter concern.
 Service membership becomes a versioned input to exclusion and suppression.
 Changes must fence stale calculations and notification sends consistently.
 Large service/all-service scopes require bounded fanout beyond the existing
-100-explicit-SLO write limit; the implementation protocol remains unapproved.
-
-The mock reuses the current shell and accepted SLO detail B composition. It is a
-throwaway prototype; UI acceptance and application verification remain separate.
+100-explicit-SLO write limit. Specify the persistence and API protocol before
+changing that authority in production.
 
 ## Revisit conditions
 
-Resolve active membership policy, notification resume/cooldown behavior,
-composite scope and bounded bulk activation before backend implementation.
+Revisit when external delivery ships or if the bounded publication protocol
+cannot preserve effective scope and authority across restart.

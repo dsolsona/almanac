@@ -9,6 +9,10 @@
 - Related specs: [SPEC-0006](0006-slo-calculation-and-reporting.md), [SPEC-0011](0011-alerting-and-notifications.md), [SPEC-0017](0017-slo-timeline-annotations.md)
 - Supersedes / superseded by: amends [SPEC-0006](0006-slo-calculation-and-reporting.md)'s initial exclusion deferral
 
+[SPEC-0023](0023-maintenance-management.md) extends this contract with service
+and all-service scope and automatic suppression. This spec governs exclusion
+arithmetic, alignment, permissions, audit and provenance.
+
 ## Purpose
 
 Exclude declared maintenance periods from an SLO's measured population and error

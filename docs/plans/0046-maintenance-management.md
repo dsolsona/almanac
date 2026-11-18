@@ -1,43 +1,38 @@
 # Maintenance management implementation plan
 
-Deliver the scheduling, lifecycle and SLO evidence journeys reviewed in
-[F4-T61](../tasks/F4-T61.md), building on the shared calculator and durable
-per-SLO authority from [plan 0039](0039-maintenance-exclusion-authority.md).
+The explicit-SLO API, CLI, browser lifecycle and timeline overlays have merged.
+The next increment implements
 [SPEC-0023](../specs/0023-maintenance-management.md) and
-[ADR-0053](../adr/0053-service-maintenance-workflow.md) record the proposed
-service scope and delivery behavior. The accepted exclusion arithmetic and
-historical permissions come from [SPEC-0016](../specs/0016-maintenance-exclusions.md).
+[ADR-0053](../adr/0053-service-maintenance-workflow.md), building on
+[plan 0039](0039-maintenance-exclusion-authority.md) and the calculation and
+permissions in [SPEC-0016](../specs/0016-maintenance-exclusions.md).
 
-1. **Shared picker and visual reference.** Add the search-first Combobox
-   presentation, retain the inline dependency presentation, and exercise both
-   the catalogue and the 50-service prototype. Keep screenshot evidence with
-   the design. This is the first PR.
-2. **Schedule and inspect explicit SLO maintenance.** [F4-T53](../tasks/F4-T53.md) proposes the API contract. Extend the existing
-   `internal/storage/maintenance.go` authority with bounded list/detail reads
-   and the public command paths under the accepted explicit-SLO contract.
-   Define the API in `api/openapi.yaml` and regenerate the clients. Exercise
-   future scheduling, stale revisions, replay, cancellation, prospective end,
-   administrator corrections and SLO overlay overlap queries against PostgreSQL.
-   Connect [browser scheduling and inspection](../tasks/F4-T55.md), [lifecycle actions](../tasks/F4-T57.md),
-   [schedule editing](../tasks/F4-T59.md),
-   [timeline overlays](../tasks/F4-T56.md), the
-   [calculation comparison](../tasks/F4-T58.md), and the [management CLI](../tasks/F4-T54.md) and verify the authenticated journey.
-   Describe calculation exclusions and their evidence in stage 2. Reserve
-   notification-pause copy and controls for stage 3, when delivery suppression
-   is available.
-3. **Service scope and notification suppression.** Settle membership timing,
-   composite coverage, large-scope publication and alert resume semantics in
-   the spec and ADR before implementing those paths. The current alert engine
-   exposes in-Almanac alert occurrences. External delivery is deferred under
-   SPEC-0021, so acceptance must identify the actual suppressed surface and
-   verify that existing occurrences remain inspectable. Exercise overlaps,
-   membership changes, retries, stale publication and end-of-window behavior.
-4. **Verify the integrated workflow.** Seed independently calculated inputs
-   and check raw and adjusted values, tooltip evidence and affected scope.
-   Verify both themes, mobile, keyboard, authorization, real container
-   deployment and the normal SLO performance gate. Use the screenshot evidence
-   to compare hierarchy and interactions with the reviewed prototype.
+## Dependencies
 
-Stages 2 and 3 need task records with the exact API, storage and verification
-boundaries before rollout. Keep accepted explicit-SLO behavior distinct from
-the pending service-membership and alert-delivery decisions.
+1. Define the selector and impact API, preserve the explicit-SLO compatibility
+   contract, and agree on the versioned reads for effective membership,
+   calculation readiness and alert suppression. Specify bounded publication,
+   restart and the authority fence for cancellation and prospective early end.
+2. Work in parallel once those interfaces are stable.
+   - **Scope authority and calculations.** Persist the selector and authority
+     revision, record prospective membership, and publish bounded pages to the
+     calculation and timeline consumers. Exercise overlaps, moves, archival,
+     cancellation, restart and stale publication.
+   - **Alert suppression.** Implement and test the occurrence decision using
+     the effective suppression read. Cover existing incidents, overlapping
+     windows, stale authority, catch-up and the first eligible evaluation
+     after maintenance. Connect the real authority at integration.
+   - **Browser and CLI.** Implement the three scope choices and paginated
+     impact reads against contract fixtures. Keep browser and CLI edits in
+     separate worktrees if both are in progress, and integrate against the
+     shared generated API.
+3. Verify the combined workflow on the ordinary deployment. Check exact
+   populations, scope and alert evidence, authorization and lifecycle races.
+   Exercise both themes, mobile, keyboard use and the 50-service picker.
+   Use focused local journeys and hosted fleet verification. Keep progress
+   captures with the PR or CI artifacts.
+
+The scope authority is the shared integration dependency. Keep occurrence
+suppression and calculation publication behind the same effective authority,
+and retain explicit-SLO compatibility in the integrated tests. External
+notification delivery follows its own future implementation under SPEC-0021.

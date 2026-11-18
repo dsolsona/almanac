@@ -78,4 +78,4 @@ well as benefits. Do not invent alternatives or measurements to justify a choice
 | [ADR-0050](0050-dedicated-firecracker-tern-client-key.md) | A dedicated Firecracker Tern client key | accepted |
 | [ADR-0051](0051-durable-alert-policy-state-machine.md) | Durable alert policy state machine | proposed |
 | [ADR-0052](0052-compiled-maintenance-populations.md) | Compile scoped maintenance populations for the shared calculator | accepted |
-| [ADR-0053](0053-service-maintenance-workflow.md) | Coordinate maintenance exclusion and notification suppression | proposed |
+| [ADR-0053](0053-service-maintenance-workflow.md) | Coordinate maintenance exclusion and notification suppression | accepted |
