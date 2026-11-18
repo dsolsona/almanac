@@ -187,6 +187,9 @@ type Querier interface {
 	HasMaintenanceAuthorityInput(ctx context.Context, arg HasMaintenanceAuthorityInputParams) (bool, error)
 	HasMaintenanceChangedInput(ctx context.Context, arg HasMaintenanceChangedInputParams) (bool, error)
 	HasPendingServiceMaintenance(ctx context.Context, arg HasPendingServiceMaintenanceParams) (bool, error)
+	// The original window projection can finish before a later join or departure.
+	// Check only unfinished membership work that can change this window.
+	HasPendingWindowMembership(ctx context.Context, arg HasPendingWindowMembershipParams) (bool, error)
 	HasSLIsForDatasource(ctx context.Context, datasourceID pgtype.UUID) (bool, error)
 	HasServiceMaintenanceProjection(ctx context.Context, exclusionID pgtype.UUID) (bool, error)
 	HasSliExecutionAttempt(ctx context.Context, arg HasSliExecutionAttemptParams) (bool, error)
@@ -377,6 +380,7 @@ type Querier interface {
 	MarkMaintenanceCompatibilityUnavailable(ctx context.Context, arg MarkMaintenanceCompatibilityUnavailableParams) error
 	MarkSliObservation(ctx context.Context, arg MarkSliObservationParams) error
 	NextMaintenanceAuthorityBoundary(ctx context.Context, arg NextMaintenanceAuthorityBoundaryParams) (pgtype.Timestamptz, error)
+	ObserveMaintenanceInventoryRevision(ctx context.Context) (int64, error)
 	ObserveServiceMaintenanceAuthority(ctx context.Context) (int64, error)
 	PinAlertCutoff(ctx context.Context, arg PinAlertCutoffParams) (int64, error)
 	// Preview counts stop at 1001; the report labels these as lower bounds.

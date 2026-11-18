@@ -429,21 +429,29 @@ func validateAgentPage(kind, agentID string, limit int, cursor string) (int, age
 	if len(cursor) == 0 {
 		return limit, agentCursor{Version: 1, Kind: kind, AgentID: agentID}, nil
 	}
-	if len(cursor) > 512 || !isASCII(cursor) {
-		return 0, agentCursor{}, ErrInvalidAgentInput
-	}
-	raw, err := base64.RawURLEncoding.DecodeString(cursor)
-	if err != nil || base64.RawURLEncoding.EncodeToString(raw) != cursor {
-		return 0, agentCursor{}, ErrInvalidAgentInput
-	}
-	var c agentCursor
-	if json.Unmarshal(raw, &c, json.RejectUnknownMembers(true)) != nil || c.Version != 1 || c.Kind != kind || c.AgentID != agentID || c.Time.IsZero() || c.Time.Nanosecond()%1000 != 0 {
-		return 0, agentCursor{}, ErrInvalidAgentInput
-	}
-	if _, ok := canonicalUUID(c.ID); !ok {
+	c, err := parseAgentPageCursor(kind, cursor)
+	if err != nil || c.AgentID != agentID {
 		return 0, agentCursor{}, ErrInvalidAgentInput
 	}
 	return limit, c, nil
+}
+
+func parseAgentPageCursor(kind, cursor string) (agentCursor, error) {
+	if len(cursor) > 512 || !isASCII(cursor) {
+		return agentCursor{}, ErrInvalidAgentInput
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(cursor)
+	if err != nil || base64.RawURLEncoding.EncodeToString(raw) != cursor {
+		return agentCursor{}, ErrInvalidAgentInput
+	}
+	var c agentCursor
+	if json.Unmarshal(raw, &c, json.RejectUnknownMembers(true)) != nil || c.Version != 1 || c.Kind != kind || c.Time.IsZero() || c.Time.Nanosecond()%1000 != 0 {
+		return agentCursor{}, ErrInvalidAgentInput
+	}
+	if _, ok := canonicalUUID(c.ID); !ok {
+		return agentCursor{}, ErrInvalidAgentInput
+	}
+	return c, nil
 }
 func encodeAgentCursor(c agentCursor) (string, error) {
 	raw, err := json.Marshal(c)

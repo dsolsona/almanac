@@ -250,6 +250,49 @@ func (q *Queries) HasPendingServiceMaintenance(ctx context.Context, arg HasPendi
 	return column_1, err
 }
 
+const hasPendingWindowMembership = `-- name: HasPendingWindowMembership :one
+SELECT EXISTS (
+  SELECT 1
+  FROM public.almanac_service_maintenance_membership_work w
+  WHERE w.through_exclusion < $1::uuid
+    AND w.affected_from < $2::timestamptz
+    AND (
+      EXISTS (
+        SELECT 1
+        FROM public.almanac_service_maintenance_intervals($1, $3::bigint, w.slo_id, NULL) participation
+        WHERE participation.ends_at > w.affected_from
+      )
+      OR EXISTS (
+        SELECT 1
+        FROM (
+          SELECT c.included, c.exclusion_revision, c.effective_coverage
+          FROM public.almanac_slo_exclusion_changes c
+          WHERE c.slo_id = w.slo_id AND c.exclusion_id = $1
+          ORDER BY c.revision DESC LIMIT 1
+        ) latest
+        WHERE latest.included AND public.almanac_effective_maintenance_coverage(
+          w.slo_id, $1, latest.exclusion_revision, latest.effective_coverage
+        ) && tstzrange(least(w.affected_from, $2), $2, '[)')
+      )
+    )
+)::boolean
+`
+
+type HasPendingWindowMembershipParams struct {
+	ExclusionID pgtype.UUID        `json:"exclusion_id"`
+	EndsAt      pgtype.Timestamptz `json:"ends_at"`
+	Revision    int64              `json:"revision"`
+}
+
+// The original window projection can finish before a later join or departure.
+// Check only unfinished membership work that can change this window.
+func (q *Queries) HasPendingWindowMembership(ctx context.Context, arg HasPendingWindowMembershipParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasPendingWindowMembership, arg.ExclusionID, arg.EndsAt, arg.Revision)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const hasServiceMaintenanceProjection = `-- name: HasServiceMaintenanceProjection :one
 SELECT EXISTS(SELECT 1 FROM public.almanac_service_maintenance_projection WHERE exclusion_id = $1)::boolean
 `
@@ -758,6 +801,18 @@ func (q *Queries) LockServiceMaintenanceMembershipWork(ctx context.Context) (Alm
 	var i AlmanacServiceMaintenanceMembershipWork
 	err := row.Scan(&i.SloID, &i.ThroughExclusion, &i.AffectedFrom)
 	return i, err
+}
+
+const observeMaintenanceInventoryRevision = `-- name: ObserveMaintenanceInventoryRevision :one
+SELECT inventory_revision
+FROM public.almanac_service_maintenance_authority WHERE singleton
+`
+
+func (q *Queries) ObserveMaintenanceInventoryRevision(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, observeMaintenanceInventoryRevision)
+	var inventory_revision int64
+	err := row.Scan(&inventory_revision)
+	return inventory_revision, err
 }
 
 const observeServiceMaintenanceAuthority = `-- name: ObserveServiceMaintenanceAuthority :one

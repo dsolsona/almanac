@@ -277,3 +277,36 @@ WHERE (sqlc.arg(all_services)::boolean OR a.service_id = ANY(sqlc.arg(service_id
         AND next.effective_at <= greatest(a.effective_at, sqlc.arg(starts_at)::timestamptz)
   )
 ORDER BY d.cadence_seconds;
+
+-- name: ObserveMaintenanceInventoryRevision :one
+SELECT inventory_revision
+FROM public.almanac_service_maintenance_authority WHERE singleton;
+
+-- The original window projection can finish before a later join or departure.
+-- Check only unfinished membership work that can change this window.
+-- name: HasPendingWindowMembership :one
+SELECT EXISTS (
+  SELECT 1
+  FROM public.almanac_service_maintenance_membership_work w
+  WHERE w.through_exclusion < sqlc.arg(exclusion_id)::uuid
+    AND w.affected_from < sqlc.arg(ends_at)::timestamptz
+    AND (
+      EXISTS (
+        SELECT 1
+        FROM public.almanac_service_maintenance_intervals(sqlc.arg(exclusion_id), sqlc.arg(revision)::bigint, w.slo_id, NULL) participation
+        WHERE participation.ends_at > w.affected_from
+      )
+      OR EXISTS (
+        SELECT 1
+        FROM (
+          SELECT c.included, c.exclusion_revision, c.effective_coverage
+          FROM public.almanac_slo_exclusion_changes c
+          WHERE c.slo_id = w.slo_id AND c.exclusion_id = sqlc.arg(exclusion_id)
+          ORDER BY c.revision DESC LIMIT 1
+        ) latest
+        WHERE latest.included AND public.almanac_effective_maintenance_coverage(
+          w.slo_id, sqlc.arg(exclusion_id), latest.exclusion_revision, latest.effective_coverage
+        ) && tstzrange(least(w.affected_from, sqlc.arg(ends_at)), sqlc.arg(ends_at), '[)')
+      )
+    )
+)::boolean;
