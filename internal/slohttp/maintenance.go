@@ -188,6 +188,13 @@ func (h *Handler) sloMaintenance(w http.ResponseWriter, r *http.Request, request
 	end, endErr := time.Parse(time.RFC3339Nano, query.Get("end"))
 	query.Del("start")
 	query.Del("end")
+	overflowValues, includeOverflow := query["include_overflow"]
+	if includeOverflow && (len(overflowValues) != 1 || overflowValues[0] != "true" && overflowValues[0] != "false") {
+		problem(w, 400, "invalid_request", requestID)
+		return
+	}
+	includeOverflow = includeOverflow && overflowValues[0] == "true"
+	query.Del("include_overflow")
 	limit, cursor, _, ok := pageQuery(query, false)
 	if !ok || startErr != nil || endErr != nil {
 		problem(w, 400, "invalid_request", requestID)
@@ -196,6 +203,7 @@ func (h *Handler) sloMaintenance(w http.ResponseWriter, r *http.Request, request
 	page, err := storage.ListSloMaintenance(r.Context(), h.databaseURL, storage.ListSloMaintenanceInput{
 		ListMaintenanceInput: storage.ListMaintenanceInput{Proof: proof, Limit: limit, Cursor: cursor, Now: h.now},
 		SloID:                id, Start: start, End: end,
+		IncludeOverflow: includeOverflow,
 	})
 	writeMaintenancePage(w, page, err, requestID)
 }
@@ -224,6 +232,11 @@ func writeMaintenancePage(w http.ResponseWriter, page storage.MaintenancePage, e
 		return
 	}
 	out := api.MaintenancePage{Items: make([]api.MaintenanceWindow, 0, len(page.Items))}
+	if page.Overflow != nil {
+		out.Overflow = &api.MaintenanceOverflow{
+			Start: page.Overflow.Start, End: page.Overflow.End, Count: strconv.FormatInt(page.Overflow.Count, 10),
+		}
+	}
 	for _, record := range page.Items {
 		out.Items = append(out.Items, maintenanceDTO(record))
 	}

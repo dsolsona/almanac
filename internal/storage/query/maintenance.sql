@@ -64,3 +64,16 @@ WHERE s.slo_id = sqlc.arg(slo_id)
   AND r.revision = (SELECT current_revision FROM public.almanac_maintenance_exclusions WHERE id = r.exclusion_id)
 ORDER BY r.starts_at, r.exclusion_id
 LIMIT sqlc.arg(page_limit);
+
+-- name: SummarizeSloMaintenanceOverflow :one
+SELECT count(*) AS window_count,
+       min(GREATEST(r.starts_at, sqlc.arg(window_start)::timestamptz))::timestamptz AS starts_at,
+       max(LEAST(r.ends_at, sqlc.arg(window_end)::timestamptz))::timestamptz AS ends_at
+FROM public.almanac_maintenance_exclusion_scopes s
+JOIN public.almanac_maintenance_exclusion_revisions r ON r.exclusion_id = s.exclusion_id AND r.revision = s.revision
+WHERE s.slo_id = sqlc.arg(slo_id)
+  AND NOT r.tombstone
+  AND tstzrange(r.starts_at, r.ends_at, '[)') &&
+      tstzrange(sqlc.arg(window_start)::timestamptz, sqlc.arg(window_end)::timestamptz, '[)')
+  AND (r.starts_at, r.exclusion_id) > (sqlc.arg(after_time)::timestamptz, sqlc.arg(after_id)::uuid)
+  AND r.revision = (SELECT current_revision FROM public.almanac_maintenance_exclusions WHERE id = r.exclusion_id);

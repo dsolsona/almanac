@@ -3989,10 +3989,21 @@ type MaintenanceEnd struct {
 	Reason string `json:"reason"`
 }
 
+// MaintenanceOverflow Chart grouping for the last first-page window and all following windows. The bounds are clipped to the requested range and enclose the grouped windows. They do not describe continuous exclusion coverage.
+type MaintenanceOverflow struct {
+	// Count Exact decimal window count.
+	Count string    `json:"count"`
+	End   time.Time `json:"end"`
+	Start time.Time `json:"start"`
+}
+
 // MaintenancePage defines model for MaintenancePage.
 type MaintenancePage struct {
 	Items      []MaintenanceWindow `json:"items"`
 	NextCursor *string             `json:"next_cursor,omitempty"`
+
+	// Overflow Chart grouping for the last first-page window and all following windows. The bounds are clipped to the requested range and enclose the grouped windows. They do not describe continuous exclusion coverage.
+	Overflow *MaintenanceOverflow `json:"overflow,omitempty"`
 }
 
 // MaintenanceReason defines model for MaintenanceReason.
@@ -5634,6 +5645,9 @@ type GetSloHistoryValuesParamsLane string
 type ListSloMaintenanceParams struct {
 	Limit  *PageLimit  `form:"limit,omitempty" json:"limit,omitempty"`
 	Cursor *PageCursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+
+	// IncludeOverflow Include a counted chart marker on an overflowing first page.
+	IncludeOverflow *bool `form:"include_overflow,omitempty" json:"include_overflow,omitempty"`
 
 	// Start UTC instant with at most microsecond precision.
 	Start time.Time `form:"start" json:"start"`
@@ -13767,6 +13781,18 @@ func NewListSloMaintenanceRequest(server string, sloId SloId, params *ListSloMai
 		if params.Cursor != nil {
 
 			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.IncludeOverflow != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "include_overflow", *params.IncludeOverflow, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "boolean", Format: ""}); err != nil {
 				return nil, err
 			} else {
 				for _, qp := range strings.Split(queryFrag, "&") {
@@ -30149,6 +30175,19 @@ func (siw *ServerInterfaceWrapper) ListSloMaintenance(w http.ResponseWriter, r *
 			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
 		} else {
 			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "include_overflow" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "include_overflow", r.URL.Query(), &params.IncludeOverflow, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "include_overflow"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "include_overflow", Err: err})
 		}
 		return
 	}

@@ -8,6 +8,7 @@ import * as telemetry from '../src/telemetry/client.ts';
 afterEach(()=>{cleanup();history.replaceState({},'','/');vi.unstubAllGlobals();vi.restoreAllMocks();vi.useRealTimers();});
 beforeEach(()=>{
  vi.stubGlobal('ResizeObserver',class {observe(){}unobserve(){}disconnect(){}});
+ vi.spyOn(sloClient,'maintenance').mockResolvedValue({items:[]});
  vi.spyOn(sloClient,'serverTime').mockResolvedValue(Date.parse('2026-10-08T00:00:00Z'));
 });
 

@@ -53,3 +53,23 @@ it('keeps dense qualified history as small marks and preserves missing gaps',()=
  expect(screen.getByRole('tooltip')).toHaveTextContent('80%');expect(screen.getByRole('tooltip')).toHaveTextContent('Partial data');
  expect(document.querySelectorAll('.inspection-dot')).toHaveLength(1);
 });
+
+it('explains maintenance across all lanes and treats its end as exclusive', () => {
+  const start = '2026-11-06T10:00:00Z';
+  const end = '2026-11-12T10:00:00Z';
+  const windowEnd = '2026-11-09T10:00:00Z';
+  const maintenance = [{ id: 'window-1', title: 'Checkout database upgrade', reason: 'Apply a scheduled update.', start: '2026-11-05T10:00:00Z', end: windowEnd }];
+  const samples = [sample(start, '0.8'), sample(windowEnd, null, 'missing')];
+  for (const kind of ['budget', 'burn', 'attainment'] as const) {
+    const view = render(<SloHistoryChart kind={kind} samples={samples} start={start} end={end} target="0.999" maintenance={maintenance} />);
+    const chart = screen.getByRole('group', { name: /Inspect/ });
+    expect(chart.querySelector('.slo-maintenance-band')).toHaveAttribute('x', '65');
+    fireEvent.keyDown(chart, { key: 'Home' });
+    expect(screen.getByRole('tooltip')).toHaveTextContent('Checkout database upgrade');
+    expect(screen.getByRole('tooltip')).toHaveTextContent('05 Nov 2026');
+    fireEvent.keyDown(chart, { key: 'End' });
+    expect(screen.getByRole('tooltip')).toHaveTextContent('Missing');
+    expect(screen.getByRole('tooltip')).not.toHaveTextContent('Checkout database upgrade');
+    view.unmount();
+  }
+});

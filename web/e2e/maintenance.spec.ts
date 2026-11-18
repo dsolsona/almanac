@@ -93,6 +93,28 @@ test('schedule and inspect explicit SLO maintenance in the deployed app', async 
     await expect(rows).toHaveCount(1);
     await page.getByRole('combobox', { name: 'Per page', exact: true }).selectOption('20');
     await expect(rows).toHaveCount(11);
+
+    const historicalStart = new Date(Math.floor(Date.now() / 60_000) * 60_000 - 60 * 60_000);
+    const historicalEnd = new Date(historicalStart.getTime() + 2 * 60 * 60_000);
+    const active = await expectOk(api(page, 'POST', '/api/v1/maintenance', {
+      title: 'Checkout load balancer update',
+      reason: 'Switch traffic after the upgrade.',
+      start: historicalStart.toISOString(),
+      end: historicalEnd.toISOString(),
+      slo_ids: [slo.body.id],
+    }));
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto(`/slos/${slo.body.id}?range=7d`);
+    await expect(page.locator('.slo-maintenance-band')).toHaveCount(3);
+    await page.locator('summary').filter({ hasText: 'Maintenance periods' }).click();
+    const link = page.getByRole('link', { name: 'Checkout load balancer update', exact: true });
+    await expect(link).toHaveAttribute('href', `/maintenance/${active.body.id}`);
+    await page.screenshot({ path: testInfo.outputPath('slo-maintenance-timeline-dark.png'), fullPage: true });
+    await testInfo.attach('slo-maintenance-timeline-dark', { path: testInfo.outputPath('slo-maintenance-timeline-dark.png'), contentType: 'image/png' });
+    await link.focus();
+    await link.press('Enter');
+    await expect(page.getByRole('heading', { name: 'Checkout load balancer update', exact: true, level: 1 })).toBeVisible();
+
   } finally {
     stopAgent(agent);
   }

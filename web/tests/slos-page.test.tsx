@@ -9,7 +9,7 @@ const service={id:'11111111-1111-1111-1111-111111111111',name:'checkout',display
 const sli={id:'22222222-2222-2222-2222-222222222222',name:'requests',display_name:'Requests',polling_interval_seconds:60,datasource_display_name:'Metrics',agent_reachability:'connected',collection_progress:'idle',activation_state:'active',freshness:'fresh',latest_observation:null,last_observation_at:null,next_expected_execution_at:null};
 async function pick(label:string,name:RegExp){await userEvent.click(await screen.findByLabelText(label));await userEvent.click(await screen.findByRole('option',{name}));}
 function sloDefinition(id:string):components['schemas']['Slo'] {const instant='2026-10-01T00:00:00Z';return {id,name:'availability',display_name:'Availability',version:'1',definition_revision:'1',service_id:service.id,service_display_name:service.display_name,sli_id:sli.id,sli_display_name:sli.display_name,target:'0.99',rolling_window_seconds:86400,cadence_seconds:60,activated_at:instant,evaluation_valid_from:instant,historical_requested_by:null,historical_requested_at:null,created_at:instant,updated_at:instant};}
-const mocks=vi.hoisted(()=>({services:vi.fn(),createService:vi.fn(),create:vi.fn(),list:vi.fn(),observations:vi.fn(),get:vi.fn(),current:vi.fn(),serverTime:vi.fn(),evaluation:vi.fn(),operational:vi.fn(),overview:vi.fn()}));
+const mocks=vi.hoisted(()=>({services:vi.fn(),createService:vi.fn(),create:vi.fn(),list:vi.fn(),observations:vi.fn(),get:vi.fn(),current:vi.fn(),serverTime:vi.fn(),evaluation:vi.fn(),operational:vi.fn(),overview:vi.fn(),maintenance:vi.fn()}));
 vi.mock('../src/slos/client.ts',async importOriginal=>({...await importOriginal<typeof import('../src/slos/client.ts')>(),sloClient:mocks}));
 vi.mock('../src/slis/client.ts',()=>({createSliClient:()=>({list:mocks.list,observations:mocks.observations})}));
 function operationalDetail(options:{state?:string;knownEmpty?:number;missing?:number;attainment?:string|null;remaining?:string|null;fraction?:string|null;burn?:string|null;burnWindow?:3600|21600}={}):components['schemas']['SloOperationalDetail'] {
@@ -25,7 +25,7 @@ beforeAll(async()=>{
  await import('../src/components/charts/TimelineChartView.tsx');
  await vi.dynamicImportSettled();
 });
-beforeEach(()=>{vi.stubGlobal('ResizeObserver',class {observe(){} disconnect(){} unobserve(){}});mocks.serverTime.mockResolvedValue(Date.parse('2026-10-02T00:00:00Z'));mocks.overview.mockResolvedValue({items:[],snapshot_id:'11111111-1111-4111-8111-111111111111',group_counts:{needs_attention:0,watch:0,healthy:0},next_cursor:'',previous_cursor:''});mocks.operational.mockResolvedValue(operationalDetail());mocks.services.mockResolvedValue({items:[],next_cursor:''});});
+beforeEach(()=>{vi.stubGlobal('ResizeObserver',class {observe(){} disconnect(){} unobserve(){}});mocks.serverTime.mockResolvedValue(Date.parse('2026-10-02T00:00:00Z'));mocks.overview.mockResolvedValue({items:[],snapshot_id:'11111111-1111-4111-8111-111111111111',group_counts:{needs_attention:0,watch:0,healthy:0},next_cursor:'',previous_cursor:''});mocks.operational.mockResolvedValue(operationalDetail());mocks.services.mockResolvedValue({items:[],next_cursor:''});mocks.maintenance.mockResolvedValue({items:[]});});
 it('starts status and history before the definition resolves, without a duplicate history read',async()=>{
  const id='33333333-3333-3333-3333-333333333333';
  history.replaceState({},'',`/slos/${id}`);

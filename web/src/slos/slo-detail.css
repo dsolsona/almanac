@@ -12,3 +12,11 @@
 .app-slo-detail.slo-detail-b{gap:0}.slo-detail-b .app-breadcrumbs{margin-bottom:6px;font-size:13px}.slo-detail-b .app-detail-heading{margin-bottom:20px;align-items:center;justify-content:space-between}
 
 .slo-detail-b .day-strip{overflow-x:auto}
+
+.slo-maintenance-events { list-style: none; padding: 0; margin: 12px 0; }
+.slo-maintenance-events li { display: flex; flex-wrap: wrap; gap: 4px 16px; padding: 10px 0; border-top: 1px solid var(--border); overflow-wrap: anywhere; }
+.slo-maintenance-events li > span { color: var(--text-2); font: 12px/1.5 var(--mono); }
+.slo-maintenance-page-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.slo-maintenance-legend { display: inline-flex; align-items: center; gap: 6px; }
+.slo-maintenance-legend i { width: 14px; height: 10px; border: 1px dashed var(--neutral); background: var(--neutral-wash); }
+.slo-maintenance-cluster-action::before { content: ''; display: inline-block; width: 14px; margin-inline-end: 6px; border-top: 3px dotted var(--neutral); }

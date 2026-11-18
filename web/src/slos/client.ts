@@ -37,7 +37,14 @@ function validEvaluation(x: Record<string, unknown>): boolean {
       ['observed','zero_traffic','known_empty','missing','expired','not_applicable'].includes(String(item.state)) && ['good','total','attainment','burn'].every(k=>decimal(item[k])) &&
       (item.state==='observed' ? typeof item.attainment==='string' : item.attainment===null));
 }
-const utcTimestamp=(v:unknown) => typeof v==='string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z$/.test(v) && Number.isFinite(Date.parse(v));
+const utcTimestamp=(v:unknown): v is string => typeof v==='string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z$/.test(v) && Number.isFinite(Date.parse(v));
+function maintenanceTimeKey(value: unknown): string | undefined {
+  if (!utcTimestamp(value)) return undefined;
+  const fraction = value.slice(20, -1);
+  if (fraction.length > 6) return undefined;
+  // Fixed-width UTC keys preserve microsecond ordering across mixed fractional widths.
+  return value.slice(0, 19) + fraction.padEnd(6, '0');
+}
 const nonnegativeInteger=(v:unknown) => typeof v==='number' && Number.isSafeInteger(v) && v>=0;
 const urgencyCodes=['on_track','stale_observations','no_data','expired_history','complete_window_violation','negative_observed_budget','low_observed_budget','high_1h_burn','evaluation_unavailable','not_yet_eligible','zero_traffic','incomplete_coverage','short_burn_unavailable','budget_below_half','excluded'];
 function validSlo(value:unknown):value is Record<string,unknown> {
@@ -209,7 +216,7 @@ export async function request<T>(path: string, init: RequestInit = {}, mutation 
         await waitForReadRetry(signal, 2000);
       }
     }
-  }, init.signal, path.startsWith('/api/v1/services')||path.startsWith('/api/v1/slos/overview')||path.startsWith('/api/v1/maintenance')||path.split('?')[0]?.endsWith('/status') ? 0 : 30_000);
+  }, init.signal, path.startsWith('/api/v1/services')||path.startsWith('/api/v1/slos/overview')||path.startsWith('/api/v1/maintenance')||path.split('?')[0]?.endsWith('/maintenance')||path.split('?')[0]?.endsWith('/status') ? 0 : 30_000);
 }
 async function requestUncached<T>(path: string, init: RequestInit = {}, mutation = false, responseLimit = 4 * 1024 * 1024): Promise<{ value: T; etag: string; serverTime?:string; serverClock?:ServerClock }> {
   let response: Response;
@@ -249,6 +256,7 @@ async function requestUncached<T>(path: string, init: RequestInit = {}, mutation
   const value = data as Record<string, unknown>;
   const isService = path.startsWith('/api/v1/services');
   const isEvaluation = path.includes('/evaluation');
+  const maintenanceSloID = /^\/api\/v1\/slos\/([0-9a-f-]{36})\/maintenance$/.exec(pathname)?.[1];
   const isOverview=pathname==='/api/v1/slos/overview';
   const operationalID=/^\/api\/v1\/slos\/([0-9a-f-]{36})\/operational$/.exec(pathname)?.[1];
   const statusID=/^\/api\/v1\/slos\/([0-9a-f-]{36})\/status$/.exec(pathname)?.[1];
@@ -265,18 +273,33 @@ async function requestUncached<T>(path: string, init: RequestInit = {}, mutation
     typeof item.rolling_window_seconds === 'number' && Number.isSafeInteger(item.rolling_window_seconds) && item.rolling_window_seconds > 0 &&
     typeof item.cadence_seconds === 'number' && Number.isSafeInteger(item.cadence_seconds) && item.cadence_seconds > 0 &&
     item.rolling_window_seconds % item.cadence_seconds === 0 && uuid(item.service_id) && uuid(item.sli_id);
-  const maintenance = (item: unknown) => record(item) && uuid(item.id) &&
-    (!maintenanceID || item.id === maintenanceID) && version(item.revision) &&
-    typeof item.title === 'string' && typeof item.reason === 'string' &&
-    Array.isArray(item.slo_ids) && item.slo_ids.every(uuid) &&
-    ['create', 'edit', 'end', 'cancel', 'withdraw'].includes(String(item.operation)) &&
-    typeof item.tombstone === 'boolean' && utcTimestamp(item.start) && utcTimestamp(item.end) &&
-    utcTimestamp(item.created_at) && utcTimestamp(item.updated_at) &&
-    uuid(item.creator_id) && uuid(item.actor_id) && uuid(item.audit_id);
-  const valid = isMaintenanceRoot || maintenanceID
-    ? isMaintenanceRoot && !init.method
+  const overlayBounds = maintenanceSloID ? new URLSearchParams(path.split('?')[1] ?? '') : undefined;
+  const overlayStart = maintenanceTimeKey(overlayBounds?.get('start'));
+  const overlayEnd = maintenanceTimeKey(overlayBounds?.get('end'));
+  const maintenance = (item: unknown): item is components['schemas']['MaintenanceWindow'] => {
+    if (!record(item)) return false;
+    const start = maintenanceTimeKey(item.start);
+    const end = maintenanceTimeKey(item.end);
+    return uuid(item.id) && (!maintenanceID || item.id === maintenanceID) && version(item.revision) &&
+      typeof item.title === 'string' && item.title.length > 0 && typeof item.reason === 'string' &&
+      Array.isArray(item.slo_ids) && item.slo_ids.every(uuid) &&
+      ['create', 'edit', 'end', 'cancel', 'withdraw'].includes(String(item.operation)) &&
+      typeof item.tombstone === 'boolean' && start !== undefined && end !== undefined && start < end &&
+      (!maintenanceSloID || (item.tombstone === false && item.slo_ids.includes(maintenanceSloID) &&
+        overlayStart !== undefined && overlayEnd !== undefined && start < overlayEnd && overlayStart < end)) &&
+      utcTimestamp(item.created_at) && utcTimestamp(item.updated_at) && uuid(item.creator_id) && uuid(item.actor_id) && uuid(item.audit_id);
+  };
+  const overflow = value.overflow;
+  const overflowStart = record(overflow) ? maintenanceTimeKey(overflow.start) : undefined;
+  const overflowEnd = record(overflow) ? maintenanceTimeKey(overflow.end) : undefined;
+  const validOverflow = overflow === undefined || (!!maintenanceSloID && !!value.next_cursor &&
+    record(overflow) && typeof overflow.count === 'string' && /^[1-9][0-9]*$/.test(overflow.count) &&
+    overlayStart !== undefined && overlayEnd !== undefined && overflowStart !== undefined && overflowEnd !== undefined &&
+    overflowStart >= overlayStart && overflowEnd <= overlayEnd && overflowStart <= overflowEnd);
+  const valid = isMaintenanceRoot || maintenanceID || maintenanceSloID
+    ? maintenanceSloID || isMaintenanceRoot && !init.method
       ? Array.isArray(value.items) && value.items.length <= 200 && value.items.every(maintenance) &&
-        (value.next_cursor === undefined || typeof value.next_cursor === 'string' && value.next_cursor.length <= 512)
+        (value.next_cursor === undefined || typeof value.next_cursor === 'string' && value.next_cursor.length <= 512) && validOverflow
       : maintenance(value) && response.headers.get('ETag') === `"maintenance:${value.id}:${value.revision}"`
     : isOverview ? uuid(value.snapshot_id)&&value.snapshot_id!=='00000000-0000-0000-0000-000000000000'&&validOperationalOverview(value)
     : valuesPath ? validHistoryValues(value,valuesPath[2]!,valuesPath[1]!,new URLSearchParams(path.split('?')[1]??''))
@@ -299,6 +322,11 @@ export function write(context: AuthContext, body: unknown, key?: string, etag?: 
   return { method: etag ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': context.csrf_token, ...(key ? { 'Idempotency-Key': key } : {}), ...(etag ? { 'If-Match': etag } : {}) }, body: JSON.stringify(body) };
 }
 export const sloClient = {
+  maintenance: (id: string, start: string, end: string, cursor: string, signal: AbortSignal) =>
+    request<components['schemas']['MaintenancePage']>(
+      `/api/v1/slos/${id}/maintenance?${new URLSearchParams({ start, end, limit: '200', ...(cursor ? { cursor } : { include_overflow: 'true' }) })}`,
+      { signal },
+    ).then(result => result.value),
   values: (id:string,generation:string,lane:HistoryLane,offset:number,signal?:AbortSignal) => request<HistoryValuePage>(`/api/v1/slos/${id}/history/${generation}/values?${new URLSearchParams({lane,offset:String(offset),limit:'50'})}`,{signal}).then(x=>x.value),
   current: (id:string,signal?:AbortSignal) => request<CurrentStatus>(`/api/v1/slos/${id}/status`,{signal}).then(x=>x.value),
   services: (cursor = '', signal?: AbortSignal) => request<{items: Service[]; next_cursor: string}>(`/api/v1/services?${new URLSearchParams({limit:'50', ...(cursor ? {cursor} : {})})}`, {signal}).then(x => x.value),

@@ -540,3 +540,44 @@ func (q *Queries) ReadMaintenanceState(ctx context.Context, sloID pgtype.UUID) (
 	err := row.Scan(&revision)
 	return revision, err
 }
+
+const summarizeSloMaintenanceOverflow = `-- name: SummarizeSloMaintenanceOverflow :one
+SELECT count(*) AS window_count,
+       min(GREATEST(r.starts_at, $1::timestamptz))::timestamptz AS starts_at,
+       max(LEAST(r.ends_at, $2::timestamptz))::timestamptz AS ends_at
+FROM public.almanac_maintenance_exclusion_scopes s
+JOIN public.almanac_maintenance_exclusion_revisions r ON r.exclusion_id = s.exclusion_id AND r.revision = s.revision
+WHERE s.slo_id = $3
+  AND NOT r.tombstone
+  AND tstzrange(r.starts_at, r.ends_at, '[)') &&
+      tstzrange($1::timestamptz, $2::timestamptz, '[)')
+  AND (r.starts_at, r.exclusion_id) > ($4::timestamptz, $5::uuid)
+  AND r.revision = (SELECT current_revision FROM public.almanac_maintenance_exclusions WHERE id = r.exclusion_id)
+`
+
+type SummarizeSloMaintenanceOverflowParams struct {
+	WindowStart pgtype.Timestamptz `json:"window_start"`
+	WindowEnd   pgtype.Timestamptz `json:"window_end"`
+	SloID       pgtype.UUID        `json:"slo_id"`
+	AfterTime   pgtype.Timestamptz `json:"after_time"`
+	AfterID     pgtype.UUID        `json:"after_id"`
+}
+
+type SummarizeSloMaintenanceOverflowRow struct {
+	WindowCount int64              `json:"window_count"`
+	StartsAt    pgtype.Timestamptz `json:"starts_at"`
+	EndsAt      pgtype.Timestamptz `json:"ends_at"`
+}
+
+func (q *Queries) SummarizeSloMaintenanceOverflow(ctx context.Context, arg SummarizeSloMaintenanceOverflowParams) (SummarizeSloMaintenanceOverflowRow, error) {
+	row := q.db.QueryRow(ctx, summarizeSloMaintenanceOverflow,
+		arg.WindowStart,
+		arg.WindowEnd,
+		arg.SloID,
+		arg.AfterTime,
+		arg.AfterID,
+	)
+	var i SummarizeSloMaintenanceOverflowRow
+	err := row.Scan(&i.WindowCount, &i.StartsAt, &i.EndsAt)
+	return i, err
+}

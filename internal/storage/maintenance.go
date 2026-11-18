@@ -90,6 +90,12 @@ type ListMaintenanceInput struct {
 type MaintenancePage struct {
 	Items      []MaintenanceRecord
 	NextCursor string
+	Overflow   *MaintenanceOverflow
+}
+
+type MaintenanceOverflow struct {
+	Start, End time.Time
+	Count      int64
 }
 
 // These internal operations are not wired to HTTP/CLI or production calculators.

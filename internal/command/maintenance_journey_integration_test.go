@@ -150,4 +150,17 @@ func verifyMaintenanceHTTP(t *testing.T, client *http.Client, baseURL, session s
 		t.Fatalf("withdrawal omitted tombstone identity or revision: %+v", withdrawn)
 	}
 
+	call(http.MethodPost, path, "maint-cluster-first", "", input, 201)
+	call(http.MethodPost, path, "maint-cluster-second", "", input, 201)
+	clusterStart := start.Add(time.Microsecond)
+	clusterEnd := end.Add(-time.Microsecond)
+	q := url.Values{"start": {clusterStart.Format(time.RFC3339Nano)}, "end": {clusterEnd.Format(time.RFC3339Nano)},
+		"limit": {"1"}, "include_overflow": {"true"}}
+	_, data = call(http.MethodGet, "/api/v1/slos/"+slo.Id.String()+"/maintenance?"+q.Encode(), "", "", nil, 200)
+	var clustered api.MaintenancePage
+	if err := json.Unmarshal(data, &clustered); err != nil || len(clustered.Items) != 1 ||
+		clustered.NextCursor == nil || clustered.Overflow == nil || clustered.Overflow.Count != "2" ||
+		!clustered.Overflow.Start.Equal(clusterStart) || !clustered.Overflow.End.Equal(clusterEnd) {
+		t.Fatalf("counted maintenance overflow missing from authenticated response: %s", data)
+	}
 }

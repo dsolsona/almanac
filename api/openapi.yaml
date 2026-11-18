@@ -988,6 +988,7 @@ paths:
         - {$ref: '#/components/parameters/SloId'}
         - {$ref: '#/components/parameters/PageLimit'}
         - {$ref: '#/components/parameters/PageCursor'}
+        - {name: include_overflow, in: query, description: Include a counted chart marker on an overflowing first page., schema: {type: boolean}}
         - {name: start, in: query, required: true, description: UTC instant with at most microsecond precision., schema: {type: string, format: date-time}}
         - {name: end, in: query, required: true, description: UTC instant with at most microsecond precision., schema: {type: string, format: date-time}}
       responses:
@@ -3149,6 +3150,18 @@ components:
       properties:
         items: {type: array, items: {$ref: '#/components/schemas/MaintenanceWindow'}}
         next_cursor: {type: string}
+        overflow: {$ref: '#/components/schemas/MaintenanceOverflow'}
+    MaintenanceOverflow:
+      type: object
+      description: >-
+        Chart grouping for the last first-page window and all following windows.
+        The bounds are clipped to the requested range and enclose the grouped
+        windows. They do not describe continuous exclusion coverage.
+      required: [start, end, count]
+      properties:
+        start: {type: string, format: date-time}
+        end: {type: string, format: date-time}
+        count: {type: string, pattern: '^[1-9][0-9]*$', description: Exact decimal window count.}
     Problem:
       type: object
       required: [code, message, request_id, field_errors]
