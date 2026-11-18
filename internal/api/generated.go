@@ -1229,27 +1229,72 @@ func (e IncompleteOutcomeState) Valid() bool {
 	}
 }
 
+// Defines values for MaintenanceAllServicesScopeKind.
+const (
+	AllServices MaintenanceAllServicesScopeKind = "all_services"
+)
+
+// Valid indicates whether the value is a known member of the MaintenanceAllServicesScopeKind enum.
+func (e MaintenanceAllServicesScopeKind) Valid() bool {
+	switch e {
+	case AllServices:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MaintenanceServiceScopeKind.
+const (
+	Services MaintenanceServiceScopeKind = "services"
+)
+
+// Valid indicates whether the value is a known member of the MaintenanceServiceScopeKind enum.
+func (e MaintenanceServiceScopeKind) Valid() bool {
+	switch e {
+	case Services:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MaintenanceSloScopeKind.
+const (
+	Slos MaintenanceSloScopeKind = "slos"
+)
+
+// Valid indicates whether the value is a known member of the MaintenanceSloScopeKind enum.
+func (e MaintenanceSloScopeKind) Valid() bool {
+	switch e {
+	case Slos:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for MaintenanceWindowOperation.
 const (
-	Cancel   MaintenanceWindowOperation = "cancel"
-	Create   MaintenanceWindowOperation = "create"
-	Edit     MaintenanceWindowOperation = "edit"
-	End      MaintenanceWindowOperation = "end"
-	Withdraw MaintenanceWindowOperation = "withdraw"
+	MaintenanceWindowOperationCancel   MaintenanceWindowOperation = "cancel"
+	MaintenanceWindowOperationCreate   MaintenanceWindowOperation = "create"
+	MaintenanceWindowOperationEdit     MaintenanceWindowOperation = "edit"
+	MaintenanceWindowOperationEnd      MaintenanceWindowOperation = "end"
+	MaintenanceWindowOperationWithdraw MaintenanceWindowOperation = "withdraw"
 )
 
 // Valid indicates whether the value is a known member of the MaintenanceWindowOperation enum.
 func (e MaintenanceWindowOperation) Valid() bool {
 	switch e {
-	case Cancel:
+	case MaintenanceWindowOperationCancel:
 		return true
-	case Create:
+	case MaintenanceWindowOperationCreate:
 		return true
-	case Edit:
+	case MaintenanceWindowOperationEdit:
 		return true
-	case End:
+	case MaintenanceWindowOperationEnd:
 		return true
-	case Withdraw:
+	case MaintenanceWindowOperationWithdraw:
 		return true
 	default:
 		return false
@@ -1520,6 +1565,33 @@ const (
 func (e RotationIssuanceReplaySecretState) Valid() bool {
 	switch e {
 	case RotationIssuanceReplaySecretStateSecretUnavailable:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ScopedMaintenanceWindowOperation.
+const (
+	ScopedMaintenanceWindowOperationCancel   ScopedMaintenanceWindowOperation = "cancel"
+	ScopedMaintenanceWindowOperationCreate   ScopedMaintenanceWindowOperation = "create"
+	ScopedMaintenanceWindowOperationEdit     ScopedMaintenanceWindowOperation = "edit"
+	ScopedMaintenanceWindowOperationEnd      ScopedMaintenanceWindowOperation = "end"
+	ScopedMaintenanceWindowOperationWithdraw ScopedMaintenanceWindowOperation = "withdraw"
+)
+
+// Valid indicates whether the value is a known member of the ScopedMaintenanceWindowOperation enum.
+func (e ScopedMaintenanceWindowOperation) Valid() bool {
+	switch e {
+	case ScopedMaintenanceWindowOperationCancel:
+		return true
+	case ScopedMaintenanceWindowOperationCreate:
+		return true
+	case ScopedMaintenanceWindowOperationEdit:
+		return true
+	case ScopedMaintenanceWindowOperationEnd:
+		return true
+	case ScopedMaintenanceWindowOperationWithdraw:
 		return true
 	default:
 		return false
@@ -3981,12 +4053,46 @@ type LoginRequest struct {
 	Password string `json:"password"`
 }
 
+// MaintenanceAllServicesScope defines model for MaintenanceAllServicesScope.
+type MaintenanceAllServicesScope struct {
+	Kind MaintenanceAllServicesScopeKind `json:"kind"`
+}
+
+// MaintenanceAllServicesScopeKind defines model for MaintenanceAllServicesScope.Kind.
+type MaintenanceAllServicesScopeKind string
+
 // MaintenanceEnd defines model for MaintenanceEnd.
 type MaintenanceEnd struct {
 	End time.Time `json:"end"`
 
 	// Reason Maximum 4096 UTF-8 bytes.
 	Reason string `json:"reason"`
+}
+
+// MaintenanceImpactMember defines model for MaintenanceImpactMember.
+type MaintenanceImpactMember struct {
+	// End Exclusive recorded participation end. Omitted for inventory previews.
+	End         *time.Time         `json:"end,omitempty"`
+	ServiceId   openapi_types.UUID `json:"service_id"`
+	ServiceName string             `json:"service_name"`
+	SloId       openapi_types.UUID `json:"slo_id"`
+	SloName     string             `json:"slo_name"`
+
+	// Start Inclusive recorded participation start. Omitted for inventory previews.
+	Start *time.Time `json:"start,omitempty"`
+}
+
+// MaintenanceImpactPage defines model for MaintenanceImpactPage.
+type MaintenanceImpactPage struct {
+	InventoryAt time.Time                 `json:"inventory_at"`
+	Items       []MaintenanceImpactMember `json:"items"`
+	NextCursor  *string                   `json:"next_cursor,omitempty"`
+
+	// Ready False if effective membership is still being prepared.
+	Ready bool `json:"ready"`
+
+	// Total Exact number of rows in this inventory or effective membership page set.
+	Total string `json:"total"`
 }
 
 // MaintenanceOverflow Chart grouping for the last first-page window and all following windows. The bounds are clipped to the requested range and enclose the grouped windows. They do not describe continuous exclusion coverage.
@@ -4011,6 +4117,34 @@ type MaintenanceReason struct {
 	// Reason Maximum 4096 UTF-8 bytes.
 	Reason string `json:"reason"`
 }
+
+// MaintenanceScope defines model for MaintenanceScope.
+type MaintenanceScope struct {
+	union json.RawMessage
+}
+
+// MaintenanceScopePreview defines model for MaintenanceScopePreview.
+type MaintenanceScopePreview struct {
+	Scope MaintenanceScope `json:"scope"`
+}
+
+// MaintenanceServiceScope defines model for MaintenanceServiceScope.
+type MaintenanceServiceScope struct {
+	Kind       MaintenanceServiceScopeKind `json:"kind"`
+	ServiceIds []openapi_types.UUID        `json:"service_ids"`
+}
+
+// MaintenanceServiceScopeKind defines model for MaintenanceServiceScope.Kind.
+type MaintenanceServiceScopeKind string
+
+// MaintenanceSloScope defines model for MaintenanceSloScope.
+type MaintenanceSloScope struct {
+	Kind   MaintenanceSloScopeKind `json:"kind"`
+	SloIds []openapi_types.UUID    `json:"slo_ids"`
+}
+
+// MaintenanceSloScopeKind defines model for MaintenanceSloScope.Kind.
+type MaintenanceSloScopeKind string
 
 // MaintenanceWindow defines model for MaintenanceWindow.
 type MaintenanceWindow struct {
@@ -4261,6 +4395,50 @@ type SafeIdentity struct {
 	Restricted bool   `json:"restricted"`
 	Role       string `json:"role"`
 	UserId     string `json:"user_id"`
+}
+
+// ScopedMaintenancePage defines model for ScopedMaintenancePage.
+type ScopedMaintenancePage struct {
+	Items      []ScopedMaintenanceWindow `json:"items"`
+	NextCursor *string                   `json:"next_cursor,omitempty"`
+}
+
+// ScopedMaintenanceWindow defines model for ScopedMaintenanceWindow.
+type ScopedMaintenanceWindow struct {
+	ActorId   openapi_types.UUID               `json:"actor_id"`
+	AuditId   openapi_types.UUID               `json:"audit_id"`
+	CreatedAt time.Time                        `json:"created_at"`
+	CreatorId openapi_types.UUID               `json:"creator_id"`
+	End       time.Time                        `json:"end"`
+	Id        openapi_types.UUID               `json:"id"`
+	Operation ScopedMaintenanceWindowOperation `json:"operation"`
+
+	// Reason Maximum 4096 UTF-8 bytes.
+	Reason   string           `json:"reason"`
+	Revision string           `json:"revision"`
+	Scope    MaintenanceScope `json:"scope"`
+	Start    time.Time        `json:"start"`
+
+	// Title Maximum 512 UTF-8 bytes.
+	Title     string    `json:"title"`
+	Tombstone bool      `json:"tombstone"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// ScopedMaintenanceWindowOperation defines model for ScopedMaintenanceWindow.Operation.
+type ScopedMaintenanceWindowOperation string
+
+// ScopedMaintenanceWrite defines model for ScopedMaintenanceWrite.
+type ScopedMaintenanceWrite struct {
+	End time.Time `json:"end"`
+
+	// Reason Maximum 4096 UTF-8 bytes.
+	Reason string           `json:"reason"`
+	Scope  MaintenanceScope `json:"scope"`
+	Start  time.Time        `json:"start"`
+
+	// Title Maximum 512 UTF-8 bytes.
+	Title string `json:"title"`
 }
 
 // SecretAction defines model for SecretAction.
@@ -5521,6 +5699,74 @@ type GetProvidersParams struct {
 	AgentId *openapi_types.UUID `form:"agent_id,omitempty" json:"agent_id,omitempty"`
 }
 
+// ListScopedMaintenanceParams defines parameters for ListScopedMaintenance.
+type ListScopedMaintenanceParams struct {
+	Limit  *PageLimit  `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor *PageCursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// CreateScopedMaintenanceParams defines parameters for CreateScopedMaintenance.
+type CreateScopedMaintenanceParams struct {
+	// IdempotencyKey One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// PreviewMaintenanceScopeParams defines parameters for PreviewMaintenanceScope.
+type PreviewMaintenanceScopeParams struct {
+	Limit  *PageLimit  `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor *PageCursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// GetScopedMaintenanceParams defines parameters for GetScopedMaintenance.
+type GetScopedMaintenanceParams struct {
+	// Revision Canonical positive signed 64-bit decimal revision.
+	Revision *string `form:"revision,omitempty" json:"revision,omitempty"`
+}
+
+// EditScopedMaintenanceParams defines parameters for EditScopedMaintenance.
+type EditScopedMaintenanceParams struct {
+	// IfMatch Strong ETag of the maintenance revision.
+	IfMatch string `json:"If-Match"`
+
+	// IdempotencyKey One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// CancelScopedMaintenanceParams defines parameters for CancelScopedMaintenance.
+type CancelScopedMaintenanceParams struct {
+	// IfMatch Strong ETag of the maintenance revision.
+	IfMatch string `json:"If-Match"`
+
+	// IdempotencyKey One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// EndScopedMaintenanceParams defines parameters for EndScopedMaintenance.
+type EndScopedMaintenanceParams struct {
+	// IfMatch Strong ETag of the maintenance revision.
+	IfMatch string `json:"If-Match"`
+
+	// IdempotencyKey One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
+// ReadMaintenanceImpactParams defines parameters for ReadMaintenanceImpact.
+type ReadMaintenanceImpactParams struct {
+	// Revision Canonical positive signed 64-bit decimal revision.
+	Revision *string     `form:"revision,omitempty" json:"revision,omitempty"`
+	Limit    *PageLimit  `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor   *PageCursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
+// WithdrawScopedMaintenanceParams defines parameters for WithdrawScopedMaintenance.
+type WithdrawScopedMaintenanceParams struct {
+	// IfMatch Strong ETag of the maintenance revision.
+	IfMatch string `json:"If-Match"`
+
+	// IdempotencyKey One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split.
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
+}
+
 // ListServicesParams defines parameters for ListServices.
 type ListServicesParams struct {
 	Limit    *PageLimit                  `form:"limit,omitempty" json:"limit,omitempty"`
@@ -5812,6 +6058,24 @@ type EndMaintenanceJSONRequestBody = MaintenanceEnd
 // WithdrawMaintenanceJSONRequestBody defines body for WithdrawMaintenance for application/json ContentType.
 type WithdrawMaintenanceJSONRequestBody = MaintenanceReason
 
+// CreateScopedMaintenanceJSONRequestBody defines body for CreateScopedMaintenance for application/json ContentType.
+type CreateScopedMaintenanceJSONRequestBody = ScopedMaintenanceWrite
+
+// PreviewMaintenanceScopeJSONRequestBody defines body for PreviewMaintenanceScope for application/json ContentType.
+type PreviewMaintenanceScopeJSONRequestBody = MaintenanceScopePreview
+
+// EditScopedMaintenanceJSONRequestBody defines body for EditScopedMaintenance for application/json ContentType.
+type EditScopedMaintenanceJSONRequestBody = ScopedMaintenanceWrite
+
+// CancelScopedMaintenanceJSONRequestBody defines body for CancelScopedMaintenance for application/json ContentType.
+type CancelScopedMaintenanceJSONRequestBody = MaintenanceReason
+
+// EndScopedMaintenanceJSONRequestBody defines body for EndScopedMaintenance for application/json ContentType.
+type EndScopedMaintenanceJSONRequestBody = MaintenanceEnd
+
+// WithdrawScopedMaintenanceJSONRequestBody defines body for WithdrawScopedMaintenance for application/json ContentType.
+type WithdrawScopedMaintenanceJSONRequestBody = MaintenanceReason
+
 // CreateServiceJSONRequestBody defines body for CreateService for application/json ContentType.
 type CreateServiceJSONRequestBody = ServiceCreateRequest
 
@@ -5844,6 +6108,143 @@ type UpdateUserJSONRequestBody = UserWriteRequest
 
 // UserCommandJSONRequestBody defines body for UserCommand for application/json ContentType.
 type UserCommandJSONRequestBody = EmptyAuthRequest
+
+// AsMaintenanceSloScope returns the union data inside the MaintenanceScope as a MaintenanceSloScope
+func (t MaintenanceScope) AsMaintenanceSloScope() (MaintenanceSloScope, error) {
+	var body MaintenanceSloScope
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromMaintenanceSloScope overwrites any union data inside the MaintenanceScope as the provided MaintenanceSloScope
+func (t *MaintenanceScope) FromMaintenanceSloScope(v MaintenanceSloScope) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"kind":"slos"}`))
+	t.union = b
+	return err
+}
+
+// MergeMaintenanceSloScope performs a merge with any union data inside the MaintenanceScope, using the provided MaintenanceSloScope
+func (t *MaintenanceScope) MergeMaintenanceSloScope(v MaintenanceSloScope) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"kind":"slos"}`))
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsMaintenanceServiceScope returns the union data inside the MaintenanceScope as a MaintenanceServiceScope
+func (t MaintenanceScope) AsMaintenanceServiceScope() (MaintenanceServiceScope, error) {
+	var body MaintenanceServiceScope
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromMaintenanceServiceScope overwrites any union data inside the MaintenanceScope as the provided MaintenanceServiceScope
+func (t *MaintenanceScope) FromMaintenanceServiceScope(v MaintenanceServiceScope) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"kind":"services"}`))
+	t.union = b
+	return err
+}
+
+// MergeMaintenanceServiceScope performs a merge with any union data inside the MaintenanceScope, using the provided MaintenanceServiceScope
+func (t *MaintenanceScope) MergeMaintenanceServiceScope(v MaintenanceServiceScope) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"kind":"services"}`))
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsMaintenanceAllServicesScope returns the union data inside the MaintenanceScope as a MaintenanceAllServicesScope
+func (t MaintenanceScope) AsMaintenanceAllServicesScope() (MaintenanceAllServicesScope, error) {
+	var body MaintenanceAllServicesScope
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromMaintenanceAllServicesScope overwrites any union data inside the MaintenanceScope as the provided MaintenanceAllServicesScope
+func (t *MaintenanceScope) FromMaintenanceAllServicesScope(v MaintenanceAllServicesScope) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"kind":"all_services"}`))
+	t.union = b
+	return err
+}
+
+// MergeMaintenanceAllServicesScope performs a merge with any union data inside the MaintenanceScope, using the provided MaintenanceAllServicesScope
+func (t *MaintenanceScope) MergeMaintenanceAllServicesScope(v MaintenanceAllServicesScope) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	b, err = runtime.JSONMerge(b, []byte(`{"kind":"all_services"}`))
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t MaintenanceScope) Discriminator() (string, error) {
+	var discriminator struct {
+		Discriminator string `json:"kind"`
+	}
+	err := json.Unmarshal(t.union, &discriminator)
+	return discriminator.Discriminator, err
+}
+
+func (t MaintenanceScope) ValueByDiscriminator() (interface{}, error) {
+	discriminator, err := t.Discriminator()
+	if err != nil {
+		return nil, err
+	}
+	switch discriminator {
+	case "all_services":
+		return t.AsMaintenanceAllServicesScope()
+	case "services":
+		return t.AsMaintenanceServiceScope()
+	case "slos":
+		return t.AsMaintenanceSloScope()
+	default:
+		return nil, errors.New("unknown discriminator value: " + discriminator)
+	}
+}
+
+func (t MaintenanceScope) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *MaintenanceScope) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
 
 // AsObservedOutcome returns the union data inside the ObservationExecutionOutcome as a ObservedOutcome
 func (t ObservationExecutionOutcome) AsObservedOutcome() (ObservedOutcome, error) {
@@ -6805,6 +7206,111 @@ type ClientInterface interface {
 	//
 	// Corresponds with GET /api/v1/providers (the `GetProviders` operationId).
 	GetProviders(ctx context.Context, params *GetProvidersParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListScopedMaintenance List maintenance windows
+	//
+	// Corresponds with GET /api/v1/scoped-maintenance (the `ListScopedMaintenance` operationId).
+	ListScopedMaintenance(ctx context.Context, params *ListScopedMaintenanceParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateScopedMaintenanceWithBody Create an scoped maintenance window
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /api/v1/scoped-maintenance (the `CreateScopedMaintenance` operationId).
+	CreateScopedMaintenanceWithBody(ctx context.Context, params *CreateScopedMaintenanceParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CreateScopedMaintenance Create an scoped maintenance window
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /api/v1/scoped-maintenance (the `CreateScopedMaintenance` operationId).
+	CreateScopedMaintenance(ctx context.Context, params *CreateScopedMaintenanceParams, body CreateScopedMaintenanceJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PreviewMaintenanceScopeWithBody Inspect the current affected SLO inventory for a maintenance selector
+	//
+	// Read-only operation available to Viewers. Scope and pagination are bound to the cursor. An empty valid inventory has a zero total.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /api/v1/scoped-maintenance/preview (the `PreviewMaintenanceScope` operationId).
+	PreviewMaintenanceScopeWithBody(ctx context.Context, params *PreviewMaintenanceScopeParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PreviewMaintenanceScope Inspect the current affected SLO inventory for a maintenance selector
+	//
+	// Read-only operation available to Viewers. Scope and pagination are bound to the cursor. An empty valid inventory has a zero total.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /api/v1/scoped-maintenance/preview (the `PreviewMaintenanceScope` operationId).
+	PreviewMaintenanceScope(ctx context.Context, params *PreviewMaintenanceScopeParams, body PreviewMaintenanceScopeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetScopedMaintenance Read latest or historical maintenance revision
+	//
+	// Corresponds with GET /api/v1/scoped-maintenance/{maintenance_id} (the `GetScopedMaintenance` operationId).
+	GetScopedMaintenance(ctx context.Context, maintenanceId openapi_types.UUID, params *GetScopedMaintenanceParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// EditScopedMaintenanceWithBody Replace maintenance window details
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with PUT /api/v1/scoped-maintenance/{maintenance_id} (the `EditScopedMaintenance` operationId).
+	EditScopedMaintenanceWithBody(ctx context.Context, maintenanceId openapi_types.UUID, params *EditScopedMaintenanceParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// EditScopedMaintenance Replace maintenance window details
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with PUT /api/v1/scoped-maintenance/{maintenance_id} (the `EditScopedMaintenance` operationId).
+	EditScopedMaintenance(ctx context.Context, maintenanceId openapi_types.UUID, params *EditScopedMaintenanceParams, body EditScopedMaintenanceJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CancelScopedMaintenanceWithBody Cancel scheduled maintenance
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /api/v1/scoped-maintenance/{maintenance_id}/cancel (the `CancelScopedMaintenance` operationId).
+	CancelScopedMaintenanceWithBody(ctx context.Context, maintenanceId openapi_types.UUID, params *CancelScopedMaintenanceParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CancelScopedMaintenance Cancel scheduled maintenance
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /api/v1/scoped-maintenance/{maintenance_id}/cancel (the `CancelScopedMaintenance` operationId).
+	CancelScopedMaintenance(ctx context.Context, maintenanceId openapi_types.UUID, params *CancelScopedMaintenanceParams, body CancelScopedMaintenanceJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// EndScopedMaintenanceWithBody End maintenance prospectively
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /api/v1/scoped-maintenance/{maintenance_id}/end (the `EndScopedMaintenance` operationId).
+	EndScopedMaintenanceWithBody(ctx context.Context, maintenanceId openapi_types.UUID, params *EndScopedMaintenanceParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// EndScopedMaintenance End maintenance prospectively
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /api/v1/scoped-maintenance/{maintenance_id}/end (the `EndScopedMaintenance` operationId).
+	EndScopedMaintenance(ctx context.Context, maintenanceId openapi_types.UUID, params *EndScopedMaintenanceParams, body EndScopedMaintenanceJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ReadMaintenanceImpact Read the effective membership of a maintenance revision
+	//
+	// Effective membership includes retained participation bounds. A page with ready false indicates calculation-scope preparation is incomplete.
+	//
+	// Corresponds with GET /api/v1/scoped-maintenance/{maintenance_id}/impact (the `ReadMaintenanceImpact` operationId).
+	ReadMaintenanceImpact(ctx context.Context, maintenanceId openapi_types.UUID, params *ReadMaintenanceImpactParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// WithdrawScopedMaintenanceWithBody Include maintenance events again
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /api/v1/scoped-maintenance/{maintenance_id}/withdraw (the `WithdrawScopedMaintenance` operationId).
+	WithdrawScopedMaintenanceWithBody(ctx context.Context, maintenanceId openapi_types.UUID, params *WithdrawScopedMaintenanceParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// WithdrawScopedMaintenance Include maintenance events again
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /api/v1/scoped-maintenance/{maintenance_id}/withdraw (the `WithdrawScopedMaintenance` operationId).
+	WithdrawScopedMaintenance(ctx context.Context, maintenanceId openapi_types.UUID, params *WithdrawScopedMaintenanceParams, body WithdrawScopedMaintenanceJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListServices List services
 	//
@@ -8594,6 +9100,261 @@ func (c *Client) WithdrawMaintenance(ctx context.Context, maintenanceId openapi_
 // Corresponds with GET /api/v1/providers (the `GetProviders` operationId).
 func (c *Client) GetProviders(ctx context.Context, params *GetProvidersParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetProvidersRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ListScopedMaintenance List maintenance windows
+//
+// Corresponds with GET /api/v1/scoped-maintenance (the `ListScopedMaintenance` operationId).
+func (c *Client) ListScopedMaintenance(ctx context.Context, params *ListScopedMaintenanceParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListScopedMaintenanceRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateScopedMaintenanceWithBody Create an scoped maintenance window
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /api/v1/scoped-maintenance (the `CreateScopedMaintenance` operationId).
+func (c *Client) CreateScopedMaintenanceWithBody(ctx context.Context, params *CreateScopedMaintenanceParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateScopedMaintenanceRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CreateScopedMaintenance Create an scoped maintenance window
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /api/v1/scoped-maintenance (the `CreateScopedMaintenance` operationId).
+func (c *Client) CreateScopedMaintenance(ctx context.Context, params *CreateScopedMaintenanceParams, body CreateScopedMaintenanceJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateScopedMaintenanceRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PreviewMaintenanceScopeWithBody Inspect the current affected SLO inventory for a maintenance selector
+//
+// Read-only operation available to Viewers. Scope and pagination are bound to the cursor. An empty valid inventory has a zero total.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /api/v1/scoped-maintenance/preview (the `PreviewMaintenanceScope` operationId).
+func (c *Client) PreviewMaintenanceScopeWithBody(ctx context.Context, params *PreviewMaintenanceScopeParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPreviewMaintenanceScopeRequestWithBody(c.Server, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// PreviewMaintenanceScope Inspect the current affected SLO inventory for a maintenance selector
+//
+// Read-only operation available to Viewers. Scope and pagination are bound to the cursor. An empty valid inventory has a zero total.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /api/v1/scoped-maintenance/preview (the `PreviewMaintenanceScope` operationId).
+func (c *Client) PreviewMaintenanceScope(ctx context.Context, params *PreviewMaintenanceScopeParams, body PreviewMaintenanceScopeJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPreviewMaintenanceScopeRequest(c.Server, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetScopedMaintenance Read latest or historical maintenance revision
+//
+// Corresponds with GET /api/v1/scoped-maintenance/{maintenance_id} (the `GetScopedMaintenance` operationId).
+func (c *Client) GetScopedMaintenance(ctx context.Context, maintenanceId openapi_types.UUID, params *GetScopedMaintenanceParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetScopedMaintenanceRequest(c.Server, maintenanceId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// EditScopedMaintenanceWithBody Replace maintenance window details
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with PUT /api/v1/scoped-maintenance/{maintenance_id} (the `EditScopedMaintenance` operationId).
+func (c *Client) EditScopedMaintenanceWithBody(ctx context.Context, maintenanceId openapi_types.UUID, params *EditScopedMaintenanceParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewEditScopedMaintenanceRequestWithBody(c.Server, maintenanceId, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// EditScopedMaintenance Replace maintenance window details
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with PUT /api/v1/scoped-maintenance/{maintenance_id} (the `EditScopedMaintenance` operationId).
+func (c *Client) EditScopedMaintenance(ctx context.Context, maintenanceId openapi_types.UUID, params *EditScopedMaintenanceParams, body EditScopedMaintenanceJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewEditScopedMaintenanceRequest(c.Server, maintenanceId, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CancelScopedMaintenanceWithBody Cancel scheduled maintenance
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /api/v1/scoped-maintenance/{maintenance_id}/cancel (the `CancelScopedMaintenance` operationId).
+func (c *Client) CancelScopedMaintenanceWithBody(ctx context.Context, maintenanceId openapi_types.UUID, params *CancelScopedMaintenanceParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCancelScopedMaintenanceRequestWithBody(c.Server, maintenanceId, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CancelScopedMaintenance Cancel scheduled maintenance
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /api/v1/scoped-maintenance/{maintenance_id}/cancel (the `CancelScopedMaintenance` operationId).
+func (c *Client) CancelScopedMaintenance(ctx context.Context, maintenanceId openapi_types.UUID, params *CancelScopedMaintenanceParams, body CancelScopedMaintenanceJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCancelScopedMaintenanceRequest(c.Server, maintenanceId, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// EndScopedMaintenanceWithBody End maintenance prospectively
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /api/v1/scoped-maintenance/{maintenance_id}/end (the `EndScopedMaintenance` operationId).
+func (c *Client) EndScopedMaintenanceWithBody(ctx context.Context, maintenanceId openapi_types.UUID, params *EndScopedMaintenanceParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewEndScopedMaintenanceRequestWithBody(c.Server, maintenanceId, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// EndScopedMaintenance End maintenance prospectively
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /api/v1/scoped-maintenance/{maintenance_id}/end (the `EndScopedMaintenance` operationId).
+func (c *Client) EndScopedMaintenance(ctx context.Context, maintenanceId openapi_types.UUID, params *EndScopedMaintenanceParams, body EndScopedMaintenanceJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewEndScopedMaintenanceRequest(c.Server, maintenanceId, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ReadMaintenanceImpact Read the effective membership of a maintenance revision
+//
+// Effective membership includes retained participation bounds. A page with ready false indicates calculation-scope preparation is incomplete.
+//
+// Corresponds with GET /api/v1/scoped-maintenance/{maintenance_id}/impact (the `ReadMaintenanceImpact` operationId).
+func (c *Client) ReadMaintenanceImpact(ctx context.Context, maintenanceId openapi_types.UUID, params *ReadMaintenanceImpactParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewReadMaintenanceImpactRequest(c.Server, maintenanceId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// WithdrawScopedMaintenanceWithBody Include maintenance events again
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /api/v1/scoped-maintenance/{maintenance_id}/withdraw (the `WithdrawScopedMaintenance` operationId).
+func (c *Client) WithdrawScopedMaintenanceWithBody(ctx context.Context, maintenanceId openapi_types.UUID, params *WithdrawScopedMaintenanceParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewWithdrawScopedMaintenanceRequestWithBody(c.Server, maintenanceId, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// WithdrawScopedMaintenance Include maintenance events again
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /api/v1/scoped-maintenance/{maintenance_id}/withdraw (the `WithdrawScopedMaintenance` operationId).
+func (c *Client) WithdrawScopedMaintenance(ctx context.Context, maintenanceId openapi_types.UUID, params *WithdrawScopedMaintenanceParams, body WithdrawScopedMaintenanceJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewWithdrawScopedMaintenanceRequest(c.Server, maintenanceId, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -12534,6 +13295,626 @@ func NewGetProvidersRequest(server string, params *GetProvidersParams) (*http.Re
 	return req, nil
 }
 
+// NewListScopedMaintenanceRequest constructs an http.Request for the ListScopedMaintenance method
+func NewListScopedMaintenanceRequest(server string, params *ListScopedMaintenanceParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/scoped-maintenance")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewCreateScopedMaintenanceRequest calls the generic CreateScopedMaintenance builder with application/json body
+func NewCreateScopedMaintenanceRequest(server string, params *CreateScopedMaintenanceParams, body CreateScopedMaintenanceJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCreateScopedMaintenanceRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewCreateScopedMaintenanceRequestWithBody constructs an http.Request for the CreateScopedMaintenance method, with any body, and a specified content type
+func NewCreateScopedMaintenanceRequestWithBody(server string, params *CreateScopedMaintenanceParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/scoped-maintenance")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewPreviewMaintenanceScopeRequest calls the generic PreviewMaintenanceScope builder with application/json body
+func NewPreviewMaintenanceScopeRequest(server string, params *PreviewMaintenanceScopeParams, body PreviewMaintenanceScopeJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPreviewMaintenanceScopeRequestWithBody(server, params, "application/json", bodyReader)
+}
+
+// NewPreviewMaintenanceScopeRequestWithBody constructs an http.Request for the PreviewMaintenanceScope method, with any body, and a specified content type
+func NewPreviewMaintenanceScopeRequestWithBody(server string, params *PreviewMaintenanceScopeParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/scoped-maintenance/preview")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewGetScopedMaintenanceRequest constructs an http.Request for the GetScopedMaintenance method
+func NewGetScopedMaintenanceRequest(server string, maintenanceId openapi_types.UUID, params *GetScopedMaintenanceParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "maintenance_id", maintenanceId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/scoped-maintenance/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Revision != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "revision", *params.Revision, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewEditScopedMaintenanceRequest calls the generic EditScopedMaintenance builder with application/json body
+func NewEditScopedMaintenanceRequest(server string, maintenanceId openapi_types.UUID, params *EditScopedMaintenanceParams, body EditScopedMaintenanceJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewEditScopedMaintenanceRequestWithBody(server, maintenanceId, params, "application/json", bodyReader)
+}
+
+// NewEditScopedMaintenanceRequestWithBody constructs an http.Request for the EditScopedMaintenance method, with any body, and a specified content type
+func NewEditScopedMaintenanceRequestWithBody(server string, maintenanceId openapi_types.UUID, params *EditScopedMaintenanceParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "maintenance_id", maintenanceId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/scoped-maintenance/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "If-Match", params.IfMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam0)
+
+		var headerParam1 string
+
+		headerParam1, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam1)
+
+	}
+
+	return req, nil
+}
+
+// NewCancelScopedMaintenanceRequest calls the generic CancelScopedMaintenance builder with application/json body
+func NewCancelScopedMaintenanceRequest(server string, maintenanceId openapi_types.UUID, params *CancelScopedMaintenanceParams, body CancelScopedMaintenanceJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCancelScopedMaintenanceRequestWithBody(server, maintenanceId, params, "application/json", bodyReader)
+}
+
+// NewCancelScopedMaintenanceRequestWithBody constructs an http.Request for the CancelScopedMaintenance method, with any body, and a specified content type
+func NewCancelScopedMaintenanceRequestWithBody(server string, maintenanceId openapi_types.UUID, params *CancelScopedMaintenanceParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "maintenance_id", maintenanceId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/scoped-maintenance/%s/cancel", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "If-Match", params.IfMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam0)
+
+		var headerParam1 string
+
+		headerParam1, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam1)
+
+	}
+
+	return req, nil
+}
+
+// NewEndScopedMaintenanceRequest calls the generic EndScopedMaintenance builder with application/json body
+func NewEndScopedMaintenanceRequest(server string, maintenanceId openapi_types.UUID, params *EndScopedMaintenanceParams, body EndScopedMaintenanceJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewEndScopedMaintenanceRequestWithBody(server, maintenanceId, params, "application/json", bodyReader)
+}
+
+// NewEndScopedMaintenanceRequestWithBody constructs an http.Request for the EndScopedMaintenance method, with any body, and a specified content type
+func NewEndScopedMaintenanceRequestWithBody(server string, maintenanceId openapi_types.UUID, params *EndScopedMaintenanceParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "maintenance_id", maintenanceId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/scoped-maintenance/%s/end", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "If-Match", params.IfMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam0)
+
+		var headerParam1 string
+
+		headerParam1, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam1)
+
+	}
+
+	return req, nil
+}
+
+// NewReadMaintenanceImpactRequest constructs an http.Request for the ReadMaintenanceImpact method
+func NewReadMaintenanceImpactRequest(server string, maintenanceId openapi_types.UUID, params *ReadMaintenanceImpactParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "maintenance_id", maintenanceId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/scoped-maintenance/%s/impact", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Revision != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "revision", *params.Revision, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewWithdrawScopedMaintenanceRequest calls the generic WithdrawScopedMaintenance builder with application/json body
+func NewWithdrawScopedMaintenanceRequest(server string, maintenanceId openapi_types.UUID, params *WithdrawScopedMaintenanceParams, body WithdrawScopedMaintenanceJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewWithdrawScopedMaintenanceRequestWithBody(server, maintenanceId, params, "application/json", bodyReader)
+}
+
+// NewWithdrawScopedMaintenanceRequestWithBody constructs an http.Request for the WithdrawScopedMaintenance method, with any body, and a specified content type
+func NewWithdrawScopedMaintenanceRequestWithBody(server string, maintenanceId openapi_types.UUID, params *WithdrawScopedMaintenanceParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "maintenance_id", maintenanceId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/scoped-maintenance/%s/withdraw", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "If-Match", params.IfMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam0)
+
+		var headerParam1 string
+
+		headerParam1, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam1)
+
+	}
+
+	return req, nil
+}
+
 // NewListServicesRequest constructs an http.Request for the ListServices method
 func NewListServicesRequest(server string, params *ListServicesParams) (*http.Request, error) {
 	var err error
@@ -15230,6 +16611,117 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with GET /api/v1/providers (the `GetProviders` operationId).
 	GetProvidersWithResponse(ctx context.Context, params *GetProvidersParams, reqEditors ...RequestEditorFn) (*GetProvidersResponse, error)
+
+	// ListScopedMaintenanceWithResponse List maintenance windows
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/scoped-maintenance (the `ListScopedMaintenance` operationId).
+	ListScopedMaintenanceWithResponse(ctx context.Context, params *ListScopedMaintenanceParams, reqEditors ...RequestEditorFn) (*ListScopedMaintenanceResponse, error)
+
+	// CreateScopedMaintenanceWithBodyWithResponse Create an scoped maintenance window
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/scoped-maintenance (the `CreateScopedMaintenance` operationId).
+	CreateScopedMaintenanceWithBodyWithResponse(ctx context.Context, params *CreateScopedMaintenanceParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateScopedMaintenanceResponse, error)
+
+	// CreateScopedMaintenanceWithResponse Create an scoped maintenance window
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/scoped-maintenance (the `CreateScopedMaintenance` operationId).
+	CreateScopedMaintenanceWithResponse(ctx context.Context, params *CreateScopedMaintenanceParams, body CreateScopedMaintenanceJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateScopedMaintenanceResponse, error)
+
+	// PreviewMaintenanceScopeWithBodyWithResponse Inspect the current affected SLO inventory for a maintenance selector
+	//
+	// Read-only operation available to Viewers. Scope and pagination are bound to the cursor. An empty valid inventory has a zero total.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/scoped-maintenance/preview (the `PreviewMaintenanceScope` operationId).
+	PreviewMaintenanceScopeWithBodyWithResponse(ctx context.Context, params *PreviewMaintenanceScopeParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PreviewMaintenanceScopeResponse, error)
+
+	// PreviewMaintenanceScopeWithResponse Inspect the current affected SLO inventory for a maintenance selector
+	//
+	// Read-only operation available to Viewers. Scope and pagination are bound to the cursor. An empty valid inventory has a zero total.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/scoped-maintenance/preview (the `PreviewMaintenanceScope` operationId).
+	PreviewMaintenanceScopeWithResponse(ctx context.Context, params *PreviewMaintenanceScopeParams, body PreviewMaintenanceScopeJSONRequestBody, reqEditors ...RequestEditorFn) (*PreviewMaintenanceScopeResponse, error)
+
+	// GetScopedMaintenanceWithResponse Read latest or historical maintenance revision
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/scoped-maintenance/{maintenance_id} (the `GetScopedMaintenance` operationId).
+	GetScopedMaintenanceWithResponse(ctx context.Context, maintenanceId openapi_types.UUID, params *GetScopedMaintenanceParams, reqEditors ...RequestEditorFn) (*GetScopedMaintenanceResponse, error)
+
+	// EditScopedMaintenanceWithBodyWithResponse Replace maintenance window details
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /api/v1/scoped-maintenance/{maintenance_id} (the `EditScopedMaintenance` operationId).
+	EditScopedMaintenanceWithBodyWithResponse(ctx context.Context, maintenanceId openapi_types.UUID, params *EditScopedMaintenanceParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*EditScopedMaintenanceResponse, error)
+
+	// EditScopedMaintenanceWithResponse Replace maintenance window details
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with PUT /api/v1/scoped-maintenance/{maintenance_id} (the `EditScopedMaintenance` operationId).
+	EditScopedMaintenanceWithResponse(ctx context.Context, maintenanceId openapi_types.UUID, params *EditScopedMaintenanceParams, body EditScopedMaintenanceJSONRequestBody, reqEditors ...RequestEditorFn) (*EditScopedMaintenanceResponse, error)
+
+	// CancelScopedMaintenanceWithBodyWithResponse Cancel scheduled maintenance
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/scoped-maintenance/{maintenance_id}/cancel (the `CancelScopedMaintenance` operationId).
+	CancelScopedMaintenanceWithBodyWithResponse(ctx context.Context, maintenanceId openapi_types.UUID, params *CancelScopedMaintenanceParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CancelScopedMaintenanceResponse, error)
+
+	// CancelScopedMaintenanceWithResponse Cancel scheduled maintenance
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/scoped-maintenance/{maintenance_id}/cancel (the `CancelScopedMaintenance` operationId).
+	CancelScopedMaintenanceWithResponse(ctx context.Context, maintenanceId openapi_types.UUID, params *CancelScopedMaintenanceParams, body CancelScopedMaintenanceJSONRequestBody, reqEditors ...RequestEditorFn) (*CancelScopedMaintenanceResponse, error)
+
+	// EndScopedMaintenanceWithBodyWithResponse End maintenance prospectively
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/scoped-maintenance/{maintenance_id}/end (the `EndScopedMaintenance` operationId).
+	EndScopedMaintenanceWithBodyWithResponse(ctx context.Context, maintenanceId openapi_types.UUID, params *EndScopedMaintenanceParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*EndScopedMaintenanceResponse, error)
+
+	// EndScopedMaintenanceWithResponse End maintenance prospectively
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/scoped-maintenance/{maintenance_id}/end (the `EndScopedMaintenance` operationId).
+	EndScopedMaintenanceWithResponse(ctx context.Context, maintenanceId openapi_types.UUID, params *EndScopedMaintenanceParams, body EndScopedMaintenanceJSONRequestBody, reqEditors ...RequestEditorFn) (*EndScopedMaintenanceResponse, error)
+
+	// ReadMaintenanceImpactWithResponse Read the effective membership of a maintenance revision
+	//
+	// Effective membership includes retained participation bounds. A page with ready false indicates calculation-scope preparation is incomplete.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/scoped-maintenance/{maintenance_id}/impact (the `ReadMaintenanceImpact` operationId).
+	ReadMaintenanceImpactWithResponse(ctx context.Context, maintenanceId openapi_types.UUID, params *ReadMaintenanceImpactParams, reqEditors ...RequestEditorFn) (*ReadMaintenanceImpactResponse, error)
+
+	// WithdrawScopedMaintenanceWithBodyWithResponse Include maintenance events again
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/scoped-maintenance/{maintenance_id}/withdraw (the `WithdrawScopedMaintenance` operationId).
+	WithdrawScopedMaintenanceWithBodyWithResponse(ctx context.Context, maintenanceId openapi_types.UUID, params *WithdrawScopedMaintenanceParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*WithdrawScopedMaintenanceResponse, error)
+
+	// WithdrawScopedMaintenanceWithResponse Include maintenance events again
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/scoped-maintenance/{maintenance_id}/withdraw (the `WithdrawScopedMaintenance` operationId).
+	WithdrawScopedMaintenanceWithResponse(ctx context.Context, maintenanceId openapi_types.UUID, params *WithdrawScopedMaintenanceParams, body WithdrawScopedMaintenanceJSONRequestBody, reqEditors ...RequestEditorFn) (*WithdrawScopedMaintenanceResponse, error)
 
 	// ListServicesWithResponse List services
 	//
@@ -18642,6 +20134,481 @@ func (r GetProvidersResponse) ContentType() string {
 	return ""
 }
 
+type ListScopedMaintenanceResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ScopedMaintenancePage
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListScopedMaintenanceResponse) GetJSON200() *ScopedMaintenancePage {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListScopedMaintenanceResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListScopedMaintenanceResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListScopedMaintenanceResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListScopedMaintenanceResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListScopedMaintenanceResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// CreateScopedMaintenanceResponse201Headers the declared response headers of an HTTP 201 response for CreateScopedMaintenance
+type CreateScopedMaintenanceResponse201Headers struct {
+	ETag     *string
+	Location *string
+}
+
+type CreateScopedMaintenanceResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON201 the response for an HTTP 201 `application/json` response
+	JSON201 *ScopedMaintenanceWindow
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+	// Headers201 the parsed response headers for an HTTP 201 response
+	Headers201 *CreateScopedMaintenanceResponse201Headers
+}
+
+// GetJSON201 returns the response for an HTTP 201 `application/json` response
+func (r CreateScopedMaintenanceResponse) GetJSON201() *ScopedMaintenanceWindow {
+	return r.JSON201
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r CreateScopedMaintenanceResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r CreateScopedMaintenanceResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r CreateScopedMaintenanceResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CreateScopedMaintenanceResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r CreateScopedMaintenanceResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type PreviewMaintenanceScopeResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *MaintenanceImpactPage
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r PreviewMaintenanceScopeResponse) GetJSON200() *MaintenanceImpactPage {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r PreviewMaintenanceScopeResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r PreviewMaintenanceScopeResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r PreviewMaintenanceScopeResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PreviewMaintenanceScopeResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PreviewMaintenanceScopeResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// GetScopedMaintenanceResponse200Headers the declared response headers of an HTTP 200 response for GetScopedMaintenance
+type GetScopedMaintenanceResponse200Headers struct {
+	ETag *string
+}
+
+type GetScopedMaintenanceResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ScopedMaintenanceWindow
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *GetScopedMaintenanceResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetScopedMaintenanceResponse) GetJSON200() *ScopedMaintenanceWindow {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetScopedMaintenanceResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetScopedMaintenanceResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetScopedMaintenanceResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetScopedMaintenanceResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetScopedMaintenanceResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// EditScopedMaintenanceResponse200Headers the declared response headers of an HTTP 200 response for EditScopedMaintenance
+type EditScopedMaintenanceResponse200Headers struct {
+	ETag *string
+}
+
+type EditScopedMaintenanceResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ScopedMaintenanceWindow
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *EditScopedMaintenanceResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r EditScopedMaintenanceResponse) GetJSON200() *ScopedMaintenanceWindow {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r EditScopedMaintenanceResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r EditScopedMaintenanceResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r EditScopedMaintenanceResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r EditScopedMaintenanceResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r EditScopedMaintenanceResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// CancelScopedMaintenanceResponse200Headers the declared response headers of an HTTP 200 response for CancelScopedMaintenance
+type CancelScopedMaintenanceResponse200Headers struct {
+	ETag *string
+}
+
+type CancelScopedMaintenanceResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ScopedMaintenanceWindow
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *CancelScopedMaintenanceResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r CancelScopedMaintenanceResponse) GetJSON200() *ScopedMaintenanceWindow {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r CancelScopedMaintenanceResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r CancelScopedMaintenanceResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r CancelScopedMaintenanceResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CancelScopedMaintenanceResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r CancelScopedMaintenanceResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// EndScopedMaintenanceResponse200Headers the declared response headers of an HTTP 200 response for EndScopedMaintenance
+type EndScopedMaintenanceResponse200Headers struct {
+	ETag *string
+}
+
+type EndScopedMaintenanceResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ScopedMaintenanceWindow
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *EndScopedMaintenanceResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r EndScopedMaintenanceResponse) GetJSON200() *ScopedMaintenanceWindow {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r EndScopedMaintenanceResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r EndScopedMaintenanceResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r EndScopedMaintenanceResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r EndScopedMaintenanceResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r EndScopedMaintenanceResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ReadMaintenanceImpactResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *MaintenanceImpactPage
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ReadMaintenanceImpactResponse) GetJSON200() *MaintenanceImpactPage {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ReadMaintenanceImpactResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ReadMaintenanceImpactResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ReadMaintenanceImpactResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ReadMaintenanceImpactResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ReadMaintenanceImpactResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+// WithdrawScopedMaintenanceResponse200Headers the declared response headers of an HTTP 200 response for WithdrawScopedMaintenance
+type WithdrawScopedMaintenanceResponse200Headers struct {
+	ETag *string
+}
+
+type WithdrawScopedMaintenanceResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ScopedMaintenanceWindow
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *WithdrawScopedMaintenanceResponse200Headers
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r WithdrawScopedMaintenanceResponse) GetJSON200() *ScopedMaintenanceWindow {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r WithdrawScopedMaintenanceResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r WithdrawScopedMaintenanceResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r WithdrawScopedMaintenanceResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r WithdrawScopedMaintenanceResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r WithdrawScopedMaintenanceResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type ListServicesResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -21663,6 +23630,207 @@ func (c *ClientWithResponses) GetProvidersWithResponse(ctx context.Context, para
 		return nil, err
 	}
 	return ParseGetProvidersResponse(rsp)
+}
+
+// ListScopedMaintenanceWithResponse List maintenance windows
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/scoped-maintenance (the `ListScopedMaintenance` operationId).
+func (c *ClientWithResponses) ListScopedMaintenanceWithResponse(ctx context.Context, params *ListScopedMaintenanceParams, reqEditors ...RequestEditorFn) (*ListScopedMaintenanceResponse, error) {
+	rsp, err := c.ListScopedMaintenance(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListScopedMaintenanceResponse(rsp)
+}
+
+// CreateScopedMaintenanceWithBodyWithResponse Create an scoped maintenance window
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/scoped-maintenance (the `CreateScopedMaintenance` operationId).
+func (c *ClientWithResponses) CreateScopedMaintenanceWithBodyWithResponse(ctx context.Context, params *CreateScopedMaintenanceParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateScopedMaintenanceResponse, error) {
+	rsp, err := c.CreateScopedMaintenanceWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateScopedMaintenanceResponse(rsp)
+}
+
+// CreateScopedMaintenanceWithResponse Create an scoped maintenance window
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/scoped-maintenance (the `CreateScopedMaintenance` operationId).
+func (c *ClientWithResponses) CreateScopedMaintenanceWithResponse(ctx context.Context, params *CreateScopedMaintenanceParams, body CreateScopedMaintenanceJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateScopedMaintenanceResponse, error) {
+	rsp, err := c.CreateScopedMaintenance(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateScopedMaintenanceResponse(rsp)
+}
+
+// PreviewMaintenanceScopeWithBodyWithResponse Inspect the current affected SLO inventory for a maintenance selector
+//
+// Read-only operation available to Viewers. Scope and pagination are bound to the cursor. An empty valid inventory has a zero total.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/scoped-maintenance/preview (the `PreviewMaintenanceScope` operationId).
+func (c *ClientWithResponses) PreviewMaintenanceScopeWithBodyWithResponse(ctx context.Context, params *PreviewMaintenanceScopeParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PreviewMaintenanceScopeResponse, error) {
+	rsp, err := c.PreviewMaintenanceScopeWithBody(ctx, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePreviewMaintenanceScopeResponse(rsp)
+}
+
+// PreviewMaintenanceScopeWithResponse Inspect the current affected SLO inventory for a maintenance selector
+//
+// Read-only operation available to Viewers. Scope and pagination are bound to the cursor. An empty valid inventory has a zero total.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/scoped-maintenance/preview (the `PreviewMaintenanceScope` operationId).
+func (c *ClientWithResponses) PreviewMaintenanceScopeWithResponse(ctx context.Context, params *PreviewMaintenanceScopeParams, body PreviewMaintenanceScopeJSONRequestBody, reqEditors ...RequestEditorFn) (*PreviewMaintenanceScopeResponse, error) {
+	rsp, err := c.PreviewMaintenanceScope(ctx, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePreviewMaintenanceScopeResponse(rsp)
+}
+
+// GetScopedMaintenanceWithResponse Read latest or historical maintenance revision
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/scoped-maintenance/{maintenance_id} (the `GetScopedMaintenance` operationId).
+func (c *ClientWithResponses) GetScopedMaintenanceWithResponse(ctx context.Context, maintenanceId openapi_types.UUID, params *GetScopedMaintenanceParams, reqEditors ...RequestEditorFn) (*GetScopedMaintenanceResponse, error) {
+	rsp, err := c.GetScopedMaintenance(ctx, maintenanceId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetScopedMaintenanceResponse(rsp)
+}
+
+// EditScopedMaintenanceWithBodyWithResponse Replace maintenance window details
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /api/v1/scoped-maintenance/{maintenance_id} (the `EditScopedMaintenance` operationId).
+func (c *ClientWithResponses) EditScopedMaintenanceWithBodyWithResponse(ctx context.Context, maintenanceId openapi_types.UUID, params *EditScopedMaintenanceParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*EditScopedMaintenanceResponse, error) {
+	rsp, err := c.EditScopedMaintenanceWithBody(ctx, maintenanceId, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseEditScopedMaintenanceResponse(rsp)
+}
+
+// EditScopedMaintenanceWithResponse Replace maintenance window details
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with PUT /api/v1/scoped-maintenance/{maintenance_id} (the `EditScopedMaintenance` operationId).
+func (c *ClientWithResponses) EditScopedMaintenanceWithResponse(ctx context.Context, maintenanceId openapi_types.UUID, params *EditScopedMaintenanceParams, body EditScopedMaintenanceJSONRequestBody, reqEditors ...RequestEditorFn) (*EditScopedMaintenanceResponse, error) {
+	rsp, err := c.EditScopedMaintenance(ctx, maintenanceId, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseEditScopedMaintenanceResponse(rsp)
+}
+
+// CancelScopedMaintenanceWithBodyWithResponse Cancel scheduled maintenance
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/scoped-maintenance/{maintenance_id}/cancel (the `CancelScopedMaintenance` operationId).
+func (c *ClientWithResponses) CancelScopedMaintenanceWithBodyWithResponse(ctx context.Context, maintenanceId openapi_types.UUID, params *CancelScopedMaintenanceParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CancelScopedMaintenanceResponse, error) {
+	rsp, err := c.CancelScopedMaintenanceWithBody(ctx, maintenanceId, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCancelScopedMaintenanceResponse(rsp)
+}
+
+// CancelScopedMaintenanceWithResponse Cancel scheduled maintenance
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/scoped-maintenance/{maintenance_id}/cancel (the `CancelScopedMaintenance` operationId).
+func (c *ClientWithResponses) CancelScopedMaintenanceWithResponse(ctx context.Context, maintenanceId openapi_types.UUID, params *CancelScopedMaintenanceParams, body CancelScopedMaintenanceJSONRequestBody, reqEditors ...RequestEditorFn) (*CancelScopedMaintenanceResponse, error) {
+	rsp, err := c.CancelScopedMaintenance(ctx, maintenanceId, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCancelScopedMaintenanceResponse(rsp)
+}
+
+// EndScopedMaintenanceWithBodyWithResponse End maintenance prospectively
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/scoped-maintenance/{maintenance_id}/end (the `EndScopedMaintenance` operationId).
+func (c *ClientWithResponses) EndScopedMaintenanceWithBodyWithResponse(ctx context.Context, maintenanceId openapi_types.UUID, params *EndScopedMaintenanceParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*EndScopedMaintenanceResponse, error) {
+	rsp, err := c.EndScopedMaintenanceWithBody(ctx, maintenanceId, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseEndScopedMaintenanceResponse(rsp)
+}
+
+// EndScopedMaintenanceWithResponse End maintenance prospectively
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/scoped-maintenance/{maintenance_id}/end (the `EndScopedMaintenance` operationId).
+func (c *ClientWithResponses) EndScopedMaintenanceWithResponse(ctx context.Context, maintenanceId openapi_types.UUID, params *EndScopedMaintenanceParams, body EndScopedMaintenanceJSONRequestBody, reqEditors ...RequestEditorFn) (*EndScopedMaintenanceResponse, error) {
+	rsp, err := c.EndScopedMaintenance(ctx, maintenanceId, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseEndScopedMaintenanceResponse(rsp)
+}
+
+// ReadMaintenanceImpactWithResponse Read the effective membership of a maintenance revision
+//
+// Effective membership includes retained participation bounds. A page with ready false indicates calculation-scope preparation is incomplete.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/scoped-maintenance/{maintenance_id}/impact (the `ReadMaintenanceImpact` operationId).
+func (c *ClientWithResponses) ReadMaintenanceImpactWithResponse(ctx context.Context, maintenanceId openapi_types.UUID, params *ReadMaintenanceImpactParams, reqEditors ...RequestEditorFn) (*ReadMaintenanceImpactResponse, error) {
+	rsp, err := c.ReadMaintenanceImpact(ctx, maintenanceId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseReadMaintenanceImpactResponse(rsp)
+}
+
+// WithdrawScopedMaintenanceWithBodyWithResponse Include maintenance events again
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/scoped-maintenance/{maintenance_id}/withdraw (the `WithdrawScopedMaintenance` operationId).
+func (c *ClientWithResponses) WithdrawScopedMaintenanceWithBodyWithResponse(ctx context.Context, maintenanceId openapi_types.UUID, params *WithdrawScopedMaintenanceParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*WithdrawScopedMaintenanceResponse, error) {
+	rsp, err := c.WithdrawScopedMaintenanceWithBody(ctx, maintenanceId, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseWithdrawScopedMaintenanceResponse(rsp)
+}
+
+// WithdrawScopedMaintenanceWithResponse Include maintenance events again
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/scoped-maintenance/{maintenance_id}/withdraw (the `WithdrawScopedMaintenance` operationId).
+func (c *ClientWithResponses) WithdrawScopedMaintenanceWithResponse(ctx context.Context, maintenanceId openapi_types.UUID, params *WithdrawScopedMaintenanceParams, body WithdrawScopedMaintenanceJSONRequestBody, reqEditors ...RequestEditorFn) (*WithdrawScopedMaintenanceResponse, error) {
+	rsp, err := c.WithdrawScopedMaintenance(ctx, maintenanceId, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseWithdrawScopedMaintenanceResponse(rsp)
 }
 
 // ListServicesWithResponse List services
@@ -24727,6 +26895,388 @@ func ParseGetProvidersResponse(rsp *http.Response) (*GetProvidersResponse, error
 	return response, nil
 }
 
+// ParseListScopedMaintenanceResponse parses an HTTP response from a ListScopedMaintenanceWithResponse call
+func ParseListScopedMaintenanceResponse(rsp *http.Response) (*ListScopedMaintenanceResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListScopedMaintenanceResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ScopedMaintenancePage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCreateScopedMaintenanceResponse parses an HTTP response from a CreateScopedMaintenanceWithResponse call
+func ParseCreateScopedMaintenanceResponse(rsp *http.Response) (*CreateScopedMaintenanceResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CreateScopedMaintenanceResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest ScopedMaintenanceWindow
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 201:
+		var headers CreateScopedMaintenanceResponse201Headers
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		if values := rsp.Header.Values("Location"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Location", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.Location = &value
+		}
+		response.Headers201 = &headers
+	}
+
+	return response, nil
+}
+
+// ParsePreviewMaintenanceScopeResponse parses an HTTP response from a PreviewMaintenanceScopeWithResponse call
+func ParsePreviewMaintenanceScopeResponse(rsp *http.Response) (*PreviewMaintenanceScopeResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PreviewMaintenanceScopeResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest MaintenanceImpactPage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetScopedMaintenanceResponse parses an HTTP response from a GetScopedMaintenanceWithResponse call
+func ParseGetScopedMaintenanceResponse(rsp *http.Response) (*GetScopedMaintenanceResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetScopedMaintenanceResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ScopedMaintenanceWindow
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers GetScopedMaintenanceResponse200Headers
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseEditScopedMaintenanceResponse parses an HTTP response from a EditScopedMaintenanceWithResponse call
+func ParseEditScopedMaintenanceResponse(rsp *http.Response) (*EditScopedMaintenanceResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &EditScopedMaintenanceResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ScopedMaintenanceWindow
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers EditScopedMaintenanceResponse200Headers
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseCancelScopedMaintenanceResponse parses an HTTP response from a CancelScopedMaintenanceWithResponse call
+func ParseCancelScopedMaintenanceResponse(rsp *http.Response) (*CancelScopedMaintenanceResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CancelScopedMaintenanceResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ScopedMaintenanceWindow
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers CancelScopedMaintenanceResponse200Headers
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseEndScopedMaintenanceResponse parses an HTTP response from a EndScopedMaintenanceWithResponse call
+func ParseEndScopedMaintenanceResponse(rsp *http.Response) (*EndScopedMaintenanceResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &EndScopedMaintenanceResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ScopedMaintenanceWindow
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers EndScopedMaintenanceResponse200Headers
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseReadMaintenanceImpactResponse parses an HTTP response from a ReadMaintenanceImpactWithResponse call
+func ParseReadMaintenanceImpactResponse(rsp *http.Response) (*ReadMaintenanceImpactResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ReadMaintenanceImpactResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest MaintenanceImpactPage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseWithdrawScopedMaintenanceResponse parses an HTTP response from a WithdrawScopedMaintenanceWithResponse call
+func ParseWithdrawScopedMaintenanceResponse(rsp *http.Response) (*WithdrawScopedMaintenanceResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &WithdrawScopedMaintenanceResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ScopedMaintenanceWindow
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers WithdrawScopedMaintenanceResponse200Headers
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
 // ParseListServicesResponse parses an HTTP response from a ListServicesWithResponse call
 func ParseListServicesResponse(rsp *http.Response) (*ListServicesResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -26330,6 +28880,33 @@ type ServerInterface interface {
 	// GetProviders List provider descriptors and selected-agent availability
 	// (GET /api/v1/providers)
 	GetProviders(w http.ResponseWriter, r *http.Request, params GetProvidersParams)
+	// ListScopedMaintenance List maintenance windows
+	// (GET /api/v1/scoped-maintenance)
+	ListScopedMaintenance(w http.ResponseWriter, r *http.Request, params ListScopedMaintenanceParams)
+	// CreateScopedMaintenance Create an scoped maintenance window
+	// (POST /api/v1/scoped-maintenance)
+	CreateScopedMaintenance(w http.ResponseWriter, r *http.Request, params CreateScopedMaintenanceParams)
+	// PreviewMaintenanceScope Inspect the current affected SLO inventory for a maintenance selector
+	// (POST /api/v1/scoped-maintenance/preview)
+	PreviewMaintenanceScope(w http.ResponseWriter, r *http.Request, params PreviewMaintenanceScopeParams)
+	// GetScopedMaintenance Read latest or historical maintenance revision
+	// (GET /api/v1/scoped-maintenance/{maintenance_id})
+	GetScopedMaintenance(w http.ResponseWriter, r *http.Request, maintenanceId openapi_types.UUID, params GetScopedMaintenanceParams)
+	// EditScopedMaintenance Replace maintenance window details
+	// (PUT /api/v1/scoped-maintenance/{maintenance_id})
+	EditScopedMaintenance(w http.ResponseWriter, r *http.Request, maintenanceId openapi_types.UUID, params EditScopedMaintenanceParams)
+	// CancelScopedMaintenance Cancel scheduled maintenance
+	// (POST /api/v1/scoped-maintenance/{maintenance_id}/cancel)
+	CancelScopedMaintenance(w http.ResponseWriter, r *http.Request, maintenanceId openapi_types.UUID, params CancelScopedMaintenanceParams)
+	// EndScopedMaintenance End maintenance prospectively
+	// (POST /api/v1/scoped-maintenance/{maintenance_id}/end)
+	EndScopedMaintenance(w http.ResponseWriter, r *http.Request, maintenanceId openapi_types.UUID, params EndScopedMaintenanceParams)
+	// ReadMaintenanceImpact Read the effective membership of a maintenance revision
+	// (GET /api/v1/scoped-maintenance/{maintenance_id}/impact)
+	ReadMaintenanceImpact(w http.ResponseWriter, r *http.Request, maintenanceId openapi_types.UUID, params ReadMaintenanceImpactParams)
+	// WithdrawScopedMaintenance Include maintenance events again
+	// (POST /api/v1/scoped-maintenance/{maintenance_id}/withdraw)
+	WithdrawScopedMaintenance(w http.ResponseWriter, r *http.Request, maintenanceId openapi_types.UUID, params WithdrawScopedMaintenanceParams)
 	// ListServices List services
 	// (GET /api/v1/services)
 	ListServices(w http.ResponseWriter, r *http.Request, params ListServicesParams)
@@ -29151,6 +31728,561 @@ func (siw *ServerInterfaceWrapper) GetProviders(w http.ResponseWriter, r *http.R
 	handler.ServeHTTP(w, r)
 }
 
+// ListScopedMaintenance operation middleware
+func (siw *ServerInterfaceWrapper) ListScopedMaintenance(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListScopedMaintenanceParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListScopedMaintenance(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateScopedMaintenance operation middleware
+func (siw *ServerInterfaceWrapper) CreateScopedMaintenance(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateScopedMaintenanceParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateScopedMaintenance(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PreviewMaintenanceScope operation middleware
+func (siw *ServerInterfaceWrapper) PreviewMaintenanceScope(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PreviewMaintenanceScopeParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PreviewMaintenanceScope(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetScopedMaintenance operation middleware
+func (siw *ServerInterfaceWrapper) GetScopedMaintenance(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "maintenance_id" -------------
+	var maintenanceId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "maintenance_id", r.PathValue("maintenance_id"), &maintenanceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "maintenance_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetScopedMaintenanceParams
+
+	// ------------- Optional query parameter "revision" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "revision", r.URL.Query(), &params.Revision, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "revision"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "revision", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetScopedMaintenance(w, r, maintenanceId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// EditScopedMaintenance operation middleware
+func (siw *ServerInterfaceWrapper) EditScopedMaintenance(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "maintenance_id" -------------
+	var maintenanceId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "maintenance_id", r.PathValue("maintenance_id"), &maintenanceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "maintenance_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params EditScopedMaintenanceParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch string
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = IfMatch
+
+	} else {
+		err := fmt.Errorf("Header parameter If-Match is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
+		return
+	}
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.EditScopedMaintenance(w, r, maintenanceId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CancelScopedMaintenance operation middleware
+func (siw *ServerInterfaceWrapper) CancelScopedMaintenance(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "maintenance_id" -------------
+	var maintenanceId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "maintenance_id", r.PathValue("maintenance_id"), &maintenanceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "maintenance_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CancelScopedMaintenanceParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch string
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = IfMatch
+
+	} else {
+		err := fmt.Errorf("Header parameter If-Match is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
+		return
+	}
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CancelScopedMaintenance(w, r, maintenanceId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// EndScopedMaintenance operation middleware
+func (siw *ServerInterfaceWrapper) EndScopedMaintenance(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "maintenance_id" -------------
+	var maintenanceId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "maintenance_id", r.PathValue("maintenance_id"), &maintenanceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "maintenance_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params EndScopedMaintenanceParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch string
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = IfMatch
+
+	} else {
+		err := fmt.Errorf("Header parameter If-Match is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
+		return
+	}
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.EndScopedMaintenance(w, r, maintenanceId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ReadMaintenanceImpact operation middleware
+func (siw *ServerInterfaceWrapper) ReadMaintenanceImpact(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "maintenance_id" -------------
+	var maintenanceId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "maintenance_id", r.PathValue("maintenance_id"), &maintenanceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "maintenance_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ReadMaintenanceImpactParams
+
+	// ------------- Optional query parameter "revision" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "revision", r.URL.Query(), &params.Revision, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "revision"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "revision", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ReadMaintenanceImpact(w, r, maintenanceId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// WithdrawScopedMaintenance operation middleware
+func (siw *ServerInterfaceWrapper) WithdrawScopedMaintenance(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "maintenance_id" -------------
+	var maintenanceId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "maintenance_id", r.PathValue("maintenance_id"), &maintenanceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "maintenance_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params WithdrawScopedMaintenanceParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch string
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = IfMatch
+
+	} else {
+		err := fmt.Errorf("Header parameter If-Match is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
+		return
+	}
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.WithdrawScopedMaintenance(w, r, maintenanceId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListServices operation middleware
 func (siw *ServerInterfaceWrapper) ListServices(w http.ResponseWriter, r *http.Request) {
 
@@ -30988,6 +34120,15 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/maintenance/{maintenance_id}/end", wrapper.EndMaintenance)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/maintenance/{maintenance_id}/cancel", wrapper.CancelMaintenance)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/maintenance/{maintenance_id}/withdraw", wrapper.WithdrawMaintenance)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/scoped-maintenance", wrapper.ListScopedMaintenance)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/scoped-maintenance", wrapper.CreateScopedMaintenance)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/scoped-maintenance/{maintenance_id}", wrapper.GetScopedMaintenance)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/api/v1/scoped-maintenance/{maintenance_id}", wrapper.EditScopedMaintenance)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/scoped-maintenance/{maintenance_id}/end", wrapper.EndScopedMaintenance)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/scoped-maintenance/{maintenance_id}/cancel", wrapper.CancelScopedMaintenance)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/scoped-maintenance/{maintenance_id}/withdraw", wrapper.WithdrawScopedMaintenance)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/scoped-maintenance/preview", wrapper.PreviewMaintenanceScope)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/scoped-maintenance/{maintenance_id}/impact", wrapper.ReadMaintenanceImpact)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/slos/{slo_id}/maintenance", wrapper.ListSloMaintenance)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/services", wrapper.ListServices)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/services", wrapper.CreateService)
