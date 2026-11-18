@@ -270,6 +270,15 @@ test('schedule and inspect explicit SLO and service maintenance in the deployed 
     await captureMaintenanceDesign(page, testInfo, 'maintenance-recorded-service-impact');
     await objective.press('Enter');
     await expect(page.getByRole('heading', { name: 'Checkout availability', level: 1 })).toBeVisible();
+    const timelineRange = new URLSearchParams({ start: historicalStart.toISOString(), end: historicalEnd.toISOString() });
+    const timeline = await expectOk(api(page, 'GET', `/api/v1/slos/${slo.body.id}/scoped-maintenance?${timelineRange}`));
+    expect(timeline.body.pending).toBe(false);
+    const interval = timeline.body.items.find((item: { window: { id: string } }) => item.window.id === currentService.body.id);
+    expect(interval?.window.scope).toEqual(scheduledService.body.scope);
+    const cadenceMilliseconds = slo.body.cadence_seconds * 1_000;
+    const firstEligible = Math.ceil(Date.parse(slo.body.activated_at) / cadenceMilliseconds) * cadenceMilliseconds;
+    expect(Date.parse(interval!.start)).toBe(firstEligible);
+    expect(Date.parse(interval!.end)).toBe(historicalEnd.getTime());
   } finally {
     stopAgent(agent);
   }
