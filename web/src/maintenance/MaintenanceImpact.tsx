@@ -4,6 +4,10 @@ import { Button, Pager } from '../components/ui/index.ts';
 import { SloFailure } from '../slos/client.ts';
 import { maintenanceClient, type ImpactPage, type MaintenanceSelector } from './client.ts';
 
+const readDeadline = 30_000;
+
+const snapshotChanged = (error: unknown) => error instanceof SloFailure && error.code === 'maintenance_snapshot_changed';
+
 type ReadImpact = (limit: number, cursor: string, signal: AbortSignal) => Promise<ImpactPage>;
 
 const utc = (instant: string) => instant.replace('T', ' ').replace(/(\.0+)?Z$/, ' UTC');
@@ -11,12 +15,17 @@ const utc = (instant: string) => instant.replace('T', ' ').replace(/(\.0+)?Z$/, 
 export function MaintenanceImpactPreview({ scope, context, onReady }: {
   scope: MaintenanceSelector;
   context: AuthContext;
-  onReady: (scope: MaintenanceSelector) => void;
+  onReady: (scope: MaintenanceSelector | undefined) => void;
 }) {
   const read = useCallback<ReadImpact>(async (limit, cursor, signal) => {
-    const page = await maintenanceClient.preview(scope, context, limit, cursor, signal);
-    if (page.ready && !signal.aborted) onReady(scope);
-    return page;
+    try {
+      const page = await maintenanceClient.preview(scope, context, limit, cursor, signal);
+      if (page.ready && !signal.aborted) onReady(scope);
+      return page;
+    } catch (error) {
+      if (snapshotChanged(error) && !signal.aborted) onReady(undefined);
+      throw error;
+    }
   }, [scope, context, onReady]);
   return <MaintenanceImpact preview read={read} />;
 }
@@ -35,26 +44,37 @@ function MaintenanceImpact({ read, preview = false }: { read: ReadImpact; previe
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState<'load' | 'changed'>();
   const [refresh, setRefresh] = useState(0);
+  const [usedPager, setUsedPager] = useState(false);
   const cursor = cursors.at(-1) ?? '';
 
   useEffect(() => {
     const controller = new AbortController();
     setBusy(true);
     setError(undefined);
+    const deadline = window.setTimeout(() => {
+      controller.abort();
+      setError('load');
+      setBusy(false);
+    }, readDeadline);
     read(size, cursor, controller.signal).then(page => {
       if (!controller.signal.aborted) setPage(page);
     }).catch(error => {
-      if (!controller.signal.aborted) setError(error instanceof SloFailure && error.code === 'maintenance_snapshot_changed' ? 'changed' : 'load');
+      if (!controller.signal.aborted) setError(snapshotChanged(error) ? 'changed' : 'load');
     }).finally(() => {
+      window.clearTimeout(deadline);
       if (!controller.signal.aborted) setBusy(false);
     });
-    return () => controller.abort();
+    return () => {
+      window.clearTimeout(deadline);
+      controller.abort();
+    };
   }, [read, size, cursor, refresh]);
 
   function changePage(next: string[], nextSize = size) {
     setPage(undefined);
     setError(undefined);
     setBusy(true);
+    setUsedPager(true);
     setCursors(next);
     setSize(nextSize);
   }
@@ -75,13 +95,13 @@ function MaintenanceImpact({ read, preview = false }: { read: ReadImpact; previe
         {new Intl.NumberFormat().format(BigInt(page.total))} {page.total === '1' ? 'affected SLO' : 'affected SLOs'} · Inventory as of <time dateTime={page.inventory_at}>{utc(page.inventory_at)}</time>
       </p>
       {!preview && page.items.length > 0 && <p className="ui-hint">Each SLO is counted once and can appear in more than one participation period.</p>}
-      {page.items.length > 0 && <ul className="maintenance-impact-list">{page.items.map(item => <li key={`${item.slo_id}:${item.start ?? ''}`}>
+      {page.items.length > 0 && <ul className="maintenance-impact-list" role="list">{page.items.map(item => <li key={`${item.slo_id}:${item.start ?? ''}`}>
         {preview ? item.slo_name : <a href={`/slos/${item.slo_id}`} data-app-route>{item.slo_name}</a>}
         <div className="ui-hint">{item.service_name}</div>
         {item.start && item.end && <div className="ui-hint"><time dateTime={item.start}>{utc(item.start)}</time> to <time dateTime={item.end}>{utc(item.end)}</time></div>}
       </li>)}</ul>}
     </>}
-    {(cursors.length > 1 || page?.next_cursor || (page?.ready && BigInt(page.total) > 10n)) &&
+    {(usedPager || page?.next_cursor || (page?.ready && BigInt(page.total) > 10n)) &&
       <Pager id={`${headingId}-size`} label="Affected SLO pages" position={`Page ${cursors.length}`} pageSize={size} pageSizes={[10, 20]}
         onPageSizeChange={value => value !== size && changePage([''], value)}
         hasPrevious={cursors.length > 1} hasNext={Boolean(page?.next_cursor) && !error} busy={busy}

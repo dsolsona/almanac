@@ -28,12 +28,14 @@ type Props = {
   badge?: (option: ComboboxOption) => string | undefined;
   noMatch?: { text: (term: string) => string; action?: { label: (term: string) => string; onSelect: (term: string) => void } };
   searchLabelOnly?: boolean;
+  resultsAction?: { label: string; onSelect: () => void; disabled?: boolean };
   selectionPresentation?: 'summary' | 'compact';
   multiple?: {
     selected: ComboboxOption[];
     onRemove: (id: string) => void;
     removeLabel?: (option: ComboboxOption) => string;
     placement?: 'inline' | 'below';
+    keepSearch?: boolean;
     selectionLabel?: string;
   };
   // The caller supplies filtered options when handling search.
@@ -49,7 +51,7 @@ function highlight(text: string, term: string): ReactNode {
 
 // Type-ahead picker. Options show their state before selection; the chosen option
 // collapses to a summary card with a Change action that returns focus to the input.
-export function Combobox({ id, label, options, value, onChange, placeholder, hint, error, disabled, badge, noMatch, searchLabelOnly = false, selectionPresentation = 'summary', multiple, onSearch }: Props) {
+export function Combobox({ id, label, options, value, onChange, placeholder, hint, error, disabled, badge, noMatch, searchLabelOnly = false, selectionPresentation = 'summary', multiple, onSearch, resultsAction }: Props) {
   const [term, setTerm] = useState('');
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
@@ -77,10 +79,14 @@ export function Combobox({ id, label, options, value, onChange, placeholder, hin
   function choose(option: ComboboxOption) {
     if (option.disabled) return;
     onChange(option.id);
-    setTerm('');
+    if (!multiple?.keepSearch) setTerm('');
     setOpen(false);
     setActive(-1);
-    if(multiple){input.current?.focus();onSearch?.('');setOpen(false);}else setFocusChange(true);
+    if (multiple) {
+      input.current?.focus();
+      if (!multiple.keepSearch) onSearch?.('');
+      setOpen(false);
+    } else setFocusChange(true);
   }
   function runNoMatch() {
     if (!noMatch?.action || !term) return;
@@ -203,6 +209,13 @@ export function Combobox({ id, label, options, value, onChange, placeholder, hin
         </li>}
       </ul>
     </div>
+    {resultsAction && <button type="button" className="ui-combobox__action" disabled={disabled || resultsAction.disabled}
+      onClick={() => {
+        resultsAction.onSelect();
+        input.current?.focus();
+        setOpen(true);
+        setActive(-1);
+      }}>{resultsAction.label}</button>}
     {hint && <p className="ui-hint" id={hintId}>{hint}</p>}
     {error && <p className="ui-error" id={errorId}>{error}</p>}
     {selectionsBelow && selectionTokens && (

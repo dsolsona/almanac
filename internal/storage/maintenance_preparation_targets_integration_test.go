@@ -3,6 +3,7 @@
 package storage
 
 import (
+	"encoding/hex"
 	"errors"
 	"reflect"
 	"testing"
@@ -303,7 +304,445 @@ func TestIntegrationMaintenancePreparationTargetPopulatedUpgrade(t *testing.T) {
 	if snapshot() != before {
 		t.Fatal("upgrade modified existing queued work")
 	}
+	var assignments, current int
+	if err := f.conn.QueryRow(t.Context(), `
+		SELECT count(*), count(*) FILTER (WHERE a.definition_revision = s.definition_revision
+		  AND a.service_id = d.service_id AND a.effective_at = greatest(s.created_at, d.activated_at))
+		FROM almanac_slo_service_assignments a
+		JOIN almanac_slos s ON s.id = a.slo_id
+		JOIN almanac_slo_definitions d ON d.slo_id = s.id AND d.revision = s.definition_revision
+		WHERE a.slo_id=$1
+	`, scope.SloID).Scan(&assignments, &current); err != nil || assignments != 1 || current != 1 {
+		t.Fatalf("populated upgrade seeded %d assignments (%d current): %v", assignments, current, err)
+	}
 	if err := dbgen.New(f.conn).EnqueueMaintenancePreparation(t.Context(), p); err != nil {
 		t.Fatalf("upgraded queue rejected target: %v", err)
+	}
+}
+
+func TestIntegrationMaintenanceUpgradeFromPublishedScopeChecksums(t *testing.T) {
+	t.Parallel()
+	migrations, err := LoadMigrations(embeddedMigrations)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The bytes published at 7f5bec5 must remain acceptable to the upgrader.
+	checksums := []string{
+		"2fee5962fd29b7a140b9f7862ce66bb44b3f5b9ab2e09ec6eda3b42f3aba034c",
+		"c8dc3f2b8a6a58cb383b3f17e74fb6ad4799c4f9f00ab44afe36cf9fc067f518",
+		"3520b72123b54e47aa0f43c7b6594a23d22f5f55f4ed8a1ab2446932b9a0e110",
+		"68e4d7d62f9a90dc30ed0ab9581badf9a930b06635e599ab2e6401ee0d59aeca",
+		"0f99f3c5653da67d43c02d9b4dc1777cea63ea4901592d5bb8f4a54b99cb2b70",
+	}
+	const lastPublished = 74
+	for offset, want := range checksums {
+		m := migrations[69+offset]
+		if got := hex.EncodeToString(m.Checksum[:]); got != want {
+			t.Fatalf("published migration %d changed: got %s want %s", m.Version, got, want)
+		}
+	}
+	databaseURL := integrationDatabase(t)
+	installed, err := UpgradeWithMigrations(t.Context(), databaseURL, migrations[:lastPublished])
+	if err != nil || installed.DatabaseSchemaVersion != lastPublished {
+		t.Fatalf("install prior published scope schema: %+v %v", installed, err)
+	}
+	conn := integrationConnect(t, databaseURL)
+	defer closeIntegrationConn(conn)
+	nodes := func() [3]int64 {
+		t.Helper()
+		var result [3]int64
+		if err := conn.QueryRow(t.Context(), `
+			SELECT pg_relation_filenode('public.almanac_maintenance_change_sets')::bigint,
+			       pg_relation_filenode('public.almanac_maintenance_changed_inputs')::bigint,
+			       pg_relation_filenode('public.almanac_slo_exclusion_work')::bigint
+		`).Scan(&result[0], &result[1], &result[2]); err != nil {
+			t.Fatal(err)
+		}
+		return result
+	}
+	before := nodes()
+	upgraded, err := Upgrade(t.Context(), databaseURL)
+	if err != nil || upgraded.DatabaseSchemaVersion != len(migrations) || upgraded.Applied != len(migrations)-lastPublished {
+		t.Fatalf("upgrade rejected the published ledger: %+v %v", upgraded, err)
+	}
+	if after := nodes(); after != before {
+		t.Fatalf("upgrade rewrote authority relations: before %v after %v", before, after)
+	}
+}
+
+func TestIntegrationMaintenanceCompatibilityOrdinalOverflowRetainsExactCoverage(t *testing.T) {
+	t.Parallel()
+	f := newMaintenanceFixture(t)
+	input := f.input("compatibility-overflow")
+	input.ScopeKind, input.SloIDs = MaintenanceScopeAllServices, nil
+	input.End = input.Start.Add(24 * time.Hour)
+	window, err := CreateMaintenance(t.Context(), f.f.databaseURL, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := mustPGUUID(f.ids[0])
+	const parts = 32768
+	if _, err := f.conn.Exec(t.Context(), `
+		WITH state AS (
+			UPDATE public.almanac_slo_exclusion_state SET revision=1 WHERE slo_id=$1 RETURNING slo_id
+		), pieces AS (
+			SELECT $3::timestamptz + n * interval '2 seconds' AS start_at
+			FROM generate_series(0, $4::integer - 1) n
+		)
+		INSERT INTO almanac_slo_exclusion_changes(slo_id,revision,exclusion_id,exclusion_revision,included,coverage_changed,recorded_at,effective_coverage)
+		SELECT state.slo_id,1,$2,1,true,true,$3,
+		       range_agg(tstzrange(pieces.start_at,pieces.start_at+interval '1 second','[)'))
+		FROM state CROSS JOIN pieces GROUP BY state.slo_id
+	`, id, window.ID, window.Start, parts); err != nil {
+		t.Fatal(err)
+	}
+	q := dbgen.New(f.conn)
+	state, err := q.ReadMaintenanceCompatibilityAuthority(t.Context(), id)
+	if err != nil || state.Unavailable || state.IndexedThrough != 1 {
+		t.Fatalf("overflow disabled exact recomputation: %+v %v", state, err)
+	}
+	gapStart, gapEnd := window.Start.Add(time.Second), window.Start.Add(2*time.Second)
+	requiresRebuild, err := q.HasMaintenanceAuthorityInput(t.Context(), dbgen.HasMaintenanceAuthorityInputParams{
+		SloID: id, ScopeOrdinal: state.ScopeOrdinal, Revision: 1, StartAt: timestamp(gapStart), EndAt: timestamp(gapEnd),
+	})
+	if err != nil || !requiresRebuild {
+		t.Fatalf("overflow allowed reuse within the conservative envelope: changed=%t %v", requiresRebuild, err)
+	}
+	snapshot, err := readSloExclusionSnapshotAt(t.Context(), q, id, 1, window.Start, gapEnd)
+	if err != nil || len(snapshot.Intervals) != 1 || !snapshot.Intervals[0].Start.Equal(window.Start) || !snapshot.Intervals[0].End.Equal(gapStart) {
+		t.Fatalf("exact coverage lost its gap: %+v %v", snapshot, err)
+	}
+}
+
+func TestIntegrationMaintenanceUpgradePreservesUnknownHistoricalGrid(t *testing.T) {
+	t.Parallel()
+	f := newMaintenanceFixture(t)
+	q := dbgen.New(f.conn)
+	id := mustPGUUID(f.ids[0])
+	subject, err := q.GetSlo(t.Context(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := f.input("published-legacy-grid")
+	input.ScopeKind, input.SloIDs, input.ServiceIDs = MaintenanceScopeServices, nil, []string{subject.ServiceID.String()}
+	input.Start, input.End = f.at.Add(time.Minute), f.at.Add(3*time.Minute)
+	window, err := CreateMaintenance(t.Context(), f.f.databaseURL, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unselected, _, err := CreateObjective(t.Context(), f.f.databaseURL, CreateObjectiveInput{
+		Proof: f.proof, Name: "legacy-future-destination", DisplayName: "Legacy future destination",
+		IdempotencyKey: "legacy-future-destination", RequestID: "legacy-future-destination", Now: f.clock,
+	}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var scheduledClock time.Time
+	if err := f.conn.QueryRow(t.Context(), `SELECT clock_timestamp()`).Scan(&scheduledClock); err != nil {
+		t.Fatal(err)
+	}
+	straddling := input
+	straddling.IdempotencyKey = "published-straddling-grid"
+	straddling.Start = f.at.Add(30 * time.Minute)
+	straddling.End = ceilSliBoundary(scheduledClock.Add(time.Hour), time.Minute)
+	allWindow, err := CreateMaintenance(t.Context(), f.f.databaseURL, straddling)
+	if err != nil {
+		t.Fatal(err)
+	}
+	straddling.IdempotencyKey = "published-after-grid-switch"
+	straddling.Start = f.at.Add(35 * time.Minute)
+	if ceilSliBoundary(straddling.Start, 61*time.Second).Unix()%60 == 0 {
+		straddling.Start = straddling.Start.Add(time.Minute)
+	}
+	laterWindow, err := CreateMaintenance(t.Context(), f.f.databaseURL, straddling)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dropServiceMaintenanceFixtureAfter(t, f.conn, 74)
+	if _, err := f.conn.Exec(t.Context(), `DELETE FROM almanac_schema_migrations WHERE version>74`); err != nil {
+		t.Fatal(err)
+	}
+	// Publish an exclusion before either staged definition is selected.
+	if _, err := f.conn.Exec(t.Context(), `
+		SELECT public.almanac_project_service_maintenance_member($1,$2,1,$3);
+	`, id, window.ID, f.at); err != nil {
+		t.Fatal(err)
+	}
+	legacy, err := readSloExclusionSnapshot(t.Context(), q, id, window.Start, window.End)
+	if err != nil || len(legacy.Intervals) != 1 || !legacy.Intervals[0].Start.Equal(window.Start) || !legacy.Intervals[0].End.Equal(window.End) {
+		t.Fatalf("legacy 60s coverage missing: %+v %v", legacy, err)
+	}
+	stage := func(revision int64, cadence int, stagedAt time.Time, serviceID string) {
+		t.Helper()
+		if _, err := f.conn.Exec(t.Context(), `
+			INSERT INTO almanac_slo_definitions(slo_id,revision,service_id,sli_id,measurement_revision,target,rolling_window_seconds,cadence_seconds,activated_at,evaluation_valid_from)
+			SELECT slo_id,$2,$5,sli_id,measurement_revision,target,rolling_window_seconds/cadence_seconds*$3,$3,$4,$4
+			FROM almanac_slo_definitions WHERE slo_id=$1 AND revision=$2::bigint-1
+		`, id, revision, cadence, stagedAt, serviceID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	selectDefinition := func(revision int64, selectedAt time.Time) {
+		t.Helper()
+		if _, err := f.conn.Exec(t.Context(), `UPDATE almanac_slos SET definition_revision=$2, updated_at=$3 WHERE id=$1`, id, revision, selectedAt); err != nil {
+			t.Fatal(err)
+		}
+	}
+	project := func(windowID string, at time.Time) {
+		t.Helper()
+		var projected bool
+		if err := f.conn.QueryRow(t.Context(), `
+			SELECT public.almanac_project_service_maintenance_member($1,$2,1,$3)
+		`, id, windowID, at).Scan(&projected); err != nil || !projected {
+			t.Fatalf("publish legacy window %s: projected=%t %v", windowID, projected, err)
+		}
+	}
+	stage(2, 61, f.at.Add(time.Minute+45*time.Second), subject.ServiceID.String())
+	project(allWindow.ID, f.at.Add(35*time.Minute))
+	selectDefinition(2, f.at.Add(40*time.Minute))
+	project(laterWindow.ID, f.at.Add(45*time.Minute))
+	stage(3, 67, f.at.Add(46*time.Minute), subject.ServiceID.String())
+	selectDefinition(3, f.at.Add(50*time.Minute))
+	f.now = f.at.Add(51 * time.Minute)
+	var beforeRepair time.Time
+	if err := f.conn.QueryRow(t.Context(), `SELECT clock_timestamp()`).Scan(&beforeRepair); err != nil {
+		t.Fatal(err)
+	}
+
+	// While an old reader holds the SLO table, the upgrader waits before
+	// locking singleton authority. The old reader can still complete.
+	readerConn := integrationConnect(t, f.f.databaseURL)
+	defer closeIntegrationConn(readerConn)
+	reader, err := readerConn.Begin(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rollbackTransaction(reader)
+	if _, err := reader.Exec(t.Context(), `LOCK TABLE public.almanac_slos IN ACCESS SHARE MODE`); err != nil {
+		t.Fatal(err)
+	}
+	upgraded := make(chan error, 1)
+	go func() {
+		_, err := Upgrade(t.Context(), f.f.databaseURL)
+		upgraded <- err
+	}()
+	waitForAgentQueryWait(t, f.conn, "%LOCK TABLE public.almanac_slos IN ACCESS EXCLUSIVE MODE%")
+	if _, err := reader.Exec(t.Context(), `LOCK TABLE public.almanac_service_maintenance_authority IN ACCESS SHARE MODE NOWAIT`); err != nil {
+		t.Fatalf("migration locked singleton authority before draining the SLO reader: %v", err)
+	}
+	var authority int64
+	if err := reader.QueryRow(t.Context(), `
+		SELECT revision FROM public.almanac_service_maintenance_authority WHERE singleton FOR SHARE NOWAIT
+	`).Scan(&authority); err != nil {
+		t.Fatalf("migration locked the singleton row before draining the SLO reader: %v", err)
+	}
+	if err := reader.Commit(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-upgraded; err != nil {
+		t.Fatal(err)
+	}
+
+	var repairedAt time.Time
+	var assigned int
+	if err := f.conn.QueryRow(t.Context(), `
+		SELECT (SELECT count(*) FROM almanac_slo_service_assignments WHERE slo_id=$1),
+		       (SELECT effective_at FROM almanac_slo_service_assignments WHERE slo_id=$1 AND definition_revision=3)
+	`, id).Scan(&assigned, &repairedAt); err != nil || assigned != 2 || repairedAt.Before(beforeRepair) {
+		t.Fatalf("repair inferred a staged or intermediate selection: count=%d cutoff=%s err=%v", assigned, repairedAt, err)
+	}
+	unknown := input
+	unknown.IdempotencyKey = "unknown-intermediate-legacy-grid"
+	unknown.Start, unknown.End = f.at.Add(43*time.Minute), f.at.Add(44*time.Minute)
+	if _, err := CreateMaintenance(t.Context(), f.f.databaseURL, unknown); !errors.Is(err, ErrMaintenanceHistoricalGridUnavailable) {
+		t.Fatalf("historical declaration used the 60s grid in its unknown 61s period: %v", err)
+	}
+	uncertain, err := q.HasUncertainHistoricalServiceMaintenanceGrid(t.Context(), dbgen.HasUncertainHistoricalServiceMaintenanceGridParams{
+		ServiceIds: []pgtype.UUID{subject.ServiceID}, StartsAt: timestamp(repairedAt), EndsAt: timestamp(repairedAt.Add(time.Hour)),
+	})
+	if err != nil || uncertain {
+		t.Fatalf("repair boundary should end uncertainty exclusively: uncertain=%t %v", uncertain, err)
+	}
+
+	// A window published on the old 60s grid spans the repair. The known
+	// 67s grid must take effect immediately, including a later departure.
+	const currentCadence = 67 * time.Second
+	firstKnown := ceilSliBoundary(repairedAt, currentCadence)
+	departure := firstKnown.Add(4 * currentCadence)
+	f.now = departure
+	stage(4, 67, departure, unselected.ID)
+	selectDefinition(4, departure)
+	if err := f.runtime.runServiceMaintenanceProjection(t.Context(), 64, time.Second, f.clock); err != nil {
+		t.Fatal(err)
+	}
+	after, err := readSloExclusionSnapshot(t.Context(), q, id, window.Start, window.End)
+	if err != nil || !reflect.DeepEqual(after.Intervals, legacy.Intervals) {
+		t.Fatalf("repair removed published elapsed coverage: after=%+v before=%+v err=%v", after, legacy, err)
+	}
+	for _, legacyScope := range []struct {
+		window  MaintenanceRecord
+		cadence time.Duration
+	}{
+		{allWindow, time.Minute},
+		{laterWindow, 61 * time.Second},
+	} {
+		oldFirst := ceilSliBoundary(legacyScope.window.Start, legacyScope.cadence)
+		assertProjectedMaintenanceCoverage(t, f, legacyScope.window.ID,
+			[2]time.Time{oldFirst, floorSliBoundary(repairedAt, legacyScope.cadence)},
+			[2]time.Time{firstKnown, departure},
+		)
+	}
+	if _, err := f.conn.Exec(t.Context(), `UPDATE almanac_services SET archived_at=$2 WHERE id=$1`, subject.ServiceID, f.at.Add(9*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	afterArchive, err := q.HasUncertainHistoricalServiceMaintenanceGrid(t.Context(), dbgen.HasUncertainHistoricalServiceMaintenanceGridParams{
+		AllServices: true, StartsAt: timestamp(f.at.Add(9 * time.Minute)), EndsAt: timestamp(f.at.Add(10 * time.Minute)),
+	})
+	if err != nil || afterArchive {
+		t.Fatalf("archived service affected an unrelated later window: uncertain=%t %v", afterArchive, err)
+	}
+
+}
+
+func TestIntegrationMaintenanceUpgradeIntersectsAmbiguousPublishedGrids(t *testing.T) {
+	t.Parallel()
+	f := newMaintenanceFixture(t)
+	id := mustPGUUID(f.ids[0])
+	subject, err := dbgen.New(f.conn).GetSlo(t.Context(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, _, err := CreateObjective(t.Context(), f.f.databaseURL, CreateObjectiveInput{
+		Proof: f.proof, Name: "published-grid-destination", DisplayName: "Published grid destination",
+		IdempotencyKey: "published-grid-destination", RequestID: "published-grid-destination", Now: f.clock,
+	}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := f.input("ambiguous-published-coverage")
+	input.ScopeKind, input.SloIDs = MaintenanceScopeAllServices, nil
+	input.Start = ceilSliBoundary(f.at.Add(20*time.Minute), 120*time.Second)
+	input.End = input.Start.Add(10 * time.Minute)
+	window, err := CreateMaintenance(t.Context(), f.f.databaseURL, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dropServiceMaintenanceFixtureAfter(t, f.conn, 74)
+	if _, err := f.conn.Exec(t.Context(), `DELETE FROM almanac_schema_migrations WHERE version>74`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Publish on 120s after 60s has been staged. Both cadences fit both
+	// endpoints, so only the common elapsed prefix can be recovered.
+	moveMaintenanceSLOAtCadence(t, f, subject.ServiceID.String(), 2, window.Start.Add(-2*time.Minute), 120)
+	if _, err := f.conn.Exec(t.Context(), `
+		INSERT INTO almanac_slo_definitions(slo_id,revision,service_id,sli_id,measurement_revision,target,rolling_window_seconds,cadence_seconds,activated_at,evaluation_valid_from)
+		SELECT slo_id,3,service_id,sli_id,measurement_revision,target,rolling_window_seconds,60,$2,$2
+		FROM almanac_slo_definitions WHERE slo_id=$1 AND revision=2
+	`, id, window.Start.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	publishLegacyServiceMaintenance(t, f, window.ID, window.Start.Add(2*time.Minute))
+	assertProjectedMaintenanceCoverage(t, f, window.ID, [2]time.Time{window.Start, window.End})
+	if _, err := f.conn.Exec(t.Context(), `UPDATE almanac_slos SET definition_revision=3, updated_at=$2 WHERE id=$1`, id, window.Start.Add(150*time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	recoveredAt := window.Start.Add(3 * time.Minute)
+	moveMaintenanceSLOAtCadence(t, f, other.ID, 4, recoveredAt, 60)
+	if _, err := Upgrade(t.Context(), f.f.databaseURL); err != nil {
+		t.Fatal(err)
+	}
+	f.now = recoveredAt
+	if err := f.runtime.runServiceMaintenanceProjection(t.Context(), 64, time.Second, f.clock); err != nil {
+		t.Fatal(err)
+	}
+	assertProjectedMaintenanceCoverage(t, f, window.ID,
+		[2]time.Time{window.Start, window.Start.Add(2 * time.Minute)},
+		[2]time.Time{recoveredAt, window.End},
+	)
+}
+
+func TestIntegrationMaintenanceUpgradeReprojectsAfterReturnToOriginalGrid(t *testing.T) {
+	t.Parallel()
+	f := newMaintenanceFixture(t)
+	id := mustPGUUID(f.ids[0])
+	q := dbgen.New(f.conn)
+	subject, err := q.GetSlo(t.Context(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var now time.Time
+	if err := f.conn.QueryRow(t.Context(), `SELECT clock_timestamp()`).Scan(&now); err != nil {
+		t.Fatal(err)
+	}
+	base := ceilSliBoundary(now.Add(time.Hour), 120*time.Second)
+	input := f.input("legacy-reverted-grid")
+	input.ScopeKind, input.SloIDs = MaintenanceScopeAllServices, nil
+	input.Start, input.End = base.Add(time.Minute), base.Add(4*time.Minute)
+	window, err := CreateMaintenance(t.Context(), f.f.databaseURL, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dropServiceMaintenanceFixtureAfter(t, f.conn, 74)
+	if _, err := f.conn.Exec(t.Context(), `DELETE FROM almanac_schema_migrations WHERE version>74`); err != nil {
+		t.Fatal(err)
+	}
+
+	moveMaintenanceSLOAtCadence(t, f, subject.ServiceID.String(), 2, f.at.Add(time.Minute), 120)
+	publishLegacyServiceMaintenance(t, f, window.ID, f.at.Add(90*time.Second))
+	assertProjectedMaintenanceCoverage(t, f, window.ID, [2]time.Time{base.Add(2 * time.Minute), window.End})
+	if _, err := f.conn.Exec(t.Context(), `UPDATE almanac_service_maintenance_projection SET complete=true WHERE exclusion_id=$1`, window.ID); err != nil {
+		t.Fatal(err)
+	}
+	moveMaintenanceSLOAtCadence(t, f, subject.ServiceID.String(), 3, f.at.Add(2*time.Minute), 60)
+	var recorded int
+	if err := f.conn.QueryRow(t.Context(), `SELECT count(*) FROM almanac_slo_service_assignments WHERE slo_id=$1`, id).Scan(&recorded); err != nil || recorded != 1 {
+		t.Fatalf("legacy scope recorded %d grid assignments: %v", recorded, err)
+	}
+	if _, err := Upgrade(t.Context(), f.f.databaseURL); err != nil {
+		t.Fatal(err)
+	}
+	affected := dbgen.HasPendingServiceMaintenanceParams{
+		SloID: id, StartAt: timestamp(window.Start), EndAt: timestamp(base.Add(2 * time.Minute)),
+	}
+	if pending, err := q.HasPendingServiceMaintenance(t.Context(), affected); err != nil || !pending {
+		t.Fatalf("upgrade trusted the obsolete 120s projection: pending=%t %v", pending, err)
+	}
+	if err := f.runtime.runServiceMaintenanceProjection(t.Context(), 64, time.Second, f.clock); err != nil {
+		t.Fatal(err)
+	}
+	if pending, err := q.HasPendingServiceMaintenance(t.Context(), affected); err != nil || pending {
+		t.Fatalf("repaired coverage still pending: pending=%t %v", pending, err)
+	}
+	assertProjectedMaintenanceCoverage(t, f, window.ID, [2]time.Time{window.Start, window.End})
+}
+
+func publishLegacyServiceMaintenance(t *testing.T, f maintenanceFixture, windowID string, at time.Time) {
+	t.Helper()
+	var projected bool
+	if err := f.conn.QueryRow(t.Context(), `
+		SELECT public.almanac_project_service_maintenance_member($1,$2,1,$3)
+	`, mustPGUUID(f.ids[0]), windowID, at).Scan(&projected); err != nil || !projected {
+		t.Fatalf("publish legacy window %s: projected=%t %v", windowID, projected, err)
+	}
+}
+
+func assertProjectedMaintenanceCoverage(t *testing.T, f maintenanceFixture, windowID string, ranges ...[2]time.Time) {
+	t.Helper()
+	starts, ends := make([]time.Time, 0, len(ranges)), make([]time.Time, 0, len(ranges))
+	for _, r := range ranges {
+		starts, ends = append(starts, r[0]), append(ends, r[1])
+	}
+	var actual string
+	var same bool
+	if err := f.conn.QueryRow(t.Context(), `
+		SELECT effective_coverage::text, effective_coverage = (
+			SELECT range_agg(tstzrange(bounds.starts_at,bounds.ends_at,'[)'))
+			FROM unnest($3::timestamptz[],$4::timestamptz[]) bounds(starts_at,ends_at)
+		)
+		FROM almanac_slo_exclusion_changes WHERE slo_id=$1 AND exclusion_id=$2
+		ORDER BY revision DESC LIMIT 1
+	`, mustPGUUID(f.ids[0]), windowID, starts, ends).Scan(&actual, &same); err != nil || !same {
+		t.Fatalf("window %s coverage = %s, want %v: %v", windowID, actual, ranges, err)
 	}
 }

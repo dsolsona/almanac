@@ -57,6 +57,46 @@ func TestPreparationProblemsExposeBoundedRecoveryMetadata(t *testing.T) {
 	}
 }
 
+func TestMaintenanceSnapshotProblemsDistinguishReadAndWriteRecovery(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		handler       func(http.ResponseWriter, error, string)
+		err           error
+		code, message string
+		revision      *string
+	}{
+		{maintenanceError, storage.ErrMaintenanceSnapshotChanged, "maintenance_snapshot_changed", "The maintenance inventory changed. Reload the first page.", nil},
+		{maintenanceWriteError, storage.ErrMaintenanceSnapshotChanged, "maintenance_write_retry", "The affected SLO inventory changed or the scheduled start passed during validation. Retry the same request with the same idempotency key.", nil},
+		{maintenanceWriteError, &storage.MaintenanceConflictError{CurrentRevision: 5}, "maintenance_conflict", "The window changed or the request key was already used.", new("5")},
+	} {
+		w := httptest.NewRecorder()
+		tc.handler(w, tc.err, "request-id")
+		var p api.Problem
+		if err := json.Unmarshal(w.Body.Bytes(), &p); err != nil {
+			t.Fatal(err)
+		}
+		if w.Code != http.StatusConflict || w.Header().Get("Content-Type") != "application/problem+json" ||
+			p.Code != tc.code || p.Message != tc.message || p.RequestId != "request-id" ||
+			(p.CurrentRevision == nil) != (tc.revision == nil) || p.CurrentRevision != nil && *p.CurrentRevision != *tc.revision {
+			t.Fatalf("wrong recovery for %s: %d %s", tc.code, w.Code, w.Body.String())
+		}
+	}
+}
+
+func TestMaintenanceWriteReportsUnavailableHistoricalGrid(t *testing.T) {
+	t.Parallel()
+	w := httptest.NewRecorder()
+	maintenanceWriteError(w, storage.ErrMaintenanceHistoricalGridUnavailable, "request-id")
+	var problem api.Problem
+	if err := json.Unmarshal(w.Body.Bytes(), &problem); err != nil {
+		t.Fatal(err)
+	}
+	if w.Code != http.StatusBadRequest || problem.Code != "maintenance_history_unavailable" ||
+		problem.SuggestedStart != nil || problem.SuggestedEnd != nil {
+		t.Fatalf("wrong unavailable-history response: %d %s", w.Code, w.Body.String())
+	}
+}
+
 func TestLegacyEvaluationMaintenanceIsUnavailableWithoutPreparation(t *testing.T) {
 	t.Parallel()
 	w := httptest.NewRecorder()

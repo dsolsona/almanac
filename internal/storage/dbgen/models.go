@@ -555,13 +555,15 @@ type AlmanacServiceDependency struct {
 }
 
 type AlmanacServiceMaintenanceAuthority struct {
-	Singleton bool  `json:"singleton"`
-	Revision  int64 `json:"revision"`
+	Singleton         bool  `json:"singleton"`
+	Revision          int64 `json:"revision"`
+	InventoryRevision int64 `json:"inventory_revision"`
 }
 
 type AlmanacServiceMaintenanceMembershipWork struct {
-	SloID            pgtype.UUID `json:"slo_id"`
-	ThroughExclusion pgtype.UUID `json:"through_exclusion"`
+	SloID            pgtype.UUID        `json:"slo_id"`
+	ThroughExclusion pgtype.UUID        `json:"through_exclusion"`
+	AffectedFrom     pgtype.Timestamptz `json:"affected_from"`
 }
 
 type AlmanacServiceMaintenanceProjection struct {
@@ -574,6 +576,14 @@ type AlmanacServiceMaintenanceProjection struct {
 type AlmanacServiceMaintenanceProjectionCompleted struct {
 	ExclusionID pgtype.UUID `json:"exclusion_id"`
 	Revision    int64       `json:"revision"`
+}
+
+type AlmanacServiceMaintenanceUncertainGrid struct {
+	SloID                       pgtype.UUID                                         `json:"slo_id"`
+	ServiceID                   pgtype.UUID                                         `json:"service_id"`
+	UncertainAt                 pgtype.Multirange[pgtype.Range[pgtype.Timestamptz]] `json:"uncertain_at"`
+	PublishedRevision           int64                                               `json:"published_revision"`
+	PublishedDefinitionRevision int64                                               `json:"published_definition_revision"`
 }
 
 type AlmanacSession struct {

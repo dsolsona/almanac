@@ -40,6 +40,14 @@ func ListAlertMaintenanceSuppressions(ctx context.Context, databaseURL string, i
 	if err != nil {
 		return page, err
 	}
+	var after pgtype.Timestamptz
+	if input.Cursor != "" {
+		cutoff := time.UnixMicro(cursor.Time).UTC()
+		if cutoff.Year() < 1970 || cutoff.Year() > 9999 {
+			return page, ErrAlertInvalid
+		}
+		after = timestamp(cutoff)
+	}
 	err = alertReadTransaction(ctx, databaseURL, input.Runtime, input.Proof, input.Now, func(q *dbgen.Queries, _ string) error {
 		exists, err := q.AlertPolicyRevisionExists(ctx, dbgen.AlertPolicyRevisionExistsParams{PolicyID: id, Revision: input.Revision})
 		if err != nil {
@@ -49,10 +57,6 @@ func ListAlertMaintenanceSuppressions(ctx context.Context, databaseURL string, i
 			return ErrAlertNotFound
 		}
 		const scanLimit = 500
-		var after pgtype.Timestamptz
-		if input.Cursor != "" {
-			after = timestamp(time.UnixMicro(cursor.Time))
-		}
 		rows, err := q.ScanAlertMaintenanceSuppressions(ctx, dbgen.ScanAlertMaintenanceSuppressionsParams{
 			PolicyID: id, Revision: input.Revision, AfterCutoff: after, ScanLimit: scanLimit + 1,
 		})

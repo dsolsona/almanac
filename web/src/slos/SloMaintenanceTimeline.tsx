@@ -15,7 +15,7 @@ export function openSloMaintenanceList() {
 
 export function useSloMaintenance(id: string, start: string | undefined, end: string | undefined, refresh: number) {
   const [layer, setLayer] = useState<Layer>();
-  const key = JSON.stringify([id, start, end, refresh]);
+  const key = JSON.stringify([id, start, end]);
   useEffect(() => {
     if (!start || !end || Date.parse(start) >= Date.parse(end)) return;
     const controller = new AbortController();
@@ -23,7 +23,7 @@ export function useSloMaintenance(id: string, start: string | undefined, end: st
       .then(page => { if (!controller.signal.aborted) setLayer({ key, page }); })
       .catch(() => { if (!controller.signal.aborted) setLayer({ key, error: true }); });
     return () => controller.abort();
-  }, [key, id, start, end]);
+  }, [key, id, start, end, refresh]);
   return { page: layer?.key === key ? layer.page : undefined, error: layer?.key === key && layer.error };
 }
 
@@ -67,10 +67,11 @@ function MaintenancePages({ id, start, end, zone, first }: Omit<ListProps, 'page
       : first.next_cursor ? <span>First 200 shown on the graphs</span> : <span>{first.items.length} in this period</span>}</summary>
     <div>
       <p className="small">Shaded periods mark scheduled exclusions for this SLO. Each graph reports its own calculation and data coverage.</p>
-      {first.overflow && <p className="small">The grouped marker spans the additional windows. Open a window to see its exact bounds.</p>}
+      {first.overflow && <p className="small">The grouped marker spans the additional {first.source === 'scoped' ? 'intervals' : 'windows'}. Open a window to see its exact bounds.</p>}
       {first.next_cursor && !first.overflow && <p className="small">Browse additional windows here or choose a shorter graph range.</p>}
       {error && !page && <p role="status">This page could not be loaded. Go back and try again.</p>}
       {!page && !error && <p role="status">Loading maintenance periods…</p>}
+      {cursor && page?.pending && !first.pending && <p className="slo-detail-notice" role="status">Some maintenance periods are still being prepared.</p>}
       {page && <ul className="slo-maintenance-events">{page.items.map(window => <li key={`${window.id}:${window.start}:${window.end}`}>
         <a href={`/maintenance/${window.id}`} data-app-route>{window.title}</a>
         <span><time dateTime={window.start}>{pointTime(window.start, zone, true)}</time> to <time dateTime={window.end}>{pointTime(window.end, zone, true)}</time></span>

@@ -136,8 +136,26 @@ WHERE NOT p.complete
 ORDER BY p.exclusion_id LIMIT 1 FOR UPDATE OF e SKIP LOCKED;
 
 -- name: ListServiceMaintenanceProjectionSlos :many
-SELECT id FROM public.almanac_slos WHERE id > sqlc.arg(after_slo)::uuid
-ORDER BY id LIMIT sqlc.arg(page_limit)::integer;
+WITH slo_page AS MATERIALIZED (
+    SELECT s.id
+    FROM public.almanac_slos s
+    WHERE s.id > sqlc.arg(after_slo)::uuid
+    ORDER BY s.id
+    LIMIT sqlc.arg(page_limit)::integer
+)
+SELECT s.id, (
+    EXISTS (
+        SELECT 1 FROM public.almanac_service_maintenance_intervals(
+            sqlc.arg(exclusion_id)::uuid, sqlc.arg(revision)::bigint, s.id, NULL
+        )
+    ) OR COALESCE((
+        SELECT c.included FROM public.almanac_slo_exclusion_changes c
+        WHERE c.slo_id = s.id AND c.exclusion_id = sqlc.arg(exclusion_id)
+        ORDER BY c.revision DESC LIMIT 1
+    ), false)
+)::boolean AS relevant
+FROM slo_page s
+ORDER BY s.id;
 
 -- name: ApplyServiceMaintenanceProjectionMember :one
 SELECT public.almanac_project_service_maintenance_member(
@@ -149,14 +167,15 @@ UPDATE public.almanac_service_maintenance_projection SET through_slo = sqlc.arg(
 WHERE exclusion_id = sqlc.arg(exclusion_id) AND desired_revision = sqlc.arg(revision)::bigint;
 
 -- name: LockServiceMaintenanceMembershipWork :one
-SELECT w.slo_id, w.through_exclusion FROM public.almanac_service_maintenance_membership_work w
+SELECT w.slo_id, w.through_exclusion, w.affected_from FROM public.almanac_service_maintenance_membership_work w
 JOIN public.almanac_slos s ON s.id = w.slo_id
 ORDER BY w.slo_id LIMIT 1 FOR NO KEY UPDATE OF s SKIP LOCKED;
 
 -- name: ListServiceMaintenanceMembershipTargets :many
 SELECT p.exclusion_id, p.desired_revision
 FROM public.almanac_service_maintenance_projection p
-WHERE p.exclusion_id > sqlc.arg(after_exclusion)::uuid
+JOIN public.almanac_maintenance_exclusion_revisions r ON r.exclusion_id = p.exclusion_id AND r.revision = p.desired_revision
+WHERE p.exclusion_id > sqlc.arg(after_exclusion)::uuid AND r.ends_at > sqlc.arg(affected_from)::timestamptz
 ORDER BY p.exclusion_id LIMIT sqlc.arg(page_limit)::integer;
 
 -- name: AdvanceServiceMaintenanceMembershipWork :exec
@@ -245,4 +264,64 @@ FOR UPDATE SKIP LOCKED;
 SELECT w.slo_id
 FROM public.almanac_service_maintenance_membership_work w
 WHERE w.slo_id = sqlc.arg(slo_id) AND w.through_exclusion = sqlc.arg(through_exclusion)
+  AND w.affected_from = sqlc.arg(affected_from)::timestamptz
 FOR UPDATE SKIP LOCKED;
+
+-- name: HasUncertainHistoricalServiceMaintenanceGrid :one
+SELECT EXISTS (
+    SELECT 1 FROM public.almanac_service_maintenance_uncertain_grids u
+    JOIN public.almanac_services s ON s.id = u.service_id
+    WHERE (sqlc.arg(all_services)::boolean OR u.service_id = ANY(sqlc.arg(service_ids)::uuid[]))
+      AND u.uncertain_at && tstzrange(sqlc.arg(starts_at)::timestamptz,
+          greatest(sqlc.arg(starts_at), least(sqlc.arg(ends_at)::timestamptz, s.archived_at)), '[)')
+)::boolean;
+
+-- Historical declarations validate against the grids of assignments that
+-- actually overlapped the requested range, even if those SLOs later moved.
+-- name: ListHistoricalServiceMaintenanceCadences :many
+SELECT DISTINCT d.cadence_seconds
+FROM public.almanac_slo_service_assignments a
+JOIN public.almanac_slo_definitions d ON d.slo_id = a.slo_id AND d.revision = a.definition_revision
+JOIN public.almanac_services s ON s.id = a.service_id
+WHERE (sqlc.arg(all_services)::boolean OR a.service_id = ANY(sqlc.arg(service_ids)::uuid[]))
+  AND greatest(a.effective_at, sqlc.arg(starts_at)::timestamptz) < least(s.archived_at, sqlc.arg(ends_at)::timestamptz)
+  AND NOT EXISTS (
+      SELECT 1 FROM public.almanac_slo_service_assignments next
+      WHERE next.slo_id = a.slo_id
+        AND (next.effective_at, next.definition_revision) > (a.effective_at, a.definition_revision)
+        AND next.effective_at <= greatest(a.effective_at, sqlc.arg(starts_at)::timestamptz)
+  )
+ORDER BY d.cadence_seconds;
+
+-- name: ObserveMaintenanceInventoryRevision :one
+SELECT inventory_revision
+FROM public.almanac_service_maintenance_authority WHERE singleton;
+
+-- The original window projection can finish before a later join or departure.
+-- Check only unfinished membership work that can change this window.
+-- name: HasPendingWindowMembership :one
+SELECT EXISTS (
+  SELECT 1
+  FROM public.almanac_service_maintenance_membership_work w
+  WHERE w.through_exclusion < sqlc.arg(exclusion_id)::uuid
+    AND w.affected_from < sqlc.arg(ends_at)::timestamptz
+    AND (
+      EXISTS (
+        SELECT 1
+        FROM public.almanac_service_maintenance_intervals(sqlc.arg(exclusion_id), sqlc.arg(revision)::bigint, w.slo_id, NULL) participation
+        WHERE participation.ends_at > w.affected_from
+      )
+      OR EXISTS (
+        SELECT 1
+        FROM (
+          SELECT c.included, c.exclusion_revision, c.effective_coverage
+          FROM public.almanac_slo_exclusion_changes c
+          WHERE c.slo_id = w.slo_id AND c.exclusion_id = sqlc.arg(exclusion_id)
+          ORDER BY c.revision DESC LIMIT 1
+        ) latest
+        WHERE latest.included AND public.almanac_effective_maintenance_coverage(
+          w.slo_id, sqlc.arg(exclusion_id), latest.exclusion_revision, latest.effective_coverage
+        ) && tstzrange(least(w.affected_from, sqlc.arg(ends_at)), sqlc.arg(ends_at), '[)')
+      )
+    )
+)::boolean;

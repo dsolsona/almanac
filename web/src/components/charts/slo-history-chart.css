@@ -7,3 +7,6 @@
 .slo-maintenance-inspection{display:grid;gap:4px}.slo-point-tooltip .slo-maintenance-inspection strong{font:600 13px var(--font-body)}
 .slo-point-tooltip--interactive{pointer-events:auto;overflow:auto}
 .slo-point-tooltip--interactive a{justify-self:start;margin:var(--space-1) 0}
+
+.slo-maintenance-inspection ul{display:grid;gap:var(--space-2);list-style:none;margin:0;padding:0}
+.slo-maintenance-inspection li{display:grid;gap:var(--space-1)}

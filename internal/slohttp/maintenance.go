@@ -148,7 +148,7 @@ func (h *Handler) maintenance(w http.ResponseWriter, r *http.Request, requestID 
 		}
 	}
 	if err != nil {
-		maintenanceError(w, err, requestID)
+		maintenanceWriteError(w, err, requestID)
 		return
 	}
 	status = 200
@@ -288,6 +288,17 @@ func writeMaintenancePage(w http.ResponseWriter, page storage.MaintenancePage, e
 	write(w, 200, out)
 }
 
+func maintenanceWriteError(w http.ResponseWriter, err error, requestID string) {
+	if errors.Is(err, storage.ErrMaintenanceSnapshotChanged) {
+		writeMaintenanceProblem(w, http.StatusConflict, api.Problem{
+			Code: "maintenance_write_retry", Message: "The affected SLO inventory changed or the scheduled start passed during validation. Retry the same request with the same idempotency key.",
+			RequestId: requestID,
+		})
+		return
+	}
+	maintenanceError(w, err, requestID)
+}
+
 func maintenanceError(w http.ResponseWriter, err error, requestID string) {
 	p := api.Problem{RequestId: requestID}
 	var status int
@@ -299,6 +310,8 @@ func maintenanceError(w http.ResponseWriter, err error, requestID string) {
 		}
 	case errors.Is(err, storage.ErrMaintenanceSnapshotChanged):
 		status, p.Code, p.Message = 409, "maintenance_snapshot_changed", "The maintenance inventory changed. Reload the first page."
+	case errors.Is(err, storage.ErrMaintenanceHistoricalGridUnavailable):
+		status, p.Code, p.Message = 400, "maintenance_history_unavailable", "The observation grid for part of this period is unknown. Choose a range with recorded grid history."
 	case errors.Is(err, storage.ErrMaintenanceAlignment):
 		status, p.Code, p.Message = 400, "maintenance_alignment", "Choose bounds aligned with the affected SLO observation grids."
 		if alignment, ok := errors.AsType[*storage.MaintenanceAlignmentError](err); ok {
@@ -319,6 +332,10 @@ func maintenanceError(w http.ResponseWriter, err error, requestID string) {
 		storageError(w, err, requestID)
 		return
 	}
+	writeMaintenanceProblem(w, status, p)
+}
+
+func writeMaintenanceProblem(w http.ResponseWriter, status int, p api.Problem) {
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(status)
 	_ = json.MarshalWrite(w, p)

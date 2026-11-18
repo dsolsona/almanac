@@ -187,9 +187,13 @@ type Querier interface {
 	HasMaintenanceAuthorityInput(ctx context.Context, arg HasMaintenanceAuthorityInputParams) (bool, error)
 	HasMaintenanceChangedInput(ctx context.Context, arg HasMaintenanceChangedInputParams) (bool, error)
 	HasPendingServiceMaintenance(ctx context.Context, arg HasPendingServiceMaintenanceParams) (bool, error)
+	// The original window projection can finish before a later join or departure.
+	// Check only unfinished membership work that can change this window.
+	HasPendingWindowMembership(ctx context.Context, arg HasPendingWindowMembershipParams) (bool, error)
 	HasSLIsForDatasource(ctx context.Context, datasourceID pgtype.UUID) (bool, error)
 	HasServiceMaintenanceProjection(ctx context.Context, exclusionID pgtype.UUID) (bool, error)
 	HasSliExecutionAttempt(ctx context.Context, arg HasSliExecutionAttemptParams) (bool, error)
+	HasUncertainHistoricalServiceMaintenanceGrid(ctx context.Context, arg HasUncertainHistoricalServiceMaintenanceGridParams) (bool, error)
 	InsertAgent(ctx context.Context, arg InsertAgentParams) (AlmanacAgent, error)
 	InsertAgentAudit(ctx context.Context, arg InsertAgentAuditParams) error
 	InsertAgentConfigurationRevision(ctx context.Context, arg InsertAgentConfigurationRevisionParams) error
@@ -274,6 +278,9 @@ type Querier interface {
 	// Keep timestamp parsing in its conditional predicate so unrelated due/backoff
 	// branches retain their existing behavior for malformed cache metadata.
 	ListDueDerivedObjectives(ctx context.Context, arg ListDueDerivedObjectivesParams) ([]pgtype.UUID, error)
+	// Historical declarations validate against the grids of assignments that
+	// actually overlapped the requested range, even if those SLOs later moved.
+	ListHistoricalServiceMaintenanceCadences(ctx context.Context, arg ListHistoricalServiceMaintenanceCadencesParams) ([]int32, error)
 	ListLegacyReceiptHours(ctx context.Context, pageLimit int32) ([]ListLegacyReceiptHoursRow, error)
 	ListMaintenanceGrids(ctx context.Context, sloID pgtype.UUID) ([]ListMaintenanceGridsRow, error)
 	ListMaintenanceIdentities(ctx context.Context, arg ListMaintenanceIdentitiesParams) ([]ListMaintenanceIdentitiesRow, error)
@@ -288,7 +295,7 @@ type Querier interface {
 	ListScopedSloMaintenanceOverlaps(ctx context.Context, arg ListScopedSloMaintenanceOverlapsParams) ([]ListScopedSloMaintenanceOverlapsRow, error)
 	ListServiceMaintenanceCadences(ctx context.Context, arg ListServiceMaintenanceCadencesParams) ([]int32, error)
 	ListServiceMaintenanceMembershipTargets(ctx context.Context, arg ListServiceMaintenanceMembershipTargetsParams) ([]ListServiceMaintenanceMembershipTargetsRow, error)
-	ListServiceMaintenanceProjectionSlos(ctx context.Context, arg ListServiceMaintenanceProjectionSlosParams) ([]pgtype.UUID, error)
+	ListServiceMaintenanceProjectionSlos(ctx context.Context, arg ListServiceMaintenanceProjectionSlosParams) ([]ListServiceMaintenanceProjectionSlosRow, error)
 	ListServiceSloStates(ctx context.Context, arg ListServiceSloStatesParams) ([]ListServiceSloStatesRow, error)
 	ListServices(ctx context.Context, arg ListServicesParams) ([]AlmanacService, error)
 	ListSliConfigurationForAgent(ctx context.Context, agentID pgtype.UUID) ([]ListSliConfigurationForAgentRow, error)
@@ -374,6 +381,7 @@ type Querier interface {
 	MarkMaintenanceCompatibilityUnavailable(ctx context.Context, arg MarkMaintenanceCompatibilityUnavailableParams) error
 	MarkSliObservation(ctx context.Context, arg MarkSliObservationParams) error
 	NextMaintenanceAuthorityBoundary(ctx context.Context, arg NextMaintenanceAuthorityBoundaryParams) (pgtype.Timestamptz, error)
+	ObserveMaintenanceInventoryRevision(ctx context.Context) (int64, error)
 	ObserveServiceMaintenanceAuthority(ctx context.Context) (int64, error)
 	PinAlertCutoff(ctx context.Context, arg PinAlertCutoffParams) (int64, error)
 	// Preview counts stop at 1001; the report labels these as lower bounds.

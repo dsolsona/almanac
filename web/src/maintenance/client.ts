@@ -47,7 +47,7 @@ const validSelector = (scope: unknown): scope is MaintenanceSelector => {
 export function validScopedWindow(value: unknown): value is MaintenanceWindow {
   return isRecord(value) && isUUID(value.id) && isRevision(value.revision) && validSelector(value.scope) &&
     typeof value.title === 'string' && value.title.length > 0 && typeof value.reason === 'string' &&
-    ['create', 'edit', 'end', 'cancel', 'withdraw'].includes(String(value.operation)) && typeof value.tombstone === 'boolean' &&
+    typeof value.operation === 'string' && ['create', 'edit', 'end', 'cancel', 'withdraw'].includes(value.operation) && typeof value.tombstone === 'boolean' &&
     validBounds(value.start, value.end) && timestampKey(value.created_at) !== undefined && timestampKey(value.updated_at) !== undefined &&
     isUUID(value.creator_id) && isUUID(value.actor_id) && isUUID(value.audit_id);
 }
@@ -67,7 +67,7 @@ function impactContract(limit: number, kind: 'preview' | 'impact') {
       !value.items.every(item =>
         isRecord(item) && isUUID(item.slo_id) && isUUID(item.service_id) &&
         typeof item.slo_name === 'string' && typeof item.service_name === 'string' &&
-        (item.start === undefined && item.end === undefined || validBounds(item.start, item.end)))) return false;
+        (kind === 'preview' ? item.start === undefined && item.end === undefined : validBounds(item.start, item.end)))) return false;
     const count = kind === 'preview' ? value.items.length : new Set(value.items.map(item => item.slo_id)).size;
     return BigInt(count) <= BigInt(value.total);
   } };

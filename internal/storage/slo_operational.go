@@ -660,6 +660,12 @@ func buildSloOperationalDetail(ctx context.Context, q *dbgen.Queries, row dbgen.
 			return api.SloOperationalDetail{}, err
 		}
 	}
+	if input.currentOnly && input.maintenance == nil {
+		start := measurementEnd.Add(-time.Duration(max(row.RollingWindowSeconds, 21600)) * time.Second)
+		if err := requireServiceMaintenanceReady(ctx, q, row.ID, start, measurementEnd); err != nil {
+			return api.SloOperationalDetail{}, err
+		}
+	}
 	window := time.Duration(row.RollingWindowSeconds) * time.Second
 	base := slo.WindowInput{Now: now, ValidFrom: row.EvaluationValidFrom.Time.UTC(), SliValidFrom: row.SliValidFrom.Time.UTC(),
 		RetentionStart: now.Add(-sli.ObservationRetention), Cadence: cadence,

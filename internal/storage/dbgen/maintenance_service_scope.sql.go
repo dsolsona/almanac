@@ -250,12 +250,84 @@ func (q *Queries) HasPendingServiceMaintenance(ctx context.Context, arg HasPendi
 	return column_1, err
 }
 
+const hasPendingWindowMembership = `-- name: HasPendingWindowMembership :one
+SELECT EXISTS (
+  SELECT 1
+  FROM public.almanac_service_maintenance_membership_work w
+  WHERE w.through_exclusion < $1::uuid
+    AND w.affected_from < $2::timestamptz
+    AND (
+      EXISTS (
+        SELECT 1
+        FROM public.almanac_service_maintenance_intervals($1, $3::bigint, w.slo_id, NULL) participation
+        WHERE participation.ends_at > w.affected_from
+      )
+      OR EXISTS (
+        SELECT 1
+        FROM (
+          SELECT c.included, c.exclusion_revision, c.effective_coverage
+          FROM public.almanac_slo_exclusion_changes c
+          WHERE c.slo_id = w.slo_id AND c.exclusion_id = $1
+          ORDER BY c.revision DESC LIMIT 1
+        ) latest
+        WHERE latest.included AND public.almanac_effective_maintenance_coverage(
+          w.slo_id, $1, latest.exclusion_revision, latest.effective_coverage
+        ) && tstzrange(least(w.affected_from, $2), $2, '[)')
+      )
+    )
+)::boolean
+`
+
+type HasPendingWindowMembershipParams struct {
+	ExclusionID pgtype.UUID        `json:"exclusion_id"`
+	EndsAt      pgtype.Timestamptz `json:"ends_at"`
+	Revision    int64              `json:"revision"`
+}
+
+// The original window projection can finish before a later join or departure.
+// Check only unfinished membership work that can change this window.
+func (q *Queries) HasPendingWindowMembership(ctx context.Context, arg HasPendingWindowMembershipParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasPendingWindowMembership, arg.ExclusionID, arg.EndsAt, arg.Revision)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const hasServiceMaintenanceProjection = `-- name: HasServiceMaintenanceProjection :one
 SELECT EXISTS(SELECT 1 FROM public.almanac_service_maintenance_projection WHERE exclusion_id = $1)::boolean
 `
 
 func (q *Queries) HasServiceMaintenanceProjection(ctx context.Context, exclusionID pgtype.UUID) (bool, error) {
 	row := q.db.QueryRow(ctx, hasServiceMaintenanceProjection, exclusionID)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const hasUncertainHistoricalServiceMaintenanceGrid = `-- name: HasUncertainHistoricalServiceMaintenanceGrid :one
+SELECT EXISTS (
+    SELECT 1 FROM public.almanac_service_maintenance_uncertain_grids u
+    JOIN public.almanac_services s ON s.id = u.service_id
+    WHERE ($1::boolean OR u.service_id = ANY($2::uuid[]))
+      AND u.uncertain_at && tstzrange($3::timestamptz,
+          greatest($3, least($4::timestamptz, s.archived_at)), '[)')
+)::boolean
+`
+
+type HasUncertainHistoricalServiceMaintenanceGridParams struct {
+	AllServices bool               `json:"all_services"`
+	ServiceIds  []pgtype.UUID      `json:"service_ids"`
+	StartsAt    pgtype.Timestamptz `json:"starts_at"`
+	EndsAt      pgtype.Timestamptz `json:"ends_at"`
+}
+
+func (q *Queries) HasUncertainHistoricalServiceMaintenanceGrid(ctx context.Context, arg HasUncertainHistoricalServiceMaintenanceGridParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasUncertainHistoricalServiceMaintenanceGrid,
+		arg.AllServices,
+		arg.ServiceIds,
+		arg.StartsAt,
+		arg.EndsAt,
+	)
 	var column_1 bool
 	err := row.Scan(&column_1)
 	return column_1, err
@@ -275,6 +347,56 @@ type InsertMaintenanceServiceSelectorParams struct {
 func (q *Queries) InsertMaintenanceServiceSelector(ctx context.Context, arg InsertMaintenanceServiceSelectorParams) error {
 	_, err := q.db.Exec(ctx, insertMaintenanceServiceSelector, arg.ExclusionID, arg.Revision, arg.ServiceID)
 	return err
+}
+
+const listHistoricalServiceMaintenanceCadences = `-- name: ListHistoricalServiceMaintenanceCadences :many
+SELECT DISTINCT d.cadence_seconds
+FROM public.almanac_slo_service_assignments a
+JOIN public.almanac_slo_definitions d ON d.slo_id = a.slo_id AND d.revision = a.definition_revision
+JOIN public.almanac_services s ON s.id = a.service_id
+WHERE ($1::boolean OR a.service_id = ANY($2::uuid[]))
+  AND greatest(a.effective_at, $3::timestamptz) < least(s.archived_at, $4::timestamptz)
+  AND NOT EXISTS (
+      SELECT 1 FROM public.almanac_slo_service_assignments next
+      WHERE next.slo_id = a.slo_id
+        AND (next.effective_at, next.definition_revision) > (a.effective_at, a.definition_revision)
+        AND next.effective_at <= greatest(a.effective_at, $3::timestamptz)
+  )
+ORDER BY d.cadence_seconds
+`
+
+type ListHistoricalServiceMaintenanceCadencesParams struct {
+	AllServices bool               `json:"all_services"`
+	ServiceIds  []pgtype.UUID      `json:"service_ids"`
+	StartsAt    pgtype.Timestamptz `json:"starts_at"`
+	EndsAt      pgtype.Timestamptz `json:"ends_at"`
+}
+
+// Historical declarations validate against the grids of assignments that
+// actually overlapped the requested range, even if those SLOs later moved.
+func (q *Queries) ListHistoricalServiceMaintenanceCadences(ctx context.Context, arg ListHistoricalServiceMaintenanceCadencesParams) ([]int32, error) {
+	rows, err := q.db.Query(ctx, listHistoricalServiceMaintenanceCadences,
+		arg.AllServices,
+		arg.ServiceIds,
+		arg.StartsAt,
+		arg.EndsAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []int32{}
+	for rows.Next() {
+		var cadence_seconds int32
+		if err := rows.Scan(&cadence_seconds); err != nil {
+			return nil, err
+		}
+		items = append(items, cadence_seconds)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listMaintenanceImpactMembers = `-- name: ListMaintenanceImpactMembers :many
@@ -546,13 +668,15 @@ func (q *Queries) ListServiceMaintenanceCadences(ctx context.Context, arg ListSe
 const listServiceMaintenanceMembershipTargets = `-- name: ListServiceMaintenanceMembershipTargets :many
 SELECT p.exclusion_id, p.desired_revision
 FROM public.almanac_service_maintenance_projection p
-WHERE p.exclusion_id > $1::uuid
-ORDER BY p.exclusion_id LIMIT $2::integer
+JOIN public.almanac_maintenance_exclusion_revisions r ON r.exclusion_id = p.exclusion_id AND r.revision = p.desired_revision
+WHERE p.exclusion_id > $1::uuid AND r.ends_at > $2::timestamptz
+ORDER BY p.exclusion_id LIMIT $3::integer
 `
 
 type ListServiceMaintenanceMembershipTargetsParams struct {
-	AfterExclusion pgtype.UUID `json:"after_exclusion"`
-	PageLimit      int32       `json:"page_limit"`
+	AfterExclusion pgtype.UUID        `json:"after_exclusion"`
+	AffectedFrom   pgtype.Timestamptz `json:"affected_from"`
+	PageLimit      int32              `json:"page_limit"`
 }
 
 type ListServiceMaintenanceMembershipTargetsRow struct {
@@ -561,7 +685,7 @@ type ListServiceMaintenanceMembershipTargetsRow struct {
 }
 
 func (q *Queries) ListServiceMaintenanceMembershipTargets(ctx context.Context, arg ListServiceMaintenanceMembershipTargetsParams) ([]ListServiceMaintenanceMembershipTargetsRow, error) {
-	rows, err := q.db.Query(ctx, listServiceMaintenanceMembershipTargets, arg.AfterExclusion, arg.PageLimit)
+	rows, err := q.db.Query(ctx, listServiceMaintenanceMembershipTargets, arg.AfterExclusion, arg.AffectedFrom, arg.PageLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -581,28 +705,58 @@ func (q *Queries) ListServiceMaintenanceMembershipTargets(ctx context.Context, a
 }
 
 const listServiceMaintenanceProjectionSlos = `-- name: ListServiceMaintenanceProjectionSlos :many
-SELECT id FROM public.almanac_slos WHERE id > $1::uuid
-ORDER BY id LIMIT $2::integer
+WITH slo_page AS MATERIALIZED (
+    SELECT s.id
+    FROM public.almanac_slos s
+    WHERE s.id > $3::uuid
+    ORDER BY s.id
+    LIMIT $4::integer
+)
+SELECT s.id, (
+    EXISTS (
+        SELECT 1 FROM public.almanac_service_maintenance_intervals(
+            $1::uuid, $2::bigint, s.id, NULL
+        )
+    ) OR COALESCE((
+        SELECT c.included FROM public.almanac_slo_exclusion_changes c
+        WHERE c.slo_id = s.id AND c.exclusion_id = $1
+        ORDER BY c.revision DESC LIMIT 1
+    ), false)
+)::boolean AS relevant
+FROM slo_page s
+ORDER BY s.id
 `
 
 type ListServiceMaintenanceProjectionSlosParams struct {
-	AfterSlo  pgtype.UUID `json:"after_slo"`
-	PageLimit int32       `json:"page_limit"`
+	ExclusionID pgtype.UUID `json:"exclusion_id"`
+	Revision    int64       `json:"revision"`
+	AfterSlo    pgtype.UUID `json:"after_slo"`
+	PageLimit   int32       `json:"page_limit"`
 }
 
-func (q *Queries) ListServiceMaintenanceProjectionSlos(ctx context.Context, arg ListServiceMaintenanceProjectionSlosParams) ([]pgtype.UUID, error) {
-	rows, err := q.db.Query(ctx, listServiceMaintenanceProjectionSlos, arg.AfterSlo, arg.PageLimit)
+type ListServiceMaintenanceProjectionSlosRow struct {
+	ID       pgtype.UUID `json:"id"`
+	Relevant bool        `json:"relevant"`
+}
+
+func (q *Queries) ListServiceMaintenanceProjectionSlos(ctx context.Context, arg ListServiceMaintenanceProjectionSlosParams) ([]ListServiceMaintenanceProjectionSlosRow, error) {
+	rows, err := q.db.Query(ctx, listServiceMaintenanceProjectionSlos,
+		arg.ExclusionID,
+		arg.Revision,
+		arg.AfterSlo,
+		arg.PageLimit,
+	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []pgtype.UUID{}
+	items := []ListServiceMaintenanceProjectionSlosRow{}
 	for rows.Next() {
-		var id pgtype.UUID
-		if err := rows.Scan(&id); err != nil {
+		var i ListServiceMaintenanceProjectionSlosRow
+		if err := rows.Scan(&i.ID, &i.Relevant); err != nil {
 			return nil, err
 		}
-		items = append(items, id)
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -635,16 +789,18 @@ const lockObservedServiceMaintenanceMembershipWork = `-- name: LockObservedServi
 SELECT w.slo_id
 FROM public.almanac_service_maintenance_membership_work w
 WHERE w.slo_id = $1 AND w.through_exclusion = $2
+  AND w.affected_from = $3::timestamptz
 FOR UPDATE SKIP LOCKED
 `
 
 type LockObservedServiceMaintenanceMembershipWorkParams struct {
-	SloID            pgtype.UUID `json:"slo_id"`
-	ThroughExclusion pgtype.UUID `json:"through_exclusion"`
+	SloID            pgtype.UUID        `json:"slo_id"`
+	ThroughExclusion pgtype.UUID        `json:"through_exclusion"`
+	AffectedFrom     pgtype.Timestamptz `json:"affected_from"`
 }
 
 func (q *Queries) LockObservedServiceMaintenanceMembershipWork(ctx context.Context, arg LockObservedServiceMaintenanceMembershipWorkParams) (pgtype.UUID, error) {
-	row := q.db.QueryRow(ctx, lockObservedServiceMaintenanceMembershipWork, arg.SloID, arg.ThroughExclusion)
+	row := q.db.QueryRow(ctx, lockObservedServiceMaintenanceMembershipWork, arg.SloID, arg.ThroughExclusion, arg.AffectedFrom)
 	var slo_id pgtype.UUID
 	err := row.Scan(&slo_id)
 	return slo_id, err
@@ -675,7 +831,7 @@ func (q *Queries) LockObservedServiceMaintenanceProjection(ctx context.Context, 
 }
 
 const lockServiceMaintenanceMembershipWork = `-- name: LockServiceMaintenanceMembershipWork :one
-SELECT w.slo_id, w.through_exclusion FROM public.almanac_service_maintenance_membership_work w
+SELECT w.slo_id, w.through_exclusion, w.affected_from FROM public.almanac_service_maintenance_membership_work w
 JOIN public.almanac_slos s ON s.id = w.slo_id
 ORDER BY w.slo_id LIMIT 1 FOR NO KEY UPDATE OF s SKIP LOCKED
 `
@@ -683,8 +839,20 @@ ORDER BY w.slo_id LIMIT 1 FOR NO KEY UPDATE OF s SKIP LOCKED
 func (q *Queries) LockServiceMaintenanceMembershipWork(ctx context.Context) (AlmanacServiceMaintenanceMembershipWork, error) {
 	row := q.db.QueryRow(ctx, lockServiceMaintenanceMembershipWork)
 	var i AlmanacServiceMaintenanceMembershipWork
-	err := row.Scan(&i.SloID, &i.ThroughExclusion)
+	err := row.Scan(&i.SloID, &i.ThroughExclusion, &i.AffectedFrom)
 	return i, err
+}
+
+const observeMaintenanceInventoryRevision = `-- name: ObserveMaintenanceInventoryRevision :one
+SELECT inventory_revision
+FROM public.almanac_service_maintenance_authority WHERE singleton
+`
+
+func (q *Queries) ObserveMaintenanceInventoryRevision(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, observeMaintenanceInventoryRevision)
+	var inventory_revision int64
+	err := row.Scan(&inventory_revision)
+	return inventory_revision, err
 }
 
 const observeServiceMaintenanceAuthority = `-- name: ObserveServiceMaintenanceAuthority :one

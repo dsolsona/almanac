@@ -324,12 +324,15 @@ func (q *Queries) ReadMaintenanceAuthorityChange(ctx context.Context, arg ReadMa
 
 const readMaintenanceAuthorityRanges = `-- name: ReadMaintenanceAuthorityRanges :many
 SELECT part,lower(input_range)::timestamptz AS starts_at,upper(input_range)::timestamptz AS ends_at
-FROM public.almanac_maintenance_changed_inputs WHERE slo_id=$1 AND revision=$2 ORDER BY part
+FROM public.almanac_maintenance_changed_inputs WHERE slo_id=$1 AND revision=$2
+ AND part>$3::smallint ORDER BY part LIMIT $4::integer
 `
 
 type ReadMaintenanceAuthorityRangesParams struct {
-	SloID    pgtype.UUID `json:"slo_id"`
-	Revision int64       `json:"revision"`
+	SloID     pgtype.UUID `json:"slo_id"`
+	Revision  int64       `json:"revision"`
+	AfterPart int16       `json:"after_part"`
+	RowLimit  int32       `json:"row_limit"`
 }
 
 type ReadMaintenanceAuthorityRangesRow struct {
@@ -339,7 +342,12 @@ type ReadMaintenanceAuthorityRangesRow struct {
 }
 
 func (q *Queries) ReadMaintenanceAuthorityRanges(ctx context.Context, arg ReadMaintenanceAuthorityRangesParams) ([]ReadMaintenanceAuthorityRangesRow, error) {
-	rows, err := q.db.Query(ctx, readMaintenanceAuthorityRanges, arg.SloID, arg.Revision)
+	rows, err := q.db.Query(ctx, readMaintenanceAuthorityRanges,
+		arg.SloID,
+		arg.Revision,
+		arg.AfterPart,
+		arg.RowLimit,
+	)
 	if err != nil {
 		return nil, err
 	}

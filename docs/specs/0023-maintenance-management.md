@@ -76,6 +76,9 @@ Store exact UTC `[start,end)` bounds. Show the chosen timezone and exact UTC pre
 Reject nonexistent/ambiguous local input unless an unambiguous instant is selected.
 Alignment follows SPEC-0016: no silent expansion or invented fractional counts.
 Reason, duration, scope, roles and expected revisions are validated atomically.
+When upgrading from versions that omitted some observation grid changes, preserve
+previously recorded coverage where the grid history is unavailable. Reject a new
+service-scoped historical declaration that needs that grid history to validate its bounds.
 
 ### UI presentation
 
@@ -187,3 +190,4 @@ See [plan 0046](../plans/0046-maintenance-management.md).
 
 - 2026-11-17: Drafted the initial direction.
 - 2026-11-18: Accepted the scope, prospective membership and in-Almanac suppression contract.
+- 2026-11-18: Defined upgrade behavior for missing observation grid history. Preserve recorded elapsed coverage and reject new service-scoped historical declarations that require an unavailable grid to validate their bounds.

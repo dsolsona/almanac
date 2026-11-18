@@ -19,11 +19,12 @@ import (
 )
 
 var (
-	ErrMaintenanceInvalid         = errors.New("storage: invalid maintenance request")
-	ErrMaintenanceNotFound        = errors.New("storage: maintenance resource not found")
-	ErrMaintenanceConflict        = errors.New("storage: maintenance revision or replay conflict")
-	ErrMaintenanceAlignment       = errors.New("storage: maintenance bounds are not aligned")
-	ErrMaintenanceSnapshotChanged = errors.New("storage: maintenance snapshot changed")
+	ErrMaintenanceInvalid                   = errors.New("storage: invalid maintenance request")
+	ErrMaintenanceNotFound                  = errors.New("storage: maintenance resource not found")
+	ErrMaintenanceConflict                  = errors.New("storage: maintenance revision or replay conflict")
+	ErrMaintenanceAlignment                 = errors.New("storage: maintenance bounds are not aligned")
+	ErrMaintenanceHistoricalGridUnavailable = errors.New("storage: observation grid history is unavailable for the selected services and time range")
+	ErrMaintenanceSnapshotChanged           = errors.New("storage: maintenance snapshot changed")
 )
 
 type MaintenanceConflictError struct{ CurrentRevision int64 }
@@ -297,21 +298,60 @@ func mutateMaintenance(ctx context.Context, databaseURL string, input CreateMain
 			return empty, err
 		}
 	}
-	if broad {
-		if _, err := q.AdvanceServiceMaintenanceAuthority(ctx); err != nil {
+	serviceDeclaration := isServiceMaintenanceScope(input.ScopeKind) && (op == "create" || op == "edit")
+	historical := serviceDeclaration && input.Start.Before(now)
+	var historicalCadences []int32
+	var inventoryRevision int64
+	if historical {
+		if err := maintenancePermission(op, user.Role, old, input, now); err != nil {
 			return empty, err
+		}
+		// Inventory history can span the fleet. Inspect it without holding the
+		// singleton and compare the revision before publishing the selector.
+		inventoryRevision, err = q.ObserveServiceMaintenanceAuthority(ctx)
+		if err != nil {
+			return empty, err
+		}
+		allServices, services := input.ScopeKind == MaintenanceScopeAllServices, maintenanceSelectorUUIDs(input.ServiceIDs)
+		startsAt, endsAt := timestamp(input.Start), timestamp(input.End)
+		uncertain, err := q.HasUncertainHistoricalServiceMaintenanceGrid(ctx, dbgen.HasUncertainHistoricalServiceMaintenanceGridParams{
+			AllServices: allServices, ServiceIds: services, StartsAt: startsAt, EndsAt: endsAt,
+		})
+		if err != nil {
+			return empty, err
+		}
+		if uncertain {
+			return empty, ErrMaintenanceHistoricalGridUnavailable
+		}
+		historicalCadences, err = q.ListHistoricalServiceMaintenanceCadences(ctx, dbgen.ListHistoricalServiceMaintenanceCadencesParams{
+			AllServices: allServices, ServiceIds: services, StartsAt: startsAt, EndsAt: endsAt,
+		})
+		if err != nil {
+			return empty, err
+		}
+	}
+	if broad {
+		revision, err := q.AdvanceServiceMaintenanceAuthority(ctx)
+		if err != nil {
+			return empty, err
+		}
+		if historical && revision-1 != inventoryRevision {
+			return empty, ErrMaintenanceSnapshotChanged
 		}
 	}
 	now = normalizedAgentNow(input.Now)
 	if err := maintenancePermission(op, user.Role, old, input, now); err != nil {
 		return empty, err
 	}
+	if serviceDeclaration && input.Start.Before(now) != historical {
+		return empty, ErrMaintenanceSnapshotChanged
+	}
 	if input.ScopeKind == MaintenanceScopeSlos {
 		if err := validateMaintenanceGrids(ctx, q, input.SloIDs, input.Start, input.End); err != nil {
 			return empty, err
 		}
 	} else if op == "create" || op == "edit" || op == "end" {
-		if err := validateServiceMaintenanceSelector(ctx, q, input, op, old.End, now); err != nil {
+		if err := validateServiceMaintenanceSelector(ctx, q, input, op, old.End, now, historicalCadences); err != nil {
 			return empty, err
 		}
 	}
@@ -539,15 +579,6 @@ func ReadMaintenance(ctx context.Context, databaseURL string, input ReadMaintena
 	}
 	if !input.Scoped && result.ScopeKind != MaintenanceScopeSlos {
 		return MaintenanceRecord{}, ErrMaintenanceNotFound
-	}
-	if !input.Scoped && input.Revision > 0 {
-		current, err := q.ReadMaintenanceRevision(ctx, dbgen.ReadMaintenanceRevisionParams{ID: id})
-		if err != nil {
-			return MaintenanceRecord{}, err
-		}
-		if current.ScopeKind != string(MaintenanceScopeSlos) {
-			return MaintenanceRecord{}, ErrMaintenanceNotFound
-		}
 	}
 	if err := finishAgentRead(ctx, tx, input.Now, started, user, installation, session); err != nil {
 		return MaintenanceRecord{}, err

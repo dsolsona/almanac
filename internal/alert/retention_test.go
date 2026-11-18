@@ -271,3 +271,18 @@ func TestCompactionRejectsInvalidInput(t *testing.T) {
 		}
 	}
 }
+
+func TestCompactionKeepsMaintenanceDecisions(t *testing.T) {
+	t.Parallel()
+	entries, before := retentionEntries()
+	entries = entries[:5]
+	middle := entries[2].Evaluation.Snapshot.Cutoff
+	entries[2].Evaluation.Maintenance = &MaintenanceSuppression{
+		WindowID: "maintenance", Revision: 1, Start: middle, End: middle.Add(time.Minute),
+	}
+	runs, err := PlanCompaction(entries, before)
+	if err != nil || len(runs) != 2 || !reflect.DeepEqual(runs[0].EvaluationIDs, []string{"0", "1"}) ||
+		!reflect.DeepEqual(runs[1].EvaluationIDs, []string{"3", "4"}) {
+		t.Fatalf("maintenance decision did not split compaction: %+v %v", runs, err)
+	}
+}

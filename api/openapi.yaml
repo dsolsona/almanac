@@ -102,9 +102,13 @@ paths:
     get:
       operationId: listAlertMaintenanceSuppressions
       summary: Audit retained openings suppressed by maintenance on a policy revision
+      description: >-
+        Scans a bounded batch of retained policy evaluations. A page may contain no decisions
+        and still include next_cursor when the scanned batch contained no suppressed opening.
+        Follow next_cursor until absent.
       security: [{SessionCookie: []}]
       parameters:
-        - {name: revision, in: query, required: true, schema: {$ref: '#/components/schemas/AlertVersion'}}
+        - {name: revision, in: query, required: true, description: Use AlertPolicy.evaluation_revision for current evaluations or the retained evaluation revision to audit. AlertPolicy.version is the resource version used for ETags., schema: {$ref: '#/components/schemas/AlertVersion'}}
         - {$ref: '#/components/parameters/AlertLimit'}
         - {$ref: '#/components/parameters/AlertCursor'}
       responses:
@@ -1007,18 +1011,29 @@ paths:
         'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
     post:
       operationId: createScopedMaintenance
-      summary: Create an scoped maintenance window
+      summary: Create a scoped maintenance window
       security: [{SessionCookie: [], CsrfToken: []}]
       parameters:
+        - {$ref: '#/components/parameters/MaintenanceOrigin'}
+        - {$ref: '#/components/parameters/MaintenanceCsrfToken'}
         - {$ref: '#/components/parameters/IdempotencyKey'}
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ScopedMaintenanceWrite'}}}}
       responses:
         '201':
-          description: Create an scoped maintenance window
+          description: Create a scoped maintenance window
           headers:
             ETag: {schema: {type: string}}
             Location: {schema: {type: string}}
           content: {application/json: {schema: {$ref: '#/components/schemas/ScopedMaintenanceWindow'}}}
+        '400':
+          description: Invalid fields or bounds, or required historical observation grid unavailable (maintenance_history_unavailable).
+          content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}
+        '409':
+          description: >-
+            A revision or request key conflicted (maintenance_conflict). If the affected SLO inventory
+            changed or the scheduled start passed during validation (maintenance_write_retry), retry
+            the same request with the same idempotency key.
+          content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}
         'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
   /api/v1/scoped-maintenance/{maintenance_id}:
     get:
@@ -1040,6 +1055,8 @@ paths:
       summary: Replace maintenance window details
       security: [{SessionCookie: [], CsrfToken: []}]
       parameters:
+        - {$ref: '#/components/parameters/MaintenanceOrigin'}
+        - {$ref: '#/components/parameters/MaintenanceCsrfToken'}
         - {name: maintenance_id, in: path, required: true, schema: {type: string, format: uuid}}
         - {name: If-Match, in: header, required: true, description: Strong ETag of the maintenance revision., schema: {type: string}}
         - {$ref: '#/components/parameters/IdempotencyKey'}
@@ -1050,6 +1067,15 @@ paths:
           headers:
             ETag: {schema: {type: string}}
           content: {application/json: {schema: {$ref: '#/components/schemas/ScopedMaintenanceWindow'}}}
+        '400':
+          description: Invalid fields or bounds, or required historical observation grid unavailable (maintenance_history_unavailable).
+          content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}
+        '409':
+          description: >-
+            A revision or request key conflicted (maintenance_conflict). If the affected SLO inventory
+            changed or the scheduled start passed during validation (maintenance_write_retry), retry
+            the same request with the same idempotency key.
+          content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}
         'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
   /api/v1/scoped-maintenance/{maintenance_id}/end:
     post:
@@ -1057,6 +1083,8 @@ paths:
       summary: End maintenance prospectively
       security: [{SessionCookie: [], CsrfToken: []}]
       parameters:
+        - {$ref: '#/components/parameters/MaintenanceOrigin'}
+        - {$ref: '#/components/parameters/MaintenanceCsrfToken'}
         - {name: maintenance_id, in: path, required: true, schema: {type: string, format: uuid}}
         - {name: If-Match, in: header, required: true, description: Strong ETag of the maintenance revision., schema: {type: string}}
         - {$ref: '#/components/parameters/IdempotencyKey'}
@@ -1074,6 +1102,8 @@ paths:
       summary: Cancel scheduled maintenance
       security: [{SessionCookie: [], CsrfToken: []}]
       parameters:
+        - {$ref: '#/components/parameters/MaintenanceOrigin'}
+        - {$ref: '#/components/parameters/MaintenanceCsrfToken'}
         - {name: maintenance_id, in: path, required: true, schema: {type: string, format: uuid}}
         - {name: If-Match, in: header, required: true, description: Strong ETag of the maintenance revision., schema: {type: string}}
         - {$ref: '#/components/parameters/IdempotencyKey'}
@@ -1091,6 +1121,8 @@ paths:
       summary: Include maintenance events again
       security: [{SessionCookie: [], CsrfToken: []}]
       parameters:
+        - {$ref: '#/components/parameters/MaintenanceOrigin'}
+        - {$ref: '#/components/parameters/MaintenanceCsrfToken'}
         - {name: maintenance_id, in: path, required: true, schema: {type: string, format: uuid}}
         - {name: If-Match, in: header, required: true, description: Strong ETag of the maintenance revision., schema: {type: string}}
         - {$ref: '#/components/parameters/IdempotencyKey'}
@@ -1106,20 +1138,36 @@ paths:
     post:
       operationId: previewMaintenanceScope
       summary: Inspect the current affected SLO inventory for a maintenance selector
-      description: Read-only operation available to Viewers. Scope and pagination are bound to the cursor. An empty valid inventory has a zero total.
+      description: >-
+        Read-only operation available to Viewers. Scope and pagination are bound to the cursor.
+        Follow next_cursor to retrieve the remaining inventory. An empty valid inventory has a zero total.
+        After a 409 maintenance_snapshot_changed response, discard the partial inventory and request
+        the first page again with the same selector and no cursor.
       security: [{SessionCookie: [], CsrfToken: []}]
       parameters:
+        - {$ref: '#/components/parameters/MaintenanceOrigin'}
+        - {$ref: '#/components/parameters/MaintenanceCsrfToken'}
         - {$ref: '#/components/parameters/PageLimit'}
         - {$ref: '#/components/parameters/PageCursor'}
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/MaintenanceScopePreview'}}}}
       responses:
         '200': {description: Bounded current impact at the reported inventory time, content: {application/json: {schema: {$ref: '#/components/schemas/MaintenanceImpactPage'}}}}
+        '409': {description: The affected SLO inventory changed (maintenance_snapshot_changed)., content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
         'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
   /api/v1/scoped-maintenance/{maintenance_id}/impact:
     get:
       operationId: readMaintenanceImpact
       summary: Read the effective membership of a maintenance revision
-      description: Effective membership includes retained participation bounds. A page with ready false indicates calculation-scope preparation is incomplete.
+      description: >-
+        Effective membership includes participation bounds, and one SLO can have several intervals.
+        An explicit SLO selection can have ready membership before the window starts.
+        A service-derived selection is ready when its membership and recorded participation bounds
+        are available. A revision superseded before activation returns a final, ready, empty result.
+        Continue with next_cursor until absent. An omitted revision on a continuation uses the
+        revision bound to the cursor. After a 409 maintenance_snapshot_changed response, restart
+        from the first page without the cursor. Omitting revision on a new first page can select a
+        newer revision. To audit the same revision across restarts, first read the window revision
+        and pass it explicitly from the first page onward.
       security: [{SessionCookie: []}]
       parameters:
         - {name: maintenance_id, in: path, required: true, schema: {type: string, format: uuid}}
@@ -1128,6 +1176,7 @@ paths:
         - {$ref: '#/components/parameters/PageCursor'}
       responses:
         '200': {description: Bounded effective membership, content: {application/json: {schema: {$ref: '#/components/schemas/MaintenanceImpactPage'}}}}
+        '409': {description: The membership snapshot changed (maintenance_snapshot_changed)., content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
         'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
   /api/v1/slos/{slo_id}/maintenance:
     get:
@@ -1594,6 +1643,18 @@ components:
       required: true
       description: One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split.
       schema: {type: string, minLength: 1, maxLength: 128}
+    MaintenanceOrigin:
+      name: Origin
+      in: header
+      required: true
+      description: One Origin header equal to the configured public HTTPS origin.
+      schema: {type: string}
+    MaintenanceCsrfToken:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      description: Session-bound CSRF token returned by the context endpoint.
+      schema: {type: string}
   securitySchemes:
     AgentBearer:
       type: http
@@ -3352,10 +3413,11 @@ components:
       properties:
         title: {type: string, minLength: 1, maxLength: 512, description: Maximum 512 UTF-8 bytes.}
         reason: {type: string, minLength: 1, maxLength: 4096, description: Maximum 4096 UTF-8 bytes.}
-        start: {type: string, format: date-time}
-        end: {type: string, format: date-time}
+        start: {type: string, format: date-time, description: Use a zero-offset UTC instant at whole-second precision aligned to the applicable observation grids., example: '2027-01-15T15:00:00Z'}
+        end: {type: string, format: date-time, description: Use a zero-offset UTC instant at whole-second precision aligned to the applicable observation grids., example: '2027-01-15T16:00:00Z'}
         scope: {$ref: '#/components/schemas/MaintenanceScope'}
     MaintenanceScope:
+      x-go-type: maintenanceScope
       oneOf:
         - {$ref: '#/components/schemas/MaintenanceSloScope'}
         - {$ref: '#/components/schemas/MaintenanceServiceScope'}
@@ -3372,14 +3434,14 @@ components:
       required: [kind, slo_ids]
       properties:
         kind: {type: string, enum: [slos]}
-        slo_ids: {type: array, minItems: 1, maxItems: 100, uniqueItems: true, items: {type: string, format: uuid}}
+        slo_ids: {type: array, minItems: 1, maxItems: 100, uniqueItems: true, items: {type: string, format: uuid, description: Canonical lowercase UUID. The zero UUID is invalid.}}
     MaintenanceServiceScope:
       type: object
       additionalProperties: false
       required: [kind, service_ids]
       properties:
         kind: {type: string, enum: [services]}
-        service_ids: {type: array, minItems: 1, maxItems: 100, uniqueItems: true, items: {type: string, format: uuid}}
+        service_ids: {type: array, minItems: 1, maxItems: 100, uniqueItems: true, items: {type: string, format: uuid, description: Canonical lowercase UUID. The zero UUID is invalid.}}
     MaintenanceAllServicesScope:
       type: object
       additionalProperties: false
@@ -3418,8 +3480,8 @@ components:
         items: {type: array, items: {$ref: '#/components/schemas/MaintenanceImpactMember'}}
         total: {type: string, pattern: '^(0|[1-9][0-9]*)$', description: Exact number of distinct affected SLOs across the inventory or effective membership page set.}
         inventory_at: {type: string, format: date-time}
-        ready: {type: boolean, description: False if effective membership is still being prepared.}
-        next_cursor: {type: string}
+        ready: {type: boolean, description: Whether the requested membership is available. Future explicit SLO selections can be ready. A service-derived selection remains pending until its recorded membership is available. Revisions superseded before activation have final empty membership.}
+        next_cursor: {type: string, description: Follow until absent to retrieve the remaining results for this membership query.}
     MaintenanceReason:
       type: object
       additionalProperties: false
@@ -3432,7 +3494,7 @@ components:
       required: [reason, end]
       properties:
         reason: {type: string, minLength: 1, maxLength: 4096, description: Maximum 4096 UTF-8 bytes.}
-        end: {type: string, format: date-time}
+        end: {type: string, format: date-time, description: Use a zero-offset UTC instant at whole-second precision aligned to the applicable observation grids., example: '2027-01-15T16:00:00Z'}
     ScopedMaintenanceTimelinePage:
       type: object
       additionalProperties: false
@@ -3443,7 +3505,18 @@ components:
           items: {$ref: '#/components/schemas/ScopedMaintenanceTimelineInterval'}
         pending: {type: boolean, description: Some effective memberships in this range are still being prepared.}
         next_cursor: {type: string}
-        overflow: {$ref: '#/components/schemas/MaintenanceOverflow'}
+        overflow: {$ref: '#/components/schemas/ScopedMaintenanceOverflow'}
+    ScopedMaintenanceOverflow:
+      type: object
+      description: >-
+        Chart grouping for the last first-page participation interval and all following
+        intervals. The bounds are clipped to the requested range and enclose the grouped
+        intervals. They do not describe continuous exclusion coverage.
+      required: [start, end, count]
+      properties:
+        start: {type: string, format: date-time}
+        end: {type: string, format: date-time}
+        count: {type: string, pattern: '^[1-9][0-9]*$', description: Exact decimal participation interval count.}
     ScopedMaintenanceTimelineInterval:
       type: object
       additionalProperties: false

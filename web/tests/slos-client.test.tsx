@@ -1,5 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { sloClient, SloFailure, sameDerivedInputs } from '../src/slos/client.ts';
+import { readSloMaintenance } from '../src/slos/maintenanceOverlay.ts';
 import type { AuthContext } from '../src/auth/client.ts';
 import type { components } from '../src/api/generated.ts';
 import { clearQueryCache } from '../src/queryCache.ts';
@@ -264,4 +265,33 @@ it('accepts disclosed stale current values but rejects stale Healthy and unknown
  await expect(sloClient.current(id)).rejects.toThrow('invalid response');
  clearQueryCache();status.urgency='watch';status.current_state='maybe';
  await expect(sloClient.current(id)).rejects.toThrow('invalid response');
+});
+
+it.each([
+  { absent: true, cursor: '', calls: ['scoped', 'collection', 'legacy'] },
+  { absent: false, cursor: '', calls: ['scoped', 'collection'] },
+  { absent: true, cursor: 'continuation', calls: ['scoped'] },
+])('keeps scoped resources and cursors separate from legacy fallback ($absent, $cursor)', async ({ absent, cursor, calls }) => {
+  clearQueryCache();
+  const paths: string[] = [];
+  const missing = () => Response.json({ code: 'not_found' }, { status: 404 });
+  vi.stubGlobal('fetch', vi.fn(async (input: string) => {
+    const url = new URL(input, 'https://almanac.example');
+    if (url.pathname === `/api/v1/slos/${id}/scoped-maintenance`) {
+      paths.push('scoped');
+      return missing();
+    }
+    if (url.pathname === '/api/v1/scoped-maintenance') {
+      paths.push('collection');
+      expect(url.searchParams.get('limit')).toBe('1');
+      return absent ? missing() : Response.json({ items: [] });
+    }
+    expect(url.pathname).toBe(`/api/v1/slos/${id}/maintenance`);
+    paths.push('legacy');
+    return Response.json({ items: [] });
+  }));
+  const operation = readSloMaintenance(id, '2026-10-29T11:00:00Z', instant, cursor, new AbortController().signal);
+  if (absent && !cursor) await expect(operation).resolves.toMatchObject({ source: 'legacy', items: [] });
+  else await expect(operation).rejects.toMatchObject({ code: 'not_found', status: 404 });
+  expect(paths).toEqual(calls);
 });

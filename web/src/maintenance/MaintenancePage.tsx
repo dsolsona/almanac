@@ -183,7 +183,7 @@ function WindowDetail({ id, revision, editing, context }: { id: string; revision
           <p className="ui-hint">Recorded SLO participation will appear when the window starts.</p>
         </section>
         : <div className="maintenance-panel maintenance-detail">
-          <MaintenanceWindowImpact key={window.revision} id={window.id} revision={window.revision} />
+          <MaintenanceWindowImpact key={`${window.revision}:${refresh}`} id={window.id} revision={window.revision} />
         </div>}
       <section className="maintenance-panel maintenance-detail" aria-labelledby="maintenance-history-heading">
         <h2 id="maintenance-history-heading">Revision history</h2>

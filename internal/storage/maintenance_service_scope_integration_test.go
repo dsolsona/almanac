@@ -12,7 +12,9 @@ import (
 )
 
 func TestIntegrationMaintenanceServiceSelectorAuthority(t *testing.T) {
+	t.Parallel()
 	f := newMaintenanceFixture(t)
+	authority := maintenanceAuthorityRevision(t, f)
 	objective, err := dbgen.New(f.conn).GetSlo(t.Context(), mustPGUUID(f.ids[0]))
 	if err != nil {
 		t.Fatal(err)
@@ -23,9 +25,16 @@ func TestIntegrationMaintenanceServiceSelectorAuthority(t *testing.T) {
 	if err != nil || window.ScopeKind != MaintenanceScopeServices || !slices.Equal(window.ServiceIDs, input.ServiceIDs) || len(window.SloIDs) != 0 {
 		t.Fatalf("persisted selector = %+v, err = %v", window, err)
 	}
+	if got := maintenanceAuthorityRevision(t, f); got != authority+1 {
+		t.Fatalf("creation advanced authority to %d, want %d", got, authority+1)
+	}
 	replay, err := CreateMaintenance(t.Context(), f.f.databaseURL, input)
 	if err != nil || replay.ID != window.ID {
 		t.Fatalf("replay selector = %+v, err = %v", replay, err)
+	}
+
+	if got := maintenanceAuthorityRevision(t, f); got != authority+1 {
+		t.Fatalf("replay advanced authority to %d, want %d", got, authority+1)
 	}
 
 	if _, err := ReadMaintenance(t.Context(), f.f.databaseURL, ReadMaintenanceInput{
@@ -64,6 +73,9 @@ func TestIntegrationMaintenanceServiceSelectorAuthority(t *testing.T) {
 	cancel.Scoped = true
 	if cancelled, err := CancelMaintenance(t.Context(), f.f.databaseURL, cancel); err != nil || !cancelled.Tombstone || cancelled.Revision != 2 {
 		t.Fatalf("scoped cancellation = %+v, %v", cancelled, err)
+	}
+	if got := maintenanceAuthorityRevision(t, f); got != authority+2 {
+		t.Fatalf("cancellation advanced authority to %d, want %d", got, authority+2)
 	}
 	if witness := serviceSuppressionAt(t, f, f.ids[0], window.Start); witness != nil {
 		t.Fatalf("cancelled window suppressed the future boundary: %+v", witness)
@@ -154,6 +166,10 @@ func TestIntegrationMaintenanceServiceSuppressionUsesRevisionOrder(t *testing.T)
 	window, err := CreateMaintenance(t.Context(), f.f.databaseURL, input)
 	if err != nil {
 		t.Fatal(err)
+	}
+
+	if witness := serviceSuppressionAt(t, f, f.ids[0], window.Start); witness == nil || witness.ID != window.ID || witness.Revision != window.Revision {
+		t.Fatalf("all-services scope lacked a witness before cancellation: %+v", witness)
 	}
 
 	// Aggregate revision remains monotonic across separate authorized requests

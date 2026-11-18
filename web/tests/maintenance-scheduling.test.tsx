@@ -120,8 +120,12 @@ it('can check an uncertain cancellation without giving up the draft', async () =
   const scheduled = { ...record, start: '2026-11-18T03:00:00Z', end: '2026-11-18T04:00:00Z' };
   const get = await showDetail(scheduled);
   const cancelled = { ...scheduled, revision: '2', operation: 'cancel' as const, tombstone: true };
-  get.mockResolvedValueOnce({ value: cancelled, etag: `"maintenance:${id}:2"` });
-  vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Response lost'); }));
+  get.mockRestore();
+  const fetch = vi.fn(async (_input: string, request?: RequestInit) => {
+    if (request?.method === 'POST') throw new TypeError('Response lost');
+    return Response.json(cancelled, { headers: { ETag: `"maintenance:${id}:2"` } });
+  });
+  vi.stubGlobal('fetch', fetch);
   fireEvent.click(screen.getByRole('button', { name: 'Cancel scheduled maintenance' }));
   const reason = screen.getByLabelText('Reason for this change');
   fireEvent.change(reason, { target: { value: 'Postpone the work.' } });
@@ -130,6 +134,10 @@ it('can check an uncertain cancellation without giving up the draft', async () =
   expect(reason).toHaveValue('Postpone the work.');
   expect(screen.getByText('Cancelled', { exact: true })).toBeVisible();
   expect(screen.getByRole('button', { name: 'Cancel maintenance' })).toBeDisabled();
+  expect(fetch.mock.calls.map(([input, request]) => [input, request?.method ?? 'GET'])).toEqual([
+    [`/api/v1/scoped-maintenance/${id}/cancel`, 'POST'],
+    [`/api/v1/scoped-maintenance/${id}`, 'GET'],
+  ]);
 });
 
 it('allows dismissal while checking a revision and aborts the pending read', async () => {
@@ -240,6 +248,35 @@ it('preserves the exact bounds of an API-created window when editing its reason'
   expect(location.pathname + location.search).toBe(`/maintenance/${id}`);
 });
 
+it('retries an edit after its inventory changes using the same draft and request key', async () => {
+  history.replaceState({}, '', `/maintenance/${id}?edit=1`);
+  const etag = `"maintenance:${id}:1"`;
+  vi.spyOn(sloClient, 'get').mockRejectedValue(new Error('Name not loaded'));
+  vi.spyOn(sloClient, 'overview').mockResolvedValue({ items: [] } as unknown as OperationalOverview);
+  const update = vi.spyOn(maintenanceClient, 'update');
+  const fetch = vi.fn()
+    .mockResolvedValueOnce(Response.json({ code: 'maintenance_write_retry' }, { status: 409 }))
+    .mockResolvedValueOnce(Response.json({ ...record, reason: 'Updated reason', revision: '2', operation: 'edit' }, {
+      headers: { ETag: `"maintenance:${id}:2"` },
+    }));
+  vi.stubGlobal('fetch', fetch);
+
+  render(<ScheduleMaintenance context={context} existing={{ value: record, etag }} />);
+  const reason = screen.getByLabelText('Reason');
+  fireEvent.change(reason, { target: { value: 'Updated reason' } });
+  const save = screen.getByRole('button', { name: 'Save schedule' });
+  await waitFor(() => expect(save).toBeEnabled());
+  fireEvent.click(save);
+  expect(await screen.findByRole('alert')).toHaveTextContent('The affected SLO inventory changed or the scheduled start passed while saving. Try saving again.');
+  expect(screen.queryByRole('button', { name: 'Read latest revision' })).toBeNull();
+  expect(reason).toHaveValue('Updated reason');
+  expect(save).toBeEnabled();
+  await act(async () => { fireEvent.click(save); });
+  expect(update).toHaveBeenCalledTimes(2);
+  expect(update.mock.calls[1]).toEqual(update.mock.calls[0]);
+  expect(location.pathname + location.search).toBe(`/maintenance/${id}`);
+});
+
 it('reviews a concurrent SLO swap and reason before enabling the retained draft', async () => {
   const replacement = '70000000-0000-4000-8000-000000000002';
   const etag = `"maintenance:${id}:1"`;
@@ -316,13 +353,8 @@ it('searches the whole service catalogue and keeps scope choices exclusive', asy
 it('pages the all-services preview and distinguishes an unavailable inventory from zero impact', async () => {
   vi.spyOn(sloClient, 'overview').mockResolvedValue({ items: [] } as unknown as OperationalOverview);
   vi.mocked(maintenanceClient.preview).mockRestore();
-  const preview = vi.fn(async (input: string, request?: RequestInit) => {
+  const preview = vi.fn(async (input: string, _request?: RequestInit) => {
     const url = new URL(input, location.origin);
-    expect(url.pathname).toBe('/api/v1/scoped-maintenance/preview');
-    expect(url.searchParams.get('limit')).toBe('10');
-    expect(request?.method).toBe('POST');
-    expect(new Headers(request?.headers).get('X-CSRF-Token')).toBe(context.csrf_token);
-    expect(JSON.parse(String(request?.body))).toEqual({ scope: { kind: 'all_services' } });
     if (url.searchParams.get('cursor') === 'next') return new Response('{}', { status: 503 });
     return Response.json({
       inventory_at: now, ready: true, total: '51', next_cursor: 'next',
@@ -340,6 +372,16 @@ it('pages the all-services preview and distinguishes an unavailable inventory fr
   expect(await screen.findByRole('alert')).toHaveTextContent('Affected SLOs could not be loaded');
   expect(screen.queryByText('0 affected SLOs')).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Retry affected SLOs' })).toBeEnabled();
+  expect(preview).toHaveBeenCalledTimes(2);
+  for (const [index, [input, request]] of preview.mock.calls.entries()) {
+    const url = new URL(input, location.origin);
+    expect(url.searchParams.get('cursor')).toBe(index === 0 ? null : 'next');
+    expect(url.pathname).toBe('/api/v1/scoped-maintenance/preview');
+    expect(url.searchParams.get('limit')).toBe('10');
+    expect(request?.method).toBe('POST');
+    expect(new Headers(request?.headers).get('X-CSRF-Token')).toBe(context.csrf_token);
+    expect(JSON.parse(String(request?.body))).toEqual({ scope: { kind: 'all_services' } });
+  }
 });
 
 it('shows scheduled scope before displaying recorded participation at activation', async () => {
@@ -394,4 +436,114 @@ it('rejects an inventory preview with more rows than the reported total', async 
 
   await expect(maintenanceClient.preview({ kind: 'all_services' }, context, 10, '', new AbortController().signal))
     .rejects.toThrow('invalid response');
+});
+
+it('revokes preview approval when a continuation reports a changed snapshot', async () => {
+  const preview = vi.mocked(maintenanceClient.preview);
+  preview.mockResolvedValueOnce({ inventory_at: now, ready: true, total: '21', items: [], next_cursor: 'next' });
+  preview.mockRejectedValueOnce(new SloFailure('Inventory changed.', false, 409, 'maintenance_snapshot_changed'));
+  render(<ScheduleMaintenance context={context} />);
+  fireEvent.click(screen.getByRole('radio', { name: 'All services' }));
+  const save = screen.getByRole('button', { name: 'Schedule maintenance' });
+  await waitFor(() => expect(save).toBeEnabled());
+
+  fireEvent.click(screen.getByRole('button', { name: /Next/ }));
+  const reload = await screen.findByRole('button', { name: 'Reload affected SLOs' });
+  expect(save).toBeDisabled();
+  fireEvent.click(reload);
+  expect(save).toBeDisabled();
+  await waitFor(() => expect(save).toBeEnabled());
+  expect(preview.mock.calls.map(args => args[3])).toEqual(['', 'next', '']);
+});
+
+it('retains focus on Per page during a replacement read', async () => {
+  const preview = vi.mocked(maintenanceClient.preview);
+  preview.mockResolvedValueOnce({ inventory_at: now, ready: true, total: '15', items: [], next_cursor: 'next' });
+  preview.mockImplementationOnce(() => new Promise(() => {}));
+  render(<ScheduleMaintenance context={context} />);
+  fireEvent.click(screen.getByRole('radio', { name: 'All services' }));
+  const size = await screen.findByRole('combobox', { name: 'Per page' });
+  size.focus();
+  fireEvent.change(size, { target: { value: '20' } });
+  expect(size).toHaveFocus();
+  expect(size).toHaveValue('20');
+  expect(screen.getByRole('button', { name: /Next/ })).toBeDisabled();
+});
+
+it('offers a retry when the first preview stalls', async () => {
+  vi.useFakeTimers();
+  const preview = vi.mocked(maintenanceClient.preview);
+  preview.mockImplementationOnce(() => new Promise(() => {}));
+  render(<ScheduleMaintenance context={context} />);
+  fireEvent.click(screen.getByRole('radio', { name: 'All services' }));
+  const save = screen.getByRole('button', { name: 'Schedule maintenance' });
+  expect(save).toBeDisabled();
+  await act(async () => { vi.advanceTimersByTime(30_000); });
+  expect(preview.mock.calls[0]?.[4].aborted).toBe(true);
+  expect(save).toBeDisabled();
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Retry affected SLOs' })); });
+  expect(save).toBeEnabled();
+});
+
+it('refreshes pending participation from page one even when the revision is unchanged', async () => {
+  const impact = vi.mocked(maintenanceClient.impact);
+  impact.mockResolvedValueOnce({ inventory_at: now, ready: false, total: '0', items: [] });
+  await showDetail({ ...record, start: '2026-11-18T01:00:00Z', end: '2026-11-18T03:00:00Z' });
+  expect(screen.getByText('Affected SLOs are being prepared.')).toBeVisible();
+
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Refresh maintenance window' })); });
+  expect(impact.mock.calls.map(([windowID, revision, , cursor]) => [windowID, revision, cursor])).toEqual([
+    [id, '1', ''], [id, '1', ''],
+  ]);
+  expect(screen.getByText(/0 affected SLOs/)).toBeVisible();
+});
+
+it('rejects malformed operation values through uncertain-write recovery', async () => {
+  for (const operation of [['cancel'], { toString: null }]) {
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ ...record, operation }, { headers: { ETag: `"maintenance:${id}:1"` } })));
+    await expect(maintenanceClient.transition(id, 'cancel', { reason: 'Change of plan' }, context, 'key', `"maintenance:${id}:1"`))
+      .rejects.toMatchObject({ uncertain: true, status: 200, message: 'The server returned an invalid response.' });
+  }
+});
+
+it('requires recorded bounds for impact and rejects them in the preview', async () => {
+  vi.mocked(maintenanceClient.impact).mockRestore();
+  vi.mocked(maintenanceClient.preview).mockRestore();
+  const member = { slo_id: sloId, service_id: id, slo_name: 'Checkout availability', service_name: 'Checkout' };
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ inventory_at: now, ready: true, total: '1', items: [member] })));
+  await expect(maintenanceClient.impact(id, '1', 10, '', new AbortController().signal)).rejects.toThrow('invalid response');
+
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({
+    inventory_at: now, ready: true, total: '1', items: [{ ...member, start: record.start, end: record.end }],
+  })));
+  await expect(maintenanceClient.preview({ kind: 'all_services' }, context, 10, '', new AbortController().signal)).rejects.toThrow('invalid response');
+});
+
+it.each(['services', 'slos'] as const)('finds more matching %s without clearing the query or selection', async kind => {
+  const first = { id, name: 'fleet-a', display_name: 'Fleet A', version: '1', created_at: now, updated_at: now };
+  const second = { ...first, id: sloId, name: 'fleet-b', display_name: 'Fleet B' };
+  const services = vi.spyOn(serviceClient, 'list').mockImplementation(async query => ({
+    items: query?.cursor ? [second] : [first], next_cursor: query?.cursor ? '' : 'next',
+  }));
+  const slos = vi.spyOn(sloClient, 'overview').mockImplementation(async query => ({
+    items: [{ slo: query?.cursor ? second : first }], next_cursor: query?.cursor ? '' : 'next',
+  } as OperationalOverview));
+  render(<ScheduleMaintenance context={context} />);
+  const serviceMode = kind === 'services';
+  const label = serviceMode ? 'Selected services' : 'Selected SLOs';
+  const search = serviceMode ? 'Search services' : 'Search SLOs';
+  fireEvent.click(screen.getByRole('radio', { name: label }));
+  const picker = screen.getByRole('combobox', { name: search });
+  picker.focus();
+  fireEvent.change(picker, { target: { value: 'Fleet owner' } });
+  fireEvent.mouseDown(await screen.findByRole('option', { name: 'Fleet A' }));
+  expect(picker).toHaveValue('Fleet owner');
+  expect(picker).toHaveFocus();
+
+  fireEvent.keyDown(picker, { key: 'ArrowDown' });
+  expect(screen.getByText('More matches are available. Choose Next search results.')).toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: 'Next search results' }));
+  fireEvent.mouseDown(await screen.findByRole('option', { name: 'Fleet B' }));
+  expect(serviceMode ? services : slos).toHaveBeenLastCalledWith({ q: 'Fleet owner', limit: 10, cursor: 'next' }, expect.any(AbortSignal));
+  expect(within(screen.getByRole('list', { name: label })).getAllByRole('listitem')).toHaveLength(2);
 });

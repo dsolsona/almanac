@@ -125,7 +125,12 @@ DROP COLUMN lease_until,DROP COLUMN claimed_version,DROP COLUMN claimed_revision
 // restores its historical schema and trims the migration ledger before upgrading.
 func dropServiceMaintenanceFixture(t *testing.T, conn *pgx.Conn) {
 	t.Helper()
-	for version := latestTestSchemaVersion(t); version >= 70; version-- {
+	dropServiceMaintenanceFixtureAfter(t, conn, 69)
+}
+
+func dropServiceMaintenanceFixtureAfter(t *testing.T, conn *pgx.Conn, retainedVersion int) {
+	t.Helper()
+	for version := latestTestSchemaVersion(t); version > retainedVersion; version-- {
 		var statement string
 		switch version {
 		case 70:
@@ -151,7 +156,6 @@ DROP TABLE public.almanac_maintenance_service_grids, public.almanac_maintenance_
 DROP FUNCTION public.almanac_effective_maintenance_coverage(uuid, uuid, bigint, tstzmultirange);
 ALTER TABLE public.almanac_slo_exclusion_changes
     DROP CONSTRAINT almanac_service_effective_coverage_shape, DROP COLUMN effective_coverage;
-
 DO $restore$
 DECLARE
     revisions_fk name;
@@ -179,6 +183,44 @@ DROP FUNCTION public.almanac_enqueue_service_maintenance_join(),
     public.almanac_service_maintenance_intervals(uuid, bigint, uuid, timestamptz);
 DROP TABLE public.almanac_service_maintenance_projection_completed, public.almanac_service_maintenance_membership_work;
 DROP INDEX public.almanac_service_maintenance_unprocessed_idx;`
+		case 75:
+			statement = `ALTER TABLE public.almanac_maintenance_change_sets
+    DROP CONSTRAINT almanac_maintenance_change_sets_range_count_check,
+    ADD CHECK (range_count BETWEEN 0 AND 2);
+ALTER TABLE public.almanac_maintenance_changed_inputs
+    DROP CONSTRAINT almanac_maintenance_changed_inputs_part_check,
+    ADD CHECK (part BETWEEN 1 AND 2);
+ALTER TABLE public.almanac_slo_exclusion_work
+    DROP CONSTRAINT almanac_slo_exclusion_work_progress_part_check,
+    ADD CHECK (progress_part BETWEEN 0 AND 2);
+` + serviceMaintenanceFixtureFunctions(t, "0073_service_maintenance_coverage.sql", "almanac_analyze_maintenance_change")
+		case 76:
+			statement = `DROP TRIGGER almanac_slo_grid_assignment ON public.almanac_slo_service_assignments;
+DROP FUNCTION public.almanac_service_maintenance_work_pending(),
+    public.almanac_service_maintenance_intervals(uuid, bigint, uuid, timestamptz);
+DROP TABLE public.almanac_service_maintenance_uncertain_grids;
+ALTER TABLE public.almanac_service_maintenance_authority DROP COLUMN inventory_revision;
+ALTER TABLE public.almanac_service_maintenance_membership_work DROP COLUMN affected_from;
+` + serviceMaintenanceFixtureFunctions(t, "0070_service_maintenance_membership.sql",
+				"almanac_record_active_slo_service", "almanac_fence_service_archive") +
+				serviceMaintenanceFixtureFunctions(t, "0072_service_maintenance_grid_inventory.sql", "almanac_record_maintenance_grid") +
+				serviceMaintenanceFixtureFunctions(t, "0074_service_maintenance_projection.sql",
+					"almanac_enqueue_service_maintenance_join", "almanac_service_maintenance_intervals",
+					"almanac_project_service_maintenance_member", "almanac_maintenance_impact_intervals",
+					"almanac_slo_service_maintenance_pending") + `
+CREATE CONSTRAINT TRIGGER almanac_slo_grid_initial
+    AFTER INSERT ON public.almanac_slos
+    DEFERRABLE INITIALLY DEFERRED
+    FOR EACH ROW EXECUTE FUNCTION public.almanac_record_maintenance_grid();
+CREATE CONSTRAINT TRIGGER almanac_slo_grid_changed
+    AFTER UPDATE OF definition_revision ON public.almanac_slos
+    DEFERRABLE INITIALLY DEFERRED
+    FOR EACH ROW WHEN (OLD.definition_revision IS DISTINCT FROM NEW.definition_revision)
+    EXECUTE FUNCTION public.almanac_record_maintenance_grid();`
+		case 77:
+			// The following rewinds remove these constraints. Validation
+			// changed their status but left their definitions intact.
+			continue
 		default:
 			t.Fatalf("missing service maintenance fixture teardown for migration %04d", version)
 		}
@@ -206,4 +248,30 @@ func legacyMaintenanceAnalyzer(t *testing.T) string {
 		t.Fatal("missing end of legacy maintenance analysis function")
 	}
 	return "CREATE OR REPLACE " + name + definition
+}
+
+func serviceMaintenanceFixtureFunctions(t *testing.T, migration string, names ...string) string {
+	t.Helper()
+	raw, err := embeddedMigrations.ReadFile("migrations/" + migration)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var restored strings.Builder
+	for _, name := range names {
+		signature := "FUNCTION public." + name + "("
+		_, definition, found := strings.Cut(string(raw), signature)
+		if !found {
+			t.Fatalf("missing %s in %s", name, migration)
+		}
+		header, body, found := strings.Cut(definition, "AS $$")
+		if !found {
+			t.Fatalf("missing body of %s in %s", name, migration)
+		}
+		body, _, found = strings.Cut(body, "$$;")
+		if !found {
+			t.Fatalf("missing end of %s in %s", name, migration)
+		}
+		restored.WriteString("CREATE OR REPLACE " + signature + header + "AS $$" + body + "$$;\n")
+	}
+	return restored.String()
 }

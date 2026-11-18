@@ -292,12 +292,13 @@ export function OperationalDetailView({id,definition:providedDefinition,location
   const warning=source?qualityWarning(source.current.quality,source.current.performance,source.current.window):'';
   const chartGeneration=detail?.generation?.generation_id;
   const overflow=maintenance.page?.overflow;
+  const overflowNoun=maintenance.page?.source==='scoped'?'intervals':'windows';
   const maintenanceBands=overflow?maintenance.page?.items.slice(0,-1):maintenance.page?.items;
   const maintenanceLegend=!!maintenanceBands?.length&&<>
     <span className="slo-maintenance-legend"><i aria-hidden="true"/>Maintenance period</span>
-    {overflow&&<Button variant="link" className="slo-maintenance-cluster-action" aria-controls="slo-maintenance-periods" onClick={openSloMaintenanceList}>{overflow.count} more maintenance windows</Button>}
+    {overflow&&<Button variant="link" className="slo-maintenance-cluster-action" aria-controls="slo-maintenance-periods" onClick={openSloMaintenanceList}>{overflow.count} more maintenance {overflowNoun}</Button>}
   </>;
-  const plot=(kind:'budget'|'burn'|'attainment',compact=false)=>detail&&<SloHistoryChart kind={kind} samples={kind==='budget'?detail.budget_series.samples:kind==='burn'?detail.burn_series.samples:detail.attainment_series.samples} start={detail.range.effective_start} end={detail.range.effective_end} target={definition.target} compact={compact} zone={zone} generation={chartGeneration} burnLabel={activeBurnLabel} maintenance={maintenanceBands} maintenanceOverflow={overflow}/>;
+  const plot=(kind:'budget'|'burn'|'attainment',compact=false)=>detail&&<SloHistoryChart kind={kind} samples={kind==='budget'?detail.budget_series.samples:kind==='burn'?detail.burn_series.samples:detail.attainment_series.samples} start={detail.range.effective_start} end={detail.range.effective_end} target={definition.target} compact={compact} zone={zone} generation={chartGeneration} burnLabel={activeBurnLabel} maintenance={maintenanceBands} maintenanceOverflow={overflow} maintenanceOverflowNoun={overflowNoun}/>;
   return <section className="app-slo-detail slo-detail-b" aria-label="Operational SLO detail">{heading}<div className="slo-detail-stack">
     {source&&<SloVerdict value={source} warning={warning}/>}
     {statusError&&<p role="status" className="slo-detail-notice">Current status could not refresh. Showing the last confirmed evaluation{source?` at ${source.current.evaluation_at}`:''}.</p>}

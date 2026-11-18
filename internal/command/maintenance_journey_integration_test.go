@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"testing"
 	"time"
 
@@ -199,9 +200,31 @@ func verifyMaintenanceHTTP(t *testing.T, client *http.Client, baseURL, session s
 		if err := json.Unmarshal(data, &stored, json.RejectUnknownMembers(true)); err != nil || stored.Revision != "1" {
 			t.Fatalf("%s create did not return the current window: %s (%v)", kind, data, err)
 		}
-		gotKind, err := stored.Scope.Discriminator()
-		if err != nil || gotKind != kind || response.Header.Get("Location") != scopedPath+"/"+stored.Id.String() {
-			t.Fatalf("%s create changed selected scope or location: %s (%v)", kind, data, err)
+		location := scopedPath + "/" + stored.Id.String()
+		if response.Header.Get("Location") != location {
+			t.Fatalf("%s create returned incorrect Location: %s", kind, data)
+		}
+		var wantIDs []string
+		switch kind {
+		case "slos":
+			wantIDs = []string{slo.Id.String()}
+		case "services":
+			wantIDs = []string{slo.ServiceId.String()}
+		}
+		_, data = call(http.MethodGet, location+"?revision=1", "", "", nil, 200)
+		var saved api.ScopedMaintenanceWindow
+		if err := json.Unmarshal(data, &saved, json.RejectUnknownMembers(true)); err != nil {
+			t.Fatal(err)
+		}
+		for _, window := range []api.ScopedMaintenanceWindow{stored, saved} {
+			gotScopeJSON, err := window.Scope.MarshalJSON()
+			if err != nil {
+				t.Fatal(err)
+			}
+			gotScope, valid := api.ParseMaintenanceScope(gotScopeJSON)
+			if !valid || gotScope.Kind != kind || !slices.Equal(gotScope.IDs, wantIDs) {
+				t.Fatalf("%s selector = %s, want kind %q and IDs %v", kind, gotScopeJSON, kind, wantIDs)
+			}
 		}
 		if kind != "slos" {
 			call(http.MethodGet, path+"/"+stored.Id.String(), "", "", nil, 404)

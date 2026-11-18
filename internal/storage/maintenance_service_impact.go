@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"strconv"
 	"strings"
 	"time"
 
@@ -44,12 +45,17 @@ type MaintenanceImpactPage struct {
 	Ready       bool
 }
 
-// The authority revision commits with membership and selector changes. The
-// window revision and projection completion bind the impact page to its exact projection.
+// Membership changes invalidate the inventory snapshot. Impact also pins the
+// window revision and its projection state.
 type maintenanceCursorSnapshot struct {
-	AuthorityRevision  int64 `json:"authority_revision"`
+	InventoryRevision  int64 `json:"inventory_revision"`
 	WindowRevision     int64 `json:"window_revision,omitzero"`
 	ProjectionComplete bool  `json:"projection_complete,omitzero"`
+	Historical         bool  `json:"historical,omitzero"`
+	TerminalEmpty      bool  `json:"terminal_empty,omitzero"`
+	// Recognize cursors from older builds so clients can restart the page.
+	LegacyAuthorityRevision *int64 `json:"authority_revision,omitzero"`
+	LegacyReady             bool   `json:"ready,omitzero"`
 }
 
 func PreviewMaintenanceScope(ctx context.Context, databaseURL string, input MaintenanceScopePreviewInput) (MaintenanceImpactPage, error) {
@@ -72,11 +78,11 @@ func PreviewMaintenanceScope(ctx context.Context, databaseURL string, input Main
 	}
 	defer closeInitialOwnerConnection(conn)
 	defer rollbackTransaction(tx)
-	authority, err := q.ObserveServiceMaintenanceAuthority(ctx)
+	inventory, err := q.ObserveMaintenanceInventoryRevision(ctx)
 	if err != nil {
 		return page, err
 	}
-	snapshot := maintenanceCursorSnapshot{AuthorityRevision: authority}
+	snapshot := maintenanceCursorSnapshot{InventoryRevision: inventory}
 	if cursor.Time.IsZero() {
 		cursor.Time = started
 	} else if cursor.MaintenanceSnapshot == nil || *cursor.MaintenanceSnapshot != snapshot || cursor.Time.After(started) {
@@ -162,6 +168,14 @@ func ReadMaintenanceImpact(ctx context.Context, databaseURL string, input Mainte
 	const cursorKind = "maintenance-impact"
 	limit, cursor, err := validateAgentPage(cursorKind, input.ID, input.Limit, input.Cursor)
 	if err != nil {
+		old, parseErr := parseAgentPageCursor(cursorKind, input.Cursor)
+		windowID, rawRevision, legacy := strings.Cut(old.AgentID, "/")
+		oldRevision, revisionErr := strconv.ParseInt(rawRevision, 10, 64)
+		if parseErr == nil && legacy && windowID == input.ID && revisionErr == nil &&
+			oldRevision >= 0 && rawRevision == strconv.FormatInt(oldRevision, 10) &&
+			(input.Revision == 0 || input.Revision == oldRevision) && input.Limit >= 0 && input.Limit <= 200 {
+			return MaintenanceImpactPage{}, ErrMaintenanceSnapshotChanged
+		}
 		return MaintenanceImpactPage{}, ErrMaintenanceInvalid
 	}
 	revision := input.Revision
@@ -169,6 +183,9 @@ func ReadMaintenanceImpact(ctx context.Context, databaseURL string, input Mainte
 		if cursor.MaintenanceSnapshot == nil || cursor.MaintenanceSnapshot.WindowRevision < 1 ||
 			revision != 0 && revision != cursor.MaintenanceSnapshot.WindowRevision {
 			return MaintenanceImpactPage{}, ErrMaintenanceInvalid
+		}
+		if cursor.MaintenanceSnapshot.LegacyAuthorityRevision != nil {
+			return MaintenanceImpactPage{}, ErrMaintenanceSnapshotChanged
 		}
 		revision = cursor.MaintenanceSnapshot.WindowRevision
 	}
@@ -195,20 +212,29 @@ func ReadMaintenanceImpact(ctx context.Context, databaseURL string, input Mainte
 		}
 		at, afterTime = cursor.SnapshotAt, cursor.Time
 	}
-	authority, err := q.ObserveServiceMaintenanceAuthority(ctx)
+	inventory, err := q.ObserveMaintenanceInventoryRevision(ctx)
 	if err != nil {
 		return MaintenanceImpactPage{}, err
 	}
 	terminalEmpty := record.Tombstone || superseded.Valid && !superseded.Time.After(record.Start)
-	snapshot := maintenanceCursorSnapshot{AuthorityRevision: authority, WindowRevision: record.Revision, ProjectionComplete: true}
+	snapshot := maintenanceCursorSnapshot{InventoryRevision: inventory, WindowRevision: record.Revision, ProjectionComplete: true, Historical: superseded.Valid, TerminalEmpty: terminalEmpty}
 	ready := true
 	if isServiceMaintenanceScope(record.ScopeKind) && !terminalEmpty {
 		snapshot.ProjectionComplete, err = q.ReadMaintenanceProjectionReady(ctx, dbgen.ReadMaintenanceProjectionReadyParams{ExclusionID: id, Revision: record.Revision})
 		if err != nil {
 			return MaintenanceImpactPage{}, err
 		}
-		// A superseded revision has no remaining projection to prepare. Its
-		// recorded impact is reconstructed from the immutable membership journal.
+		// An older revision can be reconstructed from the membership journal.
+		// Only current impact depends on completion of its membership work.
+		if snapshot.ProjectionComplete && !superseded.Valid {
+			pending, err := q.HasPendingWindowMembership(ctx, dbgen.HasPendingWindowMembershipParams{
+				ExclusionID: id, Revision: record.Revision, EndsAt: timestamp(record.End),
+			})
+			if err != nil {
+				return MaintenanceImpactPage{}, err
+			}
+			snapshot.ProjectionComplete = !pending
+		}
 		ready = !at.Before(record.Start) && (snapshot.ProjectionComplete || superseded.Valid)
 	}
 	if !cursor.Time.IsZero() && (cursor.MaintenanceSnapshot == nil || *cursor.MaintenanceSnapshot != snapshot) {

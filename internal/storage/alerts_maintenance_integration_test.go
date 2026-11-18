@@ -3,6 +3,7 @@
 package storage
 
 import (
+	"crypto/sha256"
 	"errors"
 	"testing"
 	"time"
@@ -281,6 +282,42 @@ func TestIntegrationAlertMaintenanceRejectsUnprojectedPopulation(t *testing.T) {
 	if result, err := f.runtime.commitAlertEvaluation(t.Context(), claim, stale, f.limits, clock); !errors.Is(err, ErrDerivedPending) || result.EvaluationID != "" {
 		t.Fatalf("published stale evidence while membership was being projected: %+v %v", result, err)
 	}
+
+	// Publish an identical receipt after the initial lookup, while a
+	// projection is pending. A competing successful commit can become
+	// visible at this boundary under READ COMMITTED.
+	receiptID := newAlertID()
+	record, err := marshalAlertData(alertCommitResult{FormatVersion: 1, EvaluationID: receiptID.String()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := marshalAlertData(stale)
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := sha256.Sum256(encoded)
+	var insertErr error
+	published := false
+	interleavingClock := func() time.Time {
+		if !published {
+			published = true
+			_, insertErr = f.conn.Exec(t.Context(), `
+INSERT INTO almanac_alert_evaluations
+    (id, policy_id, revision, scheduled_at, effective_cutoff, truth, source_generation, exclusion_revision,
+     claim_epoch, claim_token, input_digest, evidence, result, committed_at)
+VALUES ($1, $2, $3, $4, $4, 'breaching', $5, $6, $7, $8, $9, '{}', $10, $4)`,
+				receiptID, claim.PolicyID, claim.Revision, claim.ScheduledAt, stale.Snapshot.SourceGeneration,
+				stale.Snapshot.ExclusionRevision, claim.Epoch, claim.Token, digest[:], record)
+		}
+		return clock()
+	}
+	replayed, err := f.runtime.commitAlertEvaluation(t.Context(), claim, stale, f.limits, interleavingClock)
+	if insertErr != nil || err != nil || replayed.EvaluationID != receiptID.String() {
+		t.Fatalf("pending projection hid a committed receipt: %+v, commit=%v insert=%v", replayed, err, insertErr)
+	}
+	if _, err := f.conn.Exec(t.Context(), "DELETE FROM almanac_alert_evaluations WHERE id=$1", receiptID); err != nil {
+		t.Fatal(err)
+	}
 	if err := f.runtime.runServiceMaintenanceProjection(t.Context(), 4, time.Second, clock); err != nil {
 		t.Fatal(err)
 	}
@@ -362,6 +399,23 @@ FROM source s CROSS JOIN generate_series($2::timestamptz,$3::timestamptz-interva
 			t.Fatalf("the first uncovered cutoff did not open its own occurrence: %+v", result)
 		}
 	}
+
+	f.now = resumeAt.Add(time.Second)
+	conditions := []alert.Condition{{ID: "fast", Short: 5 * time.Minute, Long: time.Hour, Threshold: "2"}}
+	revised, err := UpdateAlertPolicy(t.Context(), f.f.databaseURL, UpdateAlertPolicyInput{
+		AlertCommandInput: alertManagementCommand(f, "audit-policy-revision"), ID: policy,
+		ExpectedVersion: 1, Conditions: &conditions, Reason: "Adjust threshold", Limits: f.limits,
+	})
+	if err != nil || revised.Policy == nil || revised.Policy.EvaluationRevision != 2 {
+		t.Fatalf("publish new alert policy revision: %+v %v", revised, err)
+	}
+	emptyRevision, err := ListAlertMaintenanceSuppressions(t.Context(), f.f.databaseURL, ListAlertMaintenanceSuppressionsInput{
+		ReadAlertInput: ReadAlertInput{Runtime: f.runtime, Proof: m.proof, ID: policy, Now: f.clock},
+		Revision:       2, Limit: 1,
+	})
+	if err != nil || len(emptyRevision.Items) != 0 || emptyRevision.NextCursor != "" {
+		t.Fatalf("suppression evidence leaked into revision 2: %+v %v", emptyRevision, err)
+	}
 	cursor := ""
 	for i := 2; i >= 0; i-- {
 		page, err := ListAlertMaintenanceSuppressions(t.Context(), f.f.databaseURL, ListAlertMaintenanceSuppressionsInput{
@@ -389,13 +443,25 @@ SELECT gen_random_uuid(), prior.policy_id, prior.revision, boundary, boundary, '
        prior.source_generation, prior.exclusion_revision, prior.claim_epoch, gen_random_uuid(),
        prior.input_digest, prior.evidence #- '{Evaluation,Maintenance}', prior.result, boundary
 FROM (SELECT * FROM almanac_alert_evaluations WHERE policy_id = $1 ORDER BY effective_cutoff DESC LIMIT 1) prior
-CROSS JOIN generate_series($2::timestamptz + interval '1 minute', $2 + interval '500 minutes', interval '1 minute') boundary`, policy, resumeAt)
+CROSS JOIN generate_series($2::timestamptz + interval '1 minute', $2 + interval '498 minutes', interval '1 minute') boundary`, policy, resumeAt)
 	if err != nil {
 		t.Fatal(err)
 	}
 	input := ListAlertMaintenanceSuppressionsInput{
 		ReadAlertInput: ReadAlertInput{Runtime: f.runtime, Proof: m.proof, ID: policy, Now: f.clock},
 		Revision:       1, Limit: 1,
+	}
+
+	badCursor, err := encodeAlertReadCursor(alertReadCursor{
+		Version: 1, Kind: "alert-maintenance-suppressions", Filter: policy + ":1", ID: policy, Time: -1 << 63,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	invalid := input
+	invalid.Cursor = badCursor
+	if _, err := ListAlertMaintenanceSuppressions(t.Context(), f.f.databaseURL, invalid); !errors.Is(err, ErrAlertInvalid) {
+		t.Fatalf("out-of-range audit cutoff: %v", err)
 	}
 	empty, err := ListAlertMaintenanceSuppressions(t.Context(), f.f.databaseURL, input)
 	if err != nil || len(empty.Items) != 0 || empty.NextCursor == "" {

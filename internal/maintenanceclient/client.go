@@ -241,8 +241,15 @@ func maintenanceResponse(ctx context.Context, in Input, response *http.Response,
 		return nil, responseFailure(ctx, in.Mutation(), 0)
 	}
 	defer response.Body.Close()
-	const maxResponse = 4 << 20
-	data, err := io.ReadAll(io.LimitReader(response.Body, maxResponse+1))
+	maxResponse := 4 << 20
+	if response.StatusCode == http.StatusOK && in.Scoped && (in.Action == "list" || in.Action == "timeline") {
+		// UTF-8 input bytes can expand to six escaped bytes each. Allow up
+		// to 100 canonical UUID strings, plus window and timeline metadata.
+		const maxWindowBytes = 6*(512+4096) + 100*39 + 2048
+		const pageEnvelopeBytes = 4096
+		maxResponse = max(maxResponse, in.Limit*maxWindowBytes+pageEnvelopeBytes)
+	}
+	data, err := io.ReadAll(io.LimitReader(response.Body, int64(maxResponse)+1))
 	if err != nil || len(data) > maxResponse {
 		return nil, responseFailure(ctx, in.Mutation(), response.StatusCode)
 	}
@@ -297,6 +304,15 @@ func problemFailure(ctx context.Context, mutation bool, status int, data []byte)
 			if problem.SuggestedStart != nil && problem.SuggestedEnd != nil && validTime(*problem.SuggestedStart) && validTime(*problem.SuggestedEnd) {
 				failure.Message += " Suggested bounds: " + problem.SuggestedStart.Format(time.RFC3339) + " to " + problem.SuggestedEnd.Format(time.RFC3339) + "."
 			}
+		case status == 400 && problem.Code == "maintenance_history_unavailable":
+			failure.BackendCode = problem.Code
+			failure.Message = "The observation grid for part of this period is unknown. Choose a range with recorded grid history."
+		case status == 409 && mutation && problem.Code == "maintenance_write_retry":
+			failure.BackendCode = problem.Code
+			failure.Message = "The affected SLO inventory changed or the scheduled start passed during validation. Retry the same request with the same idempotency key."
+		case status == 409 && !mutation && problem.Code == "maintenance_snapshot_changed":
+			failure.BackendCode = problem.Code
+			failure.Message = "The maintenance inventory changed. Restart from the first page."
 		case status == 409 && problem.Code == "maintenance_conflict":
 			failure.BackendCode = problem.Code
 			if problem.CurrentRevision != nil && validRevision(*problem.CurrentRevision) {

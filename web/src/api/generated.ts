@@ -142,7 +142,10 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Audit retained openings suppressed by maintenance on a policy revision */
+        /**
+         * Audit retained openings suppressed by maintenance on a policy revision
+         * @description Scans a bounded batch of retained policy evaluations. A page may contain no decisions and still include next_cursor when the scanned batch contained no suppressed opening. Follow next_cursor until absent.
+         */
         get: operations["listAlertMaintenanceSuppressions"];
         put?: never;
         post?: never;
@@ -1073,7 +1076,7 @@ export interface paths {
         /** List maintenance windows */
         get: operations["listScopedMaintenance"];
         put?: never;
-        /** Create an scoped maintenance window */
+        /** Create a scoped maintenance window */
         post: operations["createScopedMaintenance"];
         delete?: never;
         options?: never;
@@ -1161,7 +1164,7 @@ export interface paths {
         put?: never;
         /**
          * Inspect the current affected SLO inventory for a maintenance selector
-         * @description Read-only operation available to Viewers. Scope and pagination are bound to the cursor. An empty valid inventory has a zero total.
+         * @description Read-only operation available to Viewers. Scope and pagination are bound to the cursor. Follow next_cursor to retrieve the remaining inventory. An empty valid inventory has a zero total. After a 409 maintenance_snapshot_changed response, discard the partial inventory and request the first page again with the same selector and no cursor.
          */
         post: operations["previewMaintenanceScope"];
         delete?: never;
@@ -1179,7 +1182,7 @@ export interface paths {
         };
         /**
          * Read the effective membership of a maintenance revision
-         * @description Effective membership includes retained participation bounds. A page with ready false indicates calculation-scope preparation is incomplete.
+         * @description Effective membership includes participation bounds, and one SLO can have several intervals. An explicit SLO selection can have ready membership before the window starts. A service-derived selection is ready when its membership and recorded participation bounds are available. A revision superseded before activation returns a final, ready, empty result. Continue with next_cursor until absent. An omitted revision on a continuation uses the revision bound to the cursor. After a 409 maintenance_snapshot_changed response, restart from the first page without the cursor. Omitting revision on a new first page can select a newer revision. To audit the same revision across restarts, first read the window revision and pass it explicitly from the first page onward.
          */
         get: operations["readMaintenanceImpact"];
         put?: never;
@@ -3208,9 +3211,17 @@ export interface components {
             title: string;
             /** @description Maximum 4096 UTF-8 bytes. */
             reason: string;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description Use a zero-offset UTC instant at whole-second precision aligned to the applicable observation grids.
+             * @example 2027-01-15T15:00:00Z
+             */
             start: string;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description Use a zero-offset UTC instant at whole-second precision aligned to the applicable observation grids.
+             * @example 2027-01-15T16:00:00Z
+             */
             end: string;
             scope: components["schemas"]["MaintenanceScope"];
         };
@@ -3269,8 +3280,9 @@ export interface components {
             total: string;
             /** Format: date-time */
             inventory_at: string;
-            /** @description False if effective membership is still being prepared. */
+            /** @description Whether the requested membership is available. Future explicit SLO selections can be ready. A service-derived selection remains pending until its recorded membership is available. Revisions superseded before activation have final empty membership. */
             ready: boolean;
+            /** @description Follow until absent to retrieve the remaining results for this membership query. */
             next_cursor?: string;
         };
         MaintenanceReason: {
@@ -3280,7 +3292,11 @@ export interface components {
         MaintenanceEnd: {
             /** @description Maximum 4096 UTF-8 bytes. */
             reason: string;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description Use a zero-offset UTC instant at whole-second precision aligned to the applicable observation grids.
+             * @example 2027-01-15T16:00:00Z
+             */
             end: string;
         };
         ScopedMaintenanceTimelinePage: {
@@ -3288,7 +3304,16 @@ export interface components {
             /** @description Some effective memberships in this range are still being prepared. */
             pending: boolean;
             next_cursor?: string;
-            overflow?: components["schemas"]["MaintenanceOverflow"];
+            overflow?: components["schemas"]["ScopedMaintenanceOverflow"];
+        };
+        /** @description Chart grouping for the last first-page participation interval and all following intervals. The bounds are clipped to the requested range and enclose the grouped intervals. They do not describe continuous exclusion coverage. */
+        ScopedMaintenanceOverflow: {
+            /** Format: date-time */
+            start: string;
+            /** Format: date-time */
+            end: string;
+            /** @description Exact decimal participation interval count. */
+            count: string;
         };
         ScopedMaintenanceTimelineInterval: {
             window: components["schemas"]["ScopedMaintenanceWindow"];
@@ -3439,6 +3464,10 @@ export interface components {
         IfMatch: string;
         /** @description One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split. */
         IdempotencyKey: string;
+        /** @description One Origin header equal to the configured public HTTPS origin. */
+        MaintenanceOrigin: string;
+        /** @description Session-bound CSRF token returned by the context endpoint. */
+        MaintenanceCsrfToken: string;
     };
     requestBodies: never;
     headers: never;
@@ -3689,6 +3718,7 @@ export interface operations {
     listAlertMaintenanceSuppressions: {
         parameters: {
             query: {
+                /** @description Use AlertPolicy.evaluation_revision for current evaluations or the retained evaluation revision to audit. AlertPolicy.version is the resource version used for ETags. */
                 revision: components["schemas"]["AlertVersion"];
                 limit?: components["parameters"]["AlertLimit"];
                 cursor?: components["parameters"]["AlertCursor"];
@@ -6049,6 +6079,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description One Origin header equal to the configured public HTTPS origin. */
+                Origin: components["parameters"]["MaintenanceOrigin"];
+                /** @description Session-bound CSRF token returned by the context endpoint. */
+                "X-CSRF-Token": components["parameters"]["MaintenanceCsrfToken"];
                 /** @description One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split. */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
@@ -6061,7 +6095,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Create an scoped maintenance window */
+            /** @description Create a scoped maintenance window */
             201: {
                 headers: {
                     ETag?: string;
@@ -6070,6 +6104,24 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ScopedMaintenanceWindow"];
+                };
+            };
+            /** @description Invalid fields or bounds, or required historical observation grid unavailable (maintenance_history_unavailable). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description A revision or request key conflicted (maintenance_conflict). If the affected SLO inventory changed or the scheduled start passed during validation (maintenance_write_retry), retry the same request with the same idempotency key. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
             /** @description Request rejected */
@@ -6122,6 +6174,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description One Origin header equal to the configured public HTTPS origin. */
+                Origin: components["parameters"]["MaintenanceOrigin"];
+                /** @description Session-bound CSRF token returned by the context endpoint. */
+                "X-CSRF-Token": components["parameters"]["MaintenanceCsrfToken"];
                 /** @description Strong ETag of the maintenance revision. */
                 "If-Match": string;
                 /** @description One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split. */
@@ -6148,6 +6204,24 @@ export interface operations {
                     "application/json": components["schemas"]["ScopedMaintenanceWindow"];
                 };
             };
+            /** @description Invalid fields or bounds, or required historical observation grid unavailable (maintenance_history_unavailable). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description A revision or request key conflicted (maintenance_conflict). If the affected SLO inventory changed or the scheduled start passed during validation (maintenance_write_retry), retry the same request with the same idempotency key. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description Request rejected */
             default: {
                 headers: {
@@ -6163,6 +6237,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description One Origin header equal to the configured public HTTPS origin. */
+                Origin: components["parameters"]["MaintenanceOrigin"];
+                /** @description Session-bound CSRF token returned by the context endpoint. */
+                "X-CSRF-Token": components["parameters"]["MaintenanceCsrfToken"];
                 /** @description Strong ETag of the maintenance revision. */
                 "If-Match": string;
                 /** @description One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split. */
@@ -6204,6 +6282,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description One Origin header equal to the configured public HTTPS origin. */
+                Origin: components["parameters"]["MaintenanceOrigin"];
+                /** @description Session-bound CSRF token returned by the context endpoint. */
+                "X-CSRF-Token": components["parameters"]["MaintenanceCsrfToken"];
                 /** @description Strong ETag of the maintenance revision. */
                 "If-Match": string;
                 /** @description One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split. */
@@ -6245,6 +6327,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description One Origin header equal to the configured public HTTPS origin. */
+                Origin: components["parameters"]["MaintenanceOrigin"];
+                /** @description Session-bound CSRF token returned by the context endpoint. */
+                "X-CSRF-Token": components["parameters"]["MaintenanceCsrfToken"];
                 /** @description Strong ETag of the maintenance revision. */
                 "If-Match": string;
                 /** @description One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split. */
@@ -6288,7 +6374,12 @@ export interface operations {
                 limit?: components["parameters"]["PageLimit"];
                 cursor?: components["parameters"]["PageCursor"];
             };
-            header?: never;
+            header: {
+                /** @description One Origin header equal to the configured public HTTPS origin. */
+                Origin: components["parameters"]["MaintenanceOrigin"];
+                /** @description Session-bound CSRF token returned by the context endpoint. */
+                "X-CSRF-Token": components["parameters"]["MaintenanceCsrfToken"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -6305,6 +6396,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MaintenanceImpactPage"];
+                };
+            };
+            /** @description The affected SLO inventory changed (maintenance_snapshot_changed). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
             /** @description Request rejected */
@@ -6341,6 +6441,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MaintenanceImpactPage"];
+                };
+            };
+            /** @description The membership snapshot changed (maintenance_snapshot_changed). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
             /** @description Request rejected */

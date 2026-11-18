@@ -168,7 +168,7 @@ func writeScopedMaintenanceTimeline(w http.ResponseWriter, page storage.Maintena
 		})
 	}
 	if page.Overflow != nil {
-		out.Overflow = &api.MaintenanceOverflow{Start: page.Overflow.Start, End: page.Overflow.End, Count: strconv.FormatInt(page.Overflow.Count, 10)}
+		out.Overflow = &api.ScopedMaintenanceOverflow{Start: page.Overflow.Start, End: page.Overflow.End, Count: strconv.FormatInt(page.Overflow.Count, 10)}
 	}
 	if page.NextCursor != "" {
 		out.NextCursor = new(page.NextCursor)

@@ -8,25 +8,34 @@ import { pointTime, inspectionIndex } from './pointInspection.ts';
 type Sample=components['schemas']['SloOperationalSample'];
 export type MaintenanceBand = Pick<components['schemas']['MaintenanceWindow'], 'id' | 'title' | 'start' | 'end' | 'reason'>;
 const emptyBands: MaintenanceBand[] = [];
-type Props={maintenance?:MaintenanceBand[];maintenanceOverflow?:components['schemas']['MaintenanceOverflow'];kind:'budget'|'burn'|'attainment';samples:Sample[];start:string;end:string;target:string;compact?:boolean;zone?:'UTC'|'local';generation?:string;burnLabel?:string};
+const bandKey = (window: MaintenanceBand) => `${window.id}:${window.start}:${window.end}`;
+type Props={maintenance?:MaintenanceBand[];maintenanceOverflow?:components['schemas']['MaintenanceOverflow'];maintenanceOverflowNoun?:'intervals'|'windows';kind:'budget'|'burn'|'attainment';samples:Sample[];start:string;end:string;target:string;compact?:boolean;zone?:'UTC'|'local';generation?:string;burnLabel?:string};
 const labels:Record<Sample['state'],string>={observed:'Complete evaluation',missing:'Missing',partial:'Partial data',stale:'Stale',zero_traffic:'Zero traffic',known_empty:'Known empty',expired:'Expired history',not_applicable:'Not applicable',excluded:'Excluded by maintenance'};
 function previewText(value: string, max: number) {
  const characters = [...value];
  return characters.length > max ? `${characters.slice(0, max).join('')}…` : value;
 }
 export { pointTime } from './pointInspection.ts';
-export function SloHistoryChart({kind,samples,start,end,target,compact=false,zone='UTC',generation,burnLabel='1 h',maintenance=emptyBands,maintenanceOverflow}:Props) {
+export function SloHistoryChart({kind,samples,start,end,target,compact=false,zone='UTC',generation,burnLabel='1 h',maintenance=emptyBands,maintenanceOverflow,maintenanceOverflowNoun='windows'}:Props) {
  const host=useRef<HTMLDivElement>(null),tooltip=useRef<HTMLDivElement>(null);
  const [inspectionTime,setInspectionTime]=useState<number>();
- const [pinned,setPinned]=useState(false);
+ const [pinnedBand,setPinnedBand]=useState<string>();
+ const [keyboardBand,setKeyboardBand]=useState<string>();
  const [width,setWidth]=useState(980),[index,setIndex]=useState<number|null>(null),[pointerY,setPointerY]=useState<number|undefined>(undefined);
  useLayoutEffect(()=>{const el=host.current;if(!el)return;const resize=()=>setWidth(Math.max(280,el.clientWidth-(innerWidth>700?38:14)));resize();const observer=new ResizeObserver(resize);observer.observe(el);return()=>observer.disconnect();},[start,end]);
  function dismiss() {
   setIndex(null);
   setInspectionTime(undefined);
-  setPinned(false);
+  setPinnedBand(undefined);
+  setKeyboardBand(undefined);
  }
- useEffect(dismiss,[samples,start,end,kind]);
+ useEffect(dismiss,[start,end,kind]);
+ useEffect(()=>{
+  setIndex(null);
+  if(!pinnedBand){setInspectionTime(undefined);setKeyboardBand(undefined);}
+  // Refreshes replace numeric samples independently of the pinned interval.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+ },[samples]);
  useEffect(()=>{
   const close=(event:globalThis.PointerEvent)=>{if(event.target instanceof Node&&!host.current?.contains(event.target))dismiss();};
   const escape=(event:KeyboardEvent)=>{if(event.key==='Escape')dismiss();};
@@ -56,7 +65,9 @@ export function SloHistoryChart({kind,samples,start,end,target,compact=false,zon
  const selectedTime=inspectionTime??(selected?Date.parse(selected.evaluation_at):undefined);
  const covers=(window:MaintenanceBand,time:number)=>Date.parse(window.start)<=time&&time<Date.parse(window.end);
  const activeBands=selectedTime===undefined?emptyBands:maintenance.filter(window=>covers(window,selectedTime));
- const activeWindow=activeBands[0];
+ const activeWindow=activeBands.find(window=>bandKey(window)===keyboardBand)??activeBands[0];
+ const pinned=pinnedBand!==undefined&&activeBands.some(window=>bandKey(window)===pinnedBand);
+ useEffect(()=>{if(pinnedBand&&!pinned)dismiss();},[pinnedBand,pinned]);
  const showInspection=Boolean(selected||activeBands.length);
  useLayoutEffect(()=>{
   const frame=host.current,panel=tooltip.current,svg=frame?.querySelector('svg');
@@ -87,11 +98,12 @@ export function SloHistoryChart({kind,samples,start,end,target,compact=false,zon
  });
  function inspect(event:PointerEvent<HTMLDivElement>|MouseEvent<HTMLDivElement>) {
   const svg=event.currentTarget.querySelector('svg');
-  if(!svg)return false;
+  if(!svg)return;
   const bounds=svg.getBoundingClientRect();
   const x=(event.clientX-bounds.left)/bounds.width*width;
   const y=(event.clientY-bounds.top)/bounds.height*height;
   const time=min+(x-left)/(right-left)*(max-min);
+  setKeyboardBand(undefined);
   setPointerY(event.clientY);
   setInspectionTime(time>=min&&time<=max?time:undefined);
   if(samples.length) {
@@ -101,18 +113,20 @@ export function SloHistoryChart({kind,samples,start,end,target,compact=false,zon
    }
    setIndex(nearest);
   }
-  return y>=top&&y<=bottom&&time>=min&&time<=max&&maintenance.some(window=>covers(window,time));
+  if(y<top||y>bottom||time<min||time>max)return;
+  const window=maintenance.find(window=>covers(window,time));
+  return window&&bandKey(window);
  }
  const tickFractions=width<480?[0,6/11,1]:[0,4/11,8/11,1];
  const selectedValue=selected&&allowed(selected)?(kind==='burn'?`${selected.burn}×`:percentExact(selected[field])):null;
  if(!Number.isFinite(min)||!Number.isFinite(max)||max<=min)return <p role="alert">Chart unavailable: Timeline range must have end after start</p>;
  return <div ref={host} className={`slo-history-chart ${kind}`} data-chart-ready="true" data-rendered-generation={generation} data-rendered-zone={zone}
- role="group" aria-label={`Inspect ${label}. Use arrow keys, Home, End, Escape.${maintenance.length?' Press Enter on a maintenance period for details.':''}`} tabIndex={samples.length?0:undefined}
+ role="group" aria-label={`Inspect ${label}. Use arrow keys, Home, End, Escape.${maintenance.length?' Use Up and Down to inspect maintenance periods, then Enter for details.':''}`} tabIndex={samples.length||maintenance.length?0:undefined}
  onPointerMove={event=>{if(!pinned&&event.pointerType!=='touch')inspect(event);}}
  onPointerDown={event=>{if(!pinned&&event.pointerType==='touch')inspect(event);}}
  onPointerLeave={event=>{if(!pinned&&event.pointerType!=='touch')dismiss();}}
  onClick={event=>{
-  if(event.target instanceof Element&&event.target.closest('svg'))setPinned(inspect(event));
+  if(event.target instanceof Element&&event.target.closest('svg'))setPinnedBand(inspect(event));
  }}
  onBlur={event=>{if(!(event.relatedTarget instanceof Node&&event.currentTarget.contains(event.relatedTarget)))dismiss();}}
  onKeyDown={event=>{
@@ -122,10 +136,32 @@ export function SloHistoryChart({kind,samples,start,end,target,compact=false,zon
    return;
   }
   if(event.target!==event.currentTarget)return;
-  if(event.key==='Enter'&&activeWindow){event.preventDefault();setPinned(true);return;}
+  if(event.key==='Enter'&&activeWindow){
+   event.preventDefault();
+   setInspectionTime(selectedTime);
+   setPinnedBand(bandKey(activeWindow));
+   return;
+  }
+  if((event.key==='ArrowUp'||event.key==='ArrowDown')&&maintenance.length){
+   const visible=maintenance.filter(window=>Math.max(min,Date.parse(window.start))<Math.min(max,Date.parse(window.end)));
+   if(!visible.length)return;
+   event.preventDefault();
+   const step=event.key==='ArrowDown'?1:-1;
+   const previous=visible.findIndex(window=>bandKey(window)===keyboardBand);
+   const index=previous<0?(step===1?0:visible.length-1):(previous+step+visible.length)%visible.length;
+   const window=visible[index]!;
+   const from=Math.max(min,Date.parse(window.start)),to=Math.min(max,Date.parse(window.end));
+   setPinnedBand(undefined);
+   setKeyboardBand(bandKey(window));
+   setPointerY(undefined);
+   setIndex(null);
+   setInspectionTime(from+(to-from)/2);
+   return;
+  }
   if(!samples.length||!['Home','End','ArrowLeft','ArrowRight'].includes(event.key))return;
   event.preventDefault();
-  setPinned(false);
+  setPinnedBand(undefined);
+  setKeyboardBand(undefined);
   setPointerY(undefined);
   setInspectionTime(undefined);
   setIndex(index=>inspectionIndex(event.key,index,samples.length));
@@ -133,13 +169,13 @@ export function SloHistoryChart({kind,samples,start,end,target,compact=false,zon
  {samples.length===0&&!maintenance.length?<p className="slo-history-empty">No history available for this period.</p>:<svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${label}; unavailable measurements are gaps.`}>
  {maintenance.map(window=>{
    const from=Math.max(min,Date.parse(window.start)),to=Math.min(max,Date.parse(window.end));
-   return from<to&&<rect key={`${window.id}:${window.start}:${window.end}`} className="slo-maintenance-band" x={timeX(from)} y={top} width={timeX(to)-timeX(from)} height={bottom-top} aria-hidden="true"/>;
+   return from<to&&<rect key={bandKey(window)} className="slo-maintenance-band" x={timeX(from)} y={top} width={timeX(to)-timeX(from)} height={bottom-top} aria-hidden="true"/>;
  })}
  {ticks.map((t,i)=><g key={i}><line className="gridline" x1={left} x2={right} y1={y(t)} y2={y(t)}/><text className="axis" x="55" y={y(t)+4} textAnchor="end">{Number(t.toFixed(kind==='attainment'?3:2))}{unit}</text></g>)}
  <line className="ref" x1={left} x2={right} y1={y(kind==='budget'?0:kind==='burn'?1:Number(target)*100)} y2={y(kind==='budget'?0:kind==='burn'?1:Number(target)*100)}/>
  {plotted}
  {maintenanceOverflow&&<line className="slo-maintenance-overflow" x1={timeX(Date.parse(maintenanceOverflow.start))} x2={timeX(Date.parse(maintenanceOverflow.end))} y1={top+2} y2={top+2}>
-   <title>{maintenanceOverflow.count} additional maintenance windows from {pointTime(maintenanceOverflow.start,zone,true)} to {pointTime(maintenanceOverflow.end,zone,true)}</title>
+   <title>{maintenanceOverflow.count} additional maintenance {maintenanceOverflowNoun} from {pointTime(maintenanceOverflow.start,zone,true)} to {pointTime(maintenanceOverflow.end,zone,true)}</title>
  </line>}
  {tickFractions.map((fraction,i)=>{const t=min+fraction*(max-min);return <text className="axis" key={i} x={left+fraction*(right-left)} y={height-7} textAnchor={i===0?'start':i===tickFractions.length-1?'end':'middle'}>{new Date(t).toLocaleDateString('en-GB',{day:'2-digit',month:'short',...(zone==='UTC'?{timeZone:'UTC'}:{})})}{i===tickFractions.length-1?` ${zone==='UTC'?'UTC':'local'}`:''}</text>;})}
  {selected&&<g><line className="cursor" x1={x(selected)} x2={x(selected)} y1={top} y2={bottom}/>{allowed(selected)&&<circle className="inspection-dot" cx={x(selected)} cy={y(numeric(selected)!)} r="4.5"/>}</g>}
@@ -147,12 +183,19 @@ export function SloHistoryChart({kind,samples,start,end,target,compact=false,zon
  {samples.length===0&&maintenance.length>0&&<p className="slo-history-empty">No measured history for this period.</p>}
  {showInspection&&<div ref={tooltip} className={`slo-point-tooltip${pinned&&activeWindow?' slo-point-tooltip--interactive':''}`} role={pinned&&activeWindow?'group':'tooltip'} aria-label={pinned&&activeWindow?'Maintenance inspection':undefined}>{selected&&<><span>{pointTime(selected.evaluation_at,zone)}</span><strong>{selectedValue??labels[selected.state]}</strong><span>{label}</span><small>{selected.state==='observed'&&(selected.quality?.state!=='complete'||selected.quality?.freshness!=='fresh')?`Observed · ${selected.quality?.state.replaceAll('_',' ')} · ${selected.quality?.freshness}`:labels[selected.state]}</small>{selected.display_coverage&&<small>Displayed period includes {[...new Set([...selected.display_coverage.states,...selected.display_coverage.quality_states,...selected.display_coverage.freshness])].join(', ').replaceAll('_',' ')}</small>}</>}
  {activeWindow&&<div className="slo-maintenance-inspection"><strong>Maintenance period</strong>
-   <span>{previewText(activeWindow.title, 90)} · {pointTime(activeWindow.start,zone,true)} to {pointTime(activeWindow.end,zone,true)}</span>
-   {activeBands.length===1&&<small>{previewText(activeWindow.reason, 160)}</small>}
-   {activeBands.length>1&&<small>{activeBands.length-1} more overlapping {activeBands.length===2?'window':'windows'} in the maintenance list below.</small>}
-   {pinned
-    ? <a href={`/maintenance/${activeWindow.id}`} data-app-route>View maintenance details</a>
-    : <small>Select the period to view details.</small>}
+   {pinned&&activeBands.length>1
+    ? <ul role="list">{activeBands.map(window=><li key={bandKey(window)}>
+       <a href={`/maintenance/${window.id}`} data-app-route>{window.title}</a>
+       <small>{pointTime(window.start,zone,true)} to {pointTime(window.end,zone,true)}</small>
+      </li>)}</ul>
+    : <>
+       <span>{previewText(activeWindow.title, 90)} · {pointTime(activeWindow.start,zone,true)} to {pointTime(activeWindow.end,zone,true)}</span>
+       {activeBands.length===1&&<small>{previewText(activeWindow.reason, 160)}</small>}
+       {activeBands.length>1&&<small>{activeBands.length-1} more overlapping {activeBands.length===2?'window':'windows'}.</small>}
+       {pinned
+        ? <a href={`/maintenance/${activeWindow.id}`} data-app-route>View maintenance details</a>
+        : <small>Select the period to view details.</small>}
+      </>}
  </div>}
  </div>}
  <span className="sr-only" aria-live="polite">{selected?`${pointTime(selected.evaluation_at,zone)} · ${selectedValue??labels[selected.state]}`:''}{activeBands.length>0&&` · Maintenance: ${activeBands.map(window=>window.title).join(', ')}`}</span>

@@ -29,7 +29,7 @@ func isServiceMaintenanceScope(kind MaintenanceScopeKind) bool {
 	return kind == MaintenanceScopeServices || kind == MaintenanceScopeAllServices
 }
 
-func validateServiceMaintenanceSelector(ctx context.Context, q *dbgen.Queries, input CreateMaintenanceInput, operation string, originalEnd, now time.Time) error {
+func validateServiceMaintenanceSelector(ctx context.Context, q *dbgen.Queries, input CreateMaintenanceInput, operation string, originalEnd, now time.Time, cadences []int32) error {
 	services := make([]pgtype.UUID, len(input.ServiceIDs))
 	for i, id := range input.ServiceIDs {
 		services[i], _ = canonicalUUID(id)
@@ -43,11 +43,14 @@ func validateServiceMaintenanceSelector(ctx context.Context, q *dbgen.Queries, i
 			return ErrMaintenanceNotFound
 		}
 	}
-	cadences, err := q.ListServiceMaintenanceCadences(ctx, dbgen.ListServiceMaintenanceCadencesParams{
-		AllServices: input.ScopeKind == MaintenanceScopeAllServices, ServiceIds: services,
-	})
-	if err != nil {
-		return err
+	if cadences == nil {
+		var err error
+		cadences, err = q.ListServiceMaintenanceCadences(ctx, dbgen.ListServiceMaintenanceCadencesParams{
+			AllServices: input.ScopeKind == MaintenanceScopeAllServices, ServiceIds: services,
+		})
+		if err != nil {
+			return err
+		}
 	}
 	alignment := int64(1)
 	for _, cadence := range cadences {

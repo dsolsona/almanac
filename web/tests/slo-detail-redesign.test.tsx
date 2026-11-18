@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { SloHistoryChart, pointTime } from '../src/components/charts/SloHistoryChart.tsx';
+import { SloMaintenanceList } from '../src/slos/SloMaintenanceTimeline.tsx';
 import type { components } from '../src/api/generated.ts';
 beforeEach(()=>vi.stubGlobal('ResizeObserver',class{observe(){}disconnect(){}}));
 afterEach(()=>{cleanup();vi.unstubAllGlobals();vi.unstubAllEnvs();});
@@ -72,4 +73,66 @@ it('explains maintenance across all lanes and treats its end as exclusive', () =
     expect(screen.getByRole('tooltip')).not.toHaveTextContent('Checkout database upgrade');
     view.unmount();
   }
+});
+
+it('pins the selected participation only while its identity is still in the overlay', () => {
+  const start = '2026-11-06T10:00:00Z';
+  const end = '2026-11-06T11:00:00Z';
+  const window = { id: 'first', title: 'First repair', reason: 'Replace the database.', start, end };
+  const samples = [sample(start, '0.8')];
+  const props = { kind: 'budget' as const, samples, start, end, target: '0.999' };
+  const view = render(<SloHistoryChart {...props} maintenance={[window]} />);
+  const chart = screen.getByRole('group', { name: /Inspect/ });
+  fireEvent.keyDown(chart, { key: 'Home' });
+  fireEvent.keyDown(chart, { key: 'Enter' });
+  expect(screen.getByRole('link', { name: 'View maintenance details' })).toHaveAttribute('href', '/maintenance/first');
+
+  view.rerender(<SloHistoryChart {...props} samples={[...samples]} maintenance={[{ ...window, title: 'First repair renamed' }]} />);
+  expect(screen.getByRole('link', { name: 'View maintenance details' })).toHaveAttribute('href', '/maintenance/first');
+
+  const shortened = { ...window, end: '2026-11-06T10:45:00Z' };
+  view.rerender(<SloHistoryChart {...props} maintenance={[shortened]} />);
+  expect(screen.queryByRole('group', { name: 'Maintenance inspection' })).not.toBeInTheDocument();
+  fireEvent.keyDown(chart, { key: 'Home' });
+  fireEvent.keyDown(chart, { key: 'Enter' });
+  expect(screen.getByRole('link', { name: 'View maintenance details' })).toHaveAttribute('href', '/maintenance/first');
+
+  view.rerender(<SloHistoryChart {...props} maintenance={[{ ...shortened, id: 'replacement', title: 'Replacement repair' }]} />);
+  expect(screen.queryByRole('group', { name: 'Maintenance inspection' })).not.toBeInTheDocument();
+});
+
+it.each([false, true])('makes overlapping maintenance keyboard-inspectable with samples present: %s', hasSamples => {
+  const start = '2026-11-06T10:00:00Z';
+  const end = '2026-11-06T11:00:00Z';
+  const maintenance = [
+    { id: 'outside', title: 'Outer repair', reason: 'Replace equipment.', start: '2026-11-06T10:10:00Z', end: '2026-11-06T10:40:00Z' },
+    { id: 'inside', title: 'Inner repair', reason: 'Test the new equipment.', start: '2026-11-06T10:20:00Z', end: '2026-11-06T10:30:00Z' },
+    { id: 'later', title: 'Later repair', reason: 'Check results.', start: '2026-11-06T10:45:00Z', end: '2026-11-06T10:55:00Z' },
+  ];
+  const samples = hasSamples ? [sample(start, '0.8'), sample(end, '0.9')] : [];
+  render(<SloHistoryChart kind="budget" samples={samples} start={start} end={end} target="0.999" maintenance={maintenance} />);
+  const chart = screen.getByRole('group', { name: /Inspect/ });
+  expect(chart).toHaveAttribute('tabindex', '0');
+  chart.focus();
+  fireEvent.keyDown(chart, { key: 'ArrowDown' });
+  expect(screen.getByRole('tooltip')).toHaveTextContent('Outer repair');
+  fireEvent.keyDown(chart, { key: 'ArrowDown' });
+  expect(screen.getByRole('tooltip')).toHaveTextContent('Inner repair');
+  fireEvent.keyDown(chart, { key: 'Enter' });
+  expect(screen.getByRole('link', { name: 'Outer repair' })).toHaveAttribute('href', '/maintenance/outside');
+  expect(screen.getByRole('link', { name: 'Inner repair' })).toHaveAttribute('href', '/maintenance/inside');
+  fireEvent.keyDown(chart, { key: 'ArrowDown' });
+  expect(screen.getByRole('tooltip')).toHaveTextContent('Later repair');
+});
+
+it('shows preparation status on an empty continuation of the maintenance disclosure', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({ items: [], pending: true })));
+  const start = '2026-11-06T10:00:00Z';
+  const end = '2026-11-06T11:00:00Z';
+  const item = { id: 'first', title: 'First repair', reason: 'Replace the database.', start, end };
+  const view = render(<SloMaintenanceList id="first" start={start} end={end} zone="UTC"
+    page={{ items: [item], next_cursor: 'next', source: 'scoped', pending: false }} />);
+  view.container.querySelector('details')!.open = true;
+  fireEvent.click(screen.getByRole('button', { name: 'Next windows' }));
+  expect(await screen.findByText('Some maintenance periods are still being prepared.')).toBeVisible();
 });
