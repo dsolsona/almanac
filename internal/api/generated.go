@@ -4161,9 +4161,7 @@ type MaintenanceReason struct {
 }
 
 // MaintenanceScope defines model for MaintenanceScope.
-type MaintenanceScope struct {
-	union json.RawMessage
-}
+type MaintenanceScope = maintenanceScope
 
 // MaintenanceScopePreview defines model for MaintenanceScopePreview.
 type MaintenanceScopePreview struct {
@@ -5610,6 +5608,7 @@ type EnableAlertPolicyParams struct {
 
 // ListAlertMaintenanceSuppressionsParams defines parameters for ListAlertMaintenanceSuppressions.
 type ListAlertMaintenanceSuppressionsParams struct {
+	// Revision Use AlertPolicy.evaluation_revision for current evaluations or the retained evaluation revision to audit. AlertPolicy.version is the resource version used for ETags.
 	Revision AlertVersion `form:"revision" json:"revision"`
 	Limit    *AlertLimit  `form:"limit,omitempty" json:"limit,omitempty"`
 	Cursor   *AlertCursor `form:"cursor,omitempty" json:"cursor,omitempty"`
@@ -6209,143 +6208,6 @@ type UpdateUserJSONRequestBody = UserWriteRequest
 
 // UserCommandJSONRequestBody defines body for UserCommand for application/json ContentType.
 type UserCommandJSONRequestBody = EmptyAuthRequest
-
-// AsMaintenanceSloScope returns the union data inside the MaintenanceScope as a MaintenanceSloScope
-func (t MaintenanceScope) AsMaintenanceSloScope() (MaintenanceSloScope, error) {
-	var body MaintenanceSloScope
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromMaintenanceSloScope overwrites any union data inside the MaintenanceScope as the provided MaintenanceSloScope
-func (t *MaintenanceScope) FromMaintenanceSloScope(v MaintenanceSloScope) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-	b, err = runtime.JSONMerge(b, []byte(`{"kind":"slos"}`))
-	t.union = b
-	return err
-}
-
-// MergeMaintenanceSloScope performs a merge with any union data inside the MaintenanceScope, using the provided MaintenanceSloScope
-func (t *MaintenanceScope) MergeMaintenanceSloScope(v MaintenanceSloScope) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-	b, err = runtime.JSONMerge(b, []byte(`{"kind":"slos"}`))
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-// AsMaintenanceServiceScope returns the union data inside the MaintenanceScope as a MaintenanceServiceScope
-func (t MaintenanceScope) AsMaintenanceServiceScope() (MaintenanceServiceScope, error) {
-	var body MaintenanceServiceScope
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromMaintenanceServiceScope overwrites any union data inside the MaintenanceScope as the provided MaintenanceServiceScope
-func (t *MaintenanceScope) FromMaintenanceServiceScope(v MaintenanceServiceScope) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-	b, err = runtime.JSONMerge(b, []byte(`{"kind":"services"}`))
-	t.union = b
-	return err
-}
-
-// MergeMaintenanceServiceScope performs a merge with any union data inside the MaintenanceScope, using the provided MaintenanceServiceScope
-func (t *MaintenanceScope) MergeMaintenanceServiceScope(v MaintenanceServiceScope) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-	b, err = runtime.JSONMerge(b, []byte(`{"kind":"services"}`))
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-// AsMaintenanceAllServicesScope returns the union data inside the MaintenanceScope as a MaintenanceAllServicesScope
-func (t MaintenanceScope) AsMaintenanceAllServicesScope() (MaintenanceAllServicesScope, error) {
-	var body MaintenanceAllServicesScope
-	err := json.Unmarshal(t.union, &body)
-	return body, err
-}
-
-// FromMaintenanceAllServicesScope overwrites any union data inside the MaintenanceScope as the provided MaintenanceAllServicesScope
-func (t *MaintenanceScope) FromMaintenanceAllServicesScope(v MaintenanceAllServicesScope) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-	b, err = runtime.JSONMerge(b, []byte(`{"kind":"all_services"}`))
-	t.union = b
-	return err
-}
-
-// MergeMaintenanceAllServicesScope performs a merge with any union data inside the MaintenanceScope, using the provided MaintenanceAllServicesScope
-func (t *MaintenanceScope) MergeMaintenanceAllServicesScope(v MaintenanceAllServicesScope) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-	b, err = runtime.JSONMerge(b, []byte(`{"kind":"all_services"}`))
-	if err != nil {
-		return err
-	}
-
-	merged, err := runtime.JSONMerge(t.union, b)
-	t.union = merged
-	return err
-}
-
-func (t MaintenanceScope) Discriminator() (string, error) {
-	var discriminator struct {
-		Discriminator string `json:"kind"`
-	}
-	err := json.Unmarshal(t.union, &discriminator)
-	return discriminator.Discriminator, err
-}
-
-func (t MaintenanceScope) ValueByDiscriminator() (interface{}, error) {
-	discriminator, err := t.Discriminator()
-	if err != nil {
-		return nil, err
-	}
-	switch discriminator {
-	case "all_services":
-		return t.AsMaintenanceAllServicesScope()
-	case "services":
-		return t.AsMaintenanceServiceScope()
-	case "slos":
-		return t.AsMaintenanceSloScope()
-	default:
-		return nil, errors.New("unknown discriminator value: " + discriminator)
-	}
-}
-
-func (t MaintenanceScope) MarshalJSON() ([]byte, error) {
-	b, err := t.union.MarshalJSON()
-	return b, err
-}
-
-func (t *MaintenanceScope) UnmarshalJSON(b []byte) error {
-	err := t.union.UnmarshalJSON(b)
-	return err
-}
 
 // AsObservedOutcome returns the union data inside the ObservationExecutionOutcome as a ObservedOutcome
 func (t ObservationExecutionOutcome) AsObservedOutcome() (ObservedOutcome, error) {

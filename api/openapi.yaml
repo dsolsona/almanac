@@ -108,7 +108,7 @@ paths:
         Follow next_cursor until absent.
       security: [{SessionCookie: []}]
       parameters:
-        - {name: revision, in: query, required: true, schema: {$ref: '#/components/schemas/AlertVersion'}}
+        - {name: revision, in: query, required: true, description: Use AlertPolicy.evaluation_revision for current evaluations or the retained evaluation revision to audit. AlertPolicy.version is the resource version used for ETags., schema: {$ref: '#/components/schemas/AlertVersion'}}
         - {$ref: '#/components/parameters/AlertLimit'}
         - {$ref: '#/components/parameters/AlertCursor'}
       responses:
@@ -3373,6 +3373,7 @@ components:
         end: {type: string, format: date-time, description: Use a zero-offset UTC instant at whole-second precision aligned to the applicable observation grids., example: '2027-01-15T16:00:00Z'}
         scope: {$ref: '#/components/schemas/MaintenanceScope'}
     MaintenanceScope:
+      x-go-type: maintenanceScope
       oneOf:
         - {$ref: '#/components/schemas/MaintenanceSloScope'}
         - {$ref: '#/components/schemas/MaintenanceServiceScope'}

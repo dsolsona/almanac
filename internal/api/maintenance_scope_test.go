@@ -1,6 +1,10 @@
 package api
 
-import "testing"
+import (
+	"slices"
+	"testing"
+	"uuid"
+)
 
 func TestMaintenanceScopeRejectsAmbiguousSelectors(t *testing.T) {
 	t.Parallel()
@@ -28,6 +32,55 @@ func TestMaintenanceScopeRejectsAmbiguousSelectors(t *testing.T) {
 		}
 		if (tc.kind == "slos" || tc.kind == "services") && (len(scope.IDs) != 1 || scope.IDs[0] != id) {
 			t.Errorf("parsed IDs = %q", scope.IDs)
+		}
+	}
+}
+
+func TestMaintenanceScopeMergePreservesExclusiveSelector(t *testing.T) {
+	t.Parallel()
+	const first = "aaf71d39-d21c-4e8c-bb0e-736a86647677"
+	const second = "d5c7322d-bbc3-4917-98bd-42c6f390fb8a"
+	firstID, err := uuid.Parse(first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondID, err := uuid.Parse(second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var scope MaintenanceScope
+	for _, step := range []struct {
+		merge func() error
+		kind  string
+		ids   []string
+	}{
+		{func() error {
+			return scope.MergeMaintenanceServiceScope(MaintenanceServiceScope{ServiceIds: []ServiceId{ServiceId(firstID)}})
+		}, "services", []string{first}},
+		{func() error {
+			return scope.MergeMaintenanceServiceScope(MaintenanceServiceScope{ServiceIds: []ServiceId{ServiceId(secondID)}})
+		}, "services", []string{second}},
+		{func() error { return scope.MergeMaintenanceAllServicesScope(MaintenanceAllServicesScope{}) }, "all_services", nil},
+		{func() error {
+			return scope.MergeMaintenanceSloScope(MaintenanceSloScope{SloIds: []SloId{SloId(firstID)}})
+		}, "slos", []string{first}},
+		{func() error {
+			return scope.MergeMaintenanceServiceScope(MaintenanceServiceScope{ServiceIds: []ServiceId{ServiceId(secondID)}})
+		}, "services", []string{second}},
+		{func() error {
+			return scope.MergeMaintenanceSloScope(MaintenanceSloScope{SloIds: []SloId{SloId(secondID)}})
+		}, "slos", []string{second}},
+	} {
+		if err := step.merge(); err != nil {
+			t.Fatal(err)
+		}
+		data, err := scope.MarshalJSON()
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, valid := ParseMaintenanceScope(data)
+		if !valid || got.Kind != step.kind || !slices.Equal(got.IDs, step.ids) {
+			t.Errorf("merge to %s = %s, want exact selector with IDs %v", step.kind, data, step.ids)
 		}
 	}
 }

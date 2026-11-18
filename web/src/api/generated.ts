@@ -3729,6 +3729,7 @@ export interface operations {
     listAlertMaintenanceSuppressions: {
         parameters: {
             query: {
+                /** @description Use AlertPolicy.evaluation_revision for current evaluations or the retained evaluation revision to audit. AlertPolicy.version is the resource version used for ETags. */
                 revision: components["schemas"]["AlertVersion"];
                 limit?: components["parameters"]["AlertLimit"];
                 cursor?: components["parameters"]["AlertCursor"];
