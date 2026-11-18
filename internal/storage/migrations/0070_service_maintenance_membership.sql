@@ -1,6 +1,9 @@
 -- Service maintenance uses assignment history, rather than reconstructing
 -- elapsed coverage from the current SLO definition. Recording a new assignment
 -- also advances the authority read by occurrence and calculation transactions.
+-- Keep current assignments stable until the deferred triggers are installed.
+LOCK TABLE public.almanac_slos IN SHARE ROW EXCLUSIVE MODE;
+
 CREATE TABLE public.almanac_service_maintenance_authority (
     singleton boolean PRIMARY KEY CHECK (singleton),
     revision bigint NOT NULL DEFAULT 0 CHECK (revision >= 0)
