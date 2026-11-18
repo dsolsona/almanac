@@ -1,3 +1,5 @@
+[F4-T59](F4-T59.md) connects editing a future maintenance schedule to the shared form.
+
 [F4-T60](F4-T60.md) corrects duplicate source-hour admission for canonical history.
 
 [F4-T58](F4-T58.md) shows the eligible and including-maintenance event populations side by side.

@@ -19,7 +19,9 @@ historical permissions come from [SPEC-0016](../specs/0016-maintenance-exclusion
    future scheduling, stale revisions, replay, cancellation, prospective end,
    administrator corrections and SLO overlay overlap queries against PostgreSQL.
    Connect [browser scheduling and inspection](../tasks/F4-T55.md), [lifecycle actions](../tasks/F4-T57.md),
-   [timeline overlays](../tasks/F4-T56.md), and the [management CLI](../tasks/F4-T54.md) and verify the authenticated journey.
+   [schedule editing](../tasks/F4-T59.md),
+   [timeline overlays](../tasks/F4-T56.md), the
+   [calculation comparison](../tasks/F4-T58.md), and the [management CLI](../tasks/F4-T54.md) and verify the authenticated journey.
    Describe calculation exclusions and their evidence in stage 2. Reserve
    notification-pause copy and controls for stage 3, when delivery suppression
    is available.

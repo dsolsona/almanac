@@ -63,12 +63,57 @@ test('schedule and inspect explicit SLO maintenance in the deployed app', async 
     await page.getByRole('button', { name: 'Schedule maintenance', exact: true }).click();
     await expect(page.getByRole('heading', { name: displayName, exact: true, level: 1 })).toBeVisible();
     const pathname = new URL(page.url()).pathname;
-    const saved = await expectOk(api(page, 'GET', `/api/v1${pathname}`));
+    let saved = await expectOk(api(page, 'GET', `/api/v1${pathname}`));
     expect(saved.body.slo_ids).toEqual([slo.body.id]);
     expect(Date.parse(saved.body.start)).toBe(start.getTime());
     expect(Date.parse(saved.body.end) - Date.parse(saved.body.start)).toBe(75 * 60_000);
     await expect(page.getByRole('link', { name: 'Checkout availability', exact: true })).toHaveAttribute('href', `/slos/${slo.body.id}`);
     await expect(page.getByText('Scheduled', { exact: true })).toBeVisible();
+    await page.getByRole('link', { name: 'Edit schedule', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Edit maintenance schedule', exact: true })).toBeFocused();
+    await expect(page.getByRole('button', { name: 'Remove Checkout availability', exact: true })).toBeVisible();
+    await page.getByRole('textbox', { name: 'Reason', exact: true }).fill('Apply the approved database update.');
+    await page.getByRole('button', { name: 'Save schedule', exact: true }).click();
+    await expect(page.getByRole('heading', { name: displayName, exact: true, level: 1 })).toBeVisible();
+    const previous = saved;
+    saved = await expectOk(api(page, 'GET', `/api/v1${pathname}`));
+    expect(saved.body.revision).toBe('2');
+    expect(saved.body.reason).toBe('Apply the approved database update.');
+    expect(saved.body.start).toBe(previous.body.start);
+    expect(saved.body.end).toBe(previous.body.end);
+    expect(saved.body.slo_ids).toEqual(previous.body.slo_ids);
+
+    const replacement = await expectOk(api(page, 'POST', '/api/v1/slos', {
+      name: `${name}-replacement`, display_name: 'Checkout latency', service_id: service.body.id, sli_id: sli.body.id,
+      target: '0.99', rolling_window_seconds: 2592000,
+    }));
+    await page.getByRole('link', { name: 'Edit schedule', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Remove Checkout availability', exact: true })).toBeVisible();
+    const draftReason = 'Deploy the original database update.';
+    const currentReason = 'Maintenance now covers Checkout latency.';
+    await page.getByRole('textbox', { name: 'Reason', exact: true }).fill(draftReason);
+    await expectOk(api(page, 'PUT', `/api/v1${pathname}`, {
+      title: displayName, reason: currentReason, start: saved.body.start, end: saved.body.end, slo_ids: [replacement.body.id],
+    }, { 'If-Match': saved.etag! }));
+    const save = page.getByRole('button', { name: 'Save schedule', exact: true });
+    await save.click();
+    await page.getByRole('button', { name: 'Read latest revision', exact: true }).click();
+    const current = page.getByRole('region', { name: 'Current revision 3', exact: true });
+    await expect(current.getByText(currentReason, { exact: true })).toBeVisible();
+    await expect(current.getByRole('listitem')).toHaveText(['Checkout latency · Checkout', 'Checkout availability · Checkout']);
+    await expect(save).toBeDisabled();
+    await expect(page.getByRole('textbox', { name: 'Reason', exact: true })).toHaveValue(draftReason);
+    await page.screenshot({ path: testInfo.outputPath('maintenance-edit-conflict.png'), fullPage: true });
+    await testInfo.attach('maintenance-edit-conflict', { path: testInfo.outputPath('maintenance-edit-conflict.png'), contentType: 'image/png' });
+    await page.getByRole('button', { name: 'Keep my draft', exact: true }).press('Enter');
+    await expect(save).toBeFocused();
+    await save.press('Enter');
+    await expect(page.getByRole('heading', { name: displayName, exact: true, level: 1 })).toBeVisible();
+    saved = await expectOk(api(page, 'GET', `/api/v1${pathname}`));
+    expect(saved.body.revision).toBe('4');
+    expect(saved.body.reason).toBe(draftReason);
+    expect(saved.body.slo_ids).toEqual([slo.body.id]);
+
     await page.screenshot({ path: testInfo.outputPath('maintenance-detail-light.png'), fullPage: true });
     await testInfo.attach('maintenance-detail-light', { path: testInfo.outputPath('maintenance-detail-light.png'), contentType: 'image/png' });
 

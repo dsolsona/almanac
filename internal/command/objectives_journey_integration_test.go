@@ -61,8 +61,8 @@ func startObjectiveJourneyFixtureWithMetrics(t *testing.T, internalMetrics bool)
 	if err != nil {
 		t.Fatal("reserve isolated SLI journey port failed")
 	}
+	defer listener.Close()
 	address := listener.Addr().String()
-	listener.Close()
 	dir := t.TempDir()
 	databaseFile := filepath.Join(dir, "database-url")
 	initialPasswordFile := filepath.Join(dir, "initial-password")
@@ -126,21 +126,30 @@ func startObjectiveJourneyFixtureWithMetrics(t *testing.T, internalMetrics bool)
 		"--tls-cert-file=" + certFile, "--tls-key-file=" + keyFile, "--source-secret-keyset-file=" + keysetFile,
 		"--source-secret-keyset-id=" + keysetID, "--shutdown-timeout=5s"}
 	metricsURL := ""
+	var metricsListener net.Listener
 	if internalMetrics {
-		listener, err := net.Listen("tcp", "127.0.0.1:0")
+		metricsListener, err = net.Listen("tcp", "127.0.0.1:0")
 		if err != nil {
 			t.Fatal("reserve isolated performance metrics listener failed")
 		}
-		metricsAddress := listener.Addr().String()
-		if err := listener.Close(); err != nil {
-			t.Fatal("release isolated performance metrics listener reservation failed")
-		}
+		defer metricsListener.Close()
+		metricsAddress := metricsListener.Addr().String()
 		args = append(args, "--metrics-listen="+metricsAddress)
 		metricsURL = "http://" + metricsAddress + "/metrics"
 	}
 	logs := newRuntimeLog()
 	backend := &objectiveJourneyBackend{binary: binary, args: args, client: apiClient, baseURL: baseURL, logs: logs}
 	t.Cleanup(func() { backend.stop(t) })
+	// Hold the HTTPS reservation while the provider starts and the metrics port
+	// is picked, so neither can be assigned the same port during fixture setup.
+	if metricsListener != nil {
+		if err := metricsListener.Close(); err != nil {
+			t.Fatal("release isolated performance metrics listener reservation failed")
+		}
+	}
+	if err := listener.Close(); err != nil {
+		t.Fatal("release isolated SLI journey port reservation failed")
+	}
 	backend.start(t)
 	setup := exec.CommandContext(t.Context(), binary, "setup", "--backend-url="+baseURL, "--initial-admin-login=sli-owner",
 		"--initial-admin-password-file="+initialPasswordFile, "--new-password-file="+permanentPasswordFile, "--ca-file="+certFile, "--output=json")
