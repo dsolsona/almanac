@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { AuthContext } from '../src/auth/client.ts';
 import { MaintenancePage } from '../src/maintenance/MaintenancePage.tsx';
@@ -64,6 +64,9 @@ it('preserves an early-end draft when its window ends naturally', async () => {
   expect(screen.getByRole('dialog', { name: 'End this maintenance early?' })).toBeVisible();
   expect(reason).toHaveValue('Traffic switch finished.');
   expect(screen.getByRole('button', { name: 'End maintenance' })).toBeDisabled();
+  vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => { callback(performance.now()); return 1; });
+  fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+  expect(screen.getByRole('heading', { name: record.title, level: 1 })).toHaveFocus();
 });
 
 it('checks the early-end time at submission and clears its validation error on edit', async () => {
@@ -72,6 +75,7 @@ it('checks the early-end time at submission and clears its validation error on e
   vi.stubGlobal('fetch', submit);
   fireEvent.click(screen.getByRole('button', { name: 'End maintenance early' }));
   const time = screen.getByLabelText('New end time (UTC)');
+  expect(time).toHaveAttribute('step', '1');
   fireEvent.change(time, { target: { value: '02:01' } });
   fireEvent.change(screen.getByLabelText('Reason for this change'), { target: { value: 'Traffic switch finished.' } });
   act(() => vi.advanceTimersByTime(120_000));
@@ -82,19 +86,62 @@ it('checks the early-end time at submission and clears its validation error on e
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 });
 
-it('keeps a cancellation draft and blocks confirmation if the latest window has started', async () => {
+it('shows the latest scope and disables cancellation at its updated start boundary', async () => {
   await showDetail({ ...record, start: '2026-11-18T03:00:00Z', end: '2026-11-18T04:00:00Z' });
-  const newer = { ...record, revision: '2', operation: 'edit', start: '2026-11-18T01:59:00Z', end: '2026-11-18T04:00:00Z' };
+  const replacement = '70000000-0000-4000-8000-000000000002';
+  const newer = { ...record, revision: '2', operation: 'edit', start: '2026-11-18T02:00:01Z', end: '2026-11-18T04:00:00Z', slo_ids: [replacement] };
+  vi.mocked(sloClient.get).mockResolvedValue({ value: { display_name: 'Orders availability' }, etag: '' } as Awaited<ReturnType<typeof sloClient.get>>);
   vi.stubGlobal('fetch', vi.fn(async (_url: string, request: RequestInit) => request.method === 'POST'
     ? new Response(JSON.stringify({ code: 'maintenance_conflict' }), { status: 409 })
-    : new Response(JSON.stringify(newer), { headers: { ETag: `"maintenance:${id}:2"` } })));
+    : new Response(JSON.stringify(newer), { headers: { ETag: `"maintenance:${id}:2"`, Date: new Date(now).toUTCString() } })));
   fireEvent.click(screen.getByRole('button', { name: 'Cancel scheduled maintenance' }));
   const reason = screen.getByLabelText('Reason for this change');
   fireEvent.change(reason, { target: { value: 'Postpone the work.' } });
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Cancel maintenance' })); });
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Read latest revision' })); });
   expect(reason).toHaveValue('Postpone the work.');
+  const confirmation = screen.getByRole('dialog', { name: 'Cancel this maintenance window?' });
+  expect(within(confirmation).getByText('Orders availability')).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Cancel maintenance' })).toBeEnabled();
+  act(() => vi.advanceTimersByTime(1000));
   expect(screen.getByRole('button', { name: 'Cancel maintenance' })).toBeDisabled();
+  expect(screen.getByText('In progress', { exact: true })).toBeVisible();
+});
+
+it('can check an uncertain cancellation without giving up the draft', async () => {
+  const scheduled = { ...record, start: '2026-11-18T03:00:00Z', end: '2026-11-18T04:00:00Z' };
+  await showDetail(scheduled);
+  const cancelled = { ...scheduled, revision: '2', operation: 'cancel', tombstone: true };
+  vi.stubGlobal('fetch', vi.fn(async (_url: string, request: RequestInit) => {
+    if (request.method === 'POST') throw new TypeError('Response lost');
+    return new Response(JSON.stringify(cancelled), { headers: { ETag: `"maintenance:${id}:2"` } });
+  }));
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel scheduled maintenance' }));
+  const reason = screen.getByLabelText('Reason for this change');
+  fireEvent.change(reason, { target: { value: 'Postpone the work.' } });
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Cancel maintenance' })); });
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Read latest revision' })); });
+  expect(reason).toHaveValue('Postpone the work.');
+  expect(screen.getByText('Cancelled', { exact: true })).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Cancel maintenance' })).toBeDisabled();
+});
+
+it('allows dismissal while checking a revision and aborts the pending read', async () => {
+  await showDetail({ ...record, start: '2026-11-18T03:00:00Z', end: '2026-11-18T04:00:00Z' });
+  let readSignal: AbortSignal | null | undefined;
+  vi.stubGlobal('fetch', vi.fn(async (_url: string, request: RequestInit) => {
+    if (request.method === 'POST') throw new TypeError('Response lost');
+    readSignal = request.signal;
+    return new Promise<Response>(() => {});
+  }));
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel scheduled maintenance' }));
+  fireEvent.change(screen.getByLabelText('Reason for this change'), { target: { value: 'Postpone the work.' } });
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Cancel maintenance' })); });
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Read latest revision' })); });
+  expect(readSignal?.aborted).toBe(false);
+  fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  expect(readSignal?.aborted).toBe(true);
 });
 
 it('keeps a saved cancellation when a stale detail read resolves before the effect refresh', async () => {

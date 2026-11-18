@@ -3,8 +3,10 @@ import type { components } from '../api/generated.ts';
 import type { AuthContext } from '../auth/client.ts';
 import { Button, DatePicker, Dialog, FormActions, TextareaField, TextField } from '../components/ui/index.ts';
 import { request, SloFailure, write, type ServerClock } from '../slos/client.ts';
+import { MaintenanceScope } from './MaintenanceScope.tsx';
 
 type Window = components['schemas']['MaintenanceWindow'];
+type WindowRevision = { value: Window; etag: string; serverClock?: ServerClock };
 type Action = 'cancel' | 'end' | 'withdraw';
 
 const actions = {
@@ -37,7 +39,8 @@ type Props = {
   etag: string;
   now: number;
   readNow: () => number;
-  onUpdated: (result: { value: Window; etag: string; serverClock?: ServerClock }) => void;
+  onUpdated: (result: WindowRevision) => void;
+  onRevisionRead: (result: WindowRevision) => void;
 };
 
 function availableAction(context: AuthContext, record: Window, now: number, historical: boolean): Action | undefined {
@@ -49,7 +52,8 @@ function availableAction(context: AuthContext, record: Window, now: number, hist
   return upcoming ? 'cancel' : active ? 'end' : undefined;
 }
 
-export function MaintenanceLifecycle({ context, record, etag, now, readNow, onUpdated, historical = false }: Props & { historical?: boolean }) {
+export function MaintenanceLifecycle({ context, record, etag, now, readNow, onUpdated, onRevisionRead, fallbackFocus, historical = false }:
+  Props & { historical?: boolean; fallbackFocus: RefObject<HTMLElement | null> }) {
   const [action, setAction] = useState<Action>();
   const trigger = useRef<HTMLElement>(null);
   const available = availableAction(context, record, now, historical);
@@ -60,10 +64,10 @@ export function MaintenanceLifecycle({ context, record, etag, now, readNow, onUp
       trigger.current = event.currentTarget;
       setAction(available);
     }}>{actions[available].label}</Button>}
-    {action && <LifecycleDialog key={action} action={action} context={context} record={record} etag={etag} readNow={readNow} trigger={trigger}
+    {action && <LifecycleDialog key={action} action={action} context={context} record={record} etag={etag} readNow={readNow} trigger={trigger} onRevisionRead={onRevisionRead}
       onClose={() => {
         setAction(undefined);
-        requestAnimationFrame(() => trigger.current?.focus());
+        requestAnimationFrame(() => (trigger.current?.isConnected ? trigger.current : fallbackFocus.current)?.focus());
       }} onUpdated={result => { setAction(undefined); onUpdated(result); }} />}
   </>;
   return historical ? <details className="maintenance-panel maintenance-detail maintenance-correction">
@@ -73,22 +77,25 @@ export function MaintenanceLifecycle({ context, record, etag, now, readNow, onUp
   </details> : controls;
 }
 
-function LifecycleDialog({ action, context, record, etag, readNow, trigger, onClose, onUpdated }:
+function LifecycleDialog({ action, context, record, etag, readNow, trigger, onClose, onUpdated, onRevisionRead }:
   Omit<Props, 'now'> & { action: Action; trigger: RefObject<HTMLElement | null>; onClose: () => void }) {
   const [day, setDay] = useState(() => new Date(readNow()).toISOString().slice(0, 10));
   const [time, setTime] = useState('');
   const [reason, setReason] = useState('');
   const [error, setError] = useState('');
   const [validation, setValidation] = useState<{ field: 'reason' | 'end'; message: string }>();
-  const [conflict, setConflict] = useState(false);
+  const [outcome, setOutcome] = useState<'conflict' | 'uncertain'>();
   const [sending, setSending] = useState(false);
+  const [reading, setReading] = useState(false);
   const [revision, setRevision] = useState(etag);
   const [latest, setLatest] = useState<Window>();
   const attempt = useRef<{ identity: string; key: string } | undefined>(undefined);
   const notice = useRef<HTMLParagraphElement>(null);
+  const revisionRead = useRef<AbortController>(undefined);
 
   const message = [error, validation?.message].filter(Boolean).join(' ');
   useEffect(() => { if (message) notice.current?.focus(); }, [message]);
+  useEffect(() => () => revisionRead.current?.abort(), []);
   const operation = actions[action];
   const current = latest ?? record;
   const applies = (now: number) => availableAction(context, current, now, action === 'withdraw') === action;
@@ -101,7 +108,7 @@ function LifecycleDialog({ action, context, record, etag, readNow, trigger, onCl
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (sending || conflict) return;
+    if (sending || reading || outcome === 'conflict') return;
     const now = readNow();
     if (!applies(now)) {
       setError(unavailableMessage);
@@ -131,46 +138,65 @@ function LifecycleDialog({ action, context, record, etag, readNow, trigger, onCl
         { ...write(context, body, attempt.current.key, revision), method: 'POST' }, true);
       onUpdated(result);
     } catch (failure) {
-      setConflict(failure instanceof SloFailure && failure.status === 409);
-      if (failure instanceof SloFailure && !failure.uncertain) attempt.current = undefined;
-      setError(failure instanceof Error ? failure.message : 'The change could not be saved.');
+      const uncertain = failure instanceof SloFailure && failure.uncertain;
+      setOutcome(uncertain ? 'uncertain' : failure instanceof SloFailure && failure.status === 409 ? 'conflict' : undefined);
+      if (failure instanceof SloFailure && !uncertain) attempt.current = undefined;
+      setError(uncertain ? 'The change may have been saved. Read the latest revision to confirm.' :
+        failure instanceof Error ? failure.message : 'The change could not be saved.');
     } finally {
       setSending(false);
     }
   }
 
   async function checkRevision() {
-    if (sending) return;
-    setSending(true);
+    if (sending || reading) return;
+    const controller = new AbortController();
+    const timeout = AbortSignal.timeout(30_000);
+    revisionRead.current = controller;
+    setReading(true);
     try {
-      const result = await request<Window>(`/api/v1/maintenance/${record.id}`);
+      const result = await request<Window>(`/api/v1/maintenance/${record.id}`, { signal: AbortSignal.any([controller.signal, timeout]) });
+      if (controller.signal.aborted) return;
       setLatest(result.value);
       setRevision(result.etag);
-      setConflict(false);
+      setOutcome(undefined);
       setError('');
+      onRevisionRead(result);
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : 'The latest revision could not be loaded.');
+      if (controller.signal.aborted) return;
+      setError(timeout.aborted ? 'The latest revision took too long to load. Try again.' :
+        failure instanceof Error ? failure.message : 'The latest revision could not be loaded.');
     } finally {
-      setSending(false);
+      if (!controller.signal.aborted) setReading(false);
     }
   }
 
-  return <Dialog open onClose={() => { if (!sending) onClose(); }} title={operation.title} triggerRef={trigger}>
+  function close() {
+    if (sending) return;
+    revisionRead.current?.abort();
+    onClose();
+  }
+
+  return <Dialog open onClose={close} title={operation.title} triggerRef={trigger}>
     <form onSubmit={submit} className="maintenance-lifecycle-form">
       <p>{operation.explanation}</p>
-      {latest && <p>Current schedule <time dateTime={latest.start}>{latest.start}</time> to <time dateTime={latest.end}>{latest.end}</time></p>}
+      {latest && <section aria-label="Current revision">
+        <p>Current schedule <time dateTime={latest.start}>{latest.start}</time> to <time dateTime={latest.end}>{latest.end}</time></p>
+        <p>Affected SLOs</p>
+        <MaintenanceScope ids={latest.slo_ids} />
+      </section>}
       {latest && !unavailable && <p role="status">Latest revision {latest.revision} loaded. Check the dates before confirming your change.</p>}
       {unavailable && error !== unavailableMessage && <p role="status">{unavailableMessage}</p>}
       {action === 'end' && <div className="maintenance-schedule-row">
         <DatePicker label="New end date (UTC)" value={day} onValueChange={value => { setDay(value); clearValidation('end'); }} disabled={sending} />
-        <TextField id="maintenance-end-time" label="New end time (UTC)" type="time" value={time} onChange={event => { setTime(event.target.value); clearValidation('end'); }} required disabled={sending} />
+        <TextField id="maintenance-end-time" label="New end time (UTC)" type="time" step={1} value={time} onChange={event => { setTime(event.target.value); clearValidation('end'); }} required disabled={sending} />
       </div>}
       <TextareaField id="maintenance-change-reason" label="Reason for this change" value={reason} onChange={event => { setReason(event.target.value); clearValidation('reason'); }} required maxLength={4096} disabled={sending} />
       {message && <p ref={notice} tabIndex={-1} role="alert" className="ui-error">{message}</p>}
       <FormActions>
-        <Button variant="outline" onClick={onClose} disabled={sending}>Close</Button>
-        {conflict && <Button variant="outline" onClick={() => void checkRevision()} disabled={sending}>Read latest revision</Button>}
-        <Button type="submit" variant="danger" pending={sending} disabled={conflict || unavailable}>{operation.confirm}</Button>
+        <Button variant="outline" onClick={close} disabled={sending}>Close</Button>
+        {outcome && <Button variant="outline" onClick={() => void checkRevision()} pending={reading} disabled={sending}>Read latest revision</Button>}
+        <Button type="submit" variant="danger" pending={sending} disabled={reading || outcome === 'conflict' || unavailable}>{operation.confirm}</Button>
       </FormActions>
     </form>
   </Dialog>;
