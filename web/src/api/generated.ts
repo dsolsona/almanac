@@ -1188,6 +1188,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/slos/{slo_id}/scoped-maintenance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List effective maintenance overlapping a UTC timeline range */
+        get: operations["listSloScopedMaintenance"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/services": {
         parameters: {
             query?: never;
@@ -1624,6 +1641,16 @@ export interface components {
             truth: components["schemas"]["AlertTruth"];
             conditions: components["schemas"]["AlertConditionResult"][];
             recovery_comparison?: components["schemas"]["AlertRecoveryComparison"];
+            maintenance_suppression?: components["schemas"]["AlertMaintenanceSuppression"];
+        };
+        AlertMaintenanceSuppression: {
+            /** Format: uuid */
+            window_id: string;
+            revision: components["schemas"]["AlertVersion"];
+            start: components["schemas"]["AlertTimestamp"];
+            end: components["schemas"]["AlertTimestamp"];
+            /** @description A matching decision would otherwise have opened an occurrence. */
+            opening_suppressed: boolean;
         };
         AlertObjective: {
             target: components["schemas"]["AlertExactDecimal"];
@@ -3223,6 +3250,26 @@ export interface components {
             /** @description Maximum 4096 UTF-8 bytes. */
             reason: string;
             /** Format: date-time */
+            end: string;
+        };
+        ScopedMaintenanceTimelinePage: {
+            items: components["schemas"]["ScopedMaintenanceTimelineInterval"][];
+            /** @description Some effective memberships in this range are still being prepared. */
+            pending: boolean;
+            next_cursor?: string;
+            overflow?: components["schemas"]["MaintenanceOverflow"];
+        };
+        ScopedMaintenanceTimelineInterval: {
+            window: components["schemas"]["ScopedMaintenanceWindow"];
+            /**
+             * Format: date-time
+             * @description Inclusive effective SLO participation start.
+             */
+            start: string;
+            /**
+             * Format: date-time
+             * @description Exclusive effective SLO participation end.
+             */
             end: string;
         };
         MaintenancePage: {
@@ -6276,6 +6323,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MaintenancePage"];
+                };
+            };
+            /** @description Request rejected */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listSloScopedMaintenance: {
+        parameters: {
+            query: {
+                limit?: components["parameters"]["PageLimit"];
+                cursor?: components["parameters"]["PageCursor"];
+                /** @description Include a counted chart marker on an overflowing first page. */
+                include_overflow?: boolean;
+                /** @description UTC instant with at most microsecond precision. */
+                start: string;
+                /** @description UTC instant with at most microsecond precision. */
+                end: string;
+            };
+            header?: never;
+            path: {
+                slo_id: components["parameters"]["SloId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description List effective maintenance overlapping a UTC timeline range */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScopedMaintenanceTimelinePage"];
                 };
             };
             /** @description Request rejected */

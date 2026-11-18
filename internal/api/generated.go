@@ -3354,8 +3354,9 @@ type AlertEvaluation struct {
 	Conditions []AlertConditionResult `json:"conditions"`
 
 	// EvaluationRevision Exact positive decimal integer, no larger than signed int64 MaxInt64.
-	EvaluationRevision AlertVersion       `json:"evaluation_revision"`
-	PolicyId           openapi_types.UUID `json:"policy_id"`
+	EvaluationRevision     AlertVersion                 `json:"evaluation_revision"`
+	MaintenanceSuppression *AlertMaintenanceSuppression `json:"maintenance_suppression,omitempty"`
+	PolicyId               openapi_types.UUID           `json:"policy_id"`
 
 	// RecoveryComparison The last-breaching exclusion mask applied to the same present source facts; not a recalculation of the original firing decision.
 	RecoveryComparison *AlertRecoveryComparison `json:"recovery_comparison,omitempty"`
@@ -3391,6 +3392,22 @@ type AlertGroup struct {
 
 // AlertLifecycle defines model for AlertLifecycle.
 type AlertLifecycle string
+
+// AlertMaintenanceSuppression defines model for AlertMaintenanceSuppression.
+type AlertMaintenanceSuppression struct {
+	// End UTC timestamp with Z suffix.
+	End AlertTimestamp `json:"end"`
+
+	// OpeningSuppressed A matching decision would otherwise have opened an occurrence.
+	OpeningSuppressed bool `json:"opening_suppressed"`
+
+	// Revision Exact positive decimal integer, no larger than signed int64 MaxInt64.
+	Revision AlertVersion `json:"revision"`
+
+	// Start UTC timestamp with Z suffix.
+	Start    AlertTimestamp     `json:"start"`
+	WindowId openapi_types.UUID `json:"window_id"`
+}
 
 // AlertObjective defines model for AlertObjective.
 type AlertObjective struct {
@@ -4401,6 +4418,28 @@ type SafeIdentity struct {
 type ScopedMaintenancePage struct {
 	Items      []ScopedMaintenanceWindow `json:"items"`
 	NextCursor *string                   `json:"next_cursor,omitempty"`
+}
+
+// ScopedMaintenanceTimelineInterval defines model for ScopedMaintenanceTimelineInterval.
+type ScopedMaintenanceTimelineInterval struct {
+	// End Exclusive effective SLO participation end.
+	End time.Time `json:"end"`
+
+	// Start Inclusive effective SLO participation start.
+	Start  time.Time               `json:"start"`
+	Window ScopedMaintenanceWindow `json:"window"`
+}
+
+// ScopedMaintenanceTimelinePage defines model for ScopedMaintenanceTimelinePage.
+type ScopedMaintenanceTimelinePage struct {
+	Items      []ScopedMaintenanceTimelineInterval `json:"items"`
+	NextCursor *string                             `json:"next_cursor,omitempty"`
+
+	// Overflow Chart grouping for the last first-page window and all following windows. The bounds are clipped to the requested range and enclose the grouped windows. They do not describe continuous exclusion coverage.
+	Overflow *MaintenanceOverflow `json:"overflow,omitempty"`
+
+	// Pending Some effective memberships in this range are still being prepared.
+	Pending bool `json:"pending"`
 }
 
 // ScopedMaintenanceWindow defines model for ScopedMaintenanceWindow.
@@ -5918,6 +5957,21 @@ type GetSloOperationalDetailParamsBurnWindowSeconds int
 
 // GetSloOperationalDetailParamsPeriod defines parameters for GetSloOperationalDetail.
 type GetSloOperationalDetailParamsPeriod string
+
+// ListSloScopedMaintenanceParams defines parameters for ListSloScopedMaintenance.
+type ListSloScopedMaintenanceParams struct {
+	Limit  *PageLimit  `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor *PageCursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+
+	// IncludeOverflow Include a counted chart marker on an overflowing first page.
+	IncludeOverflow *bool `form:"include_overflow,omitempty" json:"include_overflow,omitempty"`
+
+	// Start UTC instant with at most microsecond precision.
+	Start time.Time `form:"start" json:"start"`
+
+	// End UTC instant with at most microsecond precision.
+	End time.Time `form:"end" json:"end"`
+}
 
 // PostBrowserTracesJSONBody defines parameters for PostBrowserTraces.
 type PostBrowserTracesJSONBody struct {
@@ -7521,6 +7575,11 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /api/v1/slos/{slo_id}/preparation/{job_id}/retry (the `RetrySloPreparation` operationId).
 	RetrySloPreparation(ctx context.Context, sloId SloId, jobId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListSloScopedMaintenance List effective maintenance overlapping a UTC timeline range
+	//
+	// Corresponds with GET /api/v1/slos/{slo_id}/scoped-maintenance (the `ListSloScopedMaintenance` operationId).
+	ListSloScopedMaintenance(ctx context.Context, sloId SloId, params *ListSloScopedMaintenanceParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetSloCurrentStatus Read the published current SLO result independently of history
 	//
@@ -9865,6 +9924,21 @@ func (c *Client) GetSloPreparation(ctx context.Context, sloId SloId, reqEditors 
 // Corresponds with POST /api/v1/slos/{slo_id}/preparation/{job_id}/retry (the `RetrySloPreparation` operationId).
 func (c *Client) RetrySloPreparation(ctx context.Context, sloId SloId, jobId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewRetrySloPreparationRequest(c.Server, sloId, jobId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ListSloScopedMaintenance List effective maintenance overlapping a UTC timeline range
+//
+// Corresponds with GET /api/v1/slos/{slo_id}/scoped-maintenance (the `ListSloScopedMaintenance` operationId).
+func (c *Client) ListSloScopedMaintenance(ctx context.Context, sloId SloId, params *ListSloScopedMaintenanceParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListSloScopedMaintenanceRequest(c.Server, sloId, params)
 	if err != nil {
 		return nil, err
 	}
@@ -15397,6 +15471,107 @@ func NewRetrySloPreparationRequest(server string, sloId SloId, jobId openapi_typ
 	return req, nil
 }
 
+// NewListSloScopedMaintenanceRequest constructs an http.Request for the ListSloScopedMaintenance method
+func NewListSloScopedMaintenanceRequest(server string, sloId SloId, params *ListSloScopedMaintenanceParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "slo_id", sloId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/slos/%s/scoped-maintenance", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.IncludeOverflow != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "include_overflow", *params.IncludeOverflow, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "boolean", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "start", params.Start, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "date-time"}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "end", params.End, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "date-time"}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetSloCurrentStatusRequest constructs an http.Request for the GetSloCurrentStatus method
 func NewGetSloCurrentStatusRequest(server string, sloId SloId) (*http.Request, error) {
 	var err error
@@ -16964,6 +17139,13 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /api/v1/slos/{slo_id}/preparation/{job_id}/retry (the `RetrySloPreparation` operationId).
 	RetrySloPreparationWithResponse(ctx context.Context, sloId SloId, jobId openapi_types.UUID, reqEditors ...RequestEditorFn) (*RetrySloPreparationResponse, error)
+
+	// ListSloScopedMaintenanceWithResponse List effective maintenance overlapping a UTC timeline range
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/slos/{slo_id}/scoped-maintenance (the `ListSloScopedMaintenance` operationId).
+	ListSloScopedMaintenanceWithResponse(ctx context.Context, sloId SloId, params *ListSloScopedMaintenanceParams, reqEditors ...RequestEditorFn) (*ListSloScopedMaintenanceResponse, error)
 
 	// GetSloCurrentStatusWithResponse Read the published current SLO result independently of history
 	//
@@ -21972,6 +22154,54 @@ func (r RetrySloPreparationResponse) ContentType() string {
 	return ""
 }
 
+type ListSloScopedMaintenanceResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *ScopedMaintenanceTimelinePage
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListSloScopedMaintenanceResponse) GetJSON200() *ScopedMaintenanceTimelinePage {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListSloScopedMaintenanceResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListSloScopedMaintenanceResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListSloScopedMaintenanceResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListSloScopedMaintenanceResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListSloScopedMaintenanceResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type GetSloCurrentStatusResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -24253,6 +24483,19 @@ func (c *ClientWithResponses) RetrySloPreparationWithResponse(ctx context.Contex
 		return nil, err
 	}
 	return ParseRetrySloPreparationResponse(rsp)
+}
+
+// ListSloScopedMaintenanceWithResponse List effective maintenance overlapping a UTC timeline range
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/slos/{slo_id}/scoped-maintenance (the `ListSloScopedMaintenance` operationId).
+func (c *ClientWithResponses) ListSloScopedMaintenanceWithResponse(ctx context.Context, sloId SloId, params *ListSloScopedMaintenanceParams, reqEditors ...RequestEditorFn) (*ListSloScopedMaintenanceResponse, error) {
+	rsp, err := c.ListSloScopedMaintenance(ctx, sloId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListSloScopedMaintenanceResponse(rsp)
 }
 
 // GetSloCurrentStatusWithResponse Read the published current SLO result independently of history
@@ -28355,6 +28598,39 @@ func ParseRetrySloPreparationResponse(rsp *http.Response) (*RetrySloPreparationR
 	return response, nil
 }
 
+// ParseListSloScopedMaintenanceResponse parses an HTTP response from a ListSloScopedMaintenanceWithResponse call
+func ParseListSloScopedMaintenanceResponse(rsp *http.Response) (*ListSloScopedMaintenanceResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListSloScopedMaintenanceResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ScopedMaintenanceTimelinePage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetSloCurrentStatusResponse parses an HTTP response from a GetSloCurrentStatusWithResponse call
 func ParseGetSloCurrentStatusResponse(rsp *http.Response) (*GetSloCurrentStatusResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -28976,6 +29252,9 @@ type ServerInterface interface {
 	// RetrySloPreparation Give one exhausted preparation job another bounded attempt budget
 	// (POST /api/v1/slos/{slo_id}/preparation/{job_id}/retry)
 	RetrySloPreparation(w http.ResponseWriter, r *http.Request, sloId SloId, jobId openapi_types.UUID)
+	// ListSloScopedMaintenance List effective maintenance overlapping a UTC timeline range
+	// (GET /api/v1/slos/{slo_id}/scoped-maintenance)
+	ListSloScopedMaintenance(w http.ResponseWriter, r *http.Request, sloId SloId, params ListSloScopedMaintenanceParams)
 	// GetSloCurrentStatus Read the published current SLO result independently of history
 	// (GET /api/v1/slos/{slo_id}/status)
 	GetSloCurrentStatus(w http.ResponseWriter, r *http.Request, sloId SloId)
@@ -33516,6 +33795,100 @@ func (siw *ServerInterfaceWrapper) RetrySloPreparation(w http.ResponseWriter, r 
 	handler.ServeHTTP(w, r)
 }
 
+// ListSloScopedMaintenance operation middleware
+func (siw *ServerInterfaceWrapper) ListSloScopedMaintenance(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "slo_id" -------------
+	var sloId SloId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "slo_id", r.PathValue("slo_id"), &sloId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "slo_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListSloScopedMaintenanceParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "include_overflow" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "include_overflow", r.URL.Query(), &params.IncludeOverflow, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "include_overflow"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "include_overflow", Err: err})
+		}
+		return
+	}
+
+	// ------------- Required query parameter "start" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "start", r.URL.Query(), &params.Start, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "start"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "start", Err: err})
+		}
+		return
+	}
+
+	// ------------- Required query parameter "end" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "end", r.URL.Query(), &params.End, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "end"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "end", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListSloScopedMaintenance(w, r, sloId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetSloCurrentStatus operation middleware
 func (siw *ServerInterfaceWrapper) GetSloCurrentStatus(w http.ResponseWriter, r *http.Request) {
 
@@ -34130,6 +34503,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/scoped-maintenance/preview", wrapper.PreviewMaintenanceScope)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/scoped-maintenance/{maintenance_id}/impact", wrapper.ReadMaintenanceImpact)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/slos/{slo_id}/maintenance", wrapper.ListSloMaintenance)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/slos/{slo_id}/scoped-maintenance", wrapper.ListSloScopedMaintenance)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/services", wrapper.ListServices)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/services", wrapper.CreateService)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/api/v1/services/{service_id}", wrapper.ArchiveService)

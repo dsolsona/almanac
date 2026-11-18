@@ -1133,6 +1133,23 @@ paths:
           description: List effective maintenance overlapping a UTC timeline range
           content: {application/json: {schema: {$ref: '#/components/schemas/MaintenancePage'}}}
         'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/slos/{slo_id}/scoped-maintenance:
+    get:
+      operationId: listSloScopedMaintenance
+      summary: List effective maintenance overlapping a UTC timeline range
+      security: [{SessionCookie: []}]
+      parameters:
+        - {$ref: '#/components/parameters/SloId'}
+        - {$ref: '#/components/parameters/PageLimit'}
+        - {$ref: '#/components/parameters/PageCursor'}
+        - {name: include_overflow, in: query, description: Include a counted chart marker on an overflowing first page., schema: {type: boolean}}
+        - {name: start, in: query, required: true, description: UTC instant with at most microsecond precision., schema: {type: string, format: date-time}}
+        - {name: end, in: query, required: true, description: UTC instant with at most microsecond precision., schema: {type: string, format: date-time}}
+      responses:
+        '200':
+          description: List effective maintenance overlapping a UTC timeline range
+          content: {application/json: {schema: {$ref: '#/components/schemas/ScopedMaintenanceTimelinePage'}}}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
   /api/v1/services:
     get:
       operationId: listServices
@@ -1808,6 +1825,17 @@ components:
         truth: {$ref: '#/components/schemas/AlertTruth'}
         conditions: {type: array, items: {$ref: '#/components/schemas/AlertConditionResult'}}
         recovery_comparison: {$ref: '#/components/schemas/AlertRecoveryComparison'}
+        maintenance_suppression: {$ref: '#/components/schemas/AlertMaintenanceSuppression'}
+    AlertMaintenanceSuppression:
+      type: object
+      additionalProperties: false
+      required: [window_id, revision, start, end, opening_suppressed]
+      properties:
+        window_id: {type: string, format: uuid}
+        revision: {$ref: '#/components/schemas/AlertVersion'}
+        start: {$ref: '#/components/schemas/AlertTimestamp'}
+        end: {$ref: '#/components/schemas/AlertTimestamp'}
+        opening_suppressed: {type: boolean, description: A matching decision would otherwise have opened an occurrence.}
     AlertObjective:
       type: object
       additionalProperties: false
@@ -3375,6 +3403,25 @@ components:
       properties:
         reason: {type: string, minLength: 1, maxLength: 4096, description: Maximum 4096 UTF-8 bytes.}
         end: {type: string, format: date-time}
+    ScopedMaintenanceTimelinePage:
+      type: object
+      additionalProperties: false
+      required: [items, pending]
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/ScopedMaintenanceTimelineInterval'}
+        pending: {type: boolean, description: Some effective memberships in this range are still being prepared.}
+        next_cursor: {type: string}
+        overflow: {$ref: '#/components/schemas/MaintenanceOverflow'}
+    ScopedMaintenanceTimelineInterval:
+      type: object
+      additionalProperties: false
+      required: [window, start, end]
+      properties:
+        window: {$ref: '#/components/schemas/ScopedMaintenanceWindow'}
+        start: {type: string, format: date-time, description: Inclusive effective SLO participation start.}
+        end: {type: string, format: date-time, description: Exclusive effective SLO participation end.}
     MaintenancePage:
       type: object
       required: [items]
