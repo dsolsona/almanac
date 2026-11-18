@@ -1,4 +1,4 @@
-import { expect, test, type Page, type TestInfo } from '@playwright/test';
+import { expect, test, type Locator, type Page, type TestInfo } from '@playwright/test';
 import { api, expectOk, unique } from './support/api.ts';
 import { startAgent, stopAgent } from './support/stack.ts';
 
@@ -6,6 +6,27 @@ async function captureMaintenanceDesign(page: Page, info: TestInfo, name: string
   const path = `../.local/e2e/maintenance-design/${name}.png`;
   await page.screenshot({ path, fullPage: true });
   await info.attach(name, { path, contentType: 'image/png' });
+}
+
+async function chooseCalendarDay(dialog: Locator, date: Date) {
+  const monthFormat = new Intl.DateTimeFormat('en', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+  const month = monthFormat.format(date);
+  await expect(dialog.getByRole('grid')).toBeVisible();
+  if (!await dialog.getByRole('grid', { name: month, exact: true }).count()) {
+    const following = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1));
+    const isFollowing = await dialog.getByRole('grid', { name: monthFormat.format(following), exact: true }).count();
+    await dialog.getByRole('button', { name: isFollowing ? 'Previous month' : 'Next month' }).click();
+  }
+  const day = new Intl.DateTimeFormat('en', {
+    weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC',
+  }).format(date);
+  await dialog.getByRole('grid', { name: month, exact: true })
+    .getByRole('button', { name: new RegExp(`^${day}(, selected)?(, today)?$`) }).click();
+}
+
+async function chooseStartDay(page: Page, date: Date) {
+  await page.getByRole('button', { name: /^Start date/ }).click();
+  await chooseCalendarDay(page.getByRole('dialog', { name: /Choose Start date/ }), date);
 }
 
 test('schedule and inspect explicit SLO and service maintenance in the deployed app', async ({ page }, testInfo) => {
@@ -21,7 +42,7 @@ test('schedule and inspect explicit SLO and service maintenance in the deployed 
       name, display_name: name, provider: 'prometheus', configuration_format: 'prometheus-http-v1',
       endpoint: 'http://victoriametrics:8428', tls: { insecure_skip_verify: false, ca_pem: null },
       authentication: { mode: 'none', username: null, password_secret: { action: 'clear' }, token_secret: { action: 'clear' } },
-      polling_interval_seconds: 60, agent_id: registration.body.agent.id,
+      polling_interval_seconds: 15, agent_id: registration.body.agent.id,
     }));
     const sli = await expectOk(api(page, 'POST', '/api/v1/slis', {
       name, display_name: name, datasource_id: source.body.id, measurement_kind: 'event_counts', component_mode: 'interval_count',
@@ -49,12 +70,7 @@ test('schedule and inspect explicit SLO and service maintenance in the deployed 
 
     const start = new Date(Date.now() + 86400_000);
     start.setUTCHours(12, 0, 0, 0);
-    const calendarName = new Intl.DateTimeFormat('en', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(start);
-    const calendar = page.getByRole('button', { name: /^Start date/ });
-    await calendar.click();
-    const day = page.getByRole('button', { name: calendarName, exact: true });
-    if (start.getUTCDate() === 1) await page.getByRole('button', { name: 'Next month' }).click();
-    await day.click();
+    await chooseStartDay(page, start);
     await page.getByLabel('Start time (UTC)', { exact: true }).fill('12:00');
     const preset = page.getByRole('radio', { name: '2 hours', exact: true });
     await page.getByRole('radio', { name: 'Custom…', exact: true }).click();
@@ -185,12 +201,7 @@ test('schedule and inspect explicit SLO and service maintenance in the deployed 
     await expect(reason).toHaveValue('Traffic switch finished.');
     await date.click();
     await expect(calendarDialog).toBeVisible();
-    const endMonth = new Intl.DateTimeFormat('en', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(shortEnd);
-    if (!await calendarDialog.getByRole('grid', { name: endMonth, exact: true }).count()) {
-      await calendarDialog.getByRole('button', { name: 'Next month' }).click();
-    }
-    const endDay = new Intl.DateTimeFormat('en', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(shortEnd);
-    await calendarDialog.getByRole('button', { name: endDay }).click();
+    await chooseCalendarDay(calendarDialog, shortEnd);
     await dialog.getByLabel('New end time (UTC)', { exact: true }).fill(shortEnd.toISOString().slice(11, 16));
     await dialog.getByRole('button', { name: 'End maintenance', exact: true }).click();
     await expect(dialog).toHaveCount(0);
@@ -241,9 +252,7 @@ test('schedule and inspect explicit SLO and service maintenance in the deployed 
     await expect(preview).toContainText('2 affected SLOs');
     await expect(preview).toContainText('Checkout availability');
     await expect(preview).toContainText('Checkout latency');
-    await calendar.click();
-    if (start.getUTCDate() === 1) await page.getByRole('button', { name: 'Next month' }).click();
-    await day.click();
+    await chooseStartDay(page, start);
     await page.getByLabel('Start time (UTC)', { exact: true }).fill('12:00');
     await captureMaintenanceDesign(page, testInfo, 'maintenance-selected-service-preview');
     await page.getByRole('button', { name: 'Schedule maintenance', exact: true }).click();
@@ -279,6 +288,21 @@ test('schedule and inspect explicit SLO and service maintenance in the deployed 
     const firstEligible = Math.ceil(Date.parse(slo.body.activated_at) / cadenceMilliseconds) * cadenceMilliseconds;
     expect(Date.parse(interval!.start)).toBe(firstEligible);
     expect(Date.parse(interval!.end)).toBe(historicalEnd.getTime());
+
+    // The chart only requests through the current completed evaluation range.
+    await expect.poll(async () => {
+      const response = await api(page, 'GET', `/api/v1/slos/${slo.body.id}/operational?period=7d`);
+      return Date.parse(response.body.range?.effective_end ?? '');
+    }, { timeout: 30_000 }).toBeGreaterThan(firstEligible);
+    await page.getByRole('button', { name: 'Refresh objective history' }).click();
+    const periods = page.locator('#slo-maintenance-periods');
+    await periods.locator('summary').click();
+    const row = periods.getByRole('listitem').filter({ has: page.getByRole('link', { name: currentService.body.title, exact: true }) });
+    await expect(row.getByRole('link')).toHaveAttribute('href', `/maintenance/${currentService.body.id}`);
+    await expect(row.locator('time').nth(0)).toHaveAttribute('datetime', interval!.start);
+    await expect(row.locator('time').nth(1)).toHaveAttribute('datetime', interval!.end);
+    await expect(row.locator('time').nth(0)).toBeVisible();
+    await expect(row.locator('time').nth(1)).toBeVisible();
   } finally {
     stopAgent(agent);
   }
@@ -296,16 +320,10 @@ test('schedule empty service scopes and all services from the full catalogue', a
   const second = services[49]!;
   const start = new Date(Date.now() + 86_400_000);
   start.setUTCHours(12, 0, 0, 0);
-  const calendarDate = new Intl.DateTimeFormat('en', {
-    weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC',
-  }).format(start);
-
   async function fillSchedule(title: string) {
     await page.getByRole('textbox', { name: 'Name', exact: true }).fill(title);
     await page.getByRole('textbox', { name: 'Reason', exact: true }).fill('Exercise fleet maintenance scheduling.');
-    await page.getByRole('button', { name: /^Start date/ }).click();
-    if (start.getUTCDate() === 1) await page.getByRole('button', { name: 'Next month' }).click();
-    await page.getByRole('button', { name: calendarDate, exact: true }).click();
+    await chooseStartDay(page, start);
     await page.getByLabel('Start time (UTC)', { exact: true }).fill('12:00');
   }
 
