@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"os/exec"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -39,7 +40,8 @@ func (b *objectiveJourneyBackend) start(t *testing.T) time.Duration {
 	for deadline := time.Now().Add(15 * time.Second); time.Now().Before(deadline); {
 		select {
 		case <-b.done:
-			t.Fatalf("SLI journey backend exited before readiness (failed=%t)", b.err != nil)
+			t.Fatalf("SLI journey backend exited before readiness (exit=%d, startup diagnostic=%s)",
+				process.ProcessState.ExitCode(), backendStartupDiagnostic(b.logs.String()))
 		default:
 		}
 		response, err := b.client.Get(b.baseURL + "/livez")
@@ -53,6 +55,25 @@ func (b *objectiveJourneyBackend) start(t *testing.T) time.Duration {
 	}
 	t.Fatal("SLI journey backend did not become live")
 	return 0
+}
+
+func backendStartupDiagnostic(log string) string {
+	// Only report fixed messages. Backend log fields can contain fixture secrets.
+	for _, message := range []string{
+		"backend ownership acquisition failed",
+		"backend authentication initialization failed",
+		"backend database pool initialization failed",
+		"backend processing initialization failed",
+		"backend server initialization failed",
+		"backend internal metrics listener failed",
+		"backend initial owner storage failed",
+		"backend listener failed",
+	} {
+		if strings.Contains(log, `"msg":"`+message+`"`) {
+			return message
+		}
+	}
+	return "unavailable"
 }
 
 func (b *objectiveJourneyBackend) stop(t *testing.T) time.Duration {
