@@ -50,7 +50,7 @@ func TestIntegrationExistingObservationPartitionsAvoidPreparationLocks(t *testin
 	}
 	conn := integrationConnect(t, databaseURL)
 	defer closeIntegrationConn(conn)
-	now := time.Date(2028, 1, 15, 0, 0, 0, 0, time.UTC)
+	now := time.Date(2028, 1, 4, 0, 0, 0, 0, time.UTC)
 	setup, err := conn.Begin(t.Context())
 	if err != nil {
 		t.Fatal(err)
@@ -70,8 +70,11 @@ func TestIntegrationExistingObservationPartitionsAvoidPreparationLocks(t *testin
 		t.Fatal(err)
 	}
 	defer held.Rollback(t.Context())
-	if _, err := held.Exec(t.Context(), `SELECT pg_advisory_xact_lock(hashtextextended('almanac-sli-partition:almanac_sli_observations_202801', 0))`); err != nil {
-		t.Fatal(err)
+	for _, month := range []string{"202712", "202801", "202802"} {
+		key := "almanac-sli-partition:almanac_sli_observations_" + month
+		if _, err := held.Exec(t.Context(), `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, key); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	probe, err := conn.Begin(t.Context())
