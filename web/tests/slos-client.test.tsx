@@ -21,6 +21,23 @@ function operationalDetail(objectiveID=id):components['schemas']['SloOperational
  return {evaluation_id:'22222222-2222-2222-2222-222222222222',requested_at:instant,effective_at:instant,calculation_version:'1',snapshot_kind:'current_operational_read',objective,context:{sli_id:id,sli_name:'request-success',sli_display_name:'Request success',datasource_id:'33333333-3333-3333-3333-333333333333',datasource_display_name:'Metrics',measurement_revision:'1',polling_interval_seconds:60,settling_delay_seconds:0,good_query:'good',total_query:'total'},current:value,urgency:'healthy',leading_reason:{code:'on_track',provisional:false},reasons:[{code:'on_track',provisional:false}],burn_1h:burn(3600),burn_6h:burn(21600),exhaustion:{state:'unavailable',remaining_events:null,bad_events_per_hour:null,hours_until_exhaustion:null,current_quality:quality,one_hour_quality:quality,assumptions:[]},range:{requested_start:'2026-10-22T12:00:00Z',requested_end:instant,effective_start:'2026-10-22T12:00:00Z',effective_end:instant,source_cadence_seconds:60,resolution_seconds:60,reduced:false,max_samples_per_series:1500,bucket_bounds:'half_open'},attainment_series:series('attainment',null),budget_series:series('rolling_budget',null),burn_series:series('burn',3600),compliance_series:{kind:'daily_compliance',days},compliance_summary:{met_days:7,violated_days:0,evaluable_days:7,unknown_days:0,not_applicable_days:0}};
 }
 afterEach(()=>vi.unstubAllGlobals());
+
+it.each([
+ ['one microsecond before the range ends', '2026-10-29T12:00:00.000001Z', true],
+ ['exactly as the range ends', '2026-10-29T12:00:00.000000Z', false],
+] as const)('validates maintenance beginning %s', async (_name, rangeEnd, overlaps) => {
+ clearQueryCache();
+ const window: components['schemas']['MaintenanceWindow'] = {
+  id, title:'Database upgrade', reason:'Scheduled work.', start:instant, end:'2026-10-29T12:30:00Z',
+  revision:'1', operation:'create', tombstone:false, slo_ids:[id], created_at:instant, updated_at:instant,
+  creator_id:id, actor_id:id, audit_id:id,
+ };
+ vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({items:[window]}))));
+ const result = sloClient.maintenance(id, '2026-10-29T11:00:00Z', rangeEnd, '', new AbortController().signal);
+ if (overlaps) await expect(result).resolves.toEqual({items:[window]});
+ else await expect(result).rejects.toThrow('invalid response');
+});
+
 it.each(['current','burn'] as const)('checks compatibility covers the complete %s input window',async(carrier)=>{
  for(const offset of [-86_400_000,0,1]){
   clearQueryCache();const detail=operationalDetail();
