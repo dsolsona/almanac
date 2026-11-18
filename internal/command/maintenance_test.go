@@ -45,3 +45,25 @@ func TestScopedMaintenanceTextReportsOutputFailure(t *testing.T) {
 		t.Fatalf("code=%d stderr=%q", code, stderr.String())
 	}
 }
+
+func TestScopedMaintenanceImpactSeparatesRowsAndCursor(t *testing.T) {
+	start := time.Date(2026, time.November, 18, 2, 0, 0, 0, time.UTC)
+	end := start.Add(time.Hour)
+	service := api.ServiceId{15: 3}
+	page := api.MaintenanceImpactPage{
+		InventoryAt: start, Ready: true, Total: "2", NextCursor: new("next"),
+		Items: []api.MaintenanceImpactMember{
+			{SloId: api.SloId{15: 1}, SloName: "First", ServiceId: service, ServiceName: "Service", Start: &start, End: &end},
+			{SloId: api.SloId{15: 2}, SloName: "Second", ServiceId: service, ServiceName: "Service", Start: &start, End: &end},
+		},
+	}
+	var stdout, stderr bytes.Buffer
+	code := writeScopedMaintenance(&stdout, &stderr, "maintenance impact", false, maintenanceclient.ScopedResult{Impact: &page})
+	want := "Affected SLOs: 2 (distinct SLOs, inventory at 2026-11-18T02:00:00Z)\n" +
+		"00000000-0000-0000-0000-000000000001\t\"First\"\t00000000-0000-0000-0000-000000000003\t\"Service\"\t2026-11-18T02:00:00Z\t2026-11-18T03:00:00Z\n" +
+		"00000000-0000-0000-0000-000000000002\t\"Second\"\t00000000-0000-0000-0000-000000000003\t\"Service\"\t2026-11-18T02:00:00Z\t2026-11-18T03:00:00Z\n" +
+		"Next cursor: next\n"
+	if code != 0 || stdout.String() != want || stderr.Len() != 0 {
+		t.Fatalf("code=%d stdout=%q stderr=%q; want %q", code, stdout.String(), stderr.String(), want)
+	}
+}

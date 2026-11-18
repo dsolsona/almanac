@@ -228,7 +228,7 @@ func writeScopedMaintenance(stdout, stderr io.Writer, operation string, jsonOut 
 			if item.Start != nil {
 				fmt.Fprintf(&output, "\t%s\t%s", item.Start.Format(time.RFC3339Nano), item.End.Format(time.RFC3339Nano))
 			}
-			fmt.Fprintln(stdout)
+			fmt.Fprintln(&output)
 		}
 		cursor = result.Impact.NextCursor
 	case result.Timeline != nil:

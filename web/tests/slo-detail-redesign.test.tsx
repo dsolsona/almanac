@@ -90,7 +90,14 @@ it('pins the selected participation only while its identity is still in the over
   view.rerender(<SloHistoryChart {...props} samples={[...samples]} maintenance={[{ ...window, title: 'First repair renamed' }]} />);
   expect(screen.getByRole('link', { name: 'View maintenance details' })).toHaveAttribute('href', '/maintenance/first');
 
-  view.rerender(<SloHistoryChart {...props} maintenance={[{ ...window, id: 'replacement', title: 'Replacement repair' }]} />);
+  const shortened = { ...window, end: '2026-11-06T10:45:00Z' };
+  view.rerender(<SloHistoryChart {...props} maintenance={[shortened]} />);
+  expect(screen.queryByRole('group', { name: 'Maintenance inspection' })).not.toBeInTheDocument();
+  fireEvent.keyDown(chart, { key: 'Home' });
+  fireEvent.keyDown(chart, { key: 'Enter' });
+  expect(screen.getByRole('link', { name: 'View maintenance details' })).toHaveAttribute('href', '/maintenance/first');
+
+  view.rerender(<SloHistoryChart {...props} maintenance={[{ ...shortened, id: 'replacement', title: 'Replacement repair' }]} />);
   expect(screen.queryByRole('group', { name: 'Maintenance inspection' })).not.toBeInTheDocument();
 });
 

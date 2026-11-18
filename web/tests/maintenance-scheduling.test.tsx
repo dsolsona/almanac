@@ -419,7 +419,9 @@ it('revokes preview approval when a continuation reports a changed snapshot', as
   await waitFor(() => expect(save).toBeEnabled());
 
   fireEvent.click(screen.getByRole('button', { name: /Next/ }));
-  fireEvent.click(await screen.findByRole('button', { name: 'Reload affected SLOs' }));
+  const reload = await screen.findByRole('button', { name: 'Reload affected SLOs' });
+  expect(save).toBeDisabled();
+  fireEvent.click(reload);
   expect(save).toBeDisabled();
   await waitFor(() => expect(save).toBeEnabled());
   expect(preview.mock.calls.map(args => args[3])).toEqual(['', 'next', '']);
