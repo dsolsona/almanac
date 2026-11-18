@@ -23,6 +23,105 @@ func (q *Queries) AdvanceServiceMaintenanceAuthority(ctx context.Context) (int64
 	return revision, err
 }
 
+const advanceServiceMaintenanceMembershipWork = `-- name: AdvanceServiceMaintenanceMembershipWork :exec
+UPDATE public.almanac_service_maintenance_membership_work SET through_exclusion = $1 WHERE slo_id = $2
+`
+
+type AdvanceServiceMaintenanceMembershipWorkParams struct {
+	ThroughExclusion pgtype.UUID `json:"through_exclusion"`
+	SloID            pgtype.UUID `json:"slo_id"`
+}
+
+func (q *Queries) AdvanceServiceMaintenanceMembershipWork(ctx context.Context, arg AdvanceServiceMaintenanceMembershipWorkParams) error {
+	_, err := q.db.Exec(ctx, advanceServiceMaintenanceMembershipWork, arg.ThroughExclusion, arg.SloID)
+	return err
+}
+
+const advanceServiceMaintenanceProjection = `-- name: AdvanceServiceMaintenanceProjection :execrows
+UPDATE public.almanac_service_maintenance_projection SET through_slo = $1, complete = $2
+WHERE exclusion_id = $3 AND desired_revision = $4::bigint
+`
+
+type AdvanceServiceMaintenanceProjectionParams struct {
+	ThroughSlo  pgtype.UUID `json:"through_slo"`
+	Complete    bool        `json:"complete"`
+	ExclusionID pgtype.UUID `json:"exclusion_id"`
+	Revision    int64       `json:"revision"`
+}
+
+func (q *Queries) AdvanceServiceMaintenanceProjection(ctx context.Context, arg AdvanceServiceMaintenanceProjectionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, advanceServiceMaintenanceProjection,
+		arg.ThroughSlo,
+		arg.Complete,
+		arg.ExclusionID,
+		arg.Revision,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const applyServiceMaintenanceProjectionMember = `-- name: ApplyServiceMaintenanceProjectionMember :one
+SELECT public.almanac_project_service_maintenance_member(
+    $1::uuid, $2::uuid, $3::bigint, $4::timestamptz
+)::boolean
+`
+
+type ApplyServiceMaintenanceProjectionMemberParams struct {
+	SloID       pgtype.UUID        `json:"slo_id"`
+	ExclusionID pgtype.UUID        `json:"exclusion_id"`
+	Revision    int64              `json:"revision"`
+	NowAt       pgtype.Timestamptz `json:"now_at"`
+}
+
+func (q *Queries) ApplyServiceMaintenanceProjectionMember(ctx context.Context, arg ApplyServiceMaintenanceProjectionMemberParams) (bool, error) {
+	row := q.db.QueryRow(ctx, applyServiceMaintenanceProjectionMember,
+		arg.SloID,
+		arg.ExclusionID,
+		arg.Revision,
+		arg.NowAt,
+	)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const completeServiceMaintenanceProjection = `-- name: CompleteServiceMaintenanceProjection :exec
+INSERT INTO public.almanac_service_maintenance_projection_completed(exclusion_id, revision)
+VALUES ($1, $2) ON CONFLICT DO NOTHING
+`
+
+type CompleteServiceMaintenanceProjectionParams struct {
+	ExclusionID pgtype.UUID `json:"exclusion_id"`
+	Revision    int64       `json:"revision"`
+}
+
+func (q *Queries) CompleteServiceMaintenanceProjection(ctx context.Context, arg CompleteServiceMaintenanceProjectionParams) error {
+	_, err := q.db.Exec(ctx, completeServiceMaintenanceProjection, arg.ExclusionID, arg.Revision)
+	return err
+}
+
+const countMaintenanceImpactMembers = `-- name: CountMaintenanceImpactMembers :one
+SELECT count(DISTINCT p.slo_id)
+FROM public.almanac_maintenance_impact_intervals(
+    $1::uuid, $2::bigint, $3::timestamptz
+) p
+`
+
+type CountMaintenanceImpactMembersParams struct {
+	ExclusionID pgtype.UUID        `json:"exclusion_id"`
+	Revision    int64              `json:"revision"`
+	InventoryAt pgtype.Timestamptz `json:"inventory_at"`
+}
+
+func (q *Queries) CountMaintenanceImpactMembers(ctx context.Context, arg CountMaintenanceImpactMembersParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countMaintenanceImpactMembers, arg.ExclusionID, arg.Revision, arg.InventoryAt)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countMaintenancePreviewMembers = `-- name: CountMaintenancePreviewMembers :one
 SELECT count(*) FROM public.almanac_slo_service_assignments a
 JOIN public.almanac_services s ON s.id = a.service_id
@@ -104,6 +203,64 @@ func (q *Queries) FenceServiceMaintenanceAuthority(ctx context.Context) (int64, 
 	return revision, err
 }
 
+const findMaintenanceSupersededAt = `-- name: FindMaintenanceSupersededAt :one
+SELECT recorded_at
+FROM public.almanac_maintenance_exclusion_revisions r
+WHERE r.exclusion_id = $1 AND r.revision > $2::bigint
+ORDER BY r.revision LIMIT 1
+`
+
+type FindMaintenanceSupersededAtParams struct {
+	ExclusionID pgtype.UUID `json:"exclusion_id"`
+	Revision    int64       `json:"revision"`
+}
+
+func (q *Queries) FindMaintenanceSupersededAt(ctx context.Context, arg FindMaintenanceSupersededAtParams) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, findMaintenanceSupersededAt, arg.ExclusionID, arg.Revision)
+	var recorded_at pgtype.Timestamptz
+	err := row.Scan(&recorded_at)
+	return recorded_at, err
+}
+
+const finishServiceMaintenanceMembershipWork = `-- name: FinishServiceMaintenanceMembershipWork :exec
+DELETE FROM public.almanac_service_maintenance_membership_work WHERE slo_id = $1
+`
+
+func (q *Queries) FinishServiceMaintenanceMembershipWork(ctx context.Context, sloID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, finishServiceMaintenanceMembershipWork, sloID)
+	return err
+}
+
+const hasPendingServiceMaintenance = `-- name: HasPendingServiceMaintenance :one
+SELECT public.almanac_slo_service_maintenance_pending(
+    $1::uuid, $2::timestamptz, $3::timestamptz
+)::boolean
+`
+
+type HasPendingServiceMaintenanceParams struct {
+	SloID   pgtype.UUID        `json:"slo_id"`
+	StartAt pgtype.Timestamptz `json:"start_at"`
+	EndAt   pgtype.Timestamptz `json:"end_at"`
+}
+
+func (q *Queries) HasPendingServiceMaintenance(ctx context.Context, arg HasPendingServiceMaintenanceParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasPendingServiceMaintenance, arg.SloID, arg.StartAt, arg.EndAt)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const hasServiceMaintenanceProjection = `-- name: HasServiceMaintenanceProjection :one
+SELECT EXISTS(SELECT 1 FROM public.almanac_service_maintenance_projection WHERE exclusion_id = $1)::boolean
+`
+
+func (q *Queries) HasServiceMaintenanceProjection(ctx context.Context, exclusionID pgtype.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, hasServiceMaintenanceProjection, exclusionID)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const insertMaintenanceServiceSelector = `-- name: InsertMaintenanceServiceSelector :exec
 INSERT INTO public.almanac_maintenance_service_selectors(exclusion_id, revision, service_id)
 VALUES ($1, $2, $3)
@@ -118,6 +275,71 @@ type InsertMaintenanceServiceSelectorParams struct {
 func (q *Queries) InsertMaintenanceServiceSelector(ctx context.Context, arg InsertMaintenanceServiceSelectorParams) error {
 	_, err := q.db.Exec(ctx, insertMaintenanceServiceSelector, arg.ExclusionID, arg.Revision, arg.ServiceID)
 	return err
+}
+
+const listMaintenanceImpactMembers = `-- name: ListMaintenanceImpactMembers :many
+SELECT slo.id AS slo_id, slo.display_name AS slo_name, s.id AS service_id, s.display_name AS service_name,
+       p.starts_at::timestamptz AS starts_at, p.ends_at::timestamptz AS ends_at
+FROM public.almanac_maintenance_impact_intervals(
+    $1::uuid, $2::bigint, $3::timestamptz
+) p
+JOIN public.almanac_slos slo ON slo.id = p.slo_id
+JOIN public.almanac_services s ON s.id = p.service_id
+WHERE (p.slo_id, p.starts_at) > ($4::uuid, $5::timestamptz)
+ORDER BY 1, 5
+LIMIT $6::integer
+`
+
+type ListMaintenanceImpactMembersParams struct {
+	ExclusionID pgtype.UUID        `json:"exclusion_id"`
+	Revision    int64              `json:"revision"`
+	InventoryAt pgtype.Timestamptz `json:"inventory_at"`
+	AfterSlo    pgtype.UUID        `json:"after_slo"`
+	AfterTime   pgtype.Timestamptz `json:"after_time"`
+	PageLimit   int32              `json:"page_limit"`
+}
+
+type ListMaintenanceImpactMembersRow struct {
+	SloID       pgtype.UUID        `json:"slo_id"`
+	SloName     string             `json:"slo_name"`
+	ServiceID   pgtype.UUID        `json:"service_id"`
+	ServiceName string             `json:"service_name"`
+	StartsAt    pgtype.Timestamptz `json:"starts_at"`
+	EndsAt      pgtype.Timestamptz `json:"ends_at"`
+}
+
+func (q *Queries) ListMaintenanceImpactMembers(ctx context.Context, arg ListMaintenanceImpactMembersParams) ([]ListMaintenanceImpactMembersRow, error) {
+	rows, err := q.db.Query(ctx, listMaintenanceImpactMembers,
+		arg.ExclusionID,
+		arg.Revision,
+		arg.InventoryAt,
+		arg.AfterSlo,
+		arg.AfterTime,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListMaintenanceImpactMembersRow{}
+	for rows.Next() {
+		var i ListMaintenanceImpactMembersRow
+		if err := rows.Scan(
+			&i.SloID,
+			&i.SloName,
+			&i.ServiceID,
+			&i.ServiceName,
+			&i.StartsAt,
+			&i.EndsAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listMaintenancePreviewMembers = `-- name: ListMaintenancePreviewMembers :many
@@ -218,6 +440,72 @@ func (q *Queries) ListMaintenanceServiceSelectors(ctx context.Context, arg ListM
 	return items, nil
 }
 
+const listScopedSloMaintenanceOverlaps = `-- name: ListScopedSloMaintenanceOverlaps :many
+WITH latest AS MATERIALIZED (
+    SELECT DISTINCT ON (c.exclusion_id) c.exclusion_id, c.exclusion_revision, c.included, c.effective_coverage
+    FROM public.almanac_slo_exclusion_changes c
+    WHERE c.slo_id = $1
+    ORDER BY c.exclusion_id, c.revision DESC
+)
+SELECT r.exclusion_id, r.revision, lower(segment)::timestamptz AS starts_at, upper(segment)::timestamptz AS ends_at
+FROM latest c
+JOIN public.almanac_maintenance_exclusion_revisions r ON r.exclusion_id = c.exclusion_id AND r.revision = c.exclusion_revision
+CROSS JOIN LATERAL unnest(public.almanac_effective_maintenance_coverage($1, c.exclusion_id, c.exclusion_revision, c.effective_coverage)) segment
+WHERE c.included AND NOT r.tombstone
+  AND segment && tstzrange($2::timestamptz, $3::timestamptz, '[)')
+  AND (lower(segment), r.exclusion_id) > ($4::timestamptz, $5::uuid)
+ORDER BY starts_at, r.exclusion_id
+LIMIT $6::integer
+`
+
+type ListScopedSloMaintenanceOverlapsParams struct {
+	SloID       pgtype.UUID        `json:"slo_id"`
+	WindowStart pgtype.Timestamptz `json:"window_start"`
+	WindowEnd   pgtype.Timestamptz `json:"window_end"`
+	AfterTime   pgtype.Timestamptz `json:"after_time"`
+	AfterID     pgtype.UUID        `json:"after_id"`
+	PageLimit   int32              `json:"page_limit"`
+}
+
+type ListScopedSloMaintenanceOverlapsRow struct {
+	ExclusionID pgtype.UUID        `json:"exclusion_id"`
+	Revision    int64              `json:"revision"`
+	StartsAt    pgtype.Timestamptz `json:"starts_at"`
+	EndsAt      pgtype.Timestamptz `json:"ends_at"`
+}
+
+func (q *Queries) ListScopedSloMaintenanceOverlaps(ctx context.Context, arg ListScopedSloMaintenanceOverlapsParams) ([]ListScopedSloMaintenanceOverlapsRow, error) {
+	rows, err := q.db.Query(ctx, listScopedSloMaintenanceOverlaps,
+		arg.SloID,
+		arg.WindowStart,
+		arg.WindowEnd,
+		arg.AfterTime,
+		arg.AfterID,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListScopedSloMaintenanceOverlapsRow{}
+	for rows.Next() {
+		var i ListScopedSloMaintenanceOverlapsRow
+		if err := rows.Scan(
+			&i.ExclusionID,
+			&i.Revision,
+			&i.StartsAt,
+			&i.EndsAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listServiceMaintenanceCadences = `-- name: ListServiceMaintenanceCadences :many
 SELECT cadence_seconds FROM public.almanac_maintenance_installation_grids
 WHERE $1::boolean
@@ -255,6 +543,150 @@ func (q *Queries) ListServiceMaintenanceCadences(ctx context.Context, arg ListSe
 	return items, nil
 }
 
+const listServiceMaintenanceMembershipTargets = `-- name: ListServiceMaintenanceMembershipTargets :many
+SELECT p.exclusion_id, p.desired_revision
+FROM public.almanac_service_maintenance_projection p
+WHERE p.exclusion_id > $1::uuid
+ORDER BY p.exclusion_id LIMIT $2::integer
+`
+
+type ListServiceMaintenanceMembershipTargetsParams struct {
+	AfterExclusion pgtype.UUID `json:"after_exclusion"`
+	PageLimit      int32       `json:"page_limit"`
+}
+
+type ListServiceMaintenanceMembershipTargetsRow struct {
+	ExclusionID     pgtype.UUID `json:"exclusion_id"`
+	DesiredRevision int64       `json:"desired_revision"`
+}
+
+func (q *Queries) ListServiceMaintenanceMembershipTargets(ctx context.Context, arg ListServiceMaintenanceMembershipTargetsParams) ([]ListServiceMaintenanceMembershipTargetsRow, error) {
+	rows, err := q.db.Query(ctx, listServiceMaintenanceMembershipTargets, arg.AfterExclusion, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListServiceMaintenanceMembershipTargetsRow{}
+	for rows.Next() {
+		var i ListServiceMaintenanceMembershipTargetsRow
+		if err := rows.Scan(&i.ExclusionID, &i.DesiredRevision); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listServiceMaintenanceProjectionSlos = `-- name: ListServiceMaintenanceProjectionSlos :many
+SELECT id FROM public.almanac_slos WHERE id > $1::uuid
+ORDER BY id LIMIT $2::integer
+`
+
+type ListServiceMaintenanceProjectionSlosParams struct {
+	AfterSlo  pgtype.UUID `json:"after_slo"`
+	PageLimit int32       `json:"page_limit"`
+}
+
+func (q *Queries) ListServiceMaintenanceProjectionSlos(ctx context.Context, arg ListServiceMaintenanceProjectionSlosParams) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, listServiceMaintenanceProjectionSlos, arg.AfterSlo, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []pgtype.UUID{}
+	for rows.Next() {
+		var id pgtype.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockNextServiceMaintenanceProjection = `-- name: LockNextServiceMaintenanceProjection :one
+SELECT p.exclusion_id, p.desired_revision, p.through_slo
+FROM public.almanac_service_maintenance_projection p
+JOIN public.almanac_maintenance_exclusions e ON e.id = p.exclusion_id AND e.current_revision = p.desired_revision
+WHERE NOT p.complete
+ORDER BY p.exclusion_id LIMIT 1 FOR UPDATE OF e SKIP LOCKED
+`
+
+type LockNextServiceMaintenanceProjectionRow struct {
+	ExclusionID     pgtype.UUID `json:"exclusion_id"`
+	DesiredRevision int64       `json:"desired_revision"`
+	ThroughSlo      pgtype.UUID `json:"through_slo"`
+}
+
+func (q *Queries) LockNextServiceMaintenanceProjection(ctx context.Context) (LockNextServiceMaintenanceProjectionRow, error) {
+	row := q.db.QueryRow(ctx, lockNextServiceMaintenanceProjection)
+	var i LockNextServiceMaintenanceProjectionRow
+	err := row.Scan(&i.ExclusionID, &i.DesiredRevision, &i.ThroughSlo)
+	return i, err
+}
+
+const lockObservedServiceMaintenanceMembershipWork = `-- name: LockObservedServiceMaintenanceMembershipWork :one
+SELECT w.slo_id
+FROM public.almanac_service_maintenance_membership_work w
+WHERE w.slo_id = $1 AND w.through_exclusion = $2
+FOR UPDATE SKIP LOCKED
+`
+
+type LockObservedServiceMaintenanceMembershipWorkParams struct {
+	SloID            pgtype.UUID `json:"slo_id"`
+	ThroughExclusion pgtype.UUID `json:"through_exclusion"`
+}
+
+func (q *Queries) LockObservedServiceMaintenanceMembershipWork(ctx context.Context, arg LockObservedServiceMaintenanceMembershipWorkParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, lockObservedServiceMaintenanceMembershipWork, arg.SloID, arg.ThroughExclusion)
+	var slo_id pgtype.UUID
+	err := row.Scan(&slo_id)
+	return slo_id, err
+}
+
+const lockObservedServiceMaintenanceProjection = `-- name: LockObservedServiceMaintenanceProjection :one
+SELECT p.exclusion_id
+FROM public.almanac_service_maintenance_projection p
+WHERE p.exclusion_id = $1
+  AND p.desired_revision = $2::bigint
+  AND p.through_slo = $3 AND NOT p.complete
+FOR UPDATE SKIP LOCKED
+`
+
+type LockObservedServiceMaintenanceProjectionParams struct {
+	ExclusionID pgtype.UUID `json:"exclusion_id"`
+	Revision    int64       `json:"revision"`
+	ThroughSlo  pgtype.UUID `json:"through_slo"`
+}
+
+// A claim joins two rows and initially locks the parent only. Revalidate the
+// queue cursor in a fresh statement after all parent/authority locks are held.
+func (q *Queries) LockObservedServiceMaintenanceProjection(ctx context.Context, arg LockObservedServiceMaintenanceProjectionParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, lockObservedServiceMaintenanceProjection, arg.ExclusionID, arg.Revision, arg.ThroughSlo)
+	var exclusion_id pgtype.UUID
+	err := row.Scan(&exclusion_id)
+	return exclusion_id, err
+}
+
+const lockServiceMaintenanceMembershipWork = `-- name: LockServiceMaintenanceMembershipWork :one
+SELECT w.slo_id, w.through_exclusion FROM public.almanac_service_maintenance_membership_work w
+JOIN public.almanac_slos s ON s.id = w.slo_id
+ORDER BY w.slo_id LIMIT 1 FOR NO KEY UPDATE OF s SKIP LOCKED
+`
+
+func (q *Queries) LockServiceMaintenanceMembershipWork(ctx context.Context) (AlmanacServiceMaintenanceMembershipWork, error) {
+	row := q.db.QueryRow(ctx, lockServiceMaintenanceMembershipWork)
+	var i AlmanacServiceMaintenanceMembershipWork
+	err := row.Scan(&i.SloID, &i.ThroughExclusion)
+	return i, err
+}
+
 const observeServiceMaintenanceAuthority = `-- name: ObserveServiceMaintenanceAuthority :one
 SELECT revision FROM public.almanac_service_maintenance_authority WHERE singleton
 `
@@ -267,11 +699,10 @@ func (q *Queries) ObserveServiceMaintenanceAuthority(ctx context.Context) (int64
 }
 
 const readMaintenanceProjectionReady = `-- name: ReadMaintenanceProjectionReady :one
-SELECT coalesce((
-    SELECT p.complete
-    FROM public.almanac_service_maintenance_projection p
-    WHERE p.exclusion_id = $1 AND p.desired_revision = $2::bigint
-), false)::boolean
+SELECT EXISTS (
+    SELECT 1 FROM public.almanac_service_maintenance_projection_completed c
+    WHERE c.exclusion_id = $1 AND c.revision = $2::bigint
+)::boolean
 `
 
 type ReadMaintenanceProjectionReadyParams struct {
@@ -359,5 +790,49 @@ func (q *Queries) ReadMaintenanceSuppressionWitness(ctx context.Context, arg Rea
 		&i.StartsAt,
 		&i.EndsAt,
 	)
+	return i, err
+}
+
+const summarizeScopedSloMaintenanceOverflow = `-- name: SummarizeScopedSloMaintenanceOverflow :one
+WITH latest AS MATERIALIZED (
+    SELECT DISTINCT ON (c.exclusion_id) c.exclusion_id, c.exclusion_revision, c.included, c.effective_coverage
+    FROM public.almanac_slo_exclusion_changes c
+    WHERE c.slo_id = $3
+    ORDER BY c.exclusion_id, c.revision DESC
+)
+SELECT count(*) AS window_count,
+       min(greatest(lower(segment), $1::timestamptz))::timestamptz AS starts_at,
+       max(least(upper(segment), $2::timestamptz))::timestamptz AS ends_at
+FROM latest c
+CROSS JOIN LATERAL unnest(public.almanac_effective_maintenance_coverage($3, c.exclusion_id, c.exclusion_revision, c.effective_coverage)) segment
+WHERE c.included
+  AND segment && tstzrange($1::timestamptz, $2::timestamptz, '[)')
+  AND (lower(segment), c.exclusion_id) > ($4::timestamptz, $5::uuid)
+`
+
+type SummarizeScopedSloMaintenanceOverflowParams struct {
+	WindowStart pgtype.Timestamptz `json:"window_start"`
+	WindowEnd   pgtype.Timestamptz `json:"window_end"`
+	SloID       pgtype.UUID        `json:"slo_id"`
+	AfterTime   pgtype.Timestamptz `json:"after_time"`
+	AfterID     pgtype.UUID        `json:"after_id"`
+}
+
+type SummarizeScopedSloMaintenanceOverflowRow struct {
+	WindowCount int64              `json:"window_count"`
+	StartsAt    pgtype.Timestamptz `json:"starts_at"`
+	EndsAt      pgtype.Timestamptz `json:"ends_at"`
+}
+
+func (q *Queries) SummarizeScopedSloMaintenanceOverflow(ctx context.Context, arg SummarizeScopedSloMaintenanceOverflowParams) (SummarizeScopedSloMaintenanceOverflowRow, error) {
+	row := q.db.QueryRow(ctx, summarizeScopedSloMaintenanceOverflow,
+		arg.WindowStart,
+		arg.WindowEnd,
+		arg.SloID,
+		arg.AfterTime,
+		arg.AfterID,
+	)
+	var i SummarizeScopedSloMaintenanceOverflowRow
+	err := row.Scan(&i.WindowCount, &i.StartsAt, &i.EndsAt)
 	return i, err
 }

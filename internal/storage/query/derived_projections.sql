@@ -125,6 +125,8 @@ SELECT s.id AS slo_id, ((p.payload-'budget_sparkline'-'budget_history_generation
          AND g.exclusion_revision=exclusion_state.revision AND g.calculation_version=sqlc.arg(calculation_version)
          AND g.retention_start=to_timestamp(ceil(extract(epoch FROM (sqlc.arg(now)::timestamptz-interval '365 days'))/d.cadence_seconds)*d.cadence_seconds)
          AND g.source_generation=coalesce(source.generation,0)
+             AND NOT public.almanac_slo_service_maintenance_pending(d.slo_id, sqlc.arg(now)::timestamptz
+                 - greatest(d.rolling_window_seconds, 21600)*interval '1 second', sqlc.arg(now)::timestamptz)
          AND g.evaluated_through>=to_timestamp(floor(extract(epoch FROM sqlc.arg(now)::timestamptz)/d.cadence_seconds)*d.cadence_seconds)
              AND coalesce(public.almanac_projection_deadline(p.current_valid_until),'-infinity'::timestamptz)>sqlc.arg(now)::timestamptz),false)::boolean AS current
 FROM public.almanac_slos s

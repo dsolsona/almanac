@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/dsolsona/almanac/internal/slo"
 	"github.com/dsolsona/almanac/internal/storage/dbgen"
@@ -21,6 +22,8 @@ type maintenanceConsumerSession struct {
 	sourceGeneration  int64
 	sourceCaptured    bool
 	preparation       []maintenanceEvaluationPreparation
+	serviceRangeStart time.Time
+	serviceRangeEnd   time.Time
 }
 
 // No production profile is selected here. Internal acceptance callers supply
@@ -67,6 +70,10 @@ func (session *maintenanceConsumerSession) evaluate(ctx context.Context, row dbg
 		Summary: summary, RetainFacts: retain, Limits: session.limits,
 		Requests: []maintenanceMaskWindows{{RequestedRevision: session.requestedRevision, Windows: windows}},
 	}}
+	if len(windows) > 0 {
+		start, end := serviceMaintenanceWindowRange(windows)
+		session.trackServiceMaintenanceRange(start, end)
+	}
 	var err error
 	out.result, err = evaluateMaintenanceWindows(ctx, session.tx, out.input)
 	if err == nil || errors.Is(err, ErrDerivedPending) && len(out.result.Preparation) > 0 {
@@ -97,4 +104,11 @@ func (session *maintenanceConsumerSession) evaluate(ctx context.Context, row dbg
 		out.values[index] = value
 	}
 	return out, nil
+}
+
+func (session *maintenanceConsumerSession) trackServiceMaintenanceRange(start, end time.Time) {
+	if session.serviceRangeStart.IsZero() || start.Before(session.serviceRangeStart) {
+		session.serviceRangeStart = start
+	}
+	session.serviceRangeEnd = maxTime(session.serviceRangeEnd, end)
 }

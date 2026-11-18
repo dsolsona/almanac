@@ -491,49 +491,53 @@ func (q *Queries) ReadMaintenanceRevision(ctx context.Context, arg ReadMaintenan
 
 const readMaintenanceSnapshot = `-- name: ReadMaintenanceSnapshot :many
 WITH latest AS (
- SELECT DISTINCT ON (exclusion_id) exclusion_id,exclusion_revision,included FROM public.almanac_slo_exclusion_changes
+ SELECT DISTINCT ON (exclusion_id) slo_id,exclusion_id,exclusion_revision,included,effective_coverage FROM public.almanac_slo_exclusion_changes
  WHERE slo_id=$1 AND revision<=$4::bigint ORDER BY exclusion_id,revision DESC
 )
-SELECT r.exclusion_id, r.revision, r.title, r.reason, r.starts_at, r.ends_at, r.operation, r.tombstone, r.actor_id, r.recorded_at, r.request_id, r.audit_id, r.scope_kind FROM latest c JOIN public.almanac_maintenance_exclusion_revisions r ON r.exclusion_id=c.exclusion_id AND r.revision=c.exclusion_revision
-WHERE c.included AND NOT r.tombstone AND r.starts_at<$2::timestamptz AND r.ends_at>$3::timestamptz
-ORDER BY r.starts_at,r.ends_at,r.exclusion_id
+SELECT r.exclusion_id, r.revision, r.reason,
+       lower(segment)::timestamptz AS starts_at, upper(segment)::timestamptz AS ends_at
+FROM latest c JOIN public.almanac_maintenance_exclusion_revisions r ON r.exclusion_id=c.exclusion_id AND r.revision=c.exclusion_revision
+CROSS JOIN LATERAL unnest(public.almanac_effective_maintenance_coverage(c.slo_id, c.exclusion_id, c.exclusion_revision, c.effective_coverage)) AS segment
+WHERE c.included AND NOT r.tombstone
+  AND segment && tstzrange($2::timestamptz, $3::timestamptz, '[)')
+ORDER BY starts_at, ends_at, r.exclusion_id
 `
 
 type ReadMaintenanceSnapshotParams struct {
 	SloID       pgtype.UUID        `json:"slo_id"`
-	WindowEnd   pgtype.Timestamptz `json:"window_end"`
 	WindowStart pgtype.Timestamptz `json:"window_start"`
+	WindowEnd   pgtype.Timestamptz `json:"window_end"`
 	Revision    int64              `json:"revision"`
 }
 
-func (q *Queries) ReadMaintenanceSnapshot(ctx context.Context, arg ReadMaintenanceSnapshotParams) ([]AlmanacMaintenanceExclusionRevision, error) {
+type ReadMaintenanceSnapshotRow struct {
+	ExclusionID pgtype.UUID        `json:"exclusion_id"`
+	Revision    int64              `json:"revision"`
+	Reason      string             `json:"reason"`
+	StartsAt    pgtype.Timestamptz `json:"starts_at"`
+	EndsAt      pgtype.Timestamptz `json:"ends_at"`
+}
+
+func (q *Queries) ReadMaintenanceSnapshot(ctx context.Context, arg ReadMaintenanceSnapshotParams) ([]ReadMaintenanceSnapshotRow, error) {
 	rows, err := q.db.Query(ctx, readMaintenanceSnapshot,
 		arg.SloID,
-		arg.WindowEnd,
 		arg.WindowStart,
+		arg.WindowEnd,
 		arg.Revision,
 	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []AlmanacMaintenanceExclusionRevision{}
+	items := []ReadMaintenanceSnapshotRow{}
 	for rows.Next() {
-		var i AlmanacMaintenanceExclusionRevision
+		var i ReadMaintenanceSnapshotRow
 		if err := rows.Scan(
 			&i.ExclusionID,
 			&i.Revision,
-			&i.Title,
 			&i.Reason,
 			&i.StartsAt,
 			&i.EndsAt,
-			&i.Operation,
-			&i.Tombstone,
-			&i.ActorID,
-			&i.RecordedAt,
-			&i.RequestID,
-			&i.AuditID,
-			&i.ScopeKind,
 		); err != nil {
 			return nil, err
 		}

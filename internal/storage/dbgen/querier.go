@@ -25,6 +25,8 @@ type Querier interface {
 	AdvanceMaintenanceUnion(ctx context.Context, arg AdvanceMaintenanceUnionParams) error
 	AdvanceRetentionCleanup(ctx context.Context, arg AdvanceRetentionCleanupParams) (int64, error)
 	AdvanceServiceMaintenanceAuthority(ctx context.Context) (int64, error)
+	AdvanceServiceMaintenanceMembershipWork(ctx context.Context, arg AdvanceServiceMaintenanceMembershipWorkParams) error
+	AdvanceServiceMaintenanceProjection(ctx context.Context, arg AdvanceServiceMaintenanceProjectionParams) (int64, error)
 	AdvanceSliLastAttemptedInterval(ctx context.Context, arg AdvanceSliLastAttemptedIntervalParams) error
 	// The measurement lock serializes acceptance. All three writes share that
 	// transaction, after replay/conflict checks; a failed insert rolls this back.
@@ -45,6 +47,7 @@ type Querier interface {
 	// index proves absence with one predecessor, not all earlier history.
 	AlertRangesOverlap(ctx context.Context, arg AlertRangesOverlapParams) (bool, error)
 	AnalyzeMaintenanceCompatibilityEvent(ctx context.Context, arg AnalyzeMaintenanceCompatibilityEventParams) (bool, error)
+	ApplyServiceMaintenanceProjectionMember(ctx context.Context, arg ApplyServiceMaintenanceProjectionMemberParams) (bool, error)
 	ArchiveAgent(ctx context.Context, arg ArchiveAgentParams) (AlmanacAgent, error)
 	ArchiveService(ctx context.Context, arg ArchiveServiceParams) (int64, error)
 	CancelAlertCursor(ctx context.Context, arg CancelAlertCursorParams) (int64, error)
@@ -60,10 +63,12 @@ type Querier interface {
 	CompleteAcknowledgedDatasourceReassignments(ctx context.Context, arg CompleteAcknowledgedDatasourceReassignmentsParams) ([]CompleteAcknowledgedDatasourceReassignmentsRow, error)
 	CompletePasswordRotationOnboarding(ctx context.Context, onboardingCompletedAt pgtype.Timestamptz) (int64, error)
 	CompleteRetentionWork(ctx context.Context, arg CompleteRetentionWorkParams) (int64, error)
+	CompleteServiceMaintenanceProjection(ctx context.Context, arg CompleteServiceMaintenanceProjectionParams) error
 	CountAccountLoginAttempts(ctx context.Context, arg CountAccountLoginAttemptsParams) (CountAccountLoginAttemptsRow, error)
 	CountActiveServiceIDs(ctx context.Context, dollar_1 []pgtype.UUID) (int64, error)
 	CountAlertCatalog(ctx context.Context, arg CountAlertCatalogParams) (int64, error)
 	CountAlertPolicies(ctx context.Context, arg CountAlertPoliciesParams) (int64, error)
+	CountMaintenanceImpactMembers(ctx context.Context, arg CountMaintenanceImpactMembersParams) (int64, error)
 	CountMaintenancePreviewMembers(ctx context.Context, arg CountMaintenancePreviewMembersParams) (int64, error)
 	CountMaintenancePreviewServices(ctx context.Context, arg CountMaintenancePreviewServicesParams) (int64, error)
 	CountManagedUsers(ctx context.Context, arg CountManagedUsersParams) (int64, error)
@@ -138,6 +143,7 @@ type Querier interface {
 	FindAlertEvaluationReceipt(ctx context.Context, arg FindAlertEvaluationReceiptParams) (AlmanacAlertEvaluation, error)
 	FindDatasourceDiagnosticReceipt(ctx context.Context, arg FindDatasourceDiagnosticReceiptParams) (FindDatasourceDiagnosticReceiptRow, error)
 	FindDatasourceReceipt(ctx context.Context, arg FindDatasourceReceiptParams) (FindDatasourceReceiptRow, error)
+	FindMaintenanceSupersededAt(ctx context.Context, arg FindMaintenanceSupersededAtParams) (pgtype.Timestamptz, error)
 	FindObjectiveCreateReceipt(ctx context.Context, arg FindObjectiveCreateReceiptParams) (FindObjectiveCreateReceiptRow, error)
 	// Select metadata before detoasting/hashing payloads from unrelated generations.
 	FindPreparedSloHistory(ctx context.Context, arg FindPreparedSloHistoryParams) (FindPreparedSloHistoryRow, error)
@@ -147,6 +153,7 @@ type Querier interface {
 	FindUserChallenge(ctx context.Context, verifier []byte) (AlmanacUserChallenge, error)
 	FindUserReceipt(ctx context.Context, arg FindUserReceiptParams) (FindUserReceiptRow, error)
 	FinishMaintenancePreparation(ctx context.Context, arg FinishMaintenancePreparationParams) (int64, error)
+	FinishServiceMaintenanceMembershipWork(ctx context.Context, sloID pgtype.UUID) error
 	GetAgent(ctx context.Context, agentID pgtype.UUID) (AlmanacAgent, error)
 	GetAgentConfiguration(ctx context.Context, agentID pgtype.UUID) (GetAgentConfigurationRow, error)
 	GetAgentExecutionGrant(ctx context.Context, arg GetAgentExecutionGrantParams) (GetAgentExecutionGrantRow, error)
@@ -179,7 +186,9 @@ type Querier interface {
 	HasFutureUnrevokedAgentCredential(ctx context.Context, arg HasFutureUnrevokedAgentCredentialParams) (bool, error)
 	HasMaintenanceAuthorityInput(ctx context.Context, arg HasMaintenanceAuthorityInputParams) (bool, error)
 	HasMaintenanceChangedInput(ctx context.Context, arg HasMaintenanceChangedInputParams) (bool, error)
+	HasPendingServiceMaintenance(ctx context.Context, arg HasPendingServiceMaintenanceParams) (bool, error)
 	HasSLIsForDatasource(ctx context.Context, datasourceID pgtype.UUID) (bool, error)
+	HasServiceMaintenanceProjection(ctx context.Context, exclusionID pgtype.UUID) (bool, error)
 	HasSliExecutionAttempt(ctx context.Context, arg HasSliExecutionAttemptParams) (bool, error)
 	InsertAgent(ctx context.Context, arg InsertAgentParams) (AlmanacAgent, error)
 	InsertAgentAudit(ctx context.Context, arg InsertAgentAuditParams) error
@@ -268,6 +277,7 @@ type Querier interface {
 	ListLegacyReceiptHours(ctx context.Context, pageLimit int32) ([]ListLegacyReceiptHoursRow, error)
 	ListMaintenanceGrids(ctx context.Context, sloID pgtype.UUID) ([]ListMaintenanceGridsRow, error)
 	ListMaintenanceIdentities(ctx context.Context, arg ListMaintenanceIdentitiesParams) ([]ListMaintenanceIdentitiesRow, error)
+	ListMaintenanceImpactMembers(ctx context.Context, arg ListMaintenanceImpactMembersParams) ([]ListMaintenanceImpactMembersRow, error)
 	ListMaintenancePreviewMembers(ctx context.Context, arg ListMaintenancePreviewMembersParams) ([]ListMaintenancePreviewMembersRow, error)
 	ListMaintenanceScopes(ctx context.Context, arg ListMaintenanceScopesParams) ([]pgtype.UUID, error)
 	ListMaintenanceServiceSelectors(ctx context.Context, arg ListMaintenanceServiceSelectorsParams) ([]pgtype.UUID, error)
@@ -275,7 +285,10 @@ type Querier interface {
 	ListPendingSlisForAgent(ctx context.Context, agentID pgtype.UUID) ([]ListPendingSlisForAgentRow, error)
 	ListReadyDatasourceReassignments(ctx context.Context, retryAt pgtype.Timestamptz) ([]ListReadyDatasourceReassignmentsRow, error)
 	ListRetentionScopes(ctx context.Context) ([][]byte, error)
+	ListScopedSloMaintenanceOverlaps(ctx context.Context, arg ListScopedSloMaintenanceOverlapsParams) ([]ListScopedSloMaintenanceOverlapsRow, error)
 	ListServiceMaintenanceCadences(ctx context.Context, arg ListServiceMaintenanceCadencesParams) ([]int32, error)
+	ListServiceMaintenanceMembershipTargets(ctx context.Context, arg ListServiceMaintenanceMembershipTargetsParams) ([]ListServiceMaintenanceMembershipTargetsRow, error)
+	ListServiceMaintenanceProjectionSlos(ctx context.Context, arg ListServiceMaintenanceProjectionSlosParams) ([]pgtype.UUID, error)
 	ListServiceSloStates(ctx context.Context, arg ListServiceSloStatesParams) ([]ListServiceSloStatesRow, error)
 	ListServices(ctx context.Context, arg ListServicesParams) ([]AlmanacService, error)
 	ListSliConfigurationForAgent(ctx context.Context, agentID pgtype.UUID) ([]ListSliConfigurationForAgentRow, error)
@@ -333,8 +346,14 @@ type Querier interface {
 	LockMaintenanceSlo(ctx context.Context, id pgtype.UUID) (pgtype.UUID, error)
 	LockMaintenanceState(ctx context.Context, sloID pgtype.UUID) (int64, error)
 	LockManagedUser(ctx context.Context, id pgtype.UUID) (AlmanacUser, error)
+	LockNextServiceMaintenanceProjection(ctx context.Context) (LockNextServiceMaintenanceProjectionRow, error)
+	LockObservedServiceMaintenanceMembershipWork(ctx context.Context, arg LockObservedServiceMaintenanceMembershipWorkParams) (pgtype.UUID, error)
+	// A claim joins two rows and initially locks the parent only. Revalidate the
+	// queue cursor in a fresh statement after all parent/authority locks are held.
+	LockObservedServiceMaintenanceProjection(ctx context.Context, arg LockObservedServiceMaintenanceProjectionParams) (pgtype.UUID, error)
 	LockPasswordRotationInstallation(ctx context.Context) (LockPasswordRotationInstallationRow, error)
 	LockRetentionWork(ctx context.Context, arg LockRetentionWorkParams) (pgtype.UUID, error)
+	LockServiceMaintenanceMembershipWork(ctx context.Context) (AlmanacServiceMaintenanceMembershipWork, error)
 	LockSession(ctx context.Context, verifier []byte) (AlmanacSession, error)
 	LockSessionInstallation(ctx context.Context) (LockSessionInstallationRow, error)
 	LockSessionUser(ctx context.Context, userID pgtype.UUID) (LockSessionUserRow, error)
@@ -443,7 +462,7 @@ type Querier interface {
 	ReadMaintenancePendingSourceWindows(ctx context.Context, arg ReadMaintenancePendingSourceWindowsParams) ([]ReadMaintenancePendingSourceWindowsRow, error)
 	ReadMaintenanceProjectionReady(ctx context.Context, arg ReadMaintenanceProjectionReadyParams) (bool, error)
 	ReadMaintenanceRevision(ctx context.Context, arg ReadMaintenanceRevisionParams) (ReadMaintenanceRevisionRow, error)
-	ReadMaintenanceSnapshot(ctx context.Context, arg ReadMaintenanceSnapshotParams) ([]AlmanacMaintenanceExclusionRevision, error)
+	ReadMaintenanceSnapshot(ctx context.Context, arg ReadMaintenanceSnapshotParams) ([]ReadMaintenanceSnapshotRow, error)
 	ReadMaintenanceState(ctx context.Context, sloID pgtype.UUID) (int64, error)
 	// A witness is sufficient to suppress an occurrence. Look up the membership
 	// and immutable selector revision effective at the evaluation cutoff. Projection
@@ -506,6 +525,7 @@ type Querier interface {
 	SetDatasourceEpochConfigurationRevision(ctx context.Context, arg SetDatasourceEpochConfigurationRevisionParams) error
 	SetDatasourceReassignmentUnavailable(ctx context.Context, arg SetDatasourceReassignmentUnavailableParams) (int64, error)
 	SetServiceCatalogMetadata(ctx context.Context, arg SetServiceCatalogMetadataParams) error
+	SummarizeScopedSloMaintenanceOverflow(ctx context.Context, arg SummarizeScopedSloMaintenanceOverflowParams) (SummarizeScopedSloMaintenanceOverflowRow, error)
 	SummarizeSloMaintenanceOverflow(ctx context.Context, arg SummarizeSloMaintenanceOverflowParams) (SummarizeSloMaintenanceOverflowRow, error)
 	// Old handoffs may have prepublished a later boundary; shorten its predecessor too.
 	SupersedeFutureSliOwnershipEpochs(ctx context.Context, arg SupersedeFutureSliOwnershipEpochsParams) error

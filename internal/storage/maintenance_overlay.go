@@ -17,7 +17,7 @@ type ListSloMaintenanceInput struct {
 }
 
 func ListSloMaintenance(ctx context.Context, databaseURL string, input ListSloMaintenanceInput) (MaintenancePage, error) {
-	if !input.IncludeOverflow || input.Cursor != "" {
+	if !input.Scoped && (!input.IncludeOverflow || input.Cursor != "") {
 		return listSloMaintenance(ctx, databaseURL, input, pgx.TxOptions{})
 	}
 	var page MaintenancePage
@@ -35,7 +35,10 @@ func listSloMaintenance(ctx context.Context, databaseURL string, input ListSloMa
 		!validMaintenanceOverlayTime(input.Start) || !validMaintenanceOverlayTime(input.End) || !input.Start.Before(input.End) {
 		return MaintenancePage{}, ErrMaintenanceInvalid
 	}
-	const kind = "slo-maintenance"
+	kind := "slo-maintenance"
+	if input.Scoped {
+		kind = "scoped-slo-maintenance"
+	}
 	scope := input.SloID + "/" + input.Start.UTC().Format(time.RFC3339Nano) + "/" + input.End.UTC().Format(time.RFC3339Nano)
 	limit, cursor, err := validateAgentPage(kind, scope, input.Limit, input.Cursor)
 	if err != nil {
@@ -58,14 +61,14 @@ func listSloMaintenance(ctx context.Context, databaseURL string, input ListSloMa
 	if after.IsZero() {
 		after = time.Unix(-1, 0).UTC()
 	}
-	rows, err := q.ListSloMaintenanceOverlaps(ctx, dbgen.ListSloMaintenanceOverlapsParams{
+	page := MaintenancePage{}
+	rows, err := maintenanceOverlayRows(ctx, q, input, dbgen.ListScopedSloMaintenanceOverlapsParams{
 		SloID: sloID, WindowStart: timestamp(input.Start), WindowEnd: timestamp(input.End),
 		AfterTime: timestamp(after), AfterID: uuidOrZero(cursor.ID), PageLimit: int32(limit + 1),
-	})
+	}, &page.Pending)
 	if err != nil {
 		return MaintenancePage{}, err
 	}
-	page := MaintenancePage{}
 	if len(rows) > limit {
 		rows = rows[:limit]
 		last := rows[len(rows)-1]
@@ -81,14 +84,13 @@ func listSloMaintenance(ctx context.Context, databaseURL string, input ListSloMa
 				previous := rows[limit-2]
 				afterTime, afterID = previous.StartsAt, previous.ExclusionID
 			}
-			overflow, err := q.SummarizeSloMaintenanceOverflow(ctx, dbgen.SummarizeSloMaintenanceOverflowParams{
+			page.Overflow, err = maintenanceOverlayOverflow(ctx, q, input.Scoped, dbgen.SummarizeScopedSloMaintenanceOverflowParams{
 				SloID: sloID, WindowStart: timestamp(input.Start), WindowEnd: timestamp(input.End),
 				AfterTime: afterTime, AfterID: afterID,
 			})
 			if err != nil {
 				return MaintenancePage{}, err
 			}
-			page.Overflow = &MaintenanceOverflow{Start: overflow.StartsAt.Time.UTC(), End: overflow.EndsAt.Time.UTC(), Count: overflow.WindowCount}
 		}
 	}
 	page.Items = make([]MaintenanceRecord, 0, len(rows))
@@ -97,12 +99,54 @@ func listSloMaintenance(ctx context.Context, databaseURL string, input ListSloMa
 		if err != nil {
 			return MaintenancePage{}, err
 		}
+		if input.Scoped {
+			record.EffectiveStart, record.EffectiveEnd = row.StartsAt.Time.UTC(), row.EndsAt.Time.UTC()
+		}
 		page.Items = append(page.Items, record)
 	}
 	if err := finishAgentRead(ctx, tx, input.Now, started, user, installation, session); err != nil {
 		return MaintenancePage{}, err
 	}
 	return page, nil
+}
+
+func maintenanceOverlayRows(ctx context.Context, q *dbgen.Queries, input ListSloMaintenanceInput, args dbgen.ListScopedSloMaintenanceOverlapsParams, pending *bool) ([]dbgen.ListScopedSloMaintenanceOverlapsRow, error) {
+	if input.Scoped {
+		var err error
+		*pending, err = q.HasPendingServiceMaintenance(ctx, dbgen.HasPendingServiceMaintenanceParams{
+			SloID: args.SloID, StartAt: args.WindowStart, EndAt: args.WindowEnd,
+		})
+		if err != nil || *pending {
+			return nil, err
+		}
+		return q.ListScopedSloMaintenanceOverlaps(ctx, args)
+	}
+	rows, err := q.ListSloMaintenanceOverlaps(ctx, dbgen.ListSloMaintenanceOverlapsParams(args))
+	if err != nil {
+		return nil, err
+	}
+	out := make([]dbgen.ListScopedSloMaintenanceOverlapsRow, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, dbgen.ListScopedSloMaintenanceOverlapsRow{
+			ExclusionID: row.ExclusionID, Revision: row.Revision, StartsAt: row.StartsAt,
+		})
+	}
+	return out, nil
+}
+
+func maintenanceOverlayOverflow(ctx context.Context, q *dbgen.Queries, scoped bool, args dbgen.SummarizeScopedSloMaintenanceOverflowParams) (*MaintenanceOverflow, error) {
+	if scoped {
+		row, err := q.SummarizeScopedSloMaintenanceOverflow(ctx, args)
+		if err != nil {
+			return nil, err
+		}
+		return &MaintenanceOverflow{Start: row.StartsAt.Time.UTC(), End: row.EndsAt.Time.UTC(), Count: row.WindowCount}, nil
+	}
+	row, err := q.SummarizeSloMaintenanceOverflow(ctx, dbgen.SummarizeSloMaintenanceOverflowParams(args))
+	if err != nil {
+		return nil, err
+	}
+	return &MaintenanceOverflow{Start: row.StartsAt.Time.UTC(), End: row.EndsAt.Time.UTC(), Count: row.WindowCount}, nil
 }
 
 // Chart viewports can end between observation boundaries. Retain PostgreSQL's

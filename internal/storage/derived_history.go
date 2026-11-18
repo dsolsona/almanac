@@ -182,6 +182,17 @@ func loadRetainedSloHistory(ctx context.Context, q *dbgen.Queries, row dbgen.Get
 	if err != nil {
 		return api.SloOperationalDetail{}, err
 	}
+	maintenanceStart := bound.start.Add(-time.Duration(max(row.RollingWindowSeconds, int64(input.BurnWindow))) * time.Second)
+	currentStart := bound.effectiveAt.Add(-time.Duration(max(row.RollingWindowSeconds, 21600)) * time.Second)
+	if currentStart.Before(maintenanceStart) {
+		maintenanceStart = currentStart
+	}
+	if err := requireServiceMaintenanceReady(ctx, q, row.ID, maintenanceStart, bound.effectiveAt); err != nil {
+		return api.SloOperationalDetail{}, err
+	}
+	if input.maintenance != nil {
+		input.maintenance.trackServiceMaintenanceRange(maintenanceStart, bound.effectiveAt)
+	}
 	span.SetAttributes(attribute.Int64("almanac.range.seconds", int64(bound.end.Sub(bound.start)/time.Second)), attribute.Int("almanac.burn.window_seconds", input.BurnWindow))
 	sourceGeneration, err := q.GetDerivedSourceGeneration(ctx, dbgen.GetDerivedSourceGenerationParams{SliID: row.SliID, MeasurementRevision: row.MeasurementRevision})
 	if errors.Is(err, pgx.ErrNoRows) {

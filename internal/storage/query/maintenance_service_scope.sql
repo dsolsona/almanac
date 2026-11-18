@@ -120,8 +120,129 @@ WHERE a.effective_at <= sqlc.arg(inventory_at)::timestamptz
   );
 
 -- name: ReadMaintenanceProjectionReady :one
-SELECT coalesce((
-    SELECT p.complete
-    FROM public.almanac_service_maintenance_projection p
-    WHERE p.exclusion_id = sqlc.arg(exclusion_id) AND p.desired_revision = sqlc.arg(revision)::bigint
-), false)::boolean;
+SELECT EXISTS (
+    SELECT 1 FROM public.almanac_service_maintenance_projection_completed c
+    WHERE c.exclusion_id = sqlc.arg(exclusion_id) AND c.revision = sqlc.arg(revision)::bigint
+)::boolean;
+
+-- name: HasServiceMaintenanceProjection :one
+SELECT EXISTS(SELECT 1 FROM public.almanac_service_maintenance_projection WHERE exclusion_id = $1)::boolean;
+
+-- name: LockNextServiceMaintenanceProjection :one
+SELECT p.exclusion_id, p.desired_revision, p.through_slo
+FROM public.almanac_service_maintenance_projection p
+JOIN public.almanac_maintenance_exclusions e ON e.id = p.exclusion_id AND e.current_revision = p.desired_revision
+WHERE NOT p.complete
+ORDER BY p.exclusion_id LIMIT 1 FOR UPDATE OF e SKIP LOCKED;
+
+-- name: ListServiceMaintenanceProjectionSlos :many
+SELECT id FROM public.almanac_slos WHERE id > sqlc.arg(after_slo)::uuid
+ORDER BY id LIMIT sqlc.arg(page_limit)::integer;
+
+-- name: ApplyServiceMaintenanceProjectionMember :one
+SELECT public.almanac_project_service_maintenance_member(
+    sqlc.arg(slo_id)::uuid, sqlc.arg(exclusion_id)::uuid, sqlc.arg(revision)::bigint, sqlc.arg(now_at)::timestamptz
+)::boolean;
+
+-- name: AdvanceServiceMaintenanceProjection :execrows
+UPDATE public.almanac_service_maintenance_projection SET through_slo = sqlc.arg(through_slo), complete = sqlc.arg(complete)
+WHERE exclusion_id = sqlc.arg(exclusion_id) AND desired_revision = sqlc.arg(revision)::bigint;
+
+-- name: LockServiceMaintenanceMembershipWork :one
+SELECT w.slo_id, w.through_exclusion FROM public.almanac_service_maintenance_membership_work w
+JOIN public.almanac_slos s ON s.id = w.slo_id
+ORDER BY w.slo_id LIMIT 1 FOR NO KEY UPDATE OF s SKIP LOCKED;
+
+-- name: ListServiceMaintenanceMembershipTargets :many
+SELECT p.exclusion_id, p.desired_revision
+FROM public.almanac_service_maintenance_projection p
+WHERE p.exclusion_id > sqlc.arg(after_exclusion)::uuid
+ORDER BY p.exclusion_id LIMIT sqlc.arg(page_limit)::integer;
+
+-- name: AdvanceServiceMaintenanceMembershipWork :exec
+UPDATE public.almanac_service_maintenance_membership_work SET through_exclusion = sqlc.arg(through_exclusion) WHERE slo_id = sqlc.arg(slo_id);
+
+-- name: FinishServiceMaintenanceMembershipWork :exec
+DELETE FROM public.almanac_service_maintenance_membership_work WHERE slo_id = $1;
+
+-- name: CompleteServiceMaintenanceProjection :exec
+INSERT INTO public.almanac_service_maintenance_projection_completed(exclusion_id, revision)
+VALUES ($1, $2) ON CONFLICT DO NOTHING;
+
+-- name: FindMaintenanceSupersededAt :one
+SELECT recorded_at
+FROM public.almanac_maintenance_exclusion_revisions r
+WHERE r.exclusion_id = sqlc.arg(exclusion_id) AND r.revision > sqlc.arg(revision)::bigint
+ORDER BY r.revision LIMIT 1;
+
+-- name: CountMaintenanceImpactMembers :one
+SELECT count(DISTINCT p.slo_id)
+FROM public.almanac_maintenance_impact_intervals(
+    sqlc.arg(exclusion_id)::uuid, sqlc.arg(revision)::bigint, sqlc.arg(inventory_at)::timestamptz
+) p;
+
+-- name: ListMaintenanceImpactMembers :many
+SELECT slo.id AS slo_id, slo.display_name AS slo_name, s.id AS service_id, s.display_name AS service_name,
+       p.starts_at::timestamptz AS starts_at, p.ends_at::timestamptz AS ends_at
+FROM public.almanac_maintenance_impact_intervals(
+    sqlc.arg(exclusion_id)::uuid, sqlc.arg(revision)::bigint, sqlc.arg(inventory_at)::timestamptz
+) p
+JOIN public.almanac_slos slo ON slo.id = p.slo_id
+JOIN public.almanac_services s ON s.id = p.service_id
+WHERE (p.slo_id, p.starts_at) > (sqlc.arg(after_slo)::uuid, sqlc.arg(after_time)::timestamptz)
+ORDER BY 1, 5
+LIMIT sqlc.arg(page_limit)::integer;
+
+-- name: HasPendingServiceMaintenance :one
+SELECT public.almanac_slo_service_maintenance_pending(
+    sqlc.arg(slo_id)::uuid, sqlc.arg(start_at)::timestamptz, sqlc.arg(end_at)::timestamptz
+)::boolean;
+
+-- name: ListScopedSloMaintenanceOverlaps :many
+WITH latest AS MATERIALIZED (
+    SELECT DISTINCT ON (c.exclusion_id) c.exclusion_id, c.exclusion_revision, c.included, c.effective_coverage
+    FROM public.almanac_slo_exclusion_changes c
+    WHERE c.slo_id = sqlc.arg(slo_id)
+    ORDER BY c.exclusion_id, c.revision DESC
+)
+SELECT r.exclusion_id, r.revision, lower(segment)::timestamptz AS starts_at, upper(segment)::timestamptz AS ends_at
+FROM latest c
+JOIN public.almanac_maintenance_exclusion_revisions r ON r.exclusion_id = c.exclusion_id AND r.revision = c.exclusion_revision
+CROSS JOIN LATERAL unnest(public.almanac_effective_maintenance_coverage(sqlc.arg(slo_id), c.exclusion_id, c.exclusion_revision, c.effective_coverage)) segment
+WHERE c.included AND NOT r.tombstone
+  AND segment && tstzrange(sqlc.arg(window_start)::timestamptz, sqlc.arg(window_end)::timestamptz, '[)')
+  AND (lower(segment), r.exclusion_id) > (sqlc.arg(after_time)::timestamptz, sqlc.arg(after_id)::uuid)
+ORDER BY starts_at, r.exclusion_id
+LIMIT sqlc.arg(page_limit)::integer;
+
+-- name: SummarizeScopedSloMaintenanceOverflow :one
+WITH latest AS MATERIALIZED (
+    SELECT DISTINCT ON (c.exclusion_id) c.exclusion_id, c.exclusion_revision, c.included, c.effective_coverage
+    FROM public.almanac_slo_exclusion_changes c
+    WHERE c.slo_id = sqlc.arg(slo_id)
+    ORDER BY c.exclusion_id, c.revision DESC
+)
+SELECT count(*) AS window_count,
+       min(greatest(lower(segment), sqlc.arg(window_start)::timestamptz))::timestamptz AS starts_at,
+       max(least(upper(segment), sqlc.arg(window_end)::timestamptz))::timestamptz AS ends_at
+FROM latest c
+CROSS JOIN LATERAL unnest(public.almanac_effective_maintenance_coverage(sqlc.arg(slo_id), c.exclusion_id, c.exclusion_revision, c.effective_coverage)) segment
+WHERE c.included
+  AND segment && tstzrange(sqlc.arg(window_start)::timestamptz, sqlc.arg(window_end)::timestamptz, '[)')
+  AND (lower(segment), c.exclusion_id) > (sqlc.arg(after_time)::timestamptz, sqlc.arg(after_id)::uuid);
+
+-- A claim joins two rows and initially locks the parent only. Revalidate the
+-- queue cursor in a fresh statement after all parent/authority locks are held.
+-- name: LockObservedServiceMaintenanceProjection :one
+SELECT p.exclusion_id
+FROM public.almanac_service_maintenance_projection p
+WHERE p.exclusion_id = sqlc.arg(exclusion_id)
+  AND p.desired_revision = sqlc.arg(revision)::bigint
+  AND p.through_slo = sqlc.arg(through_slo) AND NOT p.complete
+FOR UPDATE SKIP LOCKED;
+
+-- name: LockObservedServiceMaintenanceMembershipWork :one
+SELECT w.slo_id
+FROM public.almanac_service_maintenance_membership_work w
+WHERE w.slo_id = sqlc.arg(slo_id) AND w.through_exclusion = sqlc.arg(through_exclusion)
+FOR UPDATE SKIP LOCKED;

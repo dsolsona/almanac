@@ -15,11 +15,14 @@ WITH page AS MATERIALIZED (
  SELECT c.* FROM public.almanac_slo_exclusion_changes c WHERE c.slo_id=$1 AND c.revision>sqlc.arg(after_revision)::bigint AND c.revision<=sqlc.arg(target_revision)::bigint ORDER BY c.revision LIMIT sqlc.arg(page_limit)::integer
 )
 SELECT p.*,r.starts_at,r.ends_at,r.tombstone,
- EXISTS(SELECT 1 FROM public.almanac_maintenance_exclusion_scopes s WHERE s.exclusion_id=p.exclusion_id AND s.revision=p.exclusion_revision AND s.slo_id=p.slo_id) AS scoped
+ (public.almanac_effective_maintenance_coverage(p.slo_id, p.exclusion_id, p.exclusion_revision, p.effective_coverage) IS NOT NULL)::boolean AS scoped
 FROM page p LEFT JOIN public.almanac_maintenance_exclusion_revisions r ON r.exclusion_id=p.exclusion_id AND r.revision=p.exclusion_revision ORDER BY p.revision;
 -- name: PutMaintenanceCompilerMember :exec
-INSERT INTO public.almanac_maintenance_members(build_id,exclusion_id,exclusion_revision,slo_id,starts_at,ends_at) VALUES($1,$2,$3,$4,$5,$6)
-ON CONFLICT(build_id,exclusion_id) DO UPDATE SET exclusion_revision=excluded.exclusion_revision,starts_at=excluded.starts_at,ends_at=excluded.ends_at;
+INSERT INTO public.almanac_maintenance_members(build_id, exclusion_id, exclusion_revision, slo_id, starts_at, ends_at)
+SELECT sqlc.arg(build_id)::uuid, c.exclusion_id, c.exclusion_revision, c.slo_id, lower(segment), upper(segment)
+FROM public.almanac_slo_exclusion_changes c
+CROSS JOIN LATERAL unnest(public.almanac_effective_maintenance_coverage(c.slo_id, c.exclusion_id, c.exclusion_revision, c.effective_coverage)) AS segment
+WHERE c.slo_id = sqlc.arg(slo_id)::uuid AND c.revision = sqlc.arg(revision)::bigint;
 -- name: RemoveMaintenanceCompilerMember :exec
 DELETE FROM public.almanac_maintenance_members WHERE build_id=$1 AND exclusion_id=$2;
 -- name: AdvanceMaintenanceReplay :exec

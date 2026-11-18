@@ -148,13 +148,13 @@ func replayMaintenancePage(ctx context.Context, q *dbgen.Queries, b dbgen.Almana
 		return result, q.AdvanceMaintenanceReplay(ctx, dbgen.AdvanceMaintenanceReplayParams{ID: b.ID, RawCursor: b.RawCursor, Phase: result.Phase})
 	}
 	for _, row := range rows {
-		if row.Included {
-			err = q.PutMaintenanceCompilerMember(ctx, dbgen.PutMaintenanceCompilerMemberParams{BuildID: b.ID, ExclusionID: row.ExclusionID, ExclusionRevision: row.ExclusionRevision, SloID: b.SloID, StartsAt: row.StartsAt, EndsAt: row.EndsAt})
-		} else {
-			err = q.RemoveMaintenanceCompilerMember(ctx, dbgen.RemoveMaintenanceCompilerMemberParams{BuildID: b.ID, ExclusionID: row.ExclusionID})
-		}
-		if err != nil {
+		if err := q.RemoveMaintenanceCompilerMember(ctx, dbgen.RemoveMaintenanceCompilerMemberParams{BuildID: b.ID, ExclusionID: row.ExclusionID}); err != nil {
 			return result, err
+		}
+		if row.Included {
+			if err := q.PutMaintenanceCompilerMember(ctx, dbgen.PutMaintenanceCompilerMemberParams{BuildID: b.ID, SloID: b.SloID, Revision: row.Revision}); err != nil {
+				return result, err
+			}
 		}
 	}
 	result.RawCursor = expected

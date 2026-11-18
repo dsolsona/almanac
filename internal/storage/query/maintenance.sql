@@ -48,12 +48,16 @@ ON CONFLICT (slo_id) DO UPDATE SET desired_revision=excluded.desired_revision,wo
 DELETE FROM public.almanac_slo_exclusion_work WHERE slo_id=$1 AND desired_revision=$2 AND work_version=$3;
 -- name: ReadMaintenanceSnapshot :many
 WITH latest AS (
- SELECT DISTINCT ON (exclusion_id) exclusion_id,exclusion_revision,included FROM public.almanac_slo_exclusion_changes
+ SELECT DISTINCT ON (exclusion_id) slo_id,exclusion_id,exclusion_revision,included,effective_coverage FROM public.almanac_slo_exclusion_changes
  WHERE slo_id=$1 AND revision<=sqlc.arg(revision)::bigint ORDER BY exclusion_id,revision DESC
 )
-SELECT r.* FROM latest c JOIN public.almanac_maintenance_exclusion_revisions r ON r.exclusion_id=c.exclusion_id AND r.revision=c.exclusion_revision
-WHERE c.included AND NOT r.tombstone AND r.starts_at<sqlc.arg(window_end)::timestamptz AND r.ends_at>sqlc.arg(window_start)::timestamptz
-ORDER BY r.starts_at,r.ends_at,r.exclusion_id;
+SELECT r.exclusion_id, r.revision, r.reason,
+       lower(segment)::timestamptz AS starts_at, upper(segment)::timestamptz AS ends_at
+FROM latest c JOIN public.almanac_maintenance_exclusion_revisions r ON r.exclusion_id=c.exclusion_id AND r.revision=c.exclusion_revision
+CROSS JOIN LATERAL unnest(public.almanac_effective_maintenance_coverage(c.slo_id, c.exclusion_id, c.exclusion_revision, c.effective_coverage)) AS segment
+WHERE c.included AND NOT r.tombstone
+  AND segment && tstzrange(sqlc.arg(window_start)::timestamptz, sqlc.arg(window_end)::timestamptz, '[)')
+ORDER BY starts_at, ends_at, r.exclusion_id;
 
 -- name: ListSloMaintenanceOverlaps :many
 SELECT r.exclusion_id, r.revision, r.starts_at
