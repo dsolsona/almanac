@@ -54,6 +54,15 @@ func projectServiceMaintenancePage(ctx context.Context, tx pgx.Tx, pageLimit int
 	if _, err := q.FenceServiceMaintenanceAuthority(ctx); err != nil {
 		return err
 	}
+	_, err = q.LockObservedServiceMaintenanceProjection(ctx, dbgen.LockObservedServiceMaintenanceProjectionParams{
+		ExclusionID: claim.ExclusionID, Revision: claim.DesiredRevision, ThroughSlo: claim.ThroughSlo,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
 	now := normalizedAgentNow(clock)
 	if now.IsZero() {
 		return ErrMaintenanceInvalid
@@ -93,10 +102,23 @@ func projectServiceMaintenanceMembershipPage(ctx context.Context, tx pgx.Tx, pag
 	if err != nil {
 		return err
 	}
+	return projectServiceMaintenanceMembershipClaim(ctx, q, claim, pageLimit, clock)
+}
+
+func projectServiceMaintenanceMembershipClaim(ctx context.Context, q *dbgen.Queries, claim dbgen.AlmanacServiceMaintenanceMembershipWork, pageLimit int, clock func() time.Time) error {
 	if _, err := q.LockMaintenanceState(ctx, claim.SloID); err != nil {
 		return err
 	}
 	if _, err := q.FenceServiceMaintenanceAuthority(ctx); err != nil {
+		return err
+	}
+	_, err := q.LockObservedServiceMaintenanceMembershipWork(ctx, dbgen.LockObservedServiceMaintenanceMembershipWorkParams{
+		SloID: claim.SloID, ThroughExclusion: claim.ThroughExclusion,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
 		return err
 	}
 	targets, err := q.ListServiceMaintenanceMembershipTargets(ctx, dbgen.ListServiceMaintenanceMembershipTargetsParams{

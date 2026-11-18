@@ -631,6 +631,49 @@ func (q *Queries) LockNextServiceMaintenanceProjection(ctx context.Context) (Loc
 	return i, err
 }
 
+const lockObservedServiceMaintenanceMembershipWork = `-- name: LockObservedServiceMaintenanceMembershipWork :one
+SELECT w.slo_id
+FROM public.almanac_service_maintenance_membership_work w
+WHERE w.slo_id = $1 AND w.through_exclusion = $2
+FOR UPDATE SKIP LOCKED
+`
+
+type LockObservedServiceMaintenanceMembershipWorkParams struct {
+	SloID            pgtype.UUID `json:"slo_id"`
+	ThroughExclusion pgtype.UUID `json:"through_exclusion"`
+}
+
+func (q *Queries) LockObservedServiceMaintenanceMembershipWork(ctx context.Context, arg LockObservedServiceMaintenanceMembershipWorkParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, lockObservedServiceMaintenanceMembershipWork, arg.SloID, arg.ThroughExclusion)
+	var slo_id pgtype.UUID
+	err := row.Scan(&slo_id)
+	return slo_id, err
+}
+
+const lockObservedServiceMaintenanceProjection = `-- name: LockObservedServiceMaintenanceProjection :one
+SELECT p.exclusion_id
+FROM public.almanac_service_maintenance_projection p
+WHERE p.exclusion_id = $1
+  AND p.desired_revision = $2::bigint
+  AND p.through_slo = $3 AND NOT p.complete
+FOR UPDATE SKIP LOCKED
+`
+
+type LockObservedServiceMaintenanceProjectionParams struct {
+	ExclusionID pgtype.UUID `json:"exclusion_id"`
+	Revision    int64       `json:"revision"`
+	ThroughSlo  pgtype.UUID `json:"through_slo"`
+}
+
+// A claim joins two rows and initially locks the parent only. Revalidate the
+// queue cursor in a fresh statement after all parent/authority locks are held.
+func (q *Queries) LockObservedServiceMaintenanceProjection(ctx context.Context, arg LockObservedServiceMaintenanceProjectionParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, lockObservedServiceMaintenanceProjection, arg.ExclusionID, arg.Revision, arg.ThroughSlo)
+	var exclusion_id pgtype.UUID
+	err := row.Scan(&exclusion_id)
+	return exclusion_id, err
+}
+
 const lockServiceMaintenanceMembershipWork = `-- name: LockServiceMaintenanceMembershipWork :one
 SELECT w.slo_id, w.through_exclusion FROM public.almanac_service_maintenance_membership_work w
 JOIN public.almanac_slos s ON s.id = w.slo_id

@@ -219,3 +219,57 @@ func TestIntegrationMaintenanceAllServicesIncludesProspectiveJoins(t *testing.T)
 		t.Fatalf("all-services membership lost prospective start: %+v, %v", snapshot, err)
 	}
 }
+
+// The old cursor models a claim statement that took its snapshot before the
+// move committed, then acquired the SLO root after the transaction was gone.
+func TestIntegrationMaintenanceServiceProjectionRejectsStaleMembershipCursor(t *testing.T) {
+	t.Parallel()
+	f := newMaintenanceFixture(t)
+	q := dbgen.New(f.conn)
+	subject, err := q.GetSlo(t.Context(), mustPGUUID(f.ids[0]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := f.input("project-stale-cursor")
+	input.ScopeKind, input.SloIDs, input.ServiceIDs = MaintenanceScopeServices, nil, []string{subject.ServiceID.String()}
+	input.Start, input.End = f.at.Add(5*time.Minute), f.at.Add(10*time.Minute)
+	window, err := CreateMaintenance(t.Context(), f.f.databaseURL, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.runtime.runServiceMaintenanceProjection(t.Context(), 64, time.Second, f.clock); err != nil {
+		t.Fatal(err)
+	}
+	claim := dbgen.AlmanacServiceMaintenanceMembershipWork{SloID: subject.ID, ThroughExclusion: mustPGUUID(window.ID)}
+	if _, err := f.conn.Exec(t.Context(), `
+		INSERT INTO almanac_service_maintenance_membership_work(slo_id, through_exclusion) VALUES ($1,$2)
+	`, claim.SloID, claim.ThroughExclusion); err != nil {
+		t.Fatal(err)
+	}
+	destination, _, err := CreateObjective(t.Context(), f.f.databaseURL, CreateObjectiveInput{
+		Proof: f.proof, Name: "stale-cursor-destination", DisplayName: "Outside maintenance",
+		IdempotencyKey: "stale-cursor-destination", RequestID: "stale-cursor-destination", Now: f.clock,
+	}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.now = window.Start.Add(time.Minute)
+	moveMaintenanceSLO(t, f, destination.ID, 2, f.now)
+	compilerTx(t, f, func(tx pgx.Tx) error {
+		q := dbgen.New(tx)
+		if _, err := q.LockMaintenanceSlo(t.Context(), subject.ID); err != nil {
+			return err
+		}
+		return projectServiceMaintenanceMembershipClaim(t.Context(), q, claim, 64, f.clock)
+	})
+	if err := requireServiceMaintenanceReady(t.Context(), q, subject.ID, f.now, window.End); !errors.Is(err, ErrDerivedPending) {
+		t.Fatalf("stale work discarded an unprojected membership change: %v", err)
+	}
+	if err := f.runtime.runServiceMaintenanceProjection(t.Context(), 64, time.Second, f.clock); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := readSloExclusionSnapshot(t.Context(), q, subject.ID, window.Start, window.End)
+	if err != nil || len(snapshot.Intervals) != 1 || !snapshot.Intervals[0].End.Equal(f.now) {
+		t.Fatalf("fresh claim failed to preserve the departure: %+v, %v", snapshot, err)
+	}
+}

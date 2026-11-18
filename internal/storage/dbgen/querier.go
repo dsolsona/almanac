@@ -347,6 +347,10 @@ type Querier interface {
 	LockMaintenanceState(ctx context.Context, sloID pgtype.UUID) (int64, error)
 	LockManagedUser(ctx context.Context, id pgtype.UUID) (AlmanacUser, error)
 	LockNextServiceMaintenanceProjection(ctx context.Context) (LockNextServiceMaintenanceProjectionRow, error)
+	LockObservedServiceMaintenanceMembershipWork(ctx context.Context, arg LockObservedServiceMaintenanceMembershipWorkParams) (pgtype.UUID, error)
+	// A claim joins two rows and initially locks the parent only. Revalidate the
+	// queue cursor in a fresh statement after all parent/authority locks are held.
+	LockObservedServiceMaintenanceProjection(ctx context.Context, arg LockObservedServiceMaintenanceProjectionParams) (pgtype.UUID, error)
 	LockPasswordRotationInstallation(ctx context.Context) (LockPasswordRotationInstallationRow, error)
 	LockRetentionWork(ctx context.Context, arg LockRetentionWorkParams) (pgtype.UUID, error)
 	LockServiceMaintenanceMembershipWork(ctx context.Context) (AlmanacServiceMaintenanceMembershipWork, error)

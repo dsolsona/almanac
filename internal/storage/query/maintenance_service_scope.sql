@@ -230,3 +230,19 @@ CROSS JOIN LATERAL unnest(public.almanac_effective_maintenance_coverage(sqlc.arg
 WHERE c.included
   AND segment && tstzrange(sqlc.arg(window_start)::timestamptz, sqlc.arg(window_end)::timestamptz, '[)')
   AND (lower(segment), c.exclusion_id) > (sqlc.arg(after_time)::timestamptz, sqlc.arg(after_id)::uuid);
+
+-- A claim joins two rows and initially locks the parent only. Revalidate the
+-- queue cursor in a fresh statement after all parent/authority locks are held.
+-- name: LockObservedServiceMaintenanceProjection :one
+SELECT p.exclusion_id
+FROM public.almanac_service_maintenance_projection p
+WHERE p.exclusion_id = sqlc.arg(exclusion_id)
+  AND p.desired_revision = sqlc.arg(revision)::bigint
+  AND p.through_slo = sqlc.arg(through_slo) AND NOT p.complete
+FOR UPDATE SKIP LOCKED;
+
+-- name: LockObservedServiceMaintenanceMembershipWork :one
+SELECT w.slo_id
+FROM public.almanac_service_maintenance_membership_work w
+WHERE w.slo_id = sqlc.arg(slo_id) AND w.through_exclusion = sqlc.arg(through_exclusion)
+FOR UPDATE SKIP LOCKED;
