@@ -41,3 +41,51 @@ func TestIntegrationMonthEndPartitionsAndLeaseIndexes(t *testing.T) {
 		}
 	}
 }
+
+func TestIntegrationExistingObservationPartitionsAvoidPreparationLocks(t *testing.T) {
+	t.Parallel()
+	databaseURL := integrationDatabase(t)
+	if _, err := Upgrade(t.Context(), databaseURL); err != nil {
+		t.Fatal(err)
+	}
+	conn := integrationConnect(t, databaseURL)
+	defer closeIntegrationConn(conn)
+	now := time.Date(2028, 1, 4, 0, 0, 0, 0, time.UTC)
+	setup, err := conn.Begin(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer setup.Rollback(t.Context())
+	if err := prepareSliPartitions(t.Context(), setup, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := setup.Commit(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	locker := integrationConnect(t, databaseURL)
+	defer closeIntegrationConn(locker)
+	held, err := locker.Begin(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer held.Rollback(t.Context())
+	for _, month := range []string{"202712", "202801", "202802"} {
+		key := "almanac-sli-partition:almanac_sli_observations_" + month
+		if _, err := held.Exec(t.Context(), `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, key); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	probe, err := conn.Begin(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer probe.Rollback(t.Context())
+	if _, err := probe.Exec(t.Context(), "SET LOCAL lock_timeout='250ms'"); err != nil {
+		t.Fatal(err)
+	}
+	if err := prepareSliPartitions(t.Context(), probe, now); err != nil {
+		t.Fatalf("reusing existing partitions should not wait for DDL coordination: %v", err)
+	}
+}

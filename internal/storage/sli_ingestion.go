@@ -259,6 +259,19 @@ func prepareSliPartitions(ctx context.Context, tx pgx.Tx, now time.Time) error {
 		start := months[suffix]
 		end := start.AddDate(0, 1, 0)
 		partition := "almanac_sli_observations_" + suffix
+		// These recent partitions are outside the retention worker's drop range.
+		// Avoid taking the shared creation lock during ordinary SLI writes.
+		var attached bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS (
+			SELECT 1 FROM pg_catalog.pg_inherits
+			WHERE inhparent = 'public.almanac_sli_observations'::regclass
+			  AND inhrelid = to_regclass($1) AND NOT inhdetachpending
+		)`, "public."+partition).Scan(&attached); err != nil {
+			return err
+		}
+		if attached {
+			continue
+		}
 		if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", "almanac-sli-partition:"+partition); err != nil {
 			return err
 		}

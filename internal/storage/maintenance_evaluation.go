@@ -384,8 +384,8 @@ func readMaintenanceEvaluationProofs(ctx context.Context, tx pgx.Tx, id pgtype.U
 }
 
 // The three existing caller budgets cover both fetch and processing. Canonical
-// zero uses its original per-window source/edge upper bound, since that query
-// performs its own reads. Nonzero source rows are fetched once; each mask's
+// zero reads distinct interiors per SQL batch and charges the conservative
+// per-window edge bound. Nonzero source rows are fetched once; each mask's
 // hour/edge processing is separately reserved. Sentinels count as read work.
 func admitMaintenanceEvaluation(work []maintenanceEvaluationWork, shared maintenanceWindowPlan, limits maintenanceWindowLimits) error {
 	hours, raw, fragments := limits.MaxSourceHours, limits.MaxRawRows, limits.MaxFragments
@@ -411,9 +411,17 @@ func admitMaintenanceEvaluation(work []maintenanceEvaluationWork, shared mainten
 	}
 	for _, w := range work {
 		if w.mask.Computed.Revision == 0 {
+			// ReadRetainedWindowBatch materializes DISTINCT (full_start, full_end)
+			// before scanning source hours. Different bounds and separate batch
+			// requests still read independently, including when their ranges overlap.
+			interiors := make(map[maintenanceWindowRange]struct{})
 			for _, v := range w.plan.Windows {
-				if v.FullStart.Before(v.FullEnd) && !charge(&hours, (uint64(v.FullEnd.UnixMicro())-uint64(v.FullStart.UnixMicro()))/uint64(time.Hour.Microseconds())) {
-					return ErrOperationalResource
+				interior := maintenanceWindowRange{Start: v.FullStart, End: v.FullEnd}
+				if _, seen := interiors[interior]; !seen && interior.Start.Before(interior.End) {
+					if !charge(&hours, (uint64(interior.End.UnixMicro())-uint64(interior.Start.UnixMicro()))/uint64(time.Hour.Microseconds())) {
+						return ErrOperationalResource
+					}
+					interiors[interior] = struct{}{}
 				}
 				for _, e := range v.Edges {
 					if !charge(&raw, slots(e, v.Input.Cadence)) {

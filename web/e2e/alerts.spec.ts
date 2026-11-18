@@ -1,6 +1,7 @@
 import {expect,test} from '@playwright/test';
+import type {components} from '../src/api/generated.ts';
 import {api,expectOk,unique} from './support/api.ts';
-import {startAgent} from './support/stack.ts';
+import {compose,startAgent} from './support/stack.ts';
 
 test('save, edit, disable and enable an alert policy through the deployed UI',async({page},info)=>{
  const name=unique('alert-journey');
@@ -9,7 +10,31 @@ test('save, edit, disable and enable an alert policy through the deployed UI',as
  const agentID=registered.body.agent.id;
  await expect.poll(async()=>(await api(page,'GET',`/api/v1/agents/${agentID}`)).body.runtime?.reachability,{timeout:30_000}).toBe('connected');
  const source=await expectOk(api(page,'POST','/api/v1/datasources',{name,display_name:name,provider:'prometheus',configuration_format:'prometheus-http-v1',endpoint:'http://victoriametrics:8428',tls:{insecure_skip_verify:false,ca_pem:null},authentication:{mode:'none',username:null,password_secret:{action:'clear'},token_secret:{action:'clear'}},polling_interval_seconds:60,agent_id:agentID}));
- const measurement=await expectOk(api(page,'POST','/api/v1/slis',{name,display_name:name,datasource_id:source.body.id,measurement_kind:'event_counts',component_mode:'interval_count',good_query:'vector(99)',total_query:'vector(100)'}));
+ // This journey exercises alert policy management on a configured collector.
+ // Let the new assignment finish before provisioning the SLI that uses it.
+ await expect.poll(async () => {
+   const providers = await api<components['schemas']['ProviderPage']>(page, 'GET', `/api/v1/providers?agent_id=${agentID}`);
+   return providers.body.items?.find(provider => provider.provider === 'prometheus')?.availability;
+ }, { timeout: 30_000 }).toBe('available');
+ const creation = await api(page,'POST','/api/v1/slis',{name,display_name:name,datasource_id:source.body.id,measurement_kind:'event_counts',component_mode:'interval_count',good_query:'vector(99)',total_query:'vector(100)'});
+ if (creation.status >= 500) {
+   let evidence = 'PostgreSQL lock diagnostics unavailable.';
+   try {
+     // Keep timing and relation names without publishing statements or parameter values.
+     const logs = compose('logs', '--no-color', '--tail', '120', 'postgres');
+     const failures = logs.split(/\n(?=[^\n]*postgres-1\s+\|.*\b(?:ERROR|LOG|FATAL|WARNING):)/)
+       .filter(entry => /ERROR:\s+(?:canceling statement due to lock timeout|deadlock detected|could not serialize access)/.test(entry))
+       .map(entry => ({
+         failure: entry.match(/ERROR:\s+(canceling statement due to lock timeout|deadlock detected|could not serialize access)/)?.[1],
+         time: entry.match(/\d{4}-\d\d-\d\d \d\d:\d\d:\d\d(?:\.\d+)? UTC/)?.[0],
+         relations: [...new Set(entry.match(/public\.almanac_[a-z_0-9]+/g) ?? [])],
+         advisoryLock: entry.includes('pg_advisory_xact_lock'),
+       }));
+     evidence = JSON.stringify(failures);
+   } catch { /* Keep the original HTTP failure if diagnostics are unavailable. */ }
+   await info.attach('postgres-lock-diagnostics', {body:evidence,contentType:'text/plain'});
+ }
+ const measurement=await expectOk(Promise.resolve(creation));
  const service=await expectOk(api(page,'POST','/api/v1/services',{name,display_name:'Alert journey service'}));
  const objective=await expectOk(api(page,'POST','/api/v1/slos',{name,display_name:`${name} availability`,service_id:service.body.id,sli_id:measurement.body.id,target:'0.999',rolling_window_seconds:2592000}));
  await page.goto('/alerts');

@@ -1,3 +1,5 @@
+[F4-T60](F4-T60.md) corrects duplicate source-hour admission for canonical history.
+
 [F4-T57](F4-T57.md) adds browser actions for cancelling, ending and correcting maintenance.
 
 [F4-T56](F4-T56.md) connects maintenance periods to the SLO graphs.
