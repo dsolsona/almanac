@@ -4108,7 +4108,7 @@ type MaintenanceImpactPage struct {
 	// Ready False if effective membership is still being prepared.
 	Ready bool `json:"ready"`
 
-	// Total Exact number of rows in this inventory or effective membership page set.
+	// Total Exact number of distinct affected SLOs across the inventory or effective membership page set.
 	Total string `json:"total"`
 }
 

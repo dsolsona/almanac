@@ -3386,7 +3386,7 @@ components:
       required: [items, total, inventory_at, ready]
       properties:
         items: {type: array, items: {$ref: '#/components/schemas/MaintenanceImpactMember'}}
-        total: {type: string, pattern: '^(0|[1-9][0-9]*)$', description: Exact number of rows in this inventory or effective membership page set.}
+        total: {type: string, pattern: '^(0|[1-9][0-9]*)$', description: Exact number of distinct affected SLOs across the inventory or effective membership page set.}
         inventory_at: {type: string, format: date-time}
         ready: {type: boolean, description: False if effective membership is still being prepared.}
         next_cursor: {type: string}

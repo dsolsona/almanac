@@ -3234,7 +3234,7 @@ export interface components {
         };
         MaintenanceImpactPage: {
             items: components["schemas"]["MaintenanceImpactMember"][];
-            /** @description Exact number of rows in this inventory or effective membership page set. */
+            /** @description Exact number of distinct affected SLOs across the inventory or effective membership page set. */
             total: string;
             /** Format: date-time */
             inventory_at: string;
