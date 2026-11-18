@@ -50,7 +50,7 @@ export function SloHistoryChart({kind,samples,start,end,target,compact=false,zon
   function position() {
   if(!frame||!panel||!svg||selectedTime===undefined)return;
   const bounds=frame.getBoundingClientRect(),plot=svg.getBoundingClientRect(),scale=plot.width/width;
-  const pointX=plot.left+timeX(selectedTime)*scale;
+  const pointX=plot.left+(selected&&allowed(selected)?x(selected):timeX(selectedTime))*scale;
   const pointY=plot.top+(selected&&allowed(selected)?y(numeric(selected)!):(top+bottom)/2)*scale;
   const gap=16,panelWidth=panel.offsetWidth,panelHeight=panel.offsetHeight;
   const fitsRight=pointX+gap+panelWidth<=Math.min(innerWidth,bounds.right)-8,fitsLeft=pointX-gap-panelWidth>=Math.max(0,bounds.left)+8;

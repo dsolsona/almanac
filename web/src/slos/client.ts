@@ -37,7 +37,14 @@ function validEvaluation(x: Record<string, unknown>): boolean {
       ['observed','zero_traffic','known_empty','missing','expired','not_applicable'].includes(String(item.state)) && ['good','total','attainment','burn'].every(k=>decimal(item[k])) &&
       (item.state==='observed' ? typeof item.attainment==='string' : item.attainment===null));
 }
-const utcTimestamp=(v:unknown) => typeof v==='string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z$/.test(v) && Number.isFinite(Date.parse(v));
+const utcTimestamp=(v:unknown): v is string => typeof v==='string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z$/.test(v) && Number.isFinite(Date.parse(v));
+function maintenanceTimeKey(value: unknown): string | undefined {
+  if (!utcTimestamp(value)) return undefined;
+  const fraction = value.slice(20, -1);
+  if (fraction.length > 6) return undefined;
+  // Fixed-width UTC keys preserve microsecond ordering across mixed fractional widths.
+  return value.slice(0, 19) + fraction.padEnd(6, '0');
+}
 const nonnegativeInteger=(v:unknown) => typeof v==='number' && Number.isSafeInteger(v) && v>=0;
 const urgencyCodes=['on_track','stale_observations','no_data','expired_history','complete_window_violation','negative_observed_budget','low_observed_budget','high_1h_burn','evaluation_unavailable','not_yet_eligible','zero_traffic','incomplete_coverage','short_burn_unavailable','budget_below_half','excluded'];
 function validSlo(value:unknown):value is Record<string,unknown> {
@@ -266,28 +273,32 @@ async function requestUncached<T>(path: string, init: RequestInit = {}, mutation
     typeof item.rolling_window_seconds === 'number' && Number.isSafeInteger(item.rolling_window_seconds) && item.rolling_window_seconds > 0 &&
     typeof item.cadence_seconds === 'number' && Number.isSafeInteger(item.cadence_seconds) && item.cadence_seconds > 0 &&
     item.rolling_window_seconds % item.cadence_seconds === 0 && uuid(item.service_id) && uuid(item.sli_id);
-  const maintenance = (item: unknown): item is components['schemas']['MaintenanceWindow'] => record(item) && uuid(item.id) &&
-    (!maintenanceID || item.id === maintenanceID) && version(item.revision) &&
-    typeof item.title === 'string' && item.title.length > 0 && typeof item.reason === 'string' &&
-    Array.isArray(item.slo_ids) && item.slo_ids.every(uuid) &&
-    ['create', 'edit', 'end', 'cancel', 'withdraw'].includes(String(item.operation)) &&
-    typeof item.tombstone === 'boolean' && utcTimestamp(item.start) && utcTimestamp(item.end) &&
-    Date.parse(String(item.start)) < Date.parse(String(item.end)) && utcTimestamp(item.created_at) && utcTimestamp(item.updated_at) &&
-    uuid(item.creator_id) && uuid(item.actor_id) && uuid(item.audit_id);
   const overlayBounds = maintenanceSloID ? new URLSearchParams(path.split('?')[1] ?? '') : undefined;
-  const overlayStart = Date.parse(overlayBounds?.get('start') ?? '');
-  const overlayEnd = Date.parse(overlayBounds?.get('end') ?? '');
+  const overlayStart = maintenanceTimeKey(overlayBounds?.get('start'));
+  const overlayEnd = maintenanceTimeKey(overlayBounds?.get('end'));
+  const maintenance = (item: unknown): item is components['schemas']['MaintenanceWindow'] => {
+    if (!record(item)) return false;
+    const start = maintenanceTimeKey(item.start);
+    const end = maintenanceTimeKey(item.end);
+    return uuid(item.id) && (!maintenanceID || item.id === maintenanceID) && version(item.revision) &&
+      typeof item.title === 'string' && item.title.length > 0 && typeof item.reason === 'string' &&
+      Array.isArray(item.slo_ids) && item.slo_ids.every(uuid) &&
+      ['create', 'edit', 'end', 'cancel', 'withdraw'].includes(String(item.operation)) &&
+      typeof item.tombstone === 'boolean' && start !== undefined && end !== undefined && start < end &&
+      (!maintenanceSloID || (item.tombstone === false && item.slo_ids.includes(maintenanceSloID) &&
+        overlayStart !== undefined && overlayEnd !== undefined && start < overlayEnd && overlayStart < end)) &&
+      utcTimestamp(item.created_at) && utcTimestamp(item.updated_at) && uuid(item.creator_id) && uuid(item.actor_id) && uuid(item.audit_id);
+  };
   const overflow = value.overflow;
+  const overflowStart = record(overflow) ? maintenanceTimeKey(overflow.start) : undefined;
+  const overflowEnd = record(overflow) ? maintenanceTimeKey(overflow.end) : undefined;
   const validOverflow = overflow === undefined || (!!maintenanceSloID && !!value.next_cursor &&
     record(overflow) && typeof overflow.count === 'string' && /^[1-9][0-9]*$/.test(overflow.count) &&
-    utcTimestamp(overflow.start) && utcTimestamp(overflow.end) &&
-    Date.parse(String(overflow.start)) >= overlayStart && Date.parse(String(overflow.end)) <= overlayEnd &&
-    Date.parse(String(overflow.start)) <= Date.parse(String(overflow.end)));
+    overlayStart !== undefined && overlayEnd !== undefined && overflowStart !== undefined && overflowEnd !== undefined &&
+    overflowStart >= overlayStart && overflowEnd <= overlayEnd && overflowStart <= overflowEnd);
   const valid = isMaintenanceRoot || maintenanceID || maintenanceSloID
     ? maintenanceSloID || isMaintenanceRoot && !init.method
-      ? Array.isArray(value.items) && value.items.length <= 200 && value.items.every(item =>
-        maintenance(item) && (!maintenanceSloID || (item.tombstone === false &&
-          item.slo_ids.includes(maintenanceSloID) && Date.parse(item.start) < overlayEnd && overlayStart < Date.parse(item.end)))) &&
+      ? Array.isArray(value.items) && value.items.length <= 200 && value.items.every(maintenance) &&
         (value.next_cursor === undefined || typeof value.next_cursor === 'string' && value.next_cursor.length <= 512) && validOverflow
       : maintenance(value) && response.headers.get('ETag') === `"maintenance:${value.id}:${value.revision}"`
     : isOverview ? uuid(value.snapshot_id)&&value.snapshot_id!=='00000000-0000-0000-0000-000000000000'&&validOperationalOverview(value)

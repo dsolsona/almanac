@@ -118,6 +118,24 @@ test('dense maintenance shows a counted marker and keeps later windows inspectab
  await expect(page.getByRole('link', { name: 'Maintenance 201', exact: true })).toBeVisible();
 });
 
+test('maintenance overlapping the chart range by one microsecond remains inspectable', async ({page}) => {
+ const detail = sloFixture();
+ detail.range.effective_end = '2026-11-12T10:00:00.0001Z';
+ await installSloFixture(page, detail);
+ const id = '70000000-0000-4000-8000-000000000001';
+ const start = '2026-11-12T10:00:00.000099Z';
+ const end = '2026-11-12T10:30:00Z';
+ const title = 'Maintenance at the range boundary';
+ await page.route(`**/api/v1/slos/${sloID}/maintenance?*`, route => {
+  expect(new URL(route.request().url()).searchParams.get('end')).toBe(detail.range.effective_end);
+  return route.fulfill({json:{items:[{id, title, reason:'Scheduled work.', start, end, tombstone:false, slo_ids:[sloID],
+   revision:'1', operation:'create', created_at:start, updated_at:start, creator_id:id, actor_id:id, audit_id:id}]}});
+ });
+ await page.goto(`/slos/${sloID}?range=7d`);
+ await page.locator('#slo-maintenance-periods > summary').click();
+ await expect(page.getByRole('link', {name:title, exact:true})).toBeVisible();
+});
+
 test('maintenance bands identify the whole period and the budget tooltip escapes the card', { tag: '@matrix' }, async ({ page }, info) => {
  const theme = info.project.name.endsWith('dark') ? 'dark' : 'light';
  await page.addInitScript(value => localStorage.setItem('almanac-theme', value), theme);

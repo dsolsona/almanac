@@ -30,3 +30,19 @@ test('tooltip follows vertical movement within the same sample',async({page})=>{
  const x=marker.x+marker.width/2;await page.mouse.move(x,marker.y+10);await expect(chart.getByRole('tooltip')).toContainText('65%');const before=(await chart.getByRole('tooltip').boundingBox())!.y;
  await page.mouse.move(x,marker.y+40);await expect(chart.getByRole('tooltip')).toContainText('65%');await expect.poll(async()=>(await chart.getByRole('tooltip').boundingBox())!.y).not.toBe(before);
 });
+
+test('pointer between sparse samples keeps the selected dot visible', async ({page}) => {
+ await page.goto('/design-system');
+ await page.getByRole('button', {name:'Charts', exact:true}).click();
+ const chart = page.locator('.slo-history-chart.budget');
+ const sample = chart.locator('.qualified-point.partial');
+ await sample.evaluate(node => node.scrollIntoView({block:'center'}));
+ const marker = (await sample.boundingBox())!;
+ await page.mouse.move(marker.x - 70, marker.y - 25);
+ const tooltip = chart.getByRole('tooltip');
+ await expect(tooltip).toContainText('65%');
+ const tip = (await tooltip.boundingBox())!;
+ const dot = (await chart.locator('.inspection-dot').boundingBox())!;
+ expect(tip.x > dot.x + dot.width || tip.x + tip.width < dot.x ||
+   tip.y > dot.y + dot.height || tip.y + tip.height < dot.y).toBe(true);
+});
