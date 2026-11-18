@@ -273,6 +273,7 @@ type Querier interface {
 	// Enrich only a bounded canonical page; missing receipt IDs use the caller's natural-key fallback.
 	ListSliObservations(ctx context.Context, arg ListSliObservationsParams) ([]ListSliObservationsRow, error)
 	ListSlis(ctx context.Context, arg ListSlisParams) ([]ListSlisRow, error)
+	ListSloMaintenanceOverlaps(ctx context.Context, arg ListSloMaintenanceOverlapsParams) ([]ListSloMaintenanceOverlapsRow, error)
 	// Reuse classification scalars without expanding them through every presentation
 	// expression. Fetch chart payloads and construct metadata only for the chosen page.
 	// Keep assembly above the scalar/reference sort, including maximum API pages.

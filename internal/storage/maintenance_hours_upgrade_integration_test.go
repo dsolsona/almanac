@@ -8,7 +8,7 @@ func TestIntegrationMaintenanceHourPopulatedUpgrade(t *testing.T) {
 	t.Parallel()
 	f, in := hourFixture(t)
 	dropMaintenanceCompatibilityFixture(t, f.conn)
-	if _, err := f.conn.Exec(t.Context(), `DROP TABLE almanac_slo_maintenance_hours; DELETE FROM almanac_schema_migrations WHERE version>=63`); err != nil {
+	if _, err := f.conn.Exec(t.Context(), `DROP TABLE almanac_slo_maintenance_hours; DROP INDEX public.almanac_maintenance_revision_range_idx; DELETE FROM almanac_schema_migrations WHERE version>=63`); err != nil {
 		t.Fatal(err)
 	}
 	snapshot := func() string {
@@ -26,7 +26,7 @@ func TestIntegrationMaintenanceHourPopulatedUpgrade(t *testing.T) {
 	}
 	before := snapshot()
 	result, err := Upgrade(t.Context(), f.f.databaseURL)
-	if err != nil || result.Applied != 6 || result.DatabaseSchemaVersion != 68 {
+	if err != nil || result.Applied != 7 || result.DatabaseSchemaVersion != 69 {
 		t.Fatalf("upgrade %+v %v", result, err)
 	}
 	if snapshot() != before {

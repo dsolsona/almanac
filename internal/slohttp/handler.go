@@ -85,6 +85,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/v1/"), "/")
+	if parts[0] == "maintenance" {
+		h.maintenance(w, r, reqID, proof, parts, query)
+		return
+	}
 	if len(parts) == 0 || (parts[0] != "services" && parts[0] != "slos") {
 		problem(w, 404, "not_found", reqID)
 		return
@@ -101,6 +105,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(parts[1])
 	if err != nil || id.String() != parts[1] || id == uuid.Nil {
 		problem(w, 404, "not_found", reqID)
+		return
+	}
+	if len(parts) == 3 && isSlo && parts[2] == "maintenance" {
+		h.sloMaintenance(w, r, reqID, proof, parts[1], query)
 		return
 	}
 	if len(parts) == 3 && isSlo && parts[2] == "evaluation" {

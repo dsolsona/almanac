@@ -869,6 +869,132 @@ paths:
         '200': {description: Exact persisted interval outcomes, content: {application/json: {schema: {$ref: '#/components/schemas/SliObservationPage'}}}}
         '404': {description: SLI not found, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
         'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/maintenance:
+    get:
+      operationId: listMaintenance
+      summary: List maintenance windows
+      security: [{SessionCookie: []}]
+      parameters:
+        - {$ref: '#/components/parameters/PageLimit'}
+        - {$ref: '#/components/parameters/PageCursor'}
+      responses:
+        '200':
+          description: List maintenance windows
+          content: {application/json: {schema: {$ref: '#/components/schemas/MaintenancePage'}}}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+    post:
+      operationId: createMaintenance
+      summary: Create an explicit-SLO maintenance window
+      security: [{SessionCookie: [], CsrfToken: []}]
+      parameters:
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/MaintenanceWrite'}}}}
+      responses:
+        '201':
+          description: Create an explicit-SLO maintenance window
+          headers:
+            ETag: {schema: {type: string}}
+            Location: {schema: {type: string}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/MaintenanceWindow'}}}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/maintenance/{maintenance_id}:
+    get:
+      operationId: getMaintenance
+      summary: Read latest or historical maintenance revision
+      security: [{SessionCookie: []}]
+      parameters:
+        - {name: maintenance_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: revision, in: query, description: Canonical positive signed 64-bit decimal revision., schema: {type: string, pattern: '^[1-9][0-9]{0,18}$'}}
+      responses:
+        '200':
+          description: Read latest or historical maintenance revision
+          headers:
+            ETag: {schema: {type: string}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/MaintenanceWindow'}}}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+    put:
+      operationId: editMaintenance
+      summary: Replace maintenance window details
+      security: [{SessionCookie: [], CsrfToken: []}]
+      parameters:
+        - {name: maintenance_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: If-Match, in: header, required: true, description: Strong ETag of the maintenance revision., schema: {type: string}}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/MaintenanceWrite'}}}}
+      responses:
+        '200':
+          description: Replace maintenance window details
+          headers:
+            ETag: {schema: {type: string}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/MaintenanceWindow'}}}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/maintenance/{maintenance_id}/end:
+    post:
+      operationId: endMaintenance
+      summary: End maintenance prospectively
+      security: [{SessionCookie: [], CsrfToken: []}]
+      parameters:
+        - {name: maintenance_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: If-Match, in: header, required: true, description: Strong ETag of the maintenance revision., schema: {type: string}}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/MaintenanceEnd'}}}}
+      responses:
+        '200':
+          description: End maintenance prospectively
+          headers:
+            ETag: {schema: {type: string}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/MaintenanceWindow'}}}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/maintenance/{maintenance_id}/cancel:
+    post:
+      operationId: cancelMaintenance
+      summary: Cancel scheduled maintenance
+      security: [{SessionCookie: [], CsrfToken: []}]
+      parameters:
+        - {name: maintenance_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: If-Match, in: header, required: true, description: Strong ETag of the maintenance revision., schema: {type: string}}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/MaintenanceReason'}}}}
+      responses:
+        '200':
+          description: Cancel scheduled maintenance
+          headers:
+            ETag: {schema: {type: string}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/MaintenanceWindow'}}}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/maintenance/{maintenance_id}/withdraw:
+    post:
+      operationId: withdrawMaintenance
+      summary: Include maintenance events again
+      security: [{SessionCookie: [], CsrfToken: []}]
+      parameters:
+        - {name: maintenance_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: If-Match, in: header, required: true, description: Strong ETag of the maintenance revision., schema: {type: string}}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/MaintenanceReason'}}}}
+      responses:
+        '200':
+          description: Include maintenance events again
+          headers:
+            ETag: {schema: {type: string}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/MaintenanceWindow'}}}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/slos/{slo_id}/maintenance:
+    get:
+      operationId: listSloMaintenance
+      summary: List effective maintenance overlapping a UTC timeline range
+      security: [{SessionCookie: []}]
+      parameters:
+        - {$ref: '#/components/parameters/SloId'}
+        - {$ref: '#/components/parameters/PageLimit'}
+        - {$ref: '#/components/parameters/PageCursor'}
+        - {name: start, in: query, required: true, description: UTC instant with at most microsecond precision., schema: {type: string, format: date-time}}
+        - {name: end, in: query, required: true, description: UTC instant with at most microsecond precision., schema: {type: string, format: date-time}}
+      responses:
+        '200':
+          description: List effective maintenance overlapping a UTC timeline range
+          content: {application/json: {schema: {$ref: '#/components/schemas/MaintenancePage'}}}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
   /api/v1/services:
     get:
       operationId: listServices
@@ -2975,6 +3101,54 @@ components:
         state: {type: string, enum: [pending, failed]}
         retry_after_seconds: {type: integer, minimum: 0, maximum: 2}
         details_url: {type: string, maxLength: 128, description: Relative authorized URL for bounded job diagnostics, when one objective is addressed}
+    MaintenanceWindow:
+      type: object
+      additionalProperties: false
+      required: [id, title, reason, slo_ids, revision, operation, tombstone, start, end, created_at, updated_at, creator_id, actor_id, audit_id]
+      properties:
+        id: {type: string, format: uuid}
+        title: {type: string, minLength: 1, maxLength: 512, description: Maximum 512 UTF-8 bytes.}
+        reason: {type: string, minLength: 1, maxLength: 4096, description: Maximum 4096 UTF-8 bytes.}
+        slo_ids: {type: array, minItems: 1, maxItems: 100, uniqueItems: true, items: {type: string, format: uuid}}
+        revision: {type: string, pattern: '^[1-9][0-9]{0,18}$'}
+        operation: {type: string, enum: [create, edit, end, cancel, withdraw]}
+        tombstone: {type: boolean}
+        start: {type: string, format: date-time}
+        end: {type: string, format: date-time}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        creator_id: {type: string, format: uuid}
+        actor_id: {type: string, format: uuid}
+        audit_id: {type: string, format: uuid}
+    MaintenanceWrite:
+      type: object
+      additionalProperties: false
+      required: [title, reason, start, end, slo_ids]
+      properties:
+        title: {type: string, minLength: 1, maxLength: 512, description: Maximum 512 UTF-8 bytes.}
+        reason: {type: string, minLength: 1, maxLength: 4096, description: Maximum 4096 UTF-8 bytes.}
+        start: {type: string, format: date-time}
+        end: {type: string, format: date-time}
+        slo_ids: {type: array, minItems: 1, maxItems: 100, uniqueItems: true, items: {type: string, format: uuid}}
+    MaintenanceReason:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason: {type: string, minLength: 1, maxLength: 4096, description: Maximum 4096 UTF-8 bytes.}
+    MaintenanceEnd:
+      type: object
+      additionalProperties: false
+      required: [reason, end]
+      properties:
+        reason: {type: string, minLength: 1, maxLength: 4096, description: Maximum 4096 UTF-8 bytes.}
+        end: {type: string, format: date-time}
+    MaintenancePage:
+      type: object
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/MaintenanceWindow'}}
+        next_cursor: {type: string}
     Problem:
       type: object
       required: [code, message, request_id, field_errors]
@@ -2983,6 +3157,9 @@ components:
         message: {type: string}
         preparation: {$ref: '#/components/schemas/DerivedPreparation'}
         request_id: {type: string, pattern: '^[0-9a-f]{32}$'}
+        current_revision: {type: string, description: Current maintenance revision after a stale write.}
+        suggested_start: {type: string, format: date-time}
+        suggested_end: {type: string, format: date-time}
         blocking_slo_ids: {type: array, items: {type: string, format: uuid}}
         blocking_service_ids: {type: array, items: {type: string, format: uuid}}
         field_errors:

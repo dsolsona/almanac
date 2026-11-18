@@ -327,6 +327,62 @@ func (q *Queries) ListMaintenanceScopes(ctx context.Context, arg ListMaintenance
 	return items, nil
 }
 
+const listSloMaintenanceOverlaps = `-- name: ListSloMaintenanceOverlaps :many
+SELECT r.exclusion_id, r.revision, r.starts_at
+FROM public.almanac_maintenance_exclusion_scopes s
+JOIN public.almanac_maintenance_exclusion_revisions r ON r.exclusion_id = s.exclusion_id AND r.revision = s.revision
+WHERE s.slo_id = $1
+  AND NOT r.tombstone
+  AND tstzrange(r.starts_at, r.ends_at, '[)') &&
+      tstzrange($2::timestamptz, $3::timestamptz, '[)')
+  AND (r.starts_at, r.exclusion_id) > ($4::timestamptz, $5::uuid)
+  AND r.revision = (SELECT current_revision FROM public.almanac_maintenance_exclusions WHERE id = r.exclusion_id)
+ORDER BY r.starts_at, r.exclusion_id
+LIMIT $6
+`
+
+type ListSloMaintenanceOverlapsParams struct {
+	SloID       pgtype.UUID        `json:"slo_id"`
+	WindowStart pgtype.Timestamptz `json:"window_start"`
+	WindowEnd   pgtype.Timestamptz `json:"window_end"`
+	AfterTime   pgtype.Timestamptz `json:"after_time"`
+	AfterID     pgtype.UUID        `json:"after_id"`
+	PageLimit   int32              `json:"page_limit"`
+}
+
+type ListSloMaintenanceOverlapsRow struct {
+	ExclusionID pgtype.UUID        `json:"exclusion_id"`
+	Revision    int64              `json:"revision"`
+	StartsAt    pgtype.Timestamptz `json:"starts_at"`
+}
+
+func (q *Queries) ListSloMaintenanceOverlaps(ctx context.Context, arg ListSloMaintenanceOverlapsParams) ([]ListSloMaintenanceOverlapsRow, error) {
+	rows, err := q.db.Query(ctx, listSloMaintenanceOverlaps,
+		arg.SloID,
+		arg.WindowStart,
+		arg.WindowEnd,
+		arg.AfterTime,
+		arg.AfterID,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListSloMaintenanceOverlapsRow{}
+	for rows.Next() {
+		var i ListSloMaintenanceOverlapsRow
+		if err := rows.Scan(&i.ExclusionID, &i.Revision, &i.StartsAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockMaintenanceIdentity = `-- name: LockMaintenanceIdentity :one
 SELECT id, current_revision, creator_id, created_at, updated_at FROM public.almanac_maintenance_exclusions WHERE id=$1 FOR UPDATE
 `

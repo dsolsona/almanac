@@ -354,6 +354,7 @@ func runObjectiveCLIJourney(t *testing.T, binary, dir, profile, sliID, databaseU
 	if err != nil || response.StatusCode != 200 || json.Unmarshal(body, &direct) != nil || direct.Performance.Good == nil || direct.Performance.Total == nil || direct.Performance.Attainment == nil || direct.Performance.Burn == nil || *direct.Performance.Good != *cli.Performance.Good || *direct.Performance.Total != *cli.Performance.Total || *direct.Performance.Attainment != *cli.Performance.Attainment || *direct.Performance.Burn != *cli.Performance.Burn || direct.Quality.ExpectedIntervals != cli.Quality.ExpectedIntervals {
 		t.Fatal("CLI and API evaluation differ")
 	}
+	verifyMaintenanceHTTP(t, httpClient, baseURL, record.Session, objective)
 }
 func containsObjectiveService(values []api.Service, id string) bool {
 	for _, value := range values {
