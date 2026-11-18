@@ -35,6 +35,16 @@ func TestIntegrationMaintenanceOverlayCursorAndCurrentScope(t *testing.T) {
 	if err != nil || len(page.Items) != 1 || page.Items[0].ID != second.ID || page.NextCursor != "" {
 		t.Fatalf("next page %+v: %v", page, err)
 	}
+	fractional := list
+	fractional.Cursor = ""
+	fractional.Limit = 2
+	fractional.Start = first.Start.Add(time.Microsecond)
+	fractional.End = second.Start.Add(time.Microsecond)
+	fractionalPage, err := ListSloMaintenance(ctx, database, fractional)
+	if err != nil || len(fractionalPage.Items) != 2 || fractionalPage.Items[0].ID != first.ID ||
+		fractionalPage.Items[1].ID != second.ID || fractionalPage.NextCursor != "" {
+		t.Fatalf("fractional overlap page %+v: %v", fractionalPage, err)
+	}
 	wrongRange := list
 	wrongRange.End = list.End.Add(time.Microsecond)
 	if _, err = ListSloMaintenance(ctx, database, wrongRange); !errors.Is(err, ErrMaintenanceInvalid) {

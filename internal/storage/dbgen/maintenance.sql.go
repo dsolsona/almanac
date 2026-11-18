@@ -330,13 +330,13 @@ func (q *Queries) ListMaintenanceScopes(ctx context.Context, arg ListMaintenance
 const listSloMaintenanceOverlaps = `-- name: ListSloMaintenanceOverlaps :many
 SELECT r.exclusion_id, r.revision, r.starts_at
 FROM public.almanac_maintenance_exclusion_scopes s
-JOIN public.almanac_maintenance_exclusions e ON e.id = s.exclusion_id AND e.current_revision = s.revision
 JOIN public.almanac_maintenance_exclusion_revisions r ON r.exclusion_id = s.exclusion_id AND r.revision = s.revision
 WHERE s.slo_id = $1
   AND NOT r.tombstone
   AND tstzrange(r.starts_at, r.ends_at, '[)') &&
       tstzrange($2::timestamptz, $3::timestamptz, '[)')
   AND (r.starts_at, r.exclusion_id) > ($4::timestamptz, $5::uuid)
+  AND r.revision = (SELECT current_revision FROM public.almanac_maintenance_exclusions WHERE id = r.exclusion_id)
 ORDER BY r.starts_at, r.exclusion_id
 LIMIT $6
 `
