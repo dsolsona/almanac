@@ -304,6 +304,9 @@ func problemFailure(ctx context.Context, mutation bool, status int, data []byte)
 			if problem.SuggestedStart != nil && problem.SuggestedEnd != nil && validTime(*problem.SuggestedStart) && validTime(*problem.SuggestedEnd) {
 				failure.Message += " Suggested bounds: " + problem.SuggestedStart.Format(time.RFC3339) + " to " + problem.SuggestedEnd.Format(time.RFC3339) + "."
 			}
+		case status == 400 && problem.Code == "maintenance_history_unavailable":
+			failure.BackendCode = problem.Code
+			failure.Message = "The observation grid for part of this period is unknown. Choose a range with recorded grid history."
 		case status == 409 && mutation && problem.Code == "maintenance_write_retry":
 			failure.BackendCode = problem.Code
 			failure.Message = "The affected SLO inventory changed or the scheduled start passed during validation. Retry the same request with the same idempotency key."

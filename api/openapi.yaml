@@ -1025,6 +1025,9 @@ paths:
             ETag: {schema: {type: string}}
             Location: {schema: {type: string}}
           content: {application/json: {schema: {$ref: '#/components/schemas/ScopedMaintenanceWindow'}}}
+        '400':
+          description: Invalid fields or bounds, or required historical observation grid unavailable (maintenance_history_unavailable).
+          content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}
         '409':
           description: >-
             A revision or request key conflicted (maintenance_conflict). If the affected SLO inventory
@@ -1064,6 +1067,9 @@ paths:
           headers:
             ETag: {schema: {type: string}}
           content: {application/json: {schema: {$ref: '#/components/schemas/ScopedMaintenanceWindow'}}}
+        '400':
+          description: Invalid fields or bounds, or required historical observation grid unavailable (maintenance_history_unavailable).
+          content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}
         '409':
           description: >-
             A revision or request key conflicted (maintenance_conflict). If the affected SLO inventory

@@ -310,6 +310,8 @@ func maintenanceError(w http.ResponseWriter, err error, requestID string) {
 		}
 	case errors.Is(err, storage.ErrMaintenanceSnapshotChanged):
 		status, p.Code, p.Message = 409, "maintenance_snapshot_changed", "The maintenance inventory changed. Reload the first page."
+	case errors.Is(err, storage.ErrMaintenanceHistoricalGridUnavailable):
+		status, p.Code, p.Message = 400, "maintenance_history_unavailable", "The observation grid for part of this period is unknown. Choose a range with recorded grid history."
 	case errors.Is(err, storage.ErrMaintenanceAlignment):
 		status, p.Code, p.Message = 400, "maintenance_alignment", "Choose bounds aligned with the affected SLO observation grids."
 		if alignment, ok := errors.AsType[*storage.MaintenanceAlignmentError](err); ok {

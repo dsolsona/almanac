@@ -194,12 +194,14 @@ func TestMaintenanceSnapshotRecoveryGuidance(t *testing.T) {
 	for _, tc := range []struct {
 		code, message string
 		mutation      bool
+		status        int
 	}{
-		{"maintenance_write_retry", "The affected SLO inventory changed or the scheduled start passed during validation. Retry the same request with the same idempotency key.", true},
-		{"maintenance_snapshot_changed", "The maintenance inventory changed. Restart from the first page.", false},
+		{"maintenance_write_retry", "The affected SLO inventory changed or the scheduled start passed during validation. Retry the same request with the same idempotency key.", true, http.StatusConflict},
+		{"maintenance_snapshot_changed", "The maintenance inventory changed. Restart from the first page.", false, http.StatusConflict},
+		{"maintenance_history_unavailable", "The observation grid for part of this period is unknown. Choose a range with recorded grid history.", true, http.StatusBadRequest},
 	} {
 		body := []byte(`{"code":"` + tc.code + `"}`)
-		err := problemFailure(t.Context(), tc.mutation, http.StatusConflict, body)
+		err := problemFailure(t.Context(), tc.mutation, tc.status, body)
 		failure, ok := errors.AsType[*datasourceclient.Failure](err)
 		if !ok || failure.BackendCode != tc.code || failure.Message != tc.message || failure.Unknown {
 			t.Fatalf("wrong recovery for %s: %+v", tc.code, err)

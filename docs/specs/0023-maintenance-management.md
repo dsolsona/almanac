@@ -76,6 +76,9 @@ Store exact UTC `[start,end)` bounds. Show the chosen timezone and exact UTC pre
 Reject nonexistent/ambiguous local input unless an unambiguous instant is selected.
 Alignment follows SPEC-0016: no silent expansion or invented fractional counts.
 Reason, duration, scope, roles and expected revisions are validated atomically.
+When upgrading from versions that omitted some observation grid changes, preserve
+previously recorded coverage where the grid history is unavailable. Reject a new
+service-scoped historical declaration that needs that grid history to validate its bounds.
 
 ### UI presentation
 

@@ -83,6 +83,20 @@ func TestMaintenanceSnapshotProblemsDistinguishReadAndWriteRecovery(t *testing.T
 	}
 }
 
+func TestMaintenanceWriteReportsUnavailableHistoricalGrid(t *testing.T) {
+	t.Parallel()
+	w := httptest.NewRecorder()
+	maintenanceWriteError(w, storage.ErrMaintenanceHistoricalGridUnavailable, "request-id")
+	var problem api.Problem
+	if err := json.Unmarshal(w.Body.Bytes(), &problem); err != nil {
+		t.Fatal(err)
+	}
+	if w.Code != http.StatusBadRequest || problem.Code != "maintenance_history_unavailable" ||
+		problem.SuggestedStart != nil || problem.SuggestedEnd != nil {
+		t.Fatalf("wrong unavailable-history response: %d %s", w.Code, w.Body.String())
+	}
+}
+
 func TestLegacyEvaluationMaintenanceIsUnavailableWithoutPreparation(t *testing.T) {
 	t.Parallel()
 	w := httptest.NewRecorder()

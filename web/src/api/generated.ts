@@ -6106,6 +6106,15 @@ export interface operations {
                     "application/json": components["schemas"]["ScopedMaintenanceWindow"];
                 };
             };
+            /** @description Invalid fields or bounds, or required historical observation grid unavailable (maintenance_history_unavailable). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description A revision or request key conflicted (maintenance_conflict). If the affected SLO inventory changed or the scheduled start passed during validation (maintenance_write_retry), retry the same request with the same idempotency key. */
             409: {
                 headers: {
@@ -6193,6 +6202,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ScopedMaintenanceWindow"];
+                };
+            };
+            /** @description Invalid fields or bounds, or required historical observation grid unavailable (maintenance_history_unavailable). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
             /** @description A revision or request key conflicted (maintenance_conflict). If the affected SLO inventory changed or the scheduled start passed during validation (maintenance_write_retry), retry the same request with the same idempotency key. */

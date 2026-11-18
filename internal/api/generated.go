@@ -20600,6 +20600,8 @@ type CreateScopedMaintenanceResponse struct {
 	HTTPResponse *http.Response
 	// JSON201 the response for an HTTP 201 `application/json` response
 	JSON201 *ScopedMaintenanceWindow
+	// ApplicationproblemJSON400 the response for an HTTP 400 `application/problem+json` response
+	ApplicationproblemJSON400 *Problem
 	// ApplicationproblemJSON409 the response for an HTTP 409 `application/problem+json` response
 	ApplicationproblemJSON409 *Problem
 	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
@@ -20611,6 +20613,11 @@ type CreateScopedMaintenanceResponse struct {
 // GetJSON201 returns the response for an HTTP 201 `application/json` response
 func (r CreateScopedMaintenanceResponse) GetJSON201() *ScopedMaintenanceWindow {
 	return r.JSON201
+}
+
+// GetApplicationproblemJSON400 returns the response for an HTTP 400 `application/problem+json` response
+func (r CreateScopedMaintenanceResponse) GetApplicationproblemJSON400() *Problem {
+	return r.ApplicationproblemJSON400
 }
 
 // GetApplicationproblemJSON409 returns the response for an HTTP 409 `application/problem+json` response
@@ -20772,6 +20779,8 @@ type EditScopedMaintenanceResponse struct {
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *ScopedMaintenanceWindow
+	// ApplicationproblemJSON400 the response for an HTTP 400 `application/problem+json` response
+	ApplicationproblemJSON400 *Problem
 	// ApplicationproblemJSON409 the response for an HTTP 409 `application/problem+json` response
 	ApplicationproblemJSON409 *Problem
 	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
@@ -20783,6 +20792,11 @@ type EditScopedMaintenanceResponse struct {
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r EditScopedMaintenanceResponse) GetJSON200() *ScopedMaintenanceWindow {
 	return r.JSON200
+}
+
+// GetApplicationproblemJSON400 returns the response for an HTTP 400 `application/problem+json` response
+func (r EditScopedMaintenanceResponse) GetApplicationproblemJSON400() *Problem {
+	return r.ApplicationproblemJSON400
 }
 
 // GetApplicationproblemJSON409 returns the response for an HTTP 409 `application/problem+json` response
@@ -27493,6 +27507,13 @@ func ParseCreateScopedMaintenanceResponse(rsp *http.Response) (*CreateScopedMain
 		}
 		response.JSON201 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON400 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -27638,6 +27659,13 @@ func ParseEditScopedMaintenanceResponse(rsp *http.Response) (*EditScopedMaintena
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON400 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
 		var dest Problem
