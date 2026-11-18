@@ -12,9 +12,10 @@ SELECT * FROM public.almanac_maintenance_builds WHERE id=$1;
 UPDATE public.almanac_maintenance_builds SET lease_token=$2,lease_until=$3 WHERE id=$1;
 -- name: ReadMaintenanceCompilerEvents :many
 WITH page AS MATERIALIZED (
- SELECT c.* FROM public.almanac_slo_exclusion_changes c WHERE c.slo_id=$1 AND c.revision>sqlc.arg(after_revision)::bigint AND c.revision<=sqlc.arg(target_revision)::bigint ORDER BY c.revision LIMIT sqlc.arg(page_limit)::integer
+ SELECT c.slo_id, c.revision, c.exclusion_id, c.exclusion_revision, c.included, c.effective_coverage
+ FROM public.almanac_slo_exclusion_changes c WHERE c.slo_id=$1 AND c.revision>sqlc.arg(after_revision)::bigint AND c.revision<=sqlc.arg(target_revision)::bigint ORDER BY c.revision LIMIT sqlc.arg(page_limit)::integer
 )
-SELECT p.*,r.starts_at,r.ends_at,r.tombstone,
+SELECT p.revision, p.exclusion_id, p.included, r.starts_at, r.ends_at, r.tombstone,
  (public.almanac_effective_maintenance_coverage(p.slo_id, p.exclusion_id, p.exclusion_revision, p.effective_coverage) IS NOT NULL)::boolean AS scoped
 FROM page p LEFT JOIN public.almanac_maintenance_exclusion_revisions r ON r.exclusion_id=p.exclusion_id AND r.revision=p.exclusion_revision ORDER BY p.revision;
 -- name: PutMaintenanceCompilerMember :exec

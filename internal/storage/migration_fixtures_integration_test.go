@@ -139,8 +139,7 @@ DROP FUNCTION public.almanac_record_active_slo_service(), public.almanac_fence_s
 DROP INDEX public.almanac_maintenance_cutoff_revision_idx, public.almanac_maintenance_all_services_range_idx;
 ALTER TABLE public.almanac_maintenance_exclusion_revisions DROP COLUMN scope_kind;`
 		case 72:
-			statement = `DROP TRIGGER almanac_slo_grid_initial ON public.almanac_slos;
-DROP TRIGGER almanac_slo_grid_changed ON public.almanac_slos;
+			statement = `DROP TRIGGER almanac_slo_grid_assignment ON public.almanac_slo_service_assignments;
 DROP TRIGGER almanac_maintenance_grid_service_state ON public.almanac_services;
 DROP FUNCTION public.almanac_record_maintenance_grid(), public.almanac_record_maintenance_grid_service_state(),
     public.almanac_adjust_maintenance_service_grid(uuid, integer, bigint),
@@ -151,6 +150,18 @@ DROP TABLE public.almanac_maintenance_service_grids, public.almanac_maintenance_
 DROP FUNCTION public.almanac_effective_maintenance_coverage(uuid, uuid, bigint, tstzmultirange);
 ALTER TABLE public.almanac_slo_exclusion_changes
     DROP CONSTRAINT almanac_service_effective_coverage_shape, DROP COLUMN effective_coverage;
+ALTER TABLE public.almanac_maintenance_change_sets
+    DROP CONSTRAINT almanac_maintenance_change_sets_range_count_check,
+    ALTER COLUMN range_count TYPE smallint,
+    ADD CHECK (range_count BETWEEN 0 AND 2);
+ALTER TABLE public.almanac_maintenance_changed_inputs
+    DROP CONSTRAINT almanac_maintenance_changed_inputs_part_check,
+    ALTER COLUMN part TYPE smallint,
+    ADD CHECK (part BETWEEN 1 AND 2);
+ALTER TABLE public.almanac_slo_exclusion_work
+    DROP CONSTRAINT almanac_slo_exclusion_work_progress_part_check,
+    ALTER COLUMN progress_part TYPE smallint,
+    ADD CHECK (progress_part BETWEEN 0 AND 2);
 
 DO $restore$
 DECLARE
@@ -175,6 +186,7 @@ ALTER TABLE public.almanac_maintenance_members
 DROP FUNCTION public.almanac_enqueue_service_maintenance_join(),
     public.almanac_maintenance_impact_intervals(uuid, bigint, timestamptz),
     public.almanac_slo_service_maintenance_pending(uuid, timestamptz, timestamptz),
+    public.almanac_service_maintenance_work_pending(),
     public.almanac_project_service_maintenance_member(uuid, uuid, bigint, timestamptz),
     public.almanac_service_maintenance_intervals(uuid, bigint, uuid, timestamptz);
 DROP TABLE public.almanac_service_maintenance_projection_completed, public.almanac_service_maintenance_membership_work;

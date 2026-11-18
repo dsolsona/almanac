@@ -555,8 +555,9 @@ type AlmanacServiceDependency struct {
 }
 
 type AlmanacServiceMaintenanceAuthority struct {
-	Singleton bool  `json:"singleton"`
-	Revision  int64 `json:"revision"`
+	Singleton         bool  `json:"singleton"`
+	Revision          int64 `json:"revision"`
+	InventoryRevision int64 `json:"inventory_revision"`
 }
 
 type AlmanacServiceMaintenanceMembershipWork struct {

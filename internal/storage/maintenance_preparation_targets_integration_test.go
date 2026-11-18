@@ -303,6 +303,17 @@ func TestIntegrationMaintenancePreparationTargetPopulatedUpgrade(t *testing.T) {
 	if snapshot() != before {
 		t.Fatal("upgrade modified existing queued work")
 	}
+	var assignments, current int
+	if err := f.conn.QueryRow(t.Context(), `
+		SELECT count(*), count(*) FILTER (WHERE a.definition_revision = s.definition_revision
+		  AND a.service_id = d.service_id AND a.effective_at = greatest(s.created_at, d.activated_at))
+		FROM almanac_slo_service_assignments a
+		JOIN almanac_slos s ON s.id = a.slo_id
+		JOIN almanac_slo_definitions d ON d.slo_id = s.id AND d.revision = s.definition_revision
+		WHERE a.slo_id=$1
+	`, scope.SloID).Scan(&assignments, &current); err != nil || assignments != 1 || current != 1 {
+		t.Fatalf("populated upgrade seeded %d assignments (%d current): %v", assignments, current, err)
+	}
 	if err := dbgen.New(f.conn).EnqueueMaintenancePreparation(t.Context(), p); err != nil {
 		t.Fatalf("upgraded queue rejected target: %v", err)
 	}

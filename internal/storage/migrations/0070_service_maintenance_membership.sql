@@ -6,7 +6,8 @@ LOCK TABLE public.almanac_slos IN SHARE ROW EXCLUSIVE MODE;
 
 CREATE TABLE public.almanac_service_maintenance_authority (
     singleton boolean PRIMARY KEY CHECK (singleton),
-    revision bigint NOT NULL DEFAULT 0 CHECK (revision >= 0)
+    revision bigint NOT NULL DEFAULT 0 CHECK (revision >= 0),
+    inventory_revision bigint NOT NULL DEFAULT 0 CHECK (inventory_revision >= 0)
 );
 INSERT INTO public.almanac_service_maintenance_authority(singleton) VALUES (true);
 
@@ -38,11 +39,16 @@ DECLARE
 BEGIN
     subject_id := NEW.id;
 
-    SELECT d.revision, d.service_id, d.cadence_seconds, GREATEST(s.updated_at, d.activated_at) AS effective_at
-    INTO STRICT current_assignment
+    SELECT d.revision, d.service_id, d.cadence_seconds, GREATEST(NEW.updated_at, d.activated_at) AS effective_at
+    INTO current_assignment
     FROM public.almanac_slos s
     JOIN public.almanac_slo_definitions d ON d.slo_id = s.id AND d.revision = s.definition_revision
-    WHERE s.id = subject_id;
+    WHERE s.id = subject_id AND s.definition_revision = NEW.definition_revision;
+    -- The deferred root may have passed through provisional revisions. Only
+    -- the matching event supplies a selection time for the committed grid.
+    IF NOT FOUND THEN
+        RETURN NULL;
+    END IF;
 
     SELECT a.definition_revision, a.service_id, a.effective_at, d.cadence_seconds
     INTO prior_assignment
@@ -63,7 +69,8 @@ BEGIN
         END IF;
     END IF;
 
-    UPDATE public.almanac_service_maintenance_authority SET revision = revision + 1 WHERE singleton;
+    UPDATE public.almanac_service_maintenance_authority
+    SET revision = revision + 1, inventory_revision = inventory_revision + 1 WHERE singleton;
     INSERT INTO public.almanac_slo_service_assignments(slo_id, definition_revision, service_id, effective_at)
     VALUES (subject_id, current_assignment.revision, current_assignment.service_id, current_assignment.effective_at);
     RETURN NULL;
@@ -87,7 +94,8 @@ CREATE TRIGGER almanac_slo_service_assignment_immutable
 
 CREATE FUNCTION public.almanac_fence_service_archive() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-    UPDATE public.almanac_service_maintenance_authority SET revision = revision + 1 WHERE singleton;
+    UPDATE public.almanac_service_maintenance_authority
+    SET revision = revision + 1, inventory_revision = inventory_revision + 1 WHERE singleton;
     RETURN NULL;
 END $$;
 CREATE TRIGGER almanac_service_maintenance_archive

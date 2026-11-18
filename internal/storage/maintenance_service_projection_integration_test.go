@@ -68,6 +68,12 @@ func TestIntegrationMaintenanceServiceProjectionPreservesMembership(t *testing.T
 	departure := window.Start.Add(2*time.Minute + 30*time.Second)
 	rejoin := window.Start.Add(7*time.Minute + 30*time.Second)
 	moveMaintenanceSLO(t, f, other.ID, 2, departure)
+	if witness := serviceSuppressionAt(t, f, f.ids[0], departure.Add(-time.Second)); witness == nil || witness.ID != window.ID {
+		t.Fatalf("departed SLO lost historical suppression: %+v", witness)
+	}
+	if witness := serviceSuppressionAt(t, f, f.ids[1], departure); witness == nil || witness.ID != window.ID {
+		t.Fatalf("remaining SLO lost direct suppression: %+v", witness)
+	}
 	if witness := serviceSuppressionAt(t, f, f.ids[0], departure); witness != nil {
 		t.Fatalf("departed SLO kept direct suppression: %+v", witness)
 	}
