@@ -219,6 +219,7 @@ it('preserves the exact bounds of an API-created window when editing its reason'
   const update = vi.spyOn(maintenanceClient, 'update').mockResolvedValue({ value: { ...record, revision: '2' }, etag: `"maintenance:${id}:2"` });
 
   render(<ScheduleMaintenance context={context} existing={{ value: record, etag }} />);
+  expect(screen.getByRole('heading', { name: 'Edit maintenance schedule' })).toHaveFocus();
   fireEvent.change(screen.getByLabelText('Reason'), { target: { value: 'Updated reason' } });
   fireEvent.click(screen.getByRole('button', { name: 'Save schedule' }));
   await act(async () => {});

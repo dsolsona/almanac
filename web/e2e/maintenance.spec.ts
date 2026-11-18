@@ -70,7 +70,7 @@ test('schedule and inspect explicit SLO maintenance in the deployed app', async 
     await expect(page.getByRole('link', { name: 'Checkout availability', exact: true })).toHaveAttribute('href', `/slos/${slo.body.id}`);
     await expect(page.getByText('Scheduled', { exact: true })).toBeVisible();
     await page.getByRole('link', { name: 'Edit schedule', exact: true }).click();
-    await expect(page.getByRole('heading', { name: 'Edit maintenance schedule', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Edit maintenance schedule', exact: true })).toBeFocused();
     await expect(page.getByRole('button', { name: 'Remove Checkout availability', exact: true })).toBeVisible();
     await page.getByRole('textbox', { name: 'Reason', exact: true }).fill('Apply the approved database update.');
     await page.getByRole('button', { name: 'Save schedule', exact: true }).click();

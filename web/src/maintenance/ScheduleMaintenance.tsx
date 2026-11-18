@@ -40,6 +40,7 @@ export function ScheduleMaintenance({ context, existing }: { context: AuthContex
   const route = useRef(location.pathname + location.search);
   const attempt = useRef<{ body: string; key: string } | null>(null);
   const notice = useRef<HTMLParagraphElement>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
   const saveButton = useRef<HTMLButtonElement>(null);
   const mounted = useRef(false);
   const revisionRead = useRef<AbortController | null>(null);
@@ -88,6 +89,8 @@ export function ScheduleMaintenance({ context, existing }: { context: AuthContex
   }, [term]);
 
   useEffect(() => { if (error) notice.current?.focus(); }, [error]);
+  const editing = Boolean(windowRecord);
+  useEffect(() => { if (editing) heading.current?.focus(); }, [editing]);
 
   const minutes = Number(duration);
   const start = Date.parse(`${day}T${time}Z`);
@@ -171,7 +174,7 @@ export function ScheduleMaintenance({ context, existing }: { context: AuthContex
   })}</ul>;
 
   return <>
-    <PageHeader title={windowRecord ? 'Edit maintenance schedule' : 'Schedule maintenance'}
+    <PageHeader headingRef={heading} title={windowRecord ? 'Edit maintenance schedule' : 'Schedule maintenance'}
       breadcrumb={{ href: returnTo, label: windowRecord?.title ?? 'Maintenance', current: windowRecord ? 'Edit schedule' : 'Schedule' }} />
     <form className="maintenance-form" onSubmit={submit}>
       <FormSection title="Context">
