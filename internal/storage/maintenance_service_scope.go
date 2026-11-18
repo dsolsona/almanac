@@ -29,7 +29,7 @@ func isServiceMaintenanceScope(kind MaintenanceScopeKind) bool {
 	return kind == MaintenanceScopeServices || kind == MaintenanceScopeAllServices
 }
 
-func validateServiceMaintenanceSelector(ctx context.Context, q *dbgen.Queries, input CreateMaintenanceInput, operation string) error {
+func validateServiceMaintenanceSelector(ctx context.Context, q *dbgen.Queries, input CreateMaintenanceInput, operation string, originalEnd, now time.Time) error {
 	services := make([]pgtype.UUID, len(input.ServiceIDs))
 	for i, id := range input.ServiceIDs {
 		services[i], _ = canonicalUUID(id)
@@ -49,12 +49,37 @@ func validateServiceMaintenanceSelector(ctx context.Context, q *dbgen.Queries, i
 	if err != nil {
 		return err
 	}
+	alignment := int64(1)
 	for _, cadence := range cadences {
-		if err := maintenanceAlignment(int64(cadence), input.Start, input.End, nil); err != nil {
-			return err
+		var ok bool
+		alignment, ok = mergeMaintenanceCadence(alignment, int64(cadence))
+		if !ok {
+			return &MaintenanceAlignmentError{}
 		}
 	}
-	return nil
+	if operation == "end" {
+		return serviceMaintenanceEndAlignment(alignment, input.Start, input.End, originalEnd, now)
+	}
+	return maintenanceAlignment(alignment, input.Start, input.End, nil)
+}
+
+func serviceMaintenanceEndAlignment(cadence int64, start, requestedEnd, originalEnd, now time.Time) error {
+	requested := requestedEnd.Unix()
+	if requested%cadence == 0 {
+		return nil
+	}
+
+	// The original start may predate a grid joining this scope. Preserve that
+	// start and prefer the next common end only if it shortens the window.
+	boundary := requested / cadence * cadence
+	if cadence < originalEnd.Unix()-boundary {
+		boundary += cadence
+	}
+	suggestion := time.Unix(boundary, 0).UTC()
+	if !suggestion.After(now) {
+		return &MaintenanceAlignmentError{}
+	}
+	return &MaintenanceAlignmentError{SuggestedStart: start, SuggestedEnd: suggestion}
 }
 
 type maintenanceSuppressionEvidence struct {

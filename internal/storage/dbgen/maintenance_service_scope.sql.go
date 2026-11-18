@@ -219,13 +219,15 @@ func (q *Queries) ListMaintenanceServiceSelectors(ctx context.Context, arg ListM
 }
 
 const listServiceMaintenanceCadences = `-- name: ListServiceMaintenanceCadences :many
-SELECT DISTINCT d.cadence_seconds
-FROM public.almanac_slo_definitions d
-JOIN public.almanac_slos slo ON slo.id = d.slo_id AND slo.definition_revision = d.revision
-JOIN public.almanac_services s ON s.id = d.service_id
-WHERE s.archived_at IS NULL
-  AND ($1::boolean OR d.service_id = ANY($2::uuid[]))
-ORDER BY d.cadence_seconds
+SELECT cadence_seconds FROM public.almanac_maintenance_installation_grids
+WHERE $1::boolean
+UNION
+SELECT g.cadence_seconds
+FROM public.almanac_maintenance_service_grids g
+JOIN public.almanac_services s ON s.id = g.service_id
+WHERE NOT $1::boolean AND s.archived_at IS NULL
+  AND g.service_id = ANY($2::uuid[])
+ORDER BY cadence_seconds
 `
 
 type ListServiceMaintenanceCadencesParams struct {

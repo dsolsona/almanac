@@ -305,7 +305,7 @@ func mutateMaintenance(ctx context.Context, databaseURL string, input CreateMain
 			return empty, err
 		}
 	} else if op == "create" || op == "edit" || op == "end" {
-		if err := validateServiceMaintenanceSelector(ctx, q, input, op); err != nil {
+		if err := validateServiceMaintenanceSelector(ctx, q, input, op, old.End, now); err != nil {
 			return empty, err
 		}
 	}
@@ -446,18 +446,25 @@ func validateMaintenanceGrids(ctx context.Context, q *dbgen.Queries, ids []strin
 			if g.MeasurementKind != "event_counts" || g.ComponentMode != "interval_count" || g.CadenceSeconds <= 0 {
 				return ErrMaintenanceInvalid
 			}
-			next := int64(g.CadenceSeconds)
-			a, b := cadence, next
-			for b != 0 {
-				a, b = b, a%b
-			}
-			if cadence/a > math.MaxInt64/next {
+			var ok bool
+			cadence, ok = mergeMaintenanceCadence(cadence, int64(g.CadenceSeconds))
+			if !ok {
 				return &MaintenanceAlignmentError{SloIDs: slices.Clone(ids)}
 			}
-			cadence = cadence / a * next
 		}
 	}
 	return maintenanceAlignment(cadence, start, end, ids)
+}
+
+func mergeMaintenanceCadence(current, next int64) (int64, bool) {
+	a, b := current, next
+	for b != 0 {
+		a, b = b, a%b
+	}
+	if current/a > math.MaxInt64/next {
+		return 0, false
+	}
+	return current / a * next, true
 }
 
 func maintenanceAlignment(cadence int64, start, end time.Time, ids []string) error {

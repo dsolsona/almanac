@@ -439,6 +439,11 @@ type AlmanacMaintenanceInputGuard struct {
 	Touched bool        `json:"touched"`
 }
 
+type AlmanacMaintenanceInstallationGrid struct {
+	CadenceSeconds int32 `json:"cadence_seconds"`
+	SloCount       int64 `json:"slo_count"`
+}
+
 type AlmanacMaintenanceMember struct {
 	BuildID           pgtype.UUID        `json:"build_id"`
 	ExclusionID       pgtype.UUID        `json:"exclusion_id"`
@@ -472,6 +477,12 @@ type AlmanacMaintenancePreparation struct {
 	CreatedAt                   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt                   pgtype.Timestamptz `json:"updated_at"`
 	AuthorityRetargetedRevision int64              `json:"authority_retargeted_revision"`
+}
+
+type AlmanacMaintenanceServiceGrid struct {
+	ServiceID      pgtype.UUID `json:"service_id"`
+	CadenceSeconds int32       `json:"cadence_seconds"`
+	SloCount       int64       `json:"slo_count"`
 }
 
 type AlmanacMaintenanceServiceSelector struct {
