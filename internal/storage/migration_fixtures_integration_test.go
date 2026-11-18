@@ -3,6 +3,7 @@
 package storage
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
@@ -104,6 +105,7 @@ func setLegacyMaintenanceAnalysis(t *testing.T, conn *pgx.Conn, legacy bool) {
 // Rewind the additive 0068 queue checkpoints without altering older work identity.
 func dropMaintenanceAuthorityFixture(t *testing.T, conn *pgx.Conn) {
 	t.Helper()
+	dropServiceMaintenanceFixture(t, conn)
 	if _, err := conn.Exec(t.Context(), `DROP INDEX public.almanac_authority_due_idx,
 public.almanac_maintenance_input_start_idx,public.almanac_maintenance_input_end_idx,
 public.almanac_maintenance_retarget_idx;
@@ -117,4 +119,91 @@ DROP COLUMN failure_reason,DROP COLUMN lease_token,DROP COLUMN lease_epoch,
 DROP COLUMN lease_until,DROP COLUMN claimed_version,DROP COLUMN claimed_revision,DROP COLUMN last_tick`); err != nil {
 		t.Fatalf("reconstruct pre-0068 authority queue: %v", err)
 	}
+}
+
+// Rewind the service maintenance suffix in descending order. The caller also
+// restores its historical schema and trims the migration ledger before upgrading.
+func dropServiceMaintenanceFixture(t *testing.T, conn *pgx.Conn) {
+	t.Helper()
+	for version := latestTestSchemaVersion(t); version >= 70; version-- {
+		var statement string
+		switch version {
+		case 70:
+			statement = `DROP TRIGGER almanac_slo_initial_service_assignment ON public.almanac_slos;
+DROP TRIGGER almanac_slo_changed_service_assignment ON public.almanac_slos;
+DROP TRIGGER almanac_service_maintenance_archive ON public.almanac_services;
+DROP TABLE public.almanac_slo_service_assignments, public.almanac_service_maintenance_authority;
+DROP FUNCTION public.almanac_record_active_slo_service(), public.almanac_fence_service_archive();`
+		case 71:
+			statement = `DROP TABLE public.almanac_service_maintenance_projection, public.almanac_maintenance_service_selectors;
+DROP INDEX public.almanac_maintenance_cutoff_revision_idx, public.almanac_maintenance_all_services_range_idx;
+ALTER TABLE public.almanac_maintenance_exclusion_revisions DROP COLUMN scope_kind;`
+		case 72:
+			statement = `DROP TRIGGER almanac_slo_grid_initial ON public.almanac_slos;
+DROP TRIGGER almanac_slo_grid_changed ON public.almanac_slos;
+DROP TRIGGER almanac_maintenance_grid_service_state ON public.almanac_services;
+DROP FUNCTION public.almanac_record_maintenance_grid(), public.almanac_record_maintenance_grid_service_state(),
+    public.almanac_adjust_maintenance_service_grid(uuid, integer, bigint),
+    public.almanac_adjust_maintenance_installation_grid(integer, bigint);
+DROP TABLE public.almanac_maintenance_service_grids, public.almanac_maintenance_installation_grids;`
+		case 73:
+			statement = legacyMaintenanceAnalyzer(t) + `
+DROP FUNCTION public.almanac_effective_maintenance_coverage(uuid, uuid, bigint, tstzmultirange);
+ALTER TABLE public.almanac_slo_exclusion_changes
+    DROP CONSTRAINT almanac_service_effective_coverage_shape, DROP COLUMN effective_coverage;
+
+DO $restore$
+DECLARE
+    revisions_fk name;
+    slo_fk name;
+BEGIN
+    SELECT conname INTO STRICT revisions_fk FROM pg_constraint
+    WHERE conrelid = 'public.almanac_maintenance_members'::regclass
+      AND confrelid = 'public.almanac_maintenance_exclusion_revisions'::regclass AND contype = 'f';
+    SELECT conname INTO STRICT slo_fk FROM pg_constraint
+    WHERE conrelid = 'public.almanac_maintenance_members'::regclass
+      AND confrelid = 'public.almanac_slos'::regclass AND contype = 'f';
+    EXECUTE format('ALTER TABLE public.almanac_maintenance_members DROP CONSTRAINT %I, DROP CONSTRAINT %I', revisions_fk, slo_fk);
+END $restore$;
+ALTER TABLE public.almanac_maintenance_members
+    DROP CONSTRAINT almanac_maintenance_members_pkey,
+    ADD PRIMARY KEY (build_id, exclusion_id),
+    ADD FOREIGN KEY (exclusion_id, exclusion_revision, slo_id)
+        REFERENCES public.almanac_maintenance_exclusion_scopes(exclusion_id, revision, slo_id);`
+		case 74:
+			statement = `DROP TRIGGER almanac_service_maintenance_assignment_work ON public.almanac_slo_service_assignments;
+DROP FUNCTION public.almanac_enqueue_service_maintenance_join(),
+    public.almanac_maintenance_impact_intervals(uuid, bigint, timestamptz),
+    public.almanac_slo_service_maintenance_pending(uuid, timestamptz, timestamptz),
+    public.almanac_project_service_maintenance_member(uuid, uuid, bigint, timestamptz),
+    public.almanac_service_maintenance_intervals(uuid, bigint, uuid, timestamptz);
+DROP TABLE public.almanac_service_maintenance_projection_completed, public.almanac_service_maintenance_membership_work;
+DROP INDEX public.almanac_service_maintenance_unprocessed_idx;`
+		default:
+			t.Fatalf("missing service maintenance fixture teardown for migration %04d", version)
+		}
+		if _, err := conn.Exec(t.Context(), statement); err != nil {
+			t.Fatalf("reconstruct pre-%04d service maintenance schema: %v", version, err)
+		}
+	}
+}
+
+// Reuse the immutable migration source so the rewind restores the same
+// function PostgreSQL saw before its body was replaced by migration 0073.
+func legacyMaintenanceAnalyzer(t *testing.T) string {
+	t.Helper()
+	source, err := embeddedMigrations.ReadFile("migrations/0064_maintenance_compatibility.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const name = "FUNCTION public.almanac_analyze_maintenance_change("
+	_, remaining, found := strings.Cut(string(source), "CREATE "+name)
+	if !found {
+		t.Fatal("missing legacy maintenance analysis function")
+	}
+	definition, _, found := strings.Cut(remaining, "\nCREATE FUNCTION public.almanac_analyze_inserted_maintenance_change()")
+	if !found {
+		t.Fatal("missing end of legacy maintenance analysis function")
+	}
+	return "CREATE OR REPLACE " + name + definition
 }

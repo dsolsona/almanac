@@ -12,9 +12,7 @@ import (
 
 func TestIntegrationAlertActivationPopulatedUpgrade(t *testing.T) {
 	t.Parallel()
-	if latest := latestTestSchemaVersion(t); latest != 69 {
-		t.Fatalf("update exact 0059 reconstruction for migration suffix: %d", latest)
-	}
+	latest := latestTestSchemaVersion(t)
 	f := newAlertTestFixture(t)
 	policy := f.policy(t, "Activation upgrade")
 	claim := f.claim(t, f.at)
@@ -53,7 +51,7 @@ func TestIntegrationAlertActivationPopulatedUpgrade(t *testing.T) {
 		t.Fatal(err)
 	}
 	result, err := Upgrade(t.Context(), f.f.databaseURL)
-	if err != nil || result.Applied != 10 || result.DatabaseSchemaVersion != 69 {
+	if err != nil || result.Applied != latest-59 || result.DatabaseSchemaVersion != latest {
 		t.Fatalf("populated 0059 upgrade: %+v %v", result, err)
 	}
 	if snapshot() != before {

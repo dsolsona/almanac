@@ -25,8 +25,9 @@ func TestIntegrationMaintenanceHourPopulatedUpgrade(t *testing.T) {
 		return result
 	}
 	before := snapshot()
+	latest := latestTestSchemaVersion(t)
 	result, err := Upgrade(t.Context(), f.f.databaseURL)
-	if err != nil || result.Applied != 7 || result.DatabaseSchemaVersion != 69 {
+	if err != nil || result.Applied != latest-62 || result.DatabaseSchemaVersion != latest {
 		t.Fatalf("upgrade %+v %v", result, err)
 	}
 	if snapshot() != before {
