@@ -162,13 +162,17 @@ test('maintenance bands identify the whole period and the budget tooltip escapes
     return node.contains(document.elementFromPoint(box.left + box.width / 2, (cardBottom + box.bottom) / 2));
    }, card.y + card.height)).toBe(true);
    await tooltip.evaluate(node => { if (node instanceof HTMLElement) node.style.pointerEvents = ''; });
-   await info.attach('maintenance-budget-tooltip', { body: await page.screenshot(), contentType: 'image/png' });
+   await info.attach('maintenance-budget-tooltip', { body: await page.screenshot({
+    path: resolve('../.local/maintenance-chart-design', `${info.project.name}-budget-tooltip.png`),
+   }), contentType: 'image/png' });
    await page.mouse.click(bounds.x + bounds.width / 2, bounds.y + bounds.height - 2);
    const detail = chart.getByRole('link', { name: 'View maintenance details' });
    await expect(detail).toHaveAttribute('href', `/maintenance/${id}`);
    await detail.hover();
    await expect(detail).toBeVisible();
-   await info.attach('maintenance-inspected-band', { body: await page.screenshot(), contentType: 'image/png' });
+   await info.attach('maintenance-inspected-band', { body: await page.screenshot({
+    path: resolve('../.local/maintenance-chart-design', `${info.project.name}-inspected-band.png`),
+   }), contentType: 'image/png' });
    await page.keyboard.press('Escape');
    await expect(detail).toHaveCount(0);
   }

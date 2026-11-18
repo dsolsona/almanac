@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useState } from 'react';
 import type { AuthContext } from '../auth/client.ts';
 import { Button, Pager } from '../components/ui/index.ts';
+import { SloFailure } from '../slos/client.ts';
 import { maintenanceClient, type ImpactPage, type MaintenanceSelector } from './client.ts';
 
 type ReadImpact = (limit: number, cursor: string, signal: AbortSignal) => Promise<ImpactPage>;
@@ -32,18 +33,18 @@ function MaintenanceImpact({ read, preview = false }: { read: ReadImpact; previe
   const [cursors, setCursors] = useState(['']);
   const [page, setPage] = useState<ImpactPage>();
   const [busy, setBusy] = useState(true);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<'load' | 'changed'>();
   const [refresh, setRefresh] = useState(0);
   const cursor = cursors.at(-1) ?? '';
 
   useEffect(() => {
     const controller = new AbortController();
     setBusy(true);
-    setError(false);
+    setError(undefined);
     read(size, cursor, controller.signal).then(page => {
       if (!controller.signal.aborted) setPage(page);
-    }).catch(() => {
-      if (!controller.signal.aborted) setError(true);
+    }).catch(error => {
+      if (!controller.signal.aborted) setError(error instanceof SloFailure && error.code === 'maintenance_snapshot_changed' ? 'changed' : 'load');
     }).finally(() => {
       if (!controller.signal.aborted) setBusy(false);
     });
@@ -52,7 +53,7 @@ function MaintenanceImpact({ read, preview = false }: { read: ReadImpact; previe
 
   function changePage(next: string[], nextSize = size) {
     setPage(undefined);
-    setError(false);
+    setError(undefined);
     setBusy(true);
     setCursors(next);
     setSize(nextSize);
@@ -61,14 +62,20 @@ function MaintenanceImpact({ read, preview = false }: { read: ReadImpact; previe
   return <section className="maintenance-impact" aria-labelledby={headingId} aria-busy={busy || undefined}>
     {preview ? <h3 id={headingId}>Affected SLO preview</h3> : <h2 id={headingId}>Affected SLOs</h2>}
     {busy && !page && <span role="status" className="sr-only">Loading affected SLOs</span>}
-    {error && <p role="alert" className="ui-error">Affected SLOs could not be loaded.</p>}
-    {!busy && (error || page?.ready === false) && <Button variant="outline" onClick={() => setRefresh(value => value + 1)}>
-      {error ? 'Retry affected SLOs' : 'Refresh affected SLOs'}
+    {error && <p role="alert" className="ui-error">{error === 'changed' ? 'Maintenance inventory changed. Reload from the first page.' : 'Affected SLOs could not be loaded.'}</p>}
+    {!busy && (error || page?.ready === false) && <Button variant="outline" onClick={() => {
+      if (error === 'changed') changePage(['']);
+      setRefresh(value => value + 1);
+    }}>
+      {error === 'changed' ? 'Reload affected SLOs' : error ? 'Retry affected SLOs' : 'Refresh affected SLOs'}
     </Button>}
     {!error && page?.ready === false && <p role="status" className="ui-hint">Affected SLOs are being prepared.</p>}
     {!error && page?.ready && <>
       <p role="status" className="ui-hint">
-        {new Intl.NumberFormat().format(BigInt(page.total))} affected {page.total === '1' ? 'SLO' : 'SLOs'} · Inventory as of <time dateTime={page.inventory_at}>{utc(page.inventory_at)}</time>
+        {new Intl.NumberFormat().format(BigInt(page.total))} {preview
+          ? (page.total === '1' ? 'affected SLO' : 'affected SLOs')
+          : (page.total === '1' ? 'recorded participation period' : 'recorded participation periods')
+        } · Inventory as of <time dateTime={page.inventory_at}>{utc(page.inventory_at)}</time>
       </p>
       {page.items.length > 0 && <ul className="maintenance-impact-list">{page.items.map(item => <li key={`${item.slo_id}:${item.start ?? ''}`}>
         {preview ? item.slo_name : <a href={`/slos/${item.slo_id}`} data-app-route>{item.slo_name}</a>}
