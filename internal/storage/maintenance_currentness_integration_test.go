@@ -9,6 +9,7 @@ import (
 
 	"github.com/dsolsona/almanac/internal/storage/dbgen"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 func TestIntegrationMaintenanceCurrentnessFencesAuthority(t *testing.T) {
@@ -54,14 +55,13 @@ func TestIntegrationMaintenanceCurrentnessUsesMeasuredCutoff(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.now = f.at.Add(30 * time.Second)
+	f.now = f.at.Add(90 * time.Second)
 	current, err := readCurrentSloFromAggregates(t.Context(), q, definition, f.now, nil)
 	if err != nil || current.CurrentState == nil || *current.CurrentState != "ready" ||
 		!current.Current.Window.End.Equal(f.at) {
 		t.Fatalf("unedited measurements through cutoff %s were not ready: state=%v cutoff=%s err=%v", f.at, current.CurrentState, current.Current.Window.End, err)
 	}
 
-	f.now = f.at.Add(90 * time.Second)
 	if _, err := execObservationFixture(t, f.conn, f.sliID, `
 INSERT INTO almanac_sli_observations
  (interval_start,sli_id,measurement_revision,outcome,good_count,total_count,result_digest,missing_components,
@@ -117,12 +117,17 @@ WHERE sli_id=$1 AND interval_start=$2::timestamptz-interval '1 minute'`, f.sliID
 
 func TestIntegrationMaintenanceCurrentnessDiscardsObsoletePreparation(t *testing.T) {
 	t.Parallel()
-	for _, changed := range []bool{false, true} {
-		name := "unchanged"
-		if changed {
-			name = "changed"
-		}
-		t.Run(name, func(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		changed       bool
+		rejectQueue   bool
+		wantArtifacts int
+	}{
+		{name: "unchanged", wantArtifacts: 1},
+		{name: "changed", changed: true},
+		{name: "queue insert fails", rejectQueue: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			f := newMaintenanceFixture(t)
 			ctx := t.Context()
@@ -147,20 +152,33 @@ func TestIntegrationMaintenanceCurrentnessDiscardsObsoletePreparation(t *testing
 				preparation:       []maintenanceEvaluationPreparation{{Kind: "mask", RequestedRevision: row.ExclusionRevision}},
 				preparationLimits: maintenancePreparationLimits{MaxRequests: 1, MaxSourceHours: 1},
 			}
-			if changed {
+			if tc.changed {
 				if _, err := CreateMaintenance(ctx, f.f.databaseURL, f.input("after-current-prepare")); err != nil {
 					t.Fatal(err)
 				}
 			}
+			if tc.rejectQueue {
+				if _, err := f.conn.Exec(ctx, `ALTER TABLE almanac_maintenance_preparation ADD CONSTRAINT fixture_reject_current_mask CHECK(kind<>'mask')`); err != nil {
+					t.Fatal(err)
+				}
+			}
 			compilerTx(t, f, func(tx pgx.Tx) error {
-				return publishCurrentMaintenancePreparation(ctx, tx, session, f.clock)
+				err := publishCurrentMaintenancePreparation(ctx, tx, session, f.clock)
+				if !tc.rejectQueue {
+					return err
+				}
+				failure, ok := errors.AsType[*pgconn.PgError](err)
+				if !ok || failure.Code != "23514" || failure.ConstraintName != "fixture_reject_current_mask" {
+					t.Fatalf("wanted the injected preparation queue error, got %v", err)
+				}
+				return nil
 			})
 			var builds, work int
 			err = f.conn.QueryRow(ctx, `
 				SELECT (SELECT count(*) FROM almanac_maintenance_builds WHERE slo_id=$1),
 				       (SELECT count(*) FROM almanac_maintenance_preparation WHERE slo_id=$1)
 			`, id).Scan(&builds, &work)
-			if err != nil || changed && (builds != 0 || work != 0) || !changed && (builds != 1 || work != 1) {
+			if err != nil || builds != tc.wantArtifacts || work != tc.wantArtifacts {
 				t.Fatalf("unexpected staging writes: builds=%d work=%d err=%v", builds, work, err)
 			}
 		})
