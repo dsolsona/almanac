@@ -319,14 +319,16 @@ BEGIN
                 FROM unnest(published_coverage) old_part
                 JOIN unnest(uncertain_coverage) uncertain_part ON old_part && uncertain_part
             ), grid_bounds AS (
-                SELECT greatest(lower(old_part), date_bin(g.cadence, lower(uncertain_part), epoch)) AS preserved_start,
-                       least(upper(old_part), date_bin(g.cadence, upper(uncertain_part), epoch)) AS preserved_end
+                SELECT max(greatest(lower(old_part), date_bin(g.cadence, lower(uncertain_part), epoch))) AS preserved_start,
+                       min(least(upper(old_part), date_bin(g.cadence, upper(uncertain_part), epoch))) AS preserved_end
                 FROM pieces CROSS JOIN grids g
                 WHERE lower(old_part) = date_bin(g.cadence, lower(old_part), epoch)
                   AND upper(old_part) = date_bin(g.cadence, upper(old_part), epoch)
+                GROUP BY old_part, uncertain_part
             ), clipped AS (
-                -- Begin with the whole observation crossing the uncertain
-                -- start; the end may never reach into known future coverage.
+                -- Retain the elapsed coverage common to every plausible grid.
+                -- The latest start and earliest end exclude time that depends
+                -- on which definition was selected.
                 SELECT tstzrange(preserved_start, preserved_end, '[)') AS part
                 FROM grid_bounds
                 WHERE preserved_start >= window_start AND preserved_start < preserved_end
@@ -446,14 +448,22 @@ RETURNS boolean LANGUAGE sql STABLE AS $$
         OR EXISTS (SELECT 1 FROM public.almanac_service_maintenance_membership_work);
 $$;
 
--- The previous projector could round historical coverage to today's grid.
--- Reproject the known history of SLOs that have recorded multiple grids.
+-- The previous projector could round coverage to a different grid, even
+-- when a cadence-only round trip left a single grid in the assignment journal.
+WITH affected AS (
+    SELECT a.slo_id, min(a.effective_at) AS affected_from
+    FROM public.almanac_slo_service_assignments a
+    JOIN public.almanac_slo_definitions d ON d.slo_id = a.slo_id AND d.revision = a.definition_revision
+    GROUP BY a.slo_id
+    HAVING min(d.cadence_seconds) <> max(d.cadence_seconds)
+    UNION ALL
+    SELECT u.slo_id, lower(range_merge(u.uncertain_at))
+    FROM public.almanac_service_maintenance_uncertain_grids u
+)
 INSERT INTO public.almanac_service_maintenance_membership_work(slo_id, affected_from)
-SELECT a.slo_id, min(a.effective_at)
-FROM public.almanac_slo_service_assignments a
-JOIN public.almanac_slo_definitions d ON d.slo_id = a.slo_id AND d.revision = a.definition_revision
+SELECT affected.slo_id, min(affected.affected_from)
+FROM affected
 WHERE EXISTS (SELECT 1 FROM public.almanac_service_maintenance_projection)
-GROUP BY a.slo_id
-HAVING min(d.cadence_seconds) <> max(d.cadence_seconds)
+GROUP BY affected.slo_id
 ON CONFLICT (slo_id) DO UPDATE SET through_exclusion = DEFAULT,
     affected_from = least(almanac_service_maintenance_membership_work.affected_from, excluded.affected_from);

@@ -587,18 +587,10 @@ func TestIntegrationMaintenanceUpgradePreservesUnknownHistoricalGrid(t *testing.
 		{laterWindow, 61 * time.Second},
 	} {
 		oldFirst := ceilSliBoundary(legacyScope.window.Start, legacyScope.cadence)
-		var knownFuture, afterDeparture, publishedElapsed bool
-		if err := f.conn.QueryRow(t.Context(), `
-			SELECT effective_coverage @> tstzrange($3,$4,'[)'),
-			       effective_coverage && tstzrange($4,$5,'[)'),
-			       effective_coverage @> tstzrange($6,$7,'[)')
-			FROM almanac_slo_exclusion_changes WHERE slo_id=$1 AND exclusion_id=$2
-			ORDER BY revision DESC LIMIT 1
-		`, id, legacyScope.window.ID, firstKnown, departure, departure.Add(currentCadence), oldFirst, floorSliBoundary(repairedAt, legacyScope.cadence)).
-			Scan(&knownFuture, &afterDeparture, &publishedElapsed); err != nil || !knownFuture || afterDeparture || !publishedElapsed {
-			t.Errorf("straddling %s scope: elapsed=%t knownFuture=%t afterDeparture=%t err=%v",
-				legacyScope.cadence, publishedElapsed, knownFuture, afterDeparture, err)
-		}
+		assertProjectedMaintenanceCoverage(t, f, legacyScope.window.ID,
+			[2]time.Time{oldFirst, floorSliBoundary(repairedAt, legacyScope.cadence)},
+			[2]time.Time{firstKnown, departure},
+		)
 	}
 	if _, err := f.conn.Exec(t.Context(), `UPDATE almanac_services SET archived_at=$2 WHERE id=$1`, subject.ServiceID, f.at.Add(9*time.Minute)); err != nil {
 		t.Fatal(err)
@@ -610,4 +602,147 @@ func TestIntegrationMaintenanceUpgradePreservesUnknownHistoricalGrid(t *testing.
 		t.Fatalf("archived service affected an unrelated later window: uncertain=%t %v", afterArchive, err)
 	}
 
+}
+
+func TestIntegrationMaintenanceUpgradeIntersectsAmbiguousPublishedGrids(t *testing.T) {
+	t.Parallel()
+	f := newMaintenanceFixture(t)
+	id := mustPGUUID(f.ids[0])
+	subject, err := dbgen.New(f.conn).GetSlo(t.Context(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, _, err := CreateObjective(t.Context(), f.f.databaseURL, CreateObjectiveInput{
+		Proof: f.proof, Name: "published-grid-destination", DisplayName: "Published grid destination",
+		IdempotencyKey: "published-grid-destination", RequestID: "published-grid-destination", Now: f.clock,
+	}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := f.input("ambiguous-published-coverage")
+	input.ScopeKind, input.SloIDs = MaintenanceScopeAllServices, nil
+	input.Start = ceilSliBoundary(f.at.Add(20*time.Minute), 120*time.Second)
+	input.End = input.Start.Add(10 * time.Minute)
+	window, err := CreateMaintenance(t.Context(), f.f.databaseURL, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dropServiceMaintenanceFixtureAfter(t, f.conn, 74)
+	if _, err := f.conn.Exec(t.Context(), `DELETE FROM almanac_schema_migrations WHERE version>74`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Publish on 120s after 60s has been staged. Both cadences fit both
+	// endpoints, so only the common elapsed prefix can be recovered.
+	moveMaintenanceSLOAtCadence(t, f, subject.ServiceID.String(), 2, window.Start.Add(-2*time.Minute), 120)
+	if _, err := f.conn.Exec(t.Context(), `
+		INSERT INTO almanac_slo_definitions(slo_id,revision,service_id,sli_id,measurement_revision,target,rolling_window_seconds,cadence_seconds,activated_at,evaluation_valid_from)
+		SELECT slo_id,3,service_id,sli_id,measurement_revision,target,rolling_window_seconds,60,$2,$2
+		FROM almanac_slo_definitions WHERE slo_id=$1 AND revision=2
+	`, id, window.Start.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	publishLegacyServiceMaintenance(t, f, window.ID, window.Start.Add(2*time.Minute))
+	assertProjectedMaintenanceCoverage(t, f, window.ID, [2]time.Time{window.Start, window.End})
+	if _, err := f.conn.Exec(t.Context(), `UPDATE almanac_slos SET definition_revision=3, updated_at=$2 WHERE id=$1`, id, window.Start.Add(150*time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	recoveredAt := window.Start.Add(3 * time.Minute)
+	moveMaintenanceSLOAtCadence(t, f, other.ID, 4, recoveredAt, 60)
+	if _, err := Upgrade(t.Context(), f.f.databaseURL); err != nil {
+		t.Fatal(err)
+	}
+	f.now = recoveredAt
+	if err := f.runtime.runServiceMaintenanceProjection(t.Context(), 64, time.Second, f.clock); err != nil {
+		t.Fatal(err)
+	}
+	assertProjectedMaintenanceCoverage(t, f, window.ID,
+		[2]time.Time{window.Start, window.Start.Add(2 * time.Minute)},
+		[2]time.Time{recoveredAt, window.End},
+	)
+}
+
+func TestIntegrationMaintenanceUpgradeReprojectsAfterReturnToOriginalGrid(t *testing.T) {
+	t.Parallel()
+	f := newMaintenanceFixture(t)
+	id := mustPGUUID(f.ids[0])
+	q := dbgen.New(f.conn)
+	subject, err := q.GetSlo(t.Context(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var now time.Time
+	if err := f.conn.QueryRow(t.Context(), `SELECT clock_timestamp()`).Scan(&now); err != nil {
+		t.Fatal(err)
+	}
+	base := ceilSliBoundary(now.Add(time.Hour), 120*time.Second)
+	input := f.input("legacy-reverted-grid")
+	input.ScopeKind, input.SloIDs = MaintenanceScopeAllServices, nil
+	input.Start, input.End = base.Add(time.Minute), base.Add(4*time.Minute)
+	window, err := CreateMaintenance(t.Context(), f.f.databaseURL, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dropServiceMaintenanceFixtureAfter(t, f.conn, 74)
+	if _, err := f.conn.Exec(t.Context(), `DELETE FROM almanac_schema_migrations WHERE version>74`); err != nil {
+		t.Fatal(err)
+	}
+
+	moveMaintenanceSLOAtCadence(t, f, subject.ServiceID.String(), 2, f.at.Add(time.Minute), 120)
+	publishLegacyServiceMaintenance(t, f, window.ID, f.at.Add(90*time.Second))
+	assertProjectedMaintenanceCoverage(t, f, window.ID, [2]time.Time{base.Add(2 * time.Minute), window.End})
+	if _, err := f.conn.Exec(t.Context(), `UPDATE almanac_service_maintenance_projection SET complete=true WHERE exclusion_id=$1`, window.ID); err != nil {
+		t.Fatal(err)
+	}
+	moveMaintenanceSLOAtCadence(t, f, subject.ServiceID.String(), 3, f.at.Add(2*time.Minute), 60)
+	var recorded int
+	if err := f.conn.QueryRow(t.Context(), `SELECT count(*) FROM almanac_slo_service_assignments WHERE slo_id=$1`, id).Scan(&recorded); err != nil || recorded != 1 {
+		t.Fatalf("legacy scope recorded %d grid assignments: %v", recorded, err)
+	}
+	if _, err := Upgrade(t.Context(), f.f.databaseURL); err != nil {
+		t.Fatal(err)
+	}
+	affected := dbgen.HasPendingServiceMaintenanceParams{
+		SloID: id, StartAt: timestamp(window.Start), EndAt: timestamp(base.Add(2 * time.Minute)),
+	}
+	if pending, err := q.HasPendingServiceMaintenance(t.Context(), affected); err != nil || !pending {
+		t.Fatalf("upgrade trusted the obsolete 120s projection: pending=%t %v", pending, err)
+	}
+	if err := f.runtime.runServiceMaintenanceProjection(t.Context(), 64, time.Second, f.clock); err != nil {
+		t.Fatal(err)
+	}
+	if pending, err := q.HasPendingServiceMaintenance(t.Context(), affected); err != nil || pending {
+		t.Fatalf("repaired coverage still pending: pending=%t %v", pending, err)
+	}
+	assertProjectedMaintenanceCoverage(t, f, window.ID, [2]time.Time{window.Start, window.End})
+}
+
+func publishLegacyServiceMaintenance(t *testing.T, f maintenanceFixture, windowID string, at time.Time) {
+	t.Helper()
+	var projected bool
+	if err := f.conn.QueryRow(t.Context(), `
+		SELECT public.almanac_project_service_maintenance_member($1,$2,1,$3)
+	`, mustPGUUID(f.ids[0]), windowID, at).Scan(&projected); err != nil || !projected {
+		t.Fatalf("publish legacy window %s: projected=%t %v", windowID, projected, err)
+	}
+}
+
+func assertProjectedMaintenanceCoverage(t *testing.T, f maintenanceFixture, windowID string, ranges ...[2]time.Time) {
+	t.Helper()
+	starts, ends := make([]time.Time, 0, len(ranges)), make([]time.Time, 0, len(ranges))
+	for _, r := range ranges {
+		starts, ends = append(starts, r[0]), append(ends, r[1])
+	}
+	var actual string
+	var same bool
+	if err := f.conn.QueryRow(t.Context(), `
+		SELECT effective_coverage::text, effective_coverage = (
+			SELECT range_agg(tstzrange(bounds.starts_at,bounds.ends_at,'[)'))
+			FROM unnest($3::timestamptz[],$4::timestamptz[]) bounds(starts_at,ends_at)
+		)
+		FROM almanac_slo_exclusion_changes WHERE slo_id=$1 AND exclusion_id=$2
+		ORDER BY revision DESC LIMIT 1
+	`, mustPGUUID(f.ids[0]), windowID, starts, ends).Scan(&actual, &same); err != nil || !same {
+		t.Fatalf("window %s coverage = %s, want %v: %v", windowID, actual, ranges, err)
+	}
 }
