@@ -59,16 +59,18 @@ function windowContract(status: number, id?: string, revision?: string) {
   };
 }
 
-function impactContract(limit: number) {
-  return { status: 200, validate: (value: unknown): value is ImpactPage =>
-    isRecord(value) && timestampKey(value.inventory_at) !== undefined && typeof value.ready === 'boolean' &&
-    typeof value.total === 'string' && /^(0|[1-9][0-9]{0,18})$/.test(value.total) &&
-    Array.isArray(value.items) && value.items.length <= limit && BigInt(value.items.length) <= BigInt(value.total) &&
-    cursorValid(value.next_cursor) && value.items.every(item =>
-      isRecord(item) && isUUID(item.slo_id) && isUUID(item.service_id) &&
-      typeof item.slo_name === 'string' && typeof item.service_name === 'string' &&
-      (item.start === undefined && item.end === undefined || validBounds(item.start, item.end))),
-  };
+function impactContract(limit: number, kind: 'preview' | 'impact') {
+  return { status: 200, validate: (value: unknown): value is ImpactPage => {
+    if (!isRecord(value) || timestampKey(value.inventory_at) === undefined || typeof value.ready !== 'boolean' ||
+      typeof value.total !== 'string' || !/^(0|[1-9][0-9]{0,18})$/.test(value.total) ||
+      !Array.isArray(value.items) || value.items.length > limit || !cursorValid(value.next_cursor) ||
+      !value.items.every(item =>
+        isRecord(item) && isUUID(item.slo_id) && isUUID(item.service_id) &&
+        typeof item.slo_name === 'string' && typeof item.service_name === 'string' &&
+        (item.start === undefined && item.end === undefined || validBounds(item.start, item.end)))) return false;
+    const count = kind === 'preview' ? value.items.length : new Set(value.items.map(item => item.slo_id)).size;
+    return BigInt(count) <= BigInt(value.total);
+  } };
 }
 
 export const maintenanceClient = {
@@ -86,7 +88,7 @@ export const maintenanceClient = {
   transition: (id: string, action: MaintenanceAction, body: { reason: string; end?: string }, context: AuthContext, key: string, etag: string) =>
     requestValidated(`${path}/${id}/${action}`, { ...write(context, body, key, etag), method: 'POST' }, windowContract(200, id), true),
   preview: (scope: MaintenanceSelector, context: AuthContext, limit: number, cursor: string, signal: AbortSignal) =>
-    requestValidated(`${path}/preview?${paging(limit, cursor)}`, { ...write(context, { scope }), signal }, impactContract(limit)).then(result => result.value),
+    requestValidated(`${path}/preview?${paging(limit, cursor)}`, { ...write(context, { scope }), signal }, impactContract(limit, 'preview')).then(result => result.value),
   impact: (id: string, revision: string, limit: number, cursor: string, signal: AbortSignal) =>
-    requestValidated(`${path}/${id}/impact?${paging(limit, cursor, revision)}`, { signal }, impactContract(limit)).then(result => result.value),
+    requestValidated(`${path}/${id}/impact?${paging(limit, cursor, revision)}`, { signal }, impactContract(limit, 'impact')).then(result => result.value),
 };

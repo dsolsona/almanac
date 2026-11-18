@@ -72,11 +72,9 @@ function MaintenanceImpact({ read, preview = false }: { read: ReadImpact; previe
     {!error && page?.ready === false && <p role="status" className="ui-hint">Affected SLOs are being prepared.</p>}
     {!error && page?.ready && <>
       <p role="status" className="ui-hint">
-        {new Intl.NumberFormat().format(BigInt(page.total))} {preview
-          ? (page.total === '1' ? 'affected SLO' : 'affected SLOs')
-          : (page.total === '1' ? 'recorded participation period' : 'recorded participation periods')
-        } · Inventory as of <time dateTime={page.inventory_at}>{utc(page.inventory_at)}</time>
+        {new Intl.NumberFormat().format(BigInt(page.total))} {page.total === '1' ? 'affected SLO' : 'affected SLOs'} · Inventory as of <time dateTime={page.inventory_at}>{utc(page.inventory_at)}</time>
       </p>
+      {!preview && page.items.length > 0 && <p className="ui-hint">Each SLO is counted once and can appear in more than one participation period.</p>}
       {page.items.length > 0 && <ul className="maintenance-impact-list">{page.items.map(item => <li key={`${item.slo_id}:${item.start ?? ''}`}>
         {preview ? item.slo_name : <a href={`/slos/${item.slo_id}`} data-app-route>{item.slo_name}</a>}
         <div className="ui-hint">{item.service_name}</div>

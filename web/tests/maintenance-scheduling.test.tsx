@@ -362,3 +362,36 @@ it('shows scheduled scope before displaying recorded participation at activation
   expect(screen.getByRole('link', { name: 'Checkout availability' })).toHaveAttribute('href', `/slos/${sloId}`);
   expect(screen.getByText('2026-11-18 02:00:01 UTC')).toBeVisible();
 });
+
+it('shows one affected SLO with two recorded participation periods', async () => {
+  vi.mocked(maintenanceClient.impact).mockRestore();
+  const member = { slo_id: sloId, slo_name: 'Checkout availability', service_id: id, service_name: 'Checkout' };
+  vi.stubGlobal('fetch', vi.fn(async (input: string) => {
+    expect(new URL(input, location.origin).pathname).toBe(`/api/v1/scoped-maintenance/${id}/impact`);
+    return Response.json({
+      inventory_at: now, total: '1', ready: true,
+      items: [
+        { ...member, start: '2026-11-18T01:05:00Z', end: '2026-11-18T01:15:00Z' },
+        { ...member, start: '2026-11-18T01:40:00Z', end: '2026-11-18T02:30:00Z' },
+      ],
+    });
+  }));
+
+  await showDetail({ ...record, start: '2026-11-18T01:00:00Z', end: '2026-11-18T03:00:00Z', scope: { kind: 'all_services' } });
+  const impact = within(screen.getByRole('region', { name: 'Affected SLOs' }));
+  expect(impact.getByText(/^1 affected SLO ·/)).toBeVisible();
+  expect(impact.getAllByRole('link', { name: 'Checkout availability' })).toHaveLength(2);
+  expect(impact.getByText('2026-11-18 01:05:00 UTC')).toBeVisible();
+  expect(impact.getByText('2026-11-18 01:40:00 UTC')).toBeVisible();
+});
+
+it('rejects an inventory preview with more rows than the reported total', async () => {
+  vi.mocked(maintenanceClient.preview).mockRestore();
+  const member = { slo_id: sloId, slo_name: 'Checkout availability', service_id: id, service_name: 'Checkout' };
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({
+    inventory_at: now, total: '1', ready: true, items: [member, member],
+  })));
+
+  await expect(maintenanceClient.preview({ kind: 'all_services' }, context, 10, '', new AbortController().signal))
+    .rejects.toThrow('invalid response');
+});
