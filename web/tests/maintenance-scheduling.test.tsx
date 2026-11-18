@@ -120,8 +120,12 @@ it('can check an uncertain cancellation without giving up the draft', async () =
   const scheduled = { ...record, start: '2026-11-18T03:00:00Z', end: '2026-11-18T04:00:00Z' };
   const get = await showDetail(scheduled);
   const cancelled = { ...scheduled, revision: '2', operation: 'cancel' as const, tombstone: true };
-  get.mockResolvedValueOnce({ value: cancelled, etag: `"maintenance:${id}:2"` });
-  vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Response lost'); }));
+  get.mockRestore();
+  const fetch = vi.fn(async (_input: string, request?: RequestInit) => {
+    if (request?.method === 'POST') throw new TypeError('Response lost');
+    return Response.json(cancelled, { headers: { ETag: `"maintenance:${id}:2"` } });
+  });
+  vi.stubGlobal('fetch', fetch);
   fireEvent.click(screen.getByRole('button', { name: 'Cancel scheduled maintenance' }));
   const reason = screen.getByLabelText('Reason for this change');
   fireEvent.change(reason, { target: { value: 'Postpone the work.' } });
@@ -130,6 +134,10 @@ it('can check an uncertain cancellation without giving up the draft', async () =
   expect(reason).toHaveValue('Postpone the work.');
   expect(screen.getByText('Cancelled', { exact: true })).toBeVisible();
   expect(screen.getByRole('button', { name: 'Cancel maintenance' })).toBeDisabled();
+  expect(fetch.mock.calls.map(([input, request]) => [input, request?.method ?? 'GET'])).toEqual([
+    [`/api/v1/scoped-maintenance/${id}/cancel`, 'POST'],
+    [`/api/v1/scoped-maintenance/${id}`, 'GET'],
+  ]);
 });
 
 it('allows dismissal while checking a revision and aborts the pending read', async () => {

@@ -1,6 +1,6 @@
 import type { components } from '../api/generated.ts';
 import type { MaintenanceBand } from '../components/charts/SloHistoryChart.tsx';
-import { validScopedWindow } from '../maintenance/client.ts';
+import { maintenanceClient, validScopedWindow } from '../maintenance/client.ts';
 import { maintenanceTimeKey, requestValidated, SloFailure, sloClient } from './client.ts';
 
 type Overflow = components['schemas']['MaintenanceOverflow'];
@@ -15,6 +15,21 @@ export type OverlayPage = {
 };
 
 const pageLimit = 200;
+const isNotFound = (error: unknown): error is SloFailure =>
+  error instanceof SloFailure && error.status === 404 && (!error.code || error.code === 'not_found');
+
+async function missingScopedRoute(error: unknown, signal: AbortSignal): Promise<boolean> {
+  if (signal.aborted || !isNotFound(error)) return false;
+  if (!error.code) return true;
+  // The pre-scoped server and a missing SLO both return the same problem.
+  // Check route availability on the scoped collection, which has no SLO ID.
+  try {
+    await maintenanceClient.list(1, '', signal);
+    return false;
+  } catch (probe) {
+    return !signal.aborted && isNotFound(probe);
+  }
+}
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
@@ -57,7 +72,7 @@ export async function readSloMaintenance(id: string, start: string, end: string,
     } catch (error) {
       // An older deployment has no scoped route. A scoped page cursor must
       // stay on that endpoint, and an API-level rejection stays visible.
-      if (source || cursor || signal.aborted || !(error instanceof SloFailure) || error.status !== 404 || error.code) throw error;
+      if (source || cursor || !await missingScopedRoute(error, signal)) throw error;
     }
   }
   const value = await sloClient.maintenance(id, start, end, cursor, signal);
