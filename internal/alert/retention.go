@@ -70,7 +70,7 @@ func PlanCompaction(entries []RetentionEntry, before time.Time) ([]CompactionRun
 		if index > 0 && !compactionOrdered(entries[index-1], entry) {
 			return nil, ErrCompaction
 		}
-		if entry.Pinned || !entry.ScheduledAt.Before(before) || !entry.CommittedAt.Before(before) {
+		if entry.Pinned || entry.Evaluation.Maintenance != nil || !entry.ScheduledAt.Before(before) || !entry.CommittedAt.Before(before) {
 			flush()
 			continue
 		}

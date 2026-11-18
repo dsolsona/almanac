@@ -89,7 +89,7 @@ func Reduce(current *Occurrence, evaluation Evaluation, detectedAt time.Time) (T
 		return TransitionResult{}, ErrTransition
 	}
 	if current == nil {
-		if evaluation.Truth != Breaching {
+		if evaluation.Truth != Breaching || evaluation.Maintenance != nil {
 			return TransitionResult{Action: Unchanged}, nil
 		}
 		return TransitionResult{Action: Create, Cause: ConditionMatched, EffectiveAt: evaluation.Snapshot.Cutoff, DetectedAt: detectedAt,

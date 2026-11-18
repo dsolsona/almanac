@@ -111,6 +111,14 @@ type ConditionResult struct {
 	Short, Long   WindowEvidence
 }
 
+// MaintenanceSuppression records a covering window at the occurrence decision.
+type MaintenanceSuppression struct {
+	WindowID          string
+	Revision          int64
+	Start, End        time.Time
+	OpeningSuppressed bool
+}
+
 type Evaluation struct {
 	PolicyID           string
 	Revision           int64
@@ -118,6 +126,7 @@ type Evaluation struct {
 	Truth              Truth
 	Conditions         []ConditionResult
 	RecoveryComparison *RecoveryComparison
+	Maintenance        *MaintenanceSuppression `json:"Maintenance,omitzero"`
 }
 
 func decimal(text string, limit int) (*big.Rat, bool) {

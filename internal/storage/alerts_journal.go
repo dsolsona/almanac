@@ -62,7 +62,7 @@ func (r *Runtime) commitAlertEvaluation(ctx context.Context, claim alertClaim, i
 	}
 	digest := sha256.Sum256(encoded)
 	var result alertCommitResult
-	err = r.alertTransaction(ctx, func(ctx context.Context, _ pgx.Tx, q *dbgen.Queries) error {
+	err = r.alertTransaction(ctx, func(ctx context.Context, tx pgx.Tx, q *dbgen.Queries) error {
 		if saved, found, err := alertReceipt(ctx, q, claim, digest); err != nil {
 			return err
 		} else if found {
@@ -102,6 +102,10 @@ func (r *Runtime) commitAlertEvaluation(ctx context.Context, claim alertClaim, i
 			return err
 		}
 		exclusion, err := q.FenceMaintenanceState(ctx, binding.SloID)
+		if err != nil {
+			return err
+		}
+		coverage, err := readMaintenanceSuppression(ctx, tx, binding.SloID, input.Snapshot.Cutoff)
 		if err != nil {
 			return err
 		}
@@ -169,6 +173,12 @@ func (r *Runtime) commitAlertEvaluation(ctx context.Context, claim alertClaim, i
 		now = normalizedAgentNow(clock)
 		if !cursor.ClaimUntil.Time.After(now) {
 			return ErrAlertStale
+		}
+		if coverage != nil {
+			evaluation.Maintenance = &alert.MaintenanceSuppression{
+				WindowID: coverage.ID, Revision: coverage.Revision, Start: coverage.Start, End: coverage.End,
+				OpeningSuppressed: stored.Occurrence == nil && evaluation.Truth == alert.Breaching,
+			}
 		}
 		transition, err := alert.Reduce(stored.Occurrence, evaluation, now)
 		if err != nil {

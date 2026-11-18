@@ -235,3 +235,41 @@ func TestMaintenanceRecoveryUsesSameFactsAndSurvivesIndeterminate(t *testing.T) 
 		})
 	}
 }
+
+func TestLifecycleMaintenanceSuppressesOnlyNewOccurrences(t *testing.T) {
+	t.Parallel()
+	current := opened(t)
+	breach := evaluated(t, Breaching, 1)
+	breach.Maintenance = &MaintenanceSuppression{WindowID: "overlapping-window", Revision: 1}
+	detected := breach.Snapshot.Cutoff.Add(time.Minute)
+	suppressed, err := Reduce(nil, breach, detected)
+	if err != nil || suppressed.Action != Unchanged || suppressed.Next != nil {
+		t.Fatalf("covered breach created an occurrence: %+v %v", suppressed, err)
+	}
+	ack, err := Acknowledge(*current, "ari", detected)
+	if err != nil {
+		t.Fatal(err)
+	}
+	continued, err := Reduce(ack.Next, breach, detected)
+	if err != nil || continued.Next == nil || continued.Next.ID != current.ID ||
+		continued.Next.State != Acknowledged || continued.Next.AcknowledgedBy != "ari" {
+		t.Fatalf("covered breach changed the open occurrence: %+v %v", continued, err)
+	}
+	missing := evaluated(t, Indeterminate, 2)
+	missing.Maintenance = breach.Maintenance
+	held, err := Reduce(continued.Next, missing, missing.Snapshot.Cutoff.Add(time.Minute))
+	if err != nil || held.Action != AdvanceEvidence || held.Next.State != Acknowledged {
+		t.Fatalf("unavailable evaluation resolved an occurrence: %+v %v", held, err)
+	}
+	clear := evaluated(t, Clear, 3)
+	clear.Maintenance = breach.Maintenance
+	closed, err := Reduce(held.Next, clear, clear.Snapshot.Cutoff.Add(time.Minute))
+	if err != nil || closed.Action != Resolve || closed.Next.ID != current.ID {
+		t.Fatalf("eligible clear during maintenance did not resolve: %+v %v", closed, err)
+	}
+	resumed := evaluated(t, Breaching, 4)
+	created, err := Reduce(nil, resumed, resumed.Snapshot.Cutoff.Add(time.Minute))
+	if err != nil || created.Action != Create || !created.EffectiveAt.Equal(resumed.Snapshot.Cutoff) {
+		t.Fatalf("first eligible breach did not open at its own boundary: %+v %v", created, err)
+	}
+}
