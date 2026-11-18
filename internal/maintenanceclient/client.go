@@ -241,8 +241,15 @@ func maintenanceResponse(ctx context.Context, in Input, response *http.Response,
 		return nil, responseFailure(ctx, in.Mutation(), 0)
 	}
 	defer response.Body.Close()
-	const maxResponse = 4 << 20
-	data, err := io.ReadAll(io.LimitReader(response.Body, maxResponse+1))
+	maxResponse := 4 << 20
+	if response.StatusCode == http.StatusOK && in.Scoped && (in.Action == "list" || in.Action == "timeline") {
+		// UTF-8 input bytes can expand to six escaped bytes each. Allow up
+		// to 100 canonical UUID strings, plus window and timeline metadata.
+		const maxWindowBytes = 6*(512+4096) + 100*39 + 2048
+		const pageEnvelopeBytes = 4096
+		maxResponse = max(maxResponse, in.Limit*maxWindowBytes+pageEnvelopeBytes)
+	}
+	data, err := io.ReadAll(io.LimitReader(response.Body, int64(maxResponse)+1))
 	if err != nil || len(data) > maxResponse {
 		return nil, responseFailure(ctx, in.Mutation(), response.StatusCode)
 	}

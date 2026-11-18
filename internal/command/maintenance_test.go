@@ -36,3 +36,12 @@ func TestScopedTimelineTextIncludesWindowRevision(t *testing.T) {
 		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
 }
+
+func TestScopedMaintenanceTextReportsOutputFailure(t *testing.T) {
+	var stderr bytes.Buffer
+	page := api.ScopedMaintenancePage{Items: []api.ScopedMaintenanceWindow{}, NextCursor: new("next")}
+	code := writeScopedMaintenance(alwaysFailWriter{}, &stderr, "maintenance list", false, maintenanceclient.ScopedResult{Page: &page})
+	if code == 0 || !strings.Contains(stderr.String(), "output failed") {
+		t.Fatalf("code=%d stderr=%q", code, stderr.String())
+	}
+}

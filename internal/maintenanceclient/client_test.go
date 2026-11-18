@@ -167,3 +167,21 @@ func TestScopedImpactCountsDistinctSLOs(t *testing.T) {
 		})
 	}
 }
+
+func TestScopedWindowListAcceptsLargeValidPage(t *testing.T) {
+	const recordStart = `{"id":"89524066-c358-4fce-b1f0-f4e11f614e55","title":"Work","reason":"`
+	const recordEnd = `","scope":{"kind":"all_services"},"revision":"1","operation":"create","start":"2026-11-18T02:00:00Z","end":"2026-11-18T03:00:00Z"}`
+	window := recordStart + strings.Repeat(`\u0001`, 4096) + recordEnd
+	const pageSize = 200
+	payload := `{"next_cursor":"next","items":[` + strings.Repeat(window+",", pageSize-1) + window + `]}`
+	client, err := api.NewClient("https://example.test", api.WithHTTPClient(maintenanceDoer(func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(payload))}, nil
+	})))
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := DoScoped(t.Context(), client, func(context.Context, *http.Request) error { return nil }, Input{Action: "list", Scoped: true, Limit: pageSize})
+	if err != nil || result.Page == nil || len(result.Page.Items) != pageSize || result.Page.NextCursor == nil || *result.Page.NextCursor != "next" {
+		t.Fatalf("large page rejected or incomplete: %v", err)
+	}
+}

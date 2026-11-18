@@ -1,6 +1,7 @@
 package command
 
 import (
+	"bytes"
 	"context"
 	"encoding/json/v2"
 	"errors"
@@ -203,12 +204,13 @@ func writeScopedMaintenance(stdout, stderr io.Writer, operation string, jsonOut 
 		}
 		return writeDatasourceSuccess(stdout, stderr, true, operation, data)
 	}
+	var output bytes.Buffer
 	var cursor *string
 	switch {
 	case result.Page != nil:
 		for _, item := range result.Page.Items {
 			kind, _ := item.Scope.Discriminator()
-			fmt.Fprintf(stdout, "%s\t%q\t%s\t%s\t%s\t%s\n", item.Id, item.Title,
+			fmt.Fprintf(&output, "%s\t%q\t%s\t%s\t%s\t%s\n", item.Id, item.Title,
 				item.Start.Format(time.RFC3339), item.End.Format(time.RFC3339), item.Operation, kind)
 		}
 		cursor = result.Page.NextCursor
@@ -217,30 +219,30 @@ func writeScopedMaintenance(stdout, stderr io.Writer, operation string, jsonOut 
 		if operation == "maintenance impact" {
 			countContext = "distinct SLOs, "
 		}
-		fmt.Fprintf(stdout, "Affected SLOs: %s (%sinventory at %s)\n", result.Impact.Total, countContext, result.Impact.InventoryAt.Format(time.RFC3339Nano))
+		fmt.Fprintf(&output, "Affected SLOs: %s (%sinventory at %s)\n", result.Impact.Total, countContext, result.Impact.InventoryAt.Format(time.RFC3339Nano))
 		if !result.Impact.Ready {
-			fmt.Fprintln(stdout, "Effective maintenance membership is being prepared.")
+			fmt.Fprintln(&output, "Effective maintenance membership is being prepared.")
 		}
 		for _, item := range result.Impact.Items {
-			fmt.Fprintf(stdout, "%s\t%q\t%s\t%q", item.SloId, item.SloName, item.ServiceId, item.ServiceName)
+			fmt.Fprintf(&output, "%s\t%q\t%s\t%q", item.SloId, item.SloName, item.ServiceId, item.ServiceName)
 			if item.Start != nil {
-				fmt.Fprintf(stdout, "\t%s\t%s", item.Start.Format(time.RFC3339Nano), item.End.Format(time.RFC3339Nano))
+				fmt.Fprintf(&output, "\t%s\t%s", item.Start.Format(time.RFC3339Nano), item.End.Format(time.RFC3339Nano))
 			}
 			fmt.Fprintln(stdout)
 		}
 		cursor = result.Impact.NextCursor
 	case result.Timeline != nil:
 		if result.Timeline.Pending {
-			fmt.Fprintln(stdout, "Some effective maintenance intervals are being prepared.")
+			fmt.Fprintln(&output, "Some effective maintenance intervals are being prepared.")
 		}
 		for _, item := range result.Timeline.Items {
-			fmt.Fprintf(stdout, "%s\t%q\t%s\t%s\trevision %s\n", item.Window.Id, item.Window.Title,
+			fmt.Fprintf(&output, "%s\t%q\t%s\t%s\trevision %s\n", item.Window.Id, item.Window.Title,
 				item.Start.Format(time.RFC3339Nano), item.End.Format(time.RFC3339Nano), item.Window.Revision)
 		}
 		cursor = result.Timeline.NextCursor
 	default:
 		item := result.Window
-		fmt.Fprintf(stdout, "%q (%s)\nUTC: %s to %s\nReason: %q\nRevision: %s (%s)\nETag: %s\n",
+		fmt.Fprintf(&output, "%q (%s)\nUTC: %s to %s\nReason: %q\nRevision: %s (%s)\nETag: %s\n",
 			item.Title, item.Id, item.Start.Format(time.RFC3339), item.End.Format(time.RFC3339),
 			item.Reason, item.Revision, item.Operation, result.ETag)
 		kind, _ := item.Scope.Discriminator()
@@ -248,19 +250,23 @@ func writeScopedMaintenance(stdout, stderr io.Writer, operation string, jsonOut 
 		case "slos":
 			scope, _ := item.Scope.AsMaintenanceSloScope()
 			for _, id := range scope.SloIds {
-				fmt.Fprintf(stdout, "SLO: %s\n", id)
+				fmt.Fprintf(&output, "SLO: %s\n", id)
 			}
 		case "services":
 			scope, _ := item.Scope.AsMaintenanceServiceScope()
 			for _, id := range scope.ServiceIds {
-				fmt.Fprintf(stdout, "Service: %s\n", id)
+				fmt.Fprintf(&output, "Service: %s\n", id)
 			}
 		case "all_services":
-			fmt.Fprintln(stdout, "Scope: All services")
+			fmt.Fprintln(&output, "Scope: All services")
 		}
 	}
 	if cursor != nil {
-		fmt.Fprintf(stdout, "Next cursor: %s\n", *cursor)
+		fmt.Fprintf(&output, "Next cursor: %s\n", *cursor)
+	}
+	if _, err := output.WriteTo(stdout); err != nil {
+		fmt.Fprintln(stderr, operation+": output failed")
+		return 1
 	}
 	return 0
 }
