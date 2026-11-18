@@ -84,7 +84,7 @@ func staticHandler(assets fs.FS) (http.Handler, error) {
 			return
 		}
 		name := strings.TrimPrefix(path.Clean("/"+r.URL.Path), "/")
-		if alertPath.MatchString(r.URL.Path) || settingsPath.MatchString(r.URL.Path) || r.URL.Path == "/activate" || r.URL.Path == "/" || r.URL.Path == "/agents" || r.URL.Path == "/datasources" || r.URL.Path == "/datasources/new" || datasourceDetailPath.MatchString(r.URL.Path) || r.URL.Path == "/slis" || r.URL.Path == "/slis/new" || sliDetailPath.MatchString(r.URL.Path) || r.URL.Path == "/slos" || r.URL.Path == "/slos/new" || sloDetailPath.MatchString(r.URL.Path) || serviceDetailPath.MatchString(r.URL.Path) {
+		if maintenancePath.MatchString(r.URL.Path) || alertPath.MatchString(r.URL.Path) || settingsPath.MatchString(r.URL.Path) || r.URL.Path == "/activate" || r.URL.Path == "/" || r.URL.Path == "/agents" || r.URL.Path == "/datasources" || r.URL.Path == "/datasources/new" || datasourceDetailPath.MatchString(r.URL.Path) || r.URL.Path == "/slis" || r.URL.Path == "/slis/new" || sliDetailPath.MatchString(r.URL.Path) || r.URL.Path == "/slos" || r.URL.Path == "/slos/new" || sloDetailPath.MatchString(r.URL.Path) || serviceDetailPath.MatchString(r.URL.Path) {
 			name = "index.html"
 		}
 		file, err := assets.Open(name)
@@ -133,3 +133,5 @@ var sloDetailPath = regexp.MustCompile(`^/slos/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{
 var serviceDetailPath = regexp.MustCompile(`^/services(?:/new|/dependencies|/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:/edit)?)?$`)
 
 var alertPath = regexp.MustCompile(`^/alerts(?:/policies(?:/new|/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?|/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$`)
+
+var maintenancePath = regexp.MustCompile(`^/maintenance(?:/new|/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?$`)

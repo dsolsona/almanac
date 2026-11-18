@@ -1,0 +1,31 @@
+.maintenance-panel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.maintenance-detail, .maintenance-empty { padding: 20px; }
+.maintenance-detail + .maintenance-detail { margin-top: 16px; }
+.maintenance-detail dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 12px 24px; margin-bottom: 0; }
+.maintenance-detail dd, .maintenance-detail ul { margin: 0; }
+.maintenance-detail ul { list-style: none; padding: 0; }
+.maintenance-detail li + li { margin-top: 6px; }
+.maintenance-detail dd { overflow-wrap: anywhere; }
+.maintenance-reason { white-space: pre-wrap; }
+.maintenance-history-links { display: flex; flex-wrap: wrap; gap: 16px; }
+.maintenance-schedule-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 145px), 1fr)); align-items: start; gap: 16px; }
+.maintenance-duration .ui-chips-field { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.maintenance-duration .ui-label, .maintenance-duration .ui-error { flex-basis: 100%; margin-bottom: 0; }
+.maintenance-duration .ui-chips { display: contents; }
+.maintenance-duration:has(.ui-chips__custom:not([hidden])) .ui-chip--custom { display: none; }
+.maintenance-duration .ui-chips__custom:not([hidden]) { min-height: 38px; white-space: nowrap; }
+.maintenance-duration .ui-chips__custom:not([hidden])::before { content: 'Custom'; font: 13px var(--mono); }
+.maintenance-duration .ui-chips__custom .ui-control { width: 88px; }
+
+@media (max-width: 620px) {
+  .maintenance-detail dl { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .maintenance-detail dd + dt { margin-top: 10px; }
+}
+
+.maintenance-form { display: grid; gap: 20px; }
+.maintenance-page a.ui-button { text-decoration: none; }
