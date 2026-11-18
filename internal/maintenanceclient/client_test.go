@@ -94,3 +94,31 @@ func TestLifecycleUncertainWrite(t *testing.T) {
 		})
 	}
 }
+
+func TestScopedPreviewUsesReadOnlySelectorRequest(t *testing.T) {
+	const input = `{"scope":{"kind":"all_services"}}`
+	client, err := api.NewClient("https://example.test", api.WithHTTPClient(maintenanceDoer(func(req *http.Request) (*http.Response, error) {
+		if req.Method != http.MethodPost || req.URL.Path != "/api/v1/scoped-maintenance/preview" ||
+			req.URL.Query().Get("limit") != "20" || req.Header.Get("Idempotency-Key") != "" ||
+			req.Header.Get("X-CSRF-Token") == "" {
+			t.Errorf("wrong preview request: %s %s", req.Method, req.URL)
+		}
+		body, err := io.ReadAll(req.Body)
+		if err != nil || string(body) != input {
+			t.Errorf("preview body %s: %v", body, err)
+		}
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(
+			`{"inventory_at":"2026-11-18T02:00:00Z","total":"0","ready":true,"items":[]}`))}, nil
+	})))
+	if err != nil {
+		t.Fatal(err)
+	}
+	editor := func(_ context.Context, req *http.Request) error {
+		req.Header.Set("X-CSRF-Token", "example")
+		return nil
+	}
+	result, err := DoScoped(t.Context(), client, editor, Input{Action: "preview", Scoped: true, Limit: 20, Body: []byte(input)})
+	if err != nil || result.Impact == nil || !result.Impact.Ready || result.Impact.Total != "0" {
+		t.Fatalf("preview result=%+v error=%v", result, err)
+	}
+}
