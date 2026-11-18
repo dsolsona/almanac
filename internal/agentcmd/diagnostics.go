@@ -64,8 +64,10 @@ func (r *diagnosticRunner) start(parent context.Context, request agentprotocol.D
 	if r == nil || r.client == nil || request.Validate() != nil || request.AgentID != r.client.agentID {
 		return errors.New("agent diagnostic request rejected")
 	}
-	now := r.client.currentServerTime()
-	if now.IsZero() || request.DeadlineAt.After(now.Add(30*time.Second)) {
+	localNow := time.Now()
+	now := r.client.serverTimeAt(localNow)
+	// The backend can be ahead of the lower bound used for settlement.
+	if now.IsZero() || request.DeadlineAt.After(r.client.serverTimeUpperBoundAt(localNow).Add(30*time.Second)) {
 		return errors.New("agent diagnostic request rejected")
 	}
 	if request.Operation == "query_preview" && !slices.Contains(r.client.assignments, request.Datasource) {

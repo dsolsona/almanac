@@ -52,3 +52,31 @@ export function validExcludedPopulation(value: Record<string, unknown>): boolean
   const scale = Math.max(good.split('.')[1]?.length ?? 0, total.split('.')[1]?.length ?? 0);
   return atScale(good, scale) <= atScale(total, scale);
 }
+
+type Counts = { good: string | null | undefined; total: string | null | undefined };
+
+export function combineMaintenanceCounts(eligible: Counts, excluded: Counts) {
+  const fields = [eligible.good, eligible.total, excluded.good, excluded.total];
+  if (!fields.every(decimal)) return;
+  const scale = Math.max(...fields.map(value => value.split('.')[1]?.length ?? 0));
+  const [eligibleGood, eligibleTotal, excludedGood, excludedTotal] = fields.map(value => atScale(value, scale)) as [bigint, bigint, bigint, bigint];
+  if (eligibleGood > eligibleTotal || excludedGood > excludedTotal) return;
+  const good = eligibleGood + excludedGood;
+  const total = eligibleTotal + excludedTotal;
+  const precision = 1_000_000_000_000n;
+  const numerator = good * precision;
+  const remainder = total > 0n ? numerator % total : 0n;
+  let ratio = total > 0n ? numerator / total : 0n;
+  if (2n * remainder > total || (2n * remainder === total && ratio % 2n === 1n)) ratio += 1n;
+  function format(value: bigint, places: number) {
+    if (places === 0) return value.toString();
+    const digits = value.toString().padStart(places + 1, '0');
+    return `${digits.slice(0, -places)}.${digits.slice(-places)}`;
+  }
+  return {
+    good: format(good, scale),
+    total: format(total, scale),
+    bad: format(total - good, scale),
+    attainment: total > 0n ? format(ratio, 12) : null,
+  };
+}

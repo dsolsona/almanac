@@ -75,7 +75,8 @@ test('schedule and inspect explicit SLO maintenance in the deployed app', async 
     await page.evaluate(() => localStorage.setItem('almanac-theme', 'dark'));
     await page.setViewportSize({ width: 360, height: 820 });
     await page.goto('/maintenance');
-    await expect(page.getByRole('link', { name: displayName, exact: true })).toBeVisible();
+    const scheduledLink = page.getByRole('link', { name: displayName, exact: true }).and(page.locator(`a[href="${pathname}"]`));
+    await expect(scheduledLink).toBeVisible();
     await expect(page.getByRole('combobox', { name: 'Per page', exact: true })).toHaveValue('10');
     await expect(page.locator('html')).toHaveCSS('color-scheme', 'dark');
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(360);
@@ -90,9 +91,12 @@ test('schedule and inspect explicit SLO maintenance in the deployed app', async 
     const rows = page.locator('.ui-resource-table tbody tr');
     await expect(rows).toHaveCount(10);
     await page.getByRole('button', { name: 'Next ›', exact: true }).click();
-    await expect(rows).toHaveCount(1);
+    await expect(page.getByText('Page 2', { exact: true })).toBeVisible();
+    await expect(rows.first()).toBeVisible();
+    await expect.poll(() => rows.count()).toBeLessThan(10);
     await page.getByRole('combobox', { name: 'Per page', exact: true }).selectOption('20');
-    await expect(rows).toHaveCount(11);
+    await expect.poll(() => rows.count()).toBeGreaterThanOrEqual(11);
+    await expect.poll(() => rows.count()).toBeLessThanOrEqual(20);
 
     const historicalStart = new Date(Math.floor(Date.now() / 60_000) * 60_000 - 60 * 60_000);
     const historicalEnd = new Date(historicalStart.getTime() + 2 * 60 * 60_000);

@@ -169,7 +169,7 @@ func TestDelayedWelcomeUsesLowerBoundForSettlingAndUpperBoundForLeaseExpiry(t *t
 	if got := client.serverTimeAt(receivedAt); !got.Equal(serverTime) {
 		t.Fatalf("scheduling clock at welcome receipt = %s, want lower bound %s", got, serverTime)
 	}
-	if got := client.leaseServerTimeAt(receivedAt); !got.Equal(serverTime.Add(4 * time.Second)) {
+	if got := client.serverTimeUpperBoundAt(receivedAt); !got.Equal(serverTime.Add(4 * time.Second)) {
 		t.Fatalf("lease clock at welcome receipt = %s, want conservative upper bound", got)
 	}
 

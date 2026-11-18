@@ -248,6 +248,8 @@ identity may replay unchanged deliveries; token rotation is not a new producer.
 
 Connection/query tests have a 30s end-to-end deadline and 20s provider execution timeout
 by default. Backend starts the deadline at request creation, not receipt by the agent.
+The agent uses the upper bound of its backend clock estimate to reject deadlines
+too far in the future. The lower bound continues to determine settled intervals.
 Agent deduplicates command IDs during validity; backend persists terminal result
 receipts for 24h. After disconnect an unfinished diagnostic becomes failed/unknown
 at its deadline and is never silently replayed as a new test.

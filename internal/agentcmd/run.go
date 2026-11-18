@@ -67,7 +67,7 @@ type client struct {
 type serverClockEstimate struct {
 	mu              sync.RWMutex
 	serverTime      time.Time
-	leaseServerTime time.Time
+	serverTimeUpper time.Time
 	serverAt        time.Time
 }
 
@@ -618,7 +618,7 @@ func (c *client) writeHeartbeat(ctx context.Context, conn *websocket.Conn) error
 	sentAt := time.Now()
 	if c.pendingSentAt.IsZero() {
 		c.pendingSentAt = sentAt
-		c.pendingServerAtSend = c.leaseServerTimeAt(sentAt)
+		c.pendingServerAtSend = c.serverTimeUpperBoundAt(sentAt)
 	}
 	c.pendingLatestSentAt = sentAt
 	writeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -749,7 +749,7 @@ func (c *client) setServerTime(serverTime time.Time) {
 		c.serverClock = &serverClockEstimate{}
 	}
 	c.serverClock.mu.Lock()
-	c.serverClock.serverTime, c.serverClock.leaseServerTime, c.serverClock.serverAt = serverTime, serverTime, time.Now()
+	c.serverClock.serverTime, c.serverClock.serverTimeUpper, c.serverClock.serverAt = serverTime, serverTime, time.Now()
 	c.serverClock.mu.Unlock()
 }
 
@@ -758,12 +758,12 @@ func (c *client) setServerTimeAt(serverTime, sentAt, receivedAt time.Time) {
 		c.serverClock = &serverClockEstimate{}
 	}
 	// The response timestamp is a lower bound when anchored at local receipt,
-	// which keeps interval settling from starting early. A separate upper-bound
-	// estimate is used only for lease expiry decisions.
+	// which keeps interval settling from starting early. The upper bound
+	// accounts for the observed round trip when checking time limits.
 	conservative := serverTime.Add(receivedAt.Sub(sentAt))
 	c.serverClock.mu.Lock()
 	c.serverClock.serverTime = serverTime
-	c.serverClock.leaseServerTime = conservative
+	c.serverClock.serverTimeUpper = conservative
 	c.serverClock.serverAt = receivedAt
 	c.serverClock.mu.Unlock()
 }
@@ -790,13 +790,13 @@ func (c *client) serverTimeAt(localTime time.Time) time.Time {
 	return c.serverClock.serverTime.Add(localTime.Sub(c.serverClock.serverAt))
 }
 
-func (c *client) leaseServerTimeAt(localTime time.Time) time.Time {
+func (c *client) serverTimeUpperBoundAt(localTime time.Time) time.Time {
 	if c.serverClock == nil {
 		return time.Time{}
 	}
 	c.serverClock.mu.RLock()
 	defer c.serverClock.mu.RUnlock()
-	serverTime := c.serverClock.leaseServerTime
+	serverTime := c.serverClock.serverTimeUpper
 	if serverTime.IsZero() {
 		serverTime = c.serverClock.serverTime
 	}
