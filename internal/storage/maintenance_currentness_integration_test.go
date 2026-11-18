@@ -3,6 +3,7 @@
 package storage
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -60,6 +61,21 @@ func TestIntegrationMaintenanceCurrentnessUsesMeasuredCutoff(t *testing.T) {
 		t.Fatalf("unedited measurements through cutoff %s were not ready: state=%v cutoff=%s err=%v", f.at, current.CurrentState, current.Current.Window.End, err)
 	}
 
+	f.now = f.at.Add(90 * time.Second)
+	if _, err := execObservationFixture(t, f.conn, f.sliID, `
+INSERT INTO almanac_sli_observations
+ (interval_start,sli_id,measurement_revision,outcome,good_count,total_count,result_digest,missing_components,
+  execution_id,delivery_id,agent_id,session_generation,configuration_revision,lease_id,agent_created_at,recorded_at)
+SELECT $2::timestamptz,sli_id,measurement_revision,outcome,good_count,total_count,result_digest,missing_components,
+       gen_random_uuid(),gen_random_uuid(),agent_id,session_generation,configuration_revision,lease_id,$2,$3
+FROM almanac_sli_observations
+WHERE sli_id=$1 AND interval_start=$2::timestamptz-interval '1 minute'`, f.sliID, f.at, f.now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readCurrentSloFromAggregates(t.Context(), q, definition, f.now, nil); !errors.Is(err, ErrDerivedPending) {
+		t.Fatalf("live read missed pending work inside the measured range: %v", err)
+	}
+
 	if _, err := CancelMaintenance(t.Context(), f.f.databaseURL, MaintenanceCommandInput{
 		Scoped: true, Proof: f.proof, ID: firstWindow.ID, Revision: firstWindow.Revision,
 		Reason: "Fixture cancellation", IdempotencyKey: "cancel-measured-cutoff", RequestID: "cancel-measured-cutoff",
@@ -101,32 +117,52 @@ func TestIntegrationMaintenanceCurrentnessUsesMeasuredCutoff(t *testing.T) {
 
 func TestIntegrationMaintenanceCurrentnessDiscardsObsoletePreparation(t *testing.T) {
 	t.Parallel()
-	f := newMaintenanceFixture(t)
-	q := dbgen.New(f.conn)
-	id := mustPGUUID(f.ids[0])
-	row, err := q.GetSlo(t.Context(), id)
-	if err != nil {
-		t.Fatal(err)
-	}
-	old := &maintenanceConsumerSession{
-		requestedRevision: row.ExclusionRevision, sourceCaptured: true,
-		scope:             maintenancePreparationScope{SloID: id, SliID: row.SliID, DefinitionRevision: row.DefinitionRevision, MeasurementRevision: row.MeasurementRevision},
-		preparation:       []maintenanceEvaluationPreparation{{Kind: "mask", RequestedRevision: row.ExclusionRevision}},
-		preparationLimits: maintenancePreparationLimits{MaxRequests: 1, MaxSourceHours: 1},
-	}
-	if _, err := CreateMaintenance(t.Context(), f.f.databaseURL, f.input("after-current-prepare")); err != nil {
-		t.Fatal(err)
-	}
-	compilerTx(t, f, func(tx pgx.Tx) error {
-		// Publication loses its revision fence after capture has created a
-		// build. The caller should still be able to finish its fallback read.
-		return publishCurrentMaintenancePreparation(t.Context(), tx, old, f.clock)
-	})
-	var builds, work int
-	if err := f.conn.QueryRow(t.Context(), `
-		SELECT (SELECT count(*) FROM almanac_maintenance_builds WHERE slo_id=$1),
-		       (SELECT count(*) FROM almanac_maintenance_preparation WHERE slo_id=$1)
-	`, id).Scan(&builds, &work); err != nil || builds != 0 || work != 0 {
-		t.Fatalf("obsolete read committed staging writes: builds=%d work=%d err=%v", builds, work, err)
+	for _, changed := range []bool{false, true} {
+		name := "unchanged"
+		if changed {
+			name = "changed"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			f := newMaintenanceFixture(t)
+			ctx := t.Context()
+			if _, err := CreateMaintenance(ctx, f.f.databaseURL, f.input("before-current-prepare")); err != nil {
+				t.Fatal(err)
+			}
+			q := dbgen.New(f.conn)
+			id := mustPGUUID(f.ids[0])
+			row, err := q.GetSlo(ctx, id)
+			if err != nil || row.ExclusionRevision < 1 {
+				t.Fatalf("expected nonzero exclusion revision: %+v %v", row, err)
+			}
+			generation, err := q.GetDerivedSourceGeneration(ctx, dbgen.GetDerivedSourceGenerationParams{
+				SliID: row.SliID, MeasurementRevision: row.MeasurementRevision,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			session := &maintenanceConsumerSession{
+				requestedRevision: row.ExclusionRevision, sourceCaptured: true, sourceGeneration: generation,
+				scope:             maintenancePreparationScope{SloID: id, SliID: row.SliID, DefinitionRevision: row.DefinitionRevision, MeasurementRevision: row.MeasurementRevision},
+				preparation:       []maintenanceEvaluationPreparation{{Kind: "mask", RequestedRevision: row.ExclusionRevision}},
+				preparationLimits: maintenancePreparationLimits{MaxRequests: 1, MaxSourceHours: 1},
+			}
+			if changed {
+				if _, err := CreateMaintenance(ctx, f.f.databaseURL, f.input("after-current-prepare")); err != nil {
+					t.Fatal(err)
+				}
+			}
+			compilerTx(t, f, func(tx pgx.Tx) error {
+				return publishCurrentMaintenancePreparation(ctx, tx, session, f.clock)
+			})
+			var builds, work int
+			err = f.conn.QueryRow(ctx, `
+				SELECT (SELECT count(*) FROM almanac_maintenance_builds WHERE slo_id=$1),
+				       (SELECT count(*) FROM almanac_maintenance_preparation WHERE slo_id=$1)
+			`, id).Scan(&builds, &work)
+			if err != nil || changed && (builds != 0 || work != 0) || !changed && (builds != 1 || work != 1) {
+				t.Fatalf("unexpected staging writes: builds=%d work=%d err=%v", builds, work, err)
+			}
+		})
 	}
 }

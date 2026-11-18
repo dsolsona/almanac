@@ -36,6 +36,17 @@ func TestIntegrationMaintenanceFutureImpactCompletionAndCancellation(t *testing.
 	if _, err := ReadMaintenanceImpact(t.Context(), f.f.databaseURL, input); !errors.Is(err, ErrMaintenanceSnapshotChanged) {
 		t.Errorf("old same-window continuation should request reload: %v", err)
 	}
+
+	plain := legacy
+	plain.AgentID = window.ID
+	plain.MaintenanceSnapshot = &maintenanceCursorSnapshot{LegacyAuthorityRevision: new(int64(1)), WindowRevision: window.Revision}
+	input.Cursor, err = encodeAgentCursor(plain)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ReadMaintenanceImpact(t.Context(), f.f.databaseURL, input); !errors.Is(err, ErrMaintenanceSnapshotChanged) {
+		t.Errorf("previous plain-window cursor should request reload: %v", err)
+	}
 	wrongWindow := f.ids[0]
 	legacy.AgentID = wrongWindow + "/1"
 	input.Cursor, err = encodeAgentCursor(legacy)
