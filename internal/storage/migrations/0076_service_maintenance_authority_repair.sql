@@ -88,6 +88,7 @@ CREATE TABLE public.almanac_service_maintenance_uncertain_grids (
     service_id uuid NOT NULL REFERENCES public.almanac_services(id),
     uncertain_at tstzmultirange NOT NULL CHECK (NOT isempty(uncertain_at)),
     published_revision bigint NOT NULL CHECK (published_revision >= 0),
+    published_definition_revision bigint NOT NULL CHECK (published_definition_revision > 0),
     PRIMARY KEY (slo_id, service_id)
 );
 CREATE INDEX almanac_service_maintenance_uncertain_grid_service_idx
@@ -99,7 +100,7 @@ CREATE INDEX almanac_service_maintenance_uncertain_grid_service_idx
 WITH repair_cutoff AS MATERIALIZED (
     SELECT clock_timestamp() AS at
 ), candidates AS (
-    SELECT d.slo_id, d.service_id,
+    SELECT d.slo_id, d.service_id, s.definition_revision AS published_definition_revision,
            greatest(d.activated_at, previous.effective_at) AS starts_at,
            least(next.effective_at, cutoff.at) AS ends_at
     FROM public.almanac_slos s
@@ -122,11 +123,14 @@ WITH repair_cutoff AS MATERIALIZED (
         WHERE known.slo_id = d.slo_id AND known.definition_revision = d.revision
     )
 ), uncertain AS (
-    INSERT INTO public.almanac_service_maintenance_uncertain_grids(slo_id, service_id, uncertain_at, published_revision)
-    SELECT c.slo_id, c.service_id, range_agg(tstzrange(c.starts_at, c.ends_at, '[)')), state.revision
+    INSERT INTO public.almanac_service_maintenance_uncertain_grids(
+        slo_id, service_id, uncertain_at, published_revision, published_definition_revision
+    )
+    SELECT c.slo_id, c.service_id, range_agg(tstzrange(c.starts_at, c.ends_at, '[)')),
+           state.revision, c.published_definition_revision
     FROM candidates c JOIN public.almanac_slo_exclusion_state state ON state.slo_id = c.slo_id
     WHERE c.starts_at < c.ends_at
-    GROUP BY c.slo_id, c.service_id, state.revision
+    GROUP BY c.slo_id, c.service_id, state.revision, c.published_definition_revision
     RETURNING slo_id
 ), seeded AS (
     -- The active grid is known at upgrade. Start using it prospectively,
@@ -227,12 +231,11 @@ DECLARE
     old_coverage tstzmultirange := '{}';
     new_coverage tstzmultirange := '{}';
     uncertain_coverage tstzmultirange;
-    known_published_grid interval;
     published_revision bigint;
+    published_definition_revision bigint;
     published_coverage tstzmultirange := '{}';
     preserved_coverage tstzmultirange := '{}';
     window_start timestamptz;
-    window_end timestamptz;
     affected tstzrange;
     next_revision bigint;
     changed boolean;
@@ -262,8 +265,8 @@ BEGIN
     -- Only the raw unresolved span constrains new coverage. Preserve old
     -- observations separately, so their grid cannot delay known coverage.
     SELECT coalesce(range_agg(u.uncertain_at * tstzmultirange(tstzrange(r.starts_at, r.ends_at, '[)'))), '{}'),
-           max(u.published_revision), max(r.starts_at), max(r.ends_at)
-    INTO uncertain_coverage, published_revision, window_start, window_end
+           max(u.published_revision), max(u.published_definition_revision), max(r.starts_at)
+    INTO uncertain_coverage, published_revision, published_definition_revision, window_start
     FROM public.almanac_service_maintenance_uncertain_grids u
     JOIN public.almanac_maintenance_exclusion_revisions r
       ON r.exclusion_id = wanted_exclusion AND r.revision = wanted_revision
@@ -281,36 +284,54 @@ BEGIN
         IF FOUND AND published.included THEN
             published_coverage := public.almanac_effective_maintenance_coverage(
                 wanted_slo, wanted_exclusion, published.exclusion_revision, published.effective_coverage);
-            -- The old compiler used one grid at publication. Trust the grid
-            -- only when the journal covers that instant unambiguously.
-            SELECT make_interval(secs => d.cadence_seconds) INTO known_published_grid
-            FROM public.almanac_slo_service_assignments a
-            JOIN public.almanac_slo_definitions d ON d.slo_id = a.slo_id AND d.revision = a.definition_revision
-            WHERE a.slo_id = wanted_slo AND a.effective_at <= published.recorded_at
-              AND NOT EXISTS (
-                  SELECT 1 FROM public.almanac_service_maintenance_uncertain_grids u
-                  WHERE u.slo_id = wanted_slo AND u.uncertain_at @> published.recorded_at
-              )
-            ORDER BY a.effective_at DESC, a.definition_revision DESC LIMIT 1;
-
-            WITH pieces AS (
-                SELECT old_part, uncertain_part,
-                       greatest(lower(old_part), date_bin(known_published_grid, lower(uncertain_part), epoch)) AS preserved_start,
-                       least(upper(old_part), date_bin(known_published_grid, upper(uncertain_part), epoch)) AS preserved_end
+            -- The old projector used one grid at publication. When its
+            -- selection time is missing, a staged definition is only a
+            -- candidate. The stored component's endpoints rule out grids
+            -- that could not have produced it.
+            WITH publication AS MATERIALIZED (
+                SELECT EXISTS (
+                    SELECT 1 FROM public.almanac_service_maintenance_uncertain_grids u
+                    WHERE u.slo_id = wanted_slo AND u.uncertain_at @> published.recorded_at
+                ) AS ambiguous,
+                (
+                    SELECT a.definition_revision FROM public.almanac_slo_service_assignments a
+                    WHERE a.slo_id = wanted_slo AND a.definition_revision <= published_definition_revision
+                      AND a.effective_at <= published.recorded_at
+                    ORDER BY a.effective_at DESC, a.definition_revision DESC LIMIT 1
+                ) AS prior_revision,
+                (
+                    SELECT a.definition_revision FROM public.almanac_slo_service_assignments a
+                    WHERE a.slo_id = wanted_slo AND a.definition_revision <= published_definition_revision
+                      AND a.effective_at > published.recorded_at
+                    ORDER BY a.effective_at, a.definition_revision LIMIT 1
+                ) AS next_revision
+            ), grids AS (
+                SELECT DISTINCT make_interval(secs => d.cadence_seconds) AS cadence
+                FROM public.almanac_slo_definitions d CROSS JOIN publication p
+                WHERE d.slo_id = wanted_slo AND d.revision <= published_definition_revision
+                  AND (d.revision = p.prior_revision OR (
+                      p.ambiguous AND d.revision > p.prior_revision
+                      AND (p.next_revision IS NULL OR d.revision < p.next_revision)
+                      AND d.activated_at <= published.recorded_at
+                  ))
+            ), pieces AS MATERIALIZED (
+                SELECT old_part, uncertain_part
                 FROM unnest(published_coverage) old_part
                 JOIN unnest(uncertain_coverage) uncertain_part ON old_part && uncertain_part
+            ), grid_bounds AS (
+                SELECT greatest(lower(old_part), date_bin(g.cadence, lower(uncertain_part), epoch)) AS preserved_start,
+                       least(upper(old_part), date_bin(g.cadence, upper(uncertain_part), epoch)) AS preserved_end
+                FROM pieces CROSS JOIN grids g
+                WHERE lower(old_part) = date_bin(g.cadence, lower(old_part), epoch)
+                  AND upper(old_part) = date_bin(g.cadence, upper(old_part), epoch)
             ), clipped AS (
-                SELECT CASE
-                    WHEN known_published_grid IS NOT NULL
-                         AND lower(old_part) = date_bin(known_published_grid, lower(old_part), epoch)
-                         AND upper(old_part) = date_bin(known_published_grid, upper(old_part), epoch)
-                         AND preserved_start >= window_start AND preserved_start < preserved_end
-                        THEN tstzrange(preserved_start, preserved_end, '[)')
-                    -- When the original grid is unknown, retain a mask
-                    -- component only if it can be reused whole.
-                    WHEN old_part <@ uncertain_part THEN old_part
-                END AS part
-                FROM pieces
+                -- Begin with the whole observation crossing the uncertain
+                -- start; the end may never reach into known future coverage.
+                SELECT tstzrange(preserved_start, preserved_end, '[)') AS part
+                FROM grid_bounds
+                WHERE preserved_start >= window_start AND preserved_start < preserved_end
+                UNION ALL
+                SELECT old_part FROM pieces WHERE old_part <@ uncertain_part
             )
             SELECT coalesce(range_agg(part), '{}') INTO preserved_coverage FROM clipped;
         END IF;
