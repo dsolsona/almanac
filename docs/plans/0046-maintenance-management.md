@@ -3,7 +3,7 @@
 The explicit-SLO [API](../tasks/F4-T53.md), [CLI](../tasks/F4-T54.md),
 [browser lifecycle](../tasks/F4-T57.md) and [timeline overlays](../tasks/F4-T56.md)
 have merged.
-The next increment implements
+The service-scoped increment merged on 2026-11-18 at `779c2e8`. It implements
 [SPEC-0023](../specs/0023-maintenance-management.md) and
 [ADR-0053](../adr/0053-service-maintenance-workflow.md), building on
 [plan 0039](0039-maintenance-exclusion-authority.md) and the calculation and
