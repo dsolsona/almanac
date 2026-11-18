@@ -126,11 +126,12 @@ test('maintenance bands identify the whole period and the budget tooltip escapes
  const title = 'Checkout database upgrade';
  const start = '2026-11-08T02:30:00Z';
  const end = '2026-11-10T04:45:00Z';
+ let pending = false;
  await page.route(`**/api/v1/slos/${sloID}/scoped-maintenance?*`, route => {
   const bounds = new URL(route.request().url()).searchParams;
   expect(bounds.get('start')).toBe(sloFixture().range.effective_start);
   expect(bounds.get('end')).toBe(sloFixture().range.effective_end);
-  return route.fulfill({ json: { pending: true, items: [{ start, end, window: {
+  return route.fulfill({ json: { pending, items: pending ? [] : [{ start, end, window: {
     id, title, reason: 'Apply a scheduled database update.', start: '2026-11-07T02:00:00Z', end,
     tombstone: false, scope: { kind: 'services', service_ids: [id] }, revision: '1', operation: 'create',
     created_at: start, updated_at: start, creator_id: id, actor_id: id, audit_id: id,
@@ -138,7 +139,7 @@ test('maintenance bands identify the whole period and the budget tooltip escapes
  });
  await page.goto(`/slos/${sloID}?range=7d`);
  await expect(page.locator('.slo-maintenance-band')).toHaveCount(3);
- await expect(page.getByText('Some maintenance periods are still being prepared.')).toBeVisible();
+ await expect(page.getByText('Some maintenance periods are still being prepared.')).toHaveCount(0);
 
  for (const kind of ['budget', 'burn', 'attainment']) {
   const chart = page.locator(`.slo-history-chart.${kind}`);
@@ -185,6 +186,11 @@ test('maintenance bands identify the whole period and the budget tooltip escapes
  await expect(windowLink).toHaveAttribute('href', `/maintenance/${id}`);
  await expect(windowLink.locator('..')).toContainText('02:30:00 UTC');
  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+
+ pending = true;
+ await page.reload();
+ await expect(page.getByText('Some maintenance periods are still being prepared.')).toBeVisible();
+ await expect(page.locator('.slo-maintenance-band')).toHaveCount(0);
 });
 
 test('long overlapping maintenance titles fit the hover panel on a short mobile viewport', async ({ page }) => {
