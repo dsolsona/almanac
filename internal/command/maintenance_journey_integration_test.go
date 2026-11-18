@@ -163,4 +163,52 @@ func verifyMaintenanceHTTP(t *testing.T, client *http.Client, baseURL, session s
 		!clustered.Overflow.Start.Equal(clusterStart) || !clustered.Overflow.End.Equal(clusterEnd) {
 		t.Fatalf("counted maintenance overflow missing from authenticated response: %s", data)
 	}
+
+	const scopedPath = "/api/v1/scoped-maintenance"
+	var scopes [3]api.MaintenanceScope
+	if err := scopes[0].FromMaintenanceSloScope(api.MaintenanceSloScope{Kind: "slos", SloIds: input.SloIds}); err != nil {
+		t.Fatal(err)
+	}
+	if err := scopes[1].FromMaintenanceServiceScope(api.MaintenanceServiceScope{Kind: "services", ServiceIds: []api.ServiceId{slo.ServiceId}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := scopes[2].FromMaintenanceAllServicesScope(api.MaintenanceAllServicesScope{Kind: "all_services"}); err != nil {
+		t.Fatal(err)
+	}
+	for i, kind := range []string{"slos", "services", "all_services"} {
+		_, data := call(http.MethodPost, scopedPath+"/preview?limit=200", "", "", api.MaintenanceScopePreview{Scope: scopes[i]}, 200)
+		var preview api.MaintenanceImpactPage
+		if err := json.Unmarshal(data, &preview, json.RejectUnknownMembers(true)); err != nil || !preview.Ready || preview.Total == "0" {
+			t.Fatalf("%s preview unavailable: %s (%v)", kind, data, err)
+		}
+		found := false
+		for _, item := range preview.Items {
+			if item.SloId == slo.Id && item.ServiceId == slo.ServiceId && item.Start == nil && item.End == nil {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("%s preview missing the objective and service: %s", kind, data)
+		}
+
+		scopedStart := start.Truncate(time.Hour).Add(24 * time.Hour)
+		req := api.ScopedMaintenanceWrite{Title: input.Title, Reason: input.Reason,
+			Start: scopedStart, End: scopedStart.Add(time.Hour), Scope: scopes[i]}
+		response, data := call(http.MethodPost, scopedPath, "scoped-"+kind, "", req, 201)
+		var stored api.ScopedMaintenanceWindow
+		if err := json.Unmarshal(data, &stored, json.RejectUnknownMembers(true)); err != nil || stored.Revision != "1" {
+			t.Fatalf("%s create did not return the current window: %s (%v)", kind, data, err)
+		}
+		gotKind, err := stored.Scope.Discriminator()
+		if err != nil || gotKind != kind || response.Header.Get("Location") != scopedPath+"/"+stored.Id.String() {
+			t.Fatalf("%s create changed selected scope or location: %s (%v)", kind, data, err)
+		}
+		if kind != "slos" {
+			call(http.MethodGet, path+"/"+stored.Id.String(), "", "", nil, 404)
+		}
+		call(http.MethodGet, response.Header.Get("Location")+"/impact?revision=1&limit=1", "", "", nil, 200)
+		call(http.MethodPost, response.Header.Get("Location")+"/cancel", "scoped-cancel-"+kind,
+			response.Header.Get("ETag"), api.MaintenanceReason{Reason: "Reschedule"}, 200)
+	}
+
 }

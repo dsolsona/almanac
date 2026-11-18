@@ -242,3 +242,38 @@ func TestIntegrationAlertMaintenanceSuppressesOnInclusiveStart(t *testing.T) {
 		t.Fatalf("suppression changed the numerical evaluation: %+v", evidence.Evaluation)
 	}
 }
+
+func TestIntegrationAlertMaintenanceRejectsUnprojectedPopulation(t *testing.T) {
+	t.Parallel()
+	f := newAlertTestFixture(t)
+	f.policy(t, "Projected maintenance")
+	initial := f.claim(t, f.at)
+	firstClock := func() time.Time { return f.at.Add(time.Second) }
+	if result, err := f.runtime.commitAlertEvaluation(t.Context(), initial, f.input(t, initial, alert.Complete, false), f.limits, firstClock); err != nil || result.Occurrence != nil {
+		t.Fatalf("establish uncovered initial decision: %+v %v", result, err)
+	}
+	claim := f.claim(t, f.at.Add(time.Minute))
+	stale := f.input(t, claim, alert.Complete, true)
+	row, err := dbgen.New(f.conn).GetSlo(t.Context(), mustPGUUID(f.sloID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := alertMaintenanceFixture(f)
+	request := m.input("covered-unprojected")
+	request.Scoped, request.ScopeKind, request.SloIDs = true, MaintenanceScopeServices, nil
+	request.ServiceIDs = []string{row.ServiceID.String()}
+	request.Start, request.End = f.at, f.at.Add(2*time.Minute)
+	if _, err := CreateMaintenance(t.Context(), f.f.databaseURL, request); err != nil {
+		t.Fatal(err)
+	}
+	clock := func() time.Time { return claim.ScheduledAt.Add(time.Second) }
+	if result, err := f.runtime.commitAlertEvaluation(t.Context(), claim, stale, f.limits, clock); !errors.Is(err, ErrDerivedPending) || result.EvaluationID != "" {
+		t.Fatalf("published stale evidence while membership was being projected: %+v %v", result, err)
+	}
+	if err := f.runtime.runServiceMaintenanceProjection(t.Context(), 4, time.Second, clock); err != nil {
+		t.Fatal(err)
+	}
+	if result, err := f.runtime.commitAlertEvaluation(t.Context(), claim, stale, f.limits, clock); !errors.Is(err, ErrAlertStale) || result.EvaluationID != "" {
+		t.Fatalf("reused pre-maintenance evidence after membership advanced: %+v %v", result, err)
+	}
+}
