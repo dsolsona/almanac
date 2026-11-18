@@ -75,7 +75,8 @@ test('schedule and inspect explicit SLO maintenance in the deployed app', async 
     await page.evaluate(() => localStorage.setItem('almanac-theme', 'dark'));
     await page.setViewportSize({ width: 360, height: 820 });
     await page.goto('/maintenance');
-    await expect(page.getByRole('link', { name: displayName, exact: true })).toBeVisible();
+    const scheduledLink = page.getByRole('link', { name: displayName, exact: true }).and(page.locator(`a[href="${pathname}"]`));
+    await expect(scheduledLink).toBeVisible();
     await expect(page.getByRole('combobox', { name: 'Per page', exact: true })).toHaveValue('10');
     await expect(page.locator('html')).toHaveCSS('color-scheme', 'dark');
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(360);
