@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -101,7 +102,8 @@ func TestScopedPreviewUsesReadOnlySelectorRequest(t *testing.T) {
 	client, err := api.NewClient("https://example.test", api.WithHTTPClient(maintenanceDoer(func(req *http.Request) (*http.Response, error) {
 		if req.Method != http.MethodPost || req.URL.Path != "/api/v1/scoped-maintenance/preview" ||
 			req.URL.Query().Get("limit") != "20" || req.Header.Get("Idempotency-Key") != "" ||
-			req.Header.Get("X-CSRF-Token") == "" {
+			!slices.Equal(req.Header.Values("X-CSRF-Token"), []string{"example"}) ||
+			!slices.Equal(req.Header.Values("Origin"), []string{"https://example.test"}) {
 			t.Errorf("wrong preview request: %s %s", req.Method, req.URL)
 		}
 		body, err := io.ReadAll(req.Body)
@@ -116,6 +118,7 @@ func TestScopedPreviewUsesReadOnlySelectorRequest(t *testing.T) {
 	}
 	editor := func(_ context.Context, req *http.Request) error {
 		req.Header.Set("X-CSRF-Token", "example")
+		req.Header.Set("Origin", "https://example.test")
 		return nil
 	}
 	result, err := DoScoped(t.Context(), client, editor, Input{Action: "preview", Scoped: true, Limit: 20, Body: []byte(input)})
@@ -183,5 +186,23 @@ func TestScopedWindowListAcceptsLargeValidPage(t *testing.T) {
 	result, err := DoScoped(t.Context(), client, func(context.Context, *http.Request) error { return nil }, Input{Action: "list", Scoped: true, Limit: pageSize})
 	if err != nil || result.Page == nil || len(result.Page.Items) != pageSize || result.Page.NextCursor == nil || *result.Page.NextCursor != "next" {
 		t.Fatalf("large page rejected or incomplete: %v", err)
+	}
+}
+
+func TestMaintenanceSnapshotRecoveryGuidance(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		code, message string
+		mutation      bool
+	}{
+		{"maintenance_write_retry", "The affected SLO inventory changed. Retry the same request with the same idempotency key.", true},
+		{"maintenance_snapshot_changed", "The maintenance inventory changed. Restart from the first page.", false},
+	} {
+		body := []byte(`{"code":"` + tc.code + `"}`)
+		err := problemFailure(t.Context(), tc.mutation, http.StatusConflict, body)
+		failure, ok := errors.AsType[*datasourceclient.Failure](err)
+		if !ok || failure.BackendCode != tc.code || failure.Message != tc.message || failure.Unknown {
+			t.Fatalf("wrong recovery for %s: %+v", tc.code, err)
+		}
 	}
 }

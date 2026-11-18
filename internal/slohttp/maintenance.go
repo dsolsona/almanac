@@ -148,7 +148,7 @@ func (h *Handler) maintenance(w http.ResponseWriter, r *http.Request, requestID 
 		}
 	}
 	if err != nil {
-		maintenanceError(w, err, requestID)
+		maintenanceWriteError(w, err, requestID)
 		return
 	}
 	status = 200
@@ -288,6 +288,17 @@ func writeMaintenancePage(w http.ResponseWriter, page storage.MaintenancePage, e
 	write(w, 200, out)
 }
 
+func maintenanceWriteError(w http.ResponseWriter, err error, requestID string) {
+	if errors.Is(err, storage.ErrMaintenanceSnapshotChanged) {
+		writeMaintenanceProblem(w, http.StatusConflict, api.Problem{
+			Code: "maintenance_write_retry", Message: "The affected SLO inventory changed. Retry the same request with the same idempotency key.",
+			RequestId: requestID,
+		})
+		return
+	}
+	maintenanceError(w, err, requestID)
+}
+
 func maintenanceError(w http.ResponseWriter, err error, requestID string) {
 	p := api.Problem{RequestId: requestID}
 	var status int
@@ -319,6 +330,10 @@ func maintenanceError(w http.ResponseWriter, err error, requestID string) {
 		storageError(w, err, requestID)
 		return
 	}
+	writeMaintenanceProblem(w, status, p)
+}
+
+func writeMaintenanceProblem(w http.ResponseWriter, status int, p api.Problem) {
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(status)
 	_ = json.MarshalWrite(w, p)

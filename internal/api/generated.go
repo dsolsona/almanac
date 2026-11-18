@@ -4127,10 +4127,10 @@ type MaintenanceImpactPage struct {
 	InventoryAt time.Time                 `json:"inventory_at"`
 	Items       []MaintenanceImpactMember `json:"items"`
 
-	// NextCursor Follow until absent to retrieve all participation intervals. One SLO can have several intervals.
+	// NextCursor Follow until absent to retrieve the remaining results for this membership query.
 	NextCursor *string `json:"next_cursor,omitempty"`
 
-	// Ready False for future or preparing effective membership. True for final results including revisions superseded before activation.
+	// Ready Whether the requested membership is available. Future explicit SLO selections can be ready. A service-derived selection remains pending until its recorded membership is available. Revisions superseded before activation have final empty membership.
 	Ready bool `json:"ready"`
 
 	// Total Exact number of distinct affected SLOs across the inventory or effective membership page set.
@@ -5435,6 +5435,12 @@ type IdempotencyKey = string
 // IfMatch defines model for IfMatch.
 type IfMatch = string
 
+// MaintenanceCsrfToken defines model for MaintenanceCsrfToken.
+type MaintenanceCsrfToken = string
+
+// MaintenanceOrigin defines model for MaintenanceOrigin.
+type MaintenanceOrigin = string
+
 // PageCursor defines model for PageCursor.
 type PageCursor = string
 
@@ -5792,6 +5798,12 @@ type ListScopedMaintenanceParams struct {
 
 // CreateScopedMaintenanceParams defines parameters for CreateScopedMaintenance.
 type CreateScopedMaintenanceParams struct {
+	// Origin One Origin header equal to the configured public HTTPS origin.
+	Origin MaintenanceOrigin `json:"Origin"`
+
+	// XCSRFToken Session-bound CSRF token returned by the context endpoint.
+	XCSRFToken MaintenanceCsrfToken `json:"X-CSRF-Token"`
+
 	// IdempotencyKey One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split.
 	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
@@ -5800,6 +5812,12 @@ type CreateScopedMaintenanceParams struct {
 type PreviewMaintenanceScopeParams struct {
 	Limit  *PageLimit  `form:"limit,omitempty" json:"limit,omitempty"`
 	Cursor *PageCursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+
+	// Origin One Origin header equal to the configured public HTTPS origin.
+	Origin MaintenanceOrigin `json:"Origin"`
+
+	// XCSRFToken Session-bound CSRF token returned by the context endpoint.
+	XCSRFToken MaintenanceCsrfToken `json:"X-CSRF-Token"`
 }
 
 // GetScopedMaintenanceParams defines parameters for GetScopedMaintenance.
@@ -5810,6 +5828,12 @@ type GetScopedMaintenanceParams struct {
 
 // EditScopedMaintenanceParams defines parameters for EditScopedMaintenance.
 type EditScopedMaintenanceParams struct {
+	// Origin One Origin header equal to the configured public HTTPS origin.
+	Origin MaintenanceOrigin `json:"Origin"`
+
+	// XCSRFToken Session-bound CSRF token returned by the context endpoint.
+	XCSRFToken MaintenanceCsrfToken `json:"X-CSRF-Token"`
+
 	// IfMatch Strong ETag of the maintenance revision.
 	IfMatch string `json:"If-Match"`
 
@@ -5819,6 +5843,12 @@ type EditScopedMaintenanceParams struct {
 
 // CancelScopedMaintenanceParams defines parameters for CancelScopedMaintenance.
 type CancelScopedMaintenanceParams struct {
+	// Origin One Origin header equal to the configured public HTTPS origin.
+	Origin MaintenanceOrigin `json:"Origin"`
+
+	// XCSRFToken Session-bound CSRF token returned by the context endpoint.
+	XCSRFToken MaintenanceCsrfToken `json:"X-CSRF-Token"`
+
 	// IfMatch Strong ETag of the maintenance revision.
 	IfMatch string `json:"If-Match"`
 
@@ -5828,6 +5858,12 @@ type CancelScopedMaintenanceParams struct {
 
 // EndScopedMaintenanceParams defines parameters for EndScopedMaintenance.
 type EndScopedMaintenanceParams struct {
+	// Origin One Origin header equal to the configured public HTTPS origin.
+	Origin MaintenanceOrigin `json:"Origin"`
+
+	// XCSRFToken Session-bound CSRF token returned by the context endpoint.
+	XCSRFToken MaintenanceCsrfToken `json:"X-CSRF-Token"`
+
 	// IfMatch Strong ETag of the maintenance revision.
 	IfMatch string `json:"If-Match"`
 
@@ -5845,6 +5881,12 @@ type ReadMaintenanceImpactParams struct {
 
 // WithdrawScopedMaintenanceParams defines parameters for WithdrawScopedMaintenance.
 type WithdrawScopedMaintenanceParams struct {
+	// Origin One Origin header equal to the configured public HTTPS origin.
+	Origin MaintenanceOrigin `json:"Origin"`
+
+	// XCSRFToken Session-bound CSRF token returned by the context endpoint.
+	XCSRFToken MaintenanceCsrfToken `json:"X-CSRF-Token"`
+
 	// IfMatch Strong ETag of the maintenance revision.
 	IfMatch string `json:"If-Match"`
 
@@ -7184,16 +7226,12 @@ type ClientInterface interface {
 
 	// CreateScopedMaintenanceWithBody Create a scoped maintenance window
 	//
-	// Requires one Origin header equal to the configured public HTTPS origin.
-	//
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /api/v1/scoped-maintenance (the `CreateScopedMaintenance` operationId).
 	CreateScopedMaintenanceWithBody(ctx context.Context, params *CreateScopedMaintenanceParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// CreateScopedMaintenance Create a scoped maintenance window
-	//
-	// Requires one Origin header equal to the configured public HTTPS origin.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -7202,7 +7240,7 @@ type ClientInterface interface {
 
 	// PreviewMaintenanceScopeWithBody Inspect the current affected SLO inventory for a maintenance selector
 	//
-	// Read-only operation available to Viewers. Requires one Origin header equal to the configured public HTTPS origin. Scope and pagination are bound to the cursor. An empty valid inventory has a zero total.
+	// Read-only operation available to Viewers. Scope and pagination are bound to the cursor. Follow next_cursor to retrieve the remaining inventory. An empty valid inventory has a zero total.
 	//
 	// Takes any type of body and a specified content type.
 	//
@@ -7211,7 +7249,7 @@ type ClientInterface interface {
 
 	// PreviewMaintenanceScope Inspect the current affected SLO inventory for a maintenance selector
 	//
-	// Read-only operation available to Viewers. Requires one Origin header equal to the configured public HTTPS origin. Scope and pagination are bound to the cursor. An empty valid inventory has a zero total.
+	// Read-only operation available to Viewers. Scope and pagination are bound to the cursor. Follow next_cursor to retrieve the remaining inventory. An empty valid inventory has a zero total.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -7225,16 +7263,12 @@ type ClientInterface interface {
 
 	// EditScopedMaintenanceWithBody Replace maintenance window details
 	//
-	// Requires one Origin header equal to the configured public HTTPS origin.
-	//
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with PUT /api/v1/scoped-maintenance/{maintenance_id} (the `EditScopedMaintenance` operationId).
 	EditScopedMaintenanceWithBody(ctx context.Context, maintenanceId openapi_types.UUID, params *EditScopedMaintenanceParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// EditScopedMaintenance Replace maintenance window details
-	//
-	// Requires one Origin header equal to the configured public HTTPS origin.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -7243,16 +7277,12 @@ type ClientInterface interface {
 
 	// CancelScopedMaintenanceWithBody Cancel scheduled maintenance
 	//
-	// Requires one Origin header equal to the configured public HTTPS origin.
-	//
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /api/v1/scoped-maintenance/{maintenance_id}/cancel (the `CancelScopedMaintenance` operationId).
 	CancelScopedMaintenanceWithBody(ctx context.Context, maintenanceId openapi_types.UUID, params *CancelScopedMaintenanceParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// CancelScopedMaintenance Cancel scheduled maintenance
-	//
-	// Requires one Origin header equal to the configured public HTTPS origin.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -7261,16 +7291,12 @@ type ClientInterface interface {
 
 	// EndScopedMaintenanceWithBody End maintenance prospectively
 	//
-	// Requires one Origin header equal to the configured public HTTPS origin.
-	//
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /api/v1/scoped-maintenance/{maintenance_id}/end (the `EndScopedMaintenance` operationId).
 	EndScopedMaintenanceWithBody(ctx context.Context, maintenanceId openapi_types.UUID, params *EndScopedMaintenanceParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// EndScopedMaintenance End maintenance prospectively
-	//
-	// Requires one Origin header equal to the configured public HTTPS origin.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -7279,14 +7305,12 @@ type ClientInterface interface {
 
 	// ReadMaintenanceImpact Read the effective membership of a maintenance revision
 	//
-	// Effective membership includes retained participation bounds. A page with ready false describes a future or still-preparing population. A revision superseded before activation returns a final, ready, empty result. Continue with next_cursor until absent. On a continuation, an omitted revision uses the revision bound to the cursor. If the inventory changes, restart from the first page.
+	// Effective membership includes participation bounds, and one SLO can have several intervals. An explicit SLO selection can have ready membership before the window starts. A service-derived selection is ready when its membership and recorded participation bounds are available. A revision superseded before activation returns a final, ready, empty result. Continue with next_cursor until absent. An omitted revision on a continuation uses the revision bound to the cursor. After a 409 maintenance_snapshot_changed response, restart from the first page without the cursor. Omitting revision on a new first page can select a newer revision. To audit the same revision across restarts, first read the window revision and pass it explicitly from the first page onward.
 	//
 	// Corresponds with GET /api/v1/scoped-maintenance/{maintenance_id}/impact (the `ReadMaintenanceImpact` operationId).
 	ReadMaintenanceImpact(ctx context.Context, maintenanceId openapi_types.UUID, params *ReadMaintenanceImpactParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// WithdrawScopedMaintenanceWithBody Include maintenance events again
-	//
-	// Requires one Origin header equal to the configured public HTTPS origin.
 	//
 	// Takes any type of body and a specified content type.
 	//
@@ -7294,8 +7318,6 @@ type ClientInterface interface {
 	WithdrawScopedMaintenanceWithBody(ctx context.Context, maintenanceId openapi_types.UUID, params *WithdrawScopedMaintenanceParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// WithdrawScopedMaintenance Include maintenance events again
-	//
-	// Requires one Origin header equal to the configured public HTTPS origin.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -9139,8 +9161,6 @@ func (c *Client) ListScopedMaintenance(ctx context.Context, params *ListScopedMa
 
 // CreateScopedMaintenanceWithBody Create a scoped maintenance window
 //
-// Requires one Origin header equal to the configured public HTTPS origin.
-//
 // Takes any type of body and a specified content type.
 //
 // Corresponds with POST /api/v1/scoped-maintenance (the `CreateScopedMaintenance` operationId).
@@ -9157,8 +9177,6 @@ func (c *Client) CreateScopedMaintenanceWithBody(ctx context.Context, params *Cr
 }
 
 // CreateScopedMaintenance Create a scoped maintenance window
-//
-// Requires one Origin header equal to the configured public HTTPS origin.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -9177,7 +9195,7 @@ func (c *Client) CreateScopedMaintenance(ctx context.Context, params *CreateScop
 
 // PreviewMaintenanceScopeWithBody Inspect the current affected SLO inventory for a maintenance selector
 //
-// Read-only operation available to Viewers. Requires one Origin header equal to the configured public HTTPS origin. Scope and pagination are bound to the cursor. An empty valid inventory has a zero total.
+// Read-only operation available to Viewers. Scope and pagination are bound to the cursor. Follow next_cursor to retrieve the remaining inventory. An empty valid inventory has a zero total.
 //
 // Takes any type of body and a specified content type.
 //
@@ -9196,7 +9214,7 @@ func (c *Client) PreviewMaintenanceScopeWithBody(ctx context.Context, params *Pr
 
 // PreviewMaintenanceScope Inspect the current affected SLO inventory for a maintenance selector
 //
-// Read-only operation available to Viewers. Requires one Origin header equal to the configured public HTTPS origin. Scope and pagination are bound to the cursor. An empty valid inventory has a zero total.
+// Read-only operation available to Viewers. Scope and pagination are bound to the cursor. Follow next_cursor to retrieve the remaining inventory. An empty valid inventory has a zero total.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -9230,8 +9248,6 @@ func (c *Client) GetScopedMaintenance(ctx context.Context, maintenanceId openapi
 
 // EditScopedMaintenanceWithBody Replace maintenance window details
 //
-// Requires one Origin header equal to the configured public HTTPS origin.
-//
 // Takes any type of body and a specified content type.
 //
 // Corresponds with PUT /api/v1/scoped-maintenance/{maintenance_id} (the `EditScopedMaintenance` operationId).
@@ -9248,8 +9264,6 @@ func (c *Client) EditScopedMaintenanceWithBody(ctx context.Context, maintenanceI
 }
 
 // EditScopedMaintenance Replace maintenance window details
-//
-// Requires one Origin header equal to the configured public HTTPS origin.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -9268,8 +9282,6 @@ func (c *Client) EditScopedMaintenance(ctx context.Context, maintenanceId openap
 
 // CancelScopedMaintenanceWithBody Cancel scheduled maintenance
 //
-// Requires one Origin header equal to the configured public HTTPS origin.
-//
 // Takes any type of body and a specified content type.
 //
 // Corresponds with POST /api/v1/scoped-maintenance/{maintenance_id}/cancel (the `CancelScopedMaintenance` operationId).
@@ -9286,8 +9298,6 @@ func (c *Client) CancelScopedMaintenanceWithBody(ctx context.Context, maintenanc
 }
 
 // CancelScopedMaintenance Cancel scheduled maintenance
-//
-// Requires one Origin header equal to the configured public HTTPS origin.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -9306,8 +9316,6 @@ func (c *Client) CancelScopedMaintenance(ctx context.Context, maintenanceId open
 
 // EndScopedMaintenanceWithBody End maintenance prospectively
 //
-// Requires one Origin header equal to the configured public HTTPS origin.
-//
 // Takes any type of body and a specified content type.
 //
 // Corresponds with POST /api/v1/scoped-maintenance/{maintenance_id}/end (the `EndScopedMaintenance` operationId).
@@ -9324,8 +9332,6 @@ func (c *Client) EndScopedMaintenanceWithBody(ctx context.Context, maintenanceId
 }
 
 // EndScopedMaintenance End maintenance prospectively
-//
-// Requires one Origin header equal to the configured public HTTPS origin.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -9344,7 +9350,7 @@ func (c *Client) EndScopedMaintenance(ctx context.Context, maintenanceId openapi
 
 // ReadMaintenanceImpact Read the effective membership of a maintenance revision
 //
-// Effective membership includes retained participation bounds. A page with ready false describes a future or still-preparing population. A revision superseded before activation returns a final, ready, empty result. Continue with next_cursor until absent. On a continuation, an omitted revision uses the revision bound to the cursor. If the inventory changes, restart from the first page.
+// Effective membership includes participation bounds, and one SLO can have several intervals. An explicit SLO selection can have ready membership before the window starts. A service-derived selection is ready when its membership and recorded participation bounds are available. A revision superseded before activation returns a final, ready, empty result. Continue with next_cursor until absent. An omitted revision on a continuation uses the revision bound to the cursor. After a 409 maintenance_snapshot_changed response, restart from the first page without the cursor. Omitting revision on a new first page can select a newer revision. To audit the same revision across restarts, first read the window revision and pass it explicitly from the first page onward.
 //
 // Corresponds with GET /api/v1/scoped-maintenance/{maintenance_id}/impact (the `ReadMaintenanceImpact` operationId).
 func (c *Client) ReadMaintenanceImpact(ctx context.Context, maintenanceId openapi_types.UUID, params *ReadMaintenanceImpactParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -9360,8 +9366,6 @@ func (c *Client) ReadMaintenanceImpact(ctx context.Context, maintenanceId openap
 }
 
 // WithdrawScopedMaintenanceWithBody Include maintenance events again
-//
-// Requires one Origin header equal to the configured public HTTPS origin.
 //
 // Takes any type of body and a specified content type.
 //
@@ -9379,8 +9383,6 @@ func (c *Client) WithdrawScopedMaintenanceWithBody(ctx context.Context, maintena
 }
 
 // WithdrawScopedMaintenance Include maintenance events again
-//
-// Requires one Origin header equal to the configured public HTTPS origin.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -13530,12 +13532,30 @@ func NewCreateScopedMaintenanceRequestWithBody(server string, params *CreateScop
 
 		var headerParam0 string
 
-		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Origin", params.Origin, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
 		if err != nil {
 			return nil, err
 		}
 
-		req.Header.Set("Idempotency-Key", headerParam0)
+		req.Header.Set("Origin", headerParam0)
+
+		var headerParam1 string
+
+		headerParam1, err = runtime.StyleParamWithOptions("simple", false, "X-CSRF-Token", params.XCSRFToken, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("X-CSRF-Token", headerParam1)
+
+		var headerParam2 string
+
+		headerParam2, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam2)
 
 	}
 
@@ -13617,6 +13637,28 @@ func NewPreviewMaintenanceScopeRequestWithBody(server string, params *PreviewMai
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Origin", params.Origin, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Origin", headerParam0)
+
+		var headerParam1 string
+
+		headerParam1, err = runtime.StyleParamWithOptions("simple", false, "X-CSRF-Token", params.XCSRFToken, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("X-CSRF-Token", headerParam1)
+
+	}
 
 	return req, nil
 }
@@ -13730,21 +13772,39 @@ func NewEditScopedMaintenanceRequestWithBody(server string, maintenanceId openap
 
 		var headerParam0 string
 
-		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "If-Match", params.IfMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Origin", params.Origin, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
 		if err != nil {
 			return nil, err
 		}
 
-		req.Header.Set("If-Match", headerParam0)
+		req.Header.Set("Origin", headerParam0)
 
 		var headerParam1 string
 
-		headerParam1, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		headerParam1, err = runtime.StyleParamWithOptions("simple", false, "X-CSRF-Token", params.XCSRFToken, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
 		if err != nil {
 			return nil, err
 		}
 
-		req.Header.Set("Idempotency-Key", headerParam1)
+		req.Header.Set("X-CSRF-Token", headerParam1)
+
+		var headerParam2 string
+
+		headerParam2, err = runtime.StyleParamWithOptions("simple", false, "If-Match", params.IfMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam2)
+
+		var headerParam3 string
+
+		headerParam3, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam3)
 
 	}
 
@@ -13799,21 +13859,39 @@ func NewCancelScopedMaintenanceRequestWithBody(server string, maintenanceId open
 
 		var headerParam0 string
 
-		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "If-Match", params.IfMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Origin", params.Origin, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
 		if err != nil {
 			return nil, err
 		}
 
-		req.Header.Set("If-Match", headerParam0)
+		req.Header.Set("Origin", headerParam0)
 
 		var headerParam1 string
 
-		headerParam1, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		headerParam1, err = runtime.StyleParamWithOptions("simple", false, "X-CSRF-Token", params.XCSRFToken, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
 		if err != nil {
 			return nil, err
 		}
 
-		req.Header.Set("Idempotency-Key", headerParam1)
+		req.Header.Set("X-CSRF-Token", headerParam1)
+
+		var headerParam2 string
+
+		headerParam2, err = runtime.StyleParamWithOptions("simple", false, "If-Match", params.IfMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam2)
+
+		var headerParam3 string
+
+		headerParam3, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam3)
 
 	}
 
@@ -13868,21 +13946,39 @@ func NewEndScopedMaintenanceRequestWithBody(server string, maintenanceId openapi
 
 		var headerParam0 string
 
-		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "If-Match", params.IfMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Origin", params.Origin, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
 		if err != nil {
 			return nil, err
 		}
 
-		req.Header.Set("If-Match", headerParam0)
+		req.Header.Set("Origin", headerParam0)
 
 		var headerParam1 string
 
-		headerParam1, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		headerParam1, err = runtime.StyleParamWithOptions("simple", false, "X-CSRF-Token", params.XCSRFToken, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
 		if err != nil {
 			return nil, err
 		}
 
-		req.Header.Set("Idempotency-Key", headerParam1)
+		req.Header.Set("X-CSRF-Token", headerParam1)
+
+		var headerParam2 string
+
+		headerParam2, err = runtime.StyleParamWithOptions("simple", false, "If-Match", params.IfMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam2)
+
+		var headerParam3 string
+
+		headerParam3, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam3)
 
 	}
 
@@ -14022,21 +14118,39 @@ func NewWithdrawScopedMaintenanceRequestWithBody(server string, maintenanceId op
 
 		var headerParam0 string
 
-		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "If-Match", params.IfMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Origin", params.Origin, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
 		if err != nil {
 			return nil, err
 		}
 
-		req.Header.Set("If-Match", headerParam0)
+		req.Header.Set("Origin", headerParam0)
 
 		var headerParam1 string
 
-		headerParam1, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		headerParam1, err = runtime.StyleParamWithOptions("simple", false, "X-CSRF-Token", params.XCSRFToken, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
 		if err != nil {
 			return nil, err
 		}
 
-		req.Header.Set("Idempotency-Key", headerParam1)
+		req.Header.Set("X-CSRF-Token", headerParam1)
+
+		var headerParam2 string
+
+		headerParam2, err = runtime.StyleParamWithOptions("simple", false, "If-Match", params.IfMatch, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam2)
+
+		var headerParam3 string
+
+		headerParam3, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam3)
 
 	}
 
@@ -16859,16 +16973,12 @@ type ClientWithResponsesInterface interface {
 
 	// CreateScopedMaintenanceWithBodyWithResponse Create a scoped maintenance window
 	//
-	// Requires one Origin header equal to the configured public HTTPS origin.
-	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/v1/scoped-maintenance (the `CreateScopedMaintenance` operationId).
 	CreateScopedMaintenanceWithBodyWithResponse(ctx context.Context, params *CreateScopedMaintenanceParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateScopedMaintenanceResponse, error)
 
 	// CreateScopedMaintenanceWithResponse Create a scoped maintenance window
-	//
-	// Requires one Origin header equal to the configured public HTTPS origin.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -16877,7 +16987,7 @@ type ClientWithResponsesInterface interface {
 
 	// PreviewMaintenanceScopeWithBodyWithResponse Inspect the current affected SLO inventory for a maintenance selector
 	//
-	// Read-only operation available to Viewers. Requires one Origin header equal to the configured public HTTPS origin. Scope and pagination are bound to the cursor. An empty valid inventory has a zero total.
+	// Read-only operation available to Viewers. Scope and pagination are bound to the cursor. Follow next_cursor to retrieve the remaining inventory. An empty valid inventory has a zero total.
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -16886,7 +16996,7 @@ type ClientWithResponsesInterface interface {
 
 	// PreviewMaintenanceScopeWithResponse Inspect the current affected SLO inventory for a maintenance selector
 	//
-	// Read-only operation available to Viewers. Requires one Origin header equal to the configured public HTTPS origin. Scope and pagination are bound to the cursor. An empty valid inventory has a zero total.
+	// Read-only operation available to Viewers. Scope and pagination are bound to the cursor. Follow next_cursor to retrieve the remaining inventory. An empty valid inventory has a zero total.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -16902,16 +17012,12 @@ type ClientWithResponsesInterface interface {
 
 	// EditScopedMaintenanceWithBodyWithResponse Replace maintenance window details
 	//
-	// Requires one Origin header equal to the configured public HTTPS origin.
-	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with PUT /api/v1/scoped-maintenance/{maintenance_id} (the `EditScopedMaintenance` operationId).
 	EditScopedMaintenanceWithBodyWithResponse(ctx context.Context, maintenanceId openapi_types.UUID, params *EditScopedMaintenanceParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*EditScopedMaintenanceResponse, error)
 
 	// EditScopedMaintenanceWithResponse Replace maintenance window details
-	//
-	// Requires one Origin header equal to the configured public HTTPS origin.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -16920,16 +17026,12 @@ type ClientWithResponsesInterface interface {
 
 	// CancelScopedMaintenanceWithBodyWithResponse Cancel scheduled maintenance
 	//
-	// Requires one Origin header equal to the configured public HTTPS origin.
-	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/v1/scoped-maintenance/{maintenance_id}/cancel (the `CancelScopedMaintenance` operationId).
 	CancelScopedMaintenanceWithBodyWithResponse(ctx context.Context, maintenanceId openapi_types.UUID, params *CancelScopedMaintenanceParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CancelScopedMaintenanceResponse, error)
 
 	// CancelScopedMaintenanceWithResponse Cancel scheduled maintenance
-	//
-	// Requires one Origin header equal to the configured public HTTPS origin.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -16938,16 +17040,12 @@ type ClientWithResponsesInterface interface {
 
 	// EndScopedMaintenanceWithBodyWithResponse End maintenance prospectively
 	//
-	// Requires one Origin header equal to the configured public HTTPS origin.
-	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/v1/scoped-maintenance/{maintenance_id}/end (the `EndScopedMaintenance` operationId).
 	EndScopedMaintenanceWithBodyWithResponse(ctx context.Context, maintenanceId openapi_types.UUID, params *EndScopedMaintenanceParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*EndScopedMaintenanceResponse, error)
 
 	// EndScopedMaintenanceWithResponse End maintenance prospectively
-	//
-	// Requires one Origin header equal to the configured public HTTPS origin.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -16956,7 +17054,7 @@ type ClientWithResponsesInterface interface {
 
 	// ReadMaintenanceImpactWithResponse Read the effective membership of a maintenance revision
 	//
-	// Effective membership includes retained participation bounds. A page with ready false describes a future or still-preparing population. A revision superseded before activation returns a final, ready, empty result. Continue with next_cursor until absent. On a continuation, an omitted revision uses the revision bound to the cursor. If the inventory changes, restart from the first page.
+	// Effective membership includes participation bounds, and one SLO can have several intervals. An explicit SLO selection can have ready membership before the window starts. A service-derived selection is ready when its membership and recorded participation bounds are available. A revision superseded before activation returns a final, ready, empty result. Continue with next_cursor until absent. An omitted revision on a continuation uses the revision bound to the cursor. After a 409 maintenance_snapshot_changed response, restart from the first page without the cursor. Omitting revision on a new first page can select a newer revision. To audit the same revision across restarts, first read the window revision and pass it explicitly from the first page onward.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -16965,16 +17063,12 @@ type ClientWithResponsesInterface interface {
 
 	// WithdrawScopedMaintenanceWithBodyWithResponse Include maintenance events again
 	//
-	// Requires one Origin header equal to the configured public HTTPS origin.
-	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/v1/scoped-maintenance/{maintenance_id}/withdraw (the `WithdrawScopedMaintenance` operationId).
 	WithdrawScopedMaintenanceWithBodyWithResponse(ctx context.Context, maintenanceId openapi_types.UUID, params *WithdrawScopedMaintenanceParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*WithdrawScopedMaintenanceResponse, error)
 
 	// WithdrawScopedMaintenanceWithResponse Include maintenance events again
-	//
-	// Requires one Origin header equal to the configured public HTTPS origin.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -20506,6 +20600,8 @@ type CreateScopedMaintenanceResponse struct {
 	HTTPResponse *http.Response
 	// JSON201 the response for an HTTP 201 `application/json` response
 	JSON201 *ScopedMaintenanceWindow
+	// ApplicationproblemJSON409 the response for an HTTP 409 `application/problem+json` response
+	ApplicationproblemJSON409 *Problem
 	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
 	ApplicationproblemJSONDefault *Problem
 	// Headers201 the parsed response headers for an HTTP 201 response
@@ -20515,6 +20611,11 @@ type CreateScopedMaintenanceResponse struct {
 // GetJSON201 returns the response for an HTTP 201 `application/json` response
 func (r CreateScopedMaintenanceResponse) GetJSON201() *ScopedMaintenanceWindow {
 	return r.JSON201
+}
+
+// GetApplicationproblemJSON409 returns the response for an HTTP 409 `application/problem+json` response
+func (r CreateScopedMaintenanceResponse) GetApplicationproblemJSON409() *Problem {
+	return r.ApplicationproblemJSON409
 }
 
 // GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
@@ -20664,6 +20765,8 @@ type EditScopedMaintenanceResponse struct {
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *ScopedMaintenanceWindow
+	// ApplicationproblemJSON409 the response for an HTTP 409 `application/problem+json` response
+	ApplicationproblemJSON409 *Problem
 	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
 	ApplicationproblemJSONDefault *Problem
 	// Headers200 the parsed response headers for an HTTP 200 response
@@ -20673,6 +20776,11 @@ type EditScopedMaintenanceResponse struct {
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r EditScopedMaintenanceResponse) GetJSON200() *ScopedMaintenanceWindow {
 	return r.JSON200
+}
+
+// GetApplicationproblemJSON409 returns the response for an HTTP 409 `application/problem+json` response
+func (r EditScopedMaintenanceResponse) GetApplicationproblemJSON409() *Problem {
+	return r.ApplicationproblemJSON409
 }
 
 // GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
@@ -20824,6 +20932,8 @@ type ReadMaintenanceImpactResponse struct {
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *MaintenanceImpactPage
+	// ApplicationproblemJSON409 the response for an HTTP 409 `application/problem+json` response
+	ApplicationproblemJSON409 *Problem
 	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
 	ApplicationproblemJSONDefault *Problem
 }
@@ -20831,6 +20941,11 @@ type ReadMaintenanceImpactResponse struct {
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r ReadMaintenanceImpactResponse) GetJSON200() *MaintenanceImpactPage {
 	return r.JSON200
+}
+
+// GetApplicationproblemJSON409 returns the response for an HTTP 409 `application/problem+json` response
+func (r ReadMaintenanceImpactResponse) GetApplicationproblemJSON409() *Problem {
+	return r.ApplicationproblemJSON409
 }
 
 // GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
@@ -24023,8 +24138,6 @@ func (c *ClientWithResponses) ListScopedMaintenanceWithResponse(ctx context.Cont
 
 // CreateScopedMaintenanceWithBodyWithResponse Create a scoped maintenance window
 //
-// Requires one Origin header equal to the configured public HTTPS origin.
-//
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/v1/scoped-maintenance (the `CreateScopedMaintenance` operationId).
@@ -24037,8 +24150,6 @@ func (c *ClientWithResponses) CreateScopedMaintenanceWithBodyWithResponse(ctx co
 }
 
 // CreateScopedMaintenanceWithResponse Create a scoped maintenance window
-//
-// Requires one Origin header equal to the configured public HTTPS origin.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -24053,7 +24164,7 @@ func (c *ClientWithResponses) CreateScopedMaintenanceWithResponse(ctx context.Co
 
 // PreviewMaintenanceScopeWithBodyWithResponse Inspect the current affected SLO inventory for a maintenance selector
 //
-// Read-only operation available to Viewers. Requires one Origin header equal to the configured public HTTPS origin. Scope and pagination are bound to the cursor. An empty valid inventory has a zero total.
+// Read-only operation available to Viewers. Scope and pagination are bound to the cursor. Follow next_cursor to retrieve the remaining inventory. An empty valid inventory has a zero total.
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
@@ -24068,7 +24179,7 @@ func (c *ClientWithResponses) PreviewMaintenanceScopeWithBodyWithResponse(ctx co
 
 // PreviewMaintenanceScopeWithResponse Inspect the current affected SLO inventory for a maintenance selector
 //
-// Read-only operation available to Viewers. Requires one Origin header equal to the configured public HTTPS origin. Scope and pagination are bound to the cursor. An empty valid inventory has a zero total.
+// Read-only operation available to Viewers. Scope and pagination are bound to the cursor. Follow next_cursor to retrieve the remaining inventory. An empty valid inventory has a zero total.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -24096,8 +24207,6 @@ func (c *ClientWithResponses) GetScopedMaintenanceWithResponse(ctx context.Conte
 
 // EditScopedMaintenanceWithBodyWithResponse Replace maintenance window details
 //
-// Requires one Origin header equal to the configured public HTTPS origin.
-//
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with PUT /api/v1/scoped-maintenance/{maintenance_id} (the `EditScopedMaintenance` operationId).
@@ -24110,8 +24219,6 @@ func (c *ClientWithResponses) EditScopedMaintenanceWithBodyWithResponse(ctx cont
 }
 
 // EditScopedMaintenanceWithResponse Replace maintenance window details
-//
-// Requires one Origin header equal to the configured public HTTPS origin.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -24126,8 +24233,6 @@ func (c *ClientWithResponses) EditScopedMaintenanceWithResponse(ctx context.Cont
 
 // CancelScopedMaintenanceWithBodyWithResponse Cancel scheduled maintenance
 //
-// Requires one Origin header equal to the configured public HTTPS origin.
-//
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/v1/scoped-maintenance/{maintenance_id}/cancel (the `CancelScopedMaintenance` operationId).
@@ -24140,8 +24245,6 @@ func (c *ClientWithResponses) CancelScopedMaintenanceWithBodyWithResponse(ctx co
 }
 
 // CancelScopedMaintenanceWithResponse Cancel scheduled maintenance
-//
-// Requires one Origin header equal to the configured public HTTPS origin.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -24156,8 +24259,6 @@ func (c *ClientWithResponses) CancelScopedMaintenanceWithResponse(ctx context.Co
 
 // EndScopedMaintenanceWithBodyWithResponse End maintenance prospectively
 //
-// Requires one Origin header equal to the configured public HTTPS origin.
-//
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/v1/scoped-maintenance/{maintenance_id}/end (the `EndScopedMaintenance` operationId).
@@ -24170,8 +24271,6 @@ func (c *ClientWithResponses) EndScopedMaintenanceWithBodyWithResponse(ctx conte
 }
 
 // EndScopedMaintenanceWithResponse End maintenance prospectively
-//
-// Requires one Origin header equal to the configured public HTTPS origin.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -24186,7 +24285,7 @@ func (c *ClientWithResponses) EndScopedMaintenanceWithResponse(ctx context.Conte
 
 // ReadMaintenanceImpactWithResponse Read the effective membership of a maintenance revision
 //
-// Effective membership includes retained participation bounds. A page with ready false describes a future or still-preparing population. A revision superseded before activation returns a final, ready, empty result. Continue with next_cursor until absent. On a continuation, an omitted revision uses the revision bound to the cursor. If the inventory changes, restart from the first page.
+// Effective membership includes participation bounds, and one SLO can have several intervals. An explicit SLO selection can have ready membership before the window starts. A service-derived selection is ready when its membership and recorded participation bounds are available. A revision superseded before activation returns a final, ready, empty result. Continue with next_cursor until absent. An omitted revision on a continuation uses the revision bound to the cursor. After a 409 maintenance_snapshot_changed response, restart from the first page without the cursor. Omitting revision on a new first page can select a newer revision. To audit the same revision across restarts, first read the window revision and pass it explicitly from the first page onward.
 //
 // Returns a wrapper object for the known response body format(s).
 //
@@ -24201,8 +24300,6 @@ func (c *ClientWithResponses) ReadMaintenanceImpactWithResponse(ctx context.Cont
 
 // WithdrawScopedMaintenanceWithBodyWithResponse Include maintenance events again
 //
-// Requires one Origin header equal to the configured public HTTPS origin.
-//
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/v1/scoped-maintenance/{maintenance_id}/withdraw (the `WithdrawScopedMaintenance` operationId).
@@ -24215,8 +24312,6 @@ func (c *ClientWithResponses) WithdrawScopedMaintenanceWithBodyWithResponse(ctx 
 }
 
 // WithdrawScopedMaintenanceWithResponse Include maintenance events again
-//
-// Requires one Origin header equal to the configured public HTTPS origin.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
@@ -27391,6 +27486,13 @@ func ParseCreateScopedMaintenanceResponse(rsp *http.Response) (*CreateScopedMain
 		}
 		response.JSON201 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON409 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -27522,6 +27624,13 @@ func ParseEditScopedMaintenanceResponse(rsp *http.Response) (*EditScopedMaintena
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON409 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
 		var dest Problem
@@ -27660,6 +27769,13 @@ func ParseReadMaintenanceImpactResponse(rsp *http.Response) (*ReadMaintenanceImp
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON409 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
 		var dest Problem
@@ -32334,6 +32450,52 @@ func (siw *ServerInterfaceWrapper) CreateScopedMaintenance(w http.ResponseWriter
 
 	headers := r.Header
 
+	// ------------- Required header parameter "Origin" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Origin")]; found {
+		var Origin MaintenanceOrigin
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Origin", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Origin", valueList[0], &Origin, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Origin", Err: err})
+			return
+		}
+
+		params.Origin = Origin
+
+	} else {
+		err := fmt.Errorf("Header parameter Origin is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Origin", Err: err})
+		return
+	}
+
+	// ------------- Required header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken MaintenanceCsrfToken
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = XCSRFToken
+
+	} else {
+		err := fmt.Errorf("Header parameter X-CSRF-Token is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-CSRF-Token", Err: err})
+		return
+	}
+
 	// ------------- Required header parameter "Idempotency-Key" -------------
 	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
 		var IdempotencyKey IdempotencyKey
@@ -32400,6 +32562,54 @@ func (siw *ServerInterfaceWrapper) PreviewMaintenanceScope(w http.ResponseWriter
 		} else {
 			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
 		}
+		return
+	}
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Origin" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Origin")]; found {
+		var Origin MaintenanceOrigin
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Origin", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Origin", valueList[0], &Origin, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Origin", Err: err})
+			return
+		}
+
+		params.Origin = Origin
+
+	} else {
+		err := fmt.Errorf("Header parameter Origin is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Origin", Err: err})
+		return
+	}
+
+	// ------------- Required header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken MaintenanceCsrfToken
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = XCSRFToken
+
+	} else {
+		err := fmt.Errorf("Header parameter X-CSRF-Token is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-CSRF-Token", Err: err})
 		return
 	}
 
@@ -32475,6 +32685,52 @@ func (siw *ServerInterfaceWrapper) EditScopedMaintenance(w http.ResponseWriter, 
 	var params EditScopedMaintenanceParams
 
 	headers := r.Header
+
+	// ------------- Required header parameter "Origin" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Origin")]; found {
+		var Origin MaintenanceOrigin
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Origin", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Origin", valueList[0], &Origin, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Origin", Err: err})
+			return
+		}
+
+		params.Origin = Origin
+
+	} else {
+		err := fmt.Errorf("Header parameter Origin is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Origin", Err: err})
+		return
+	}
+
+	// ------------- Required header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken MaintenanceCsrfToken
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = XCSRFToken
+
+	} else {
+		err := fmt.Errorf("Header parameter X-CSRF-Token is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-CSRF-Token", Err: err})
+		return
+	}
 
 	// ------------- Required header parameter "If-Match" -------------
 	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
@@ -32553,6 +32809,52 @@ func (siw *ServerInterfaceWrapper) CancelScopedMaintenance(w http.ResponseWriter
 
 	headers := r.Header
 
+	// ------------- Required header parameter "Origin" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Origin")]; found {
+		var Origin MaintenanceOrigin
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Origin", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Origin", valueList[0], &Origin, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Origin", Err: err})
+			return
+		}
+
+		params.Origin = Origin
+
+	} else {
+		err := fmt.Errorf("Header parameter Origin is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Origin", Err: err})
+		return
+	}
+
+	// ------------- Required header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken MaintenanceCsrfToken
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = XCSRFToken
+
+	} else {
+		err := fmt.Errorf("Header parameter X-CSRF-Token is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-CSRF-Token", Err: err})
+		return
+	}
+
 	// ------------- Required header parameter "If-Match" -------------
 	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
 		var IfMatch string
@@ -32629,6 +32931,52 @@ func (siw *ServerInterfaceWrapper) EndScopedMaintenance(w http.ResponseWriter, r
 	var params EndScopedMaintenanceParams
 
 	headers := r.Header
+
+	// ------------- Required header parameter "Origin" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Origin")]; found {
+		var Origin MaintenanceOrigin
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Origin", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Origin", valueList[0], &Origin, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Origin", Err: err})
+			return
+		}
+
+		params.Origin = Origin
+
+	} else {
+		err := fmt.Errorf("Header parameter Origin is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Origin", Err: err})
+		return
+	}
+
+	// ------------- Required header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken MaintenanceCsrfToken
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = XCSRFToken
+
+	} else {
+		err := fmt.Errorf("Header parameter X-CSRF-Token is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-CSRF-Token", Err: err})
+		return
+	}
 
 	// ------------- Required header parameter "If-Match" -------------
 	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
@@ -32774,6 +33122,52 @@ func (siw *ServerInterfaceWrapper) WithdrawScopedMaintenance(w http.ResponseWrit
 	var params WithdrawScopedMaintenanceParams
 
 	headers := r.Header
+
+	// ------------- Required header parameter "Origin" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Origin")]; found {
+		var Origin MaintenanceOrigin
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Origin", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Origin", valueList[0], &Origin, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Origin", Err: err})
+			return
+		}
+
+		params.Origin = Origin
+
+	} else {
+		err := fmt.Errorf("Header parameter Origin is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Origin", Err: err})
+		return
+	}
+
+	// ------------- Required header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken MaintenanceCsrfToken
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = XCSRFToken
+
+	} else {
+		err := fmt.Errorf("Header parameter X-CSRF-Token is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-CSRF-Token", Err: err})
+		return
+	}
 
 	// ------------- Required header parameter "If-Match" -------------
 	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {

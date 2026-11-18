@@ -248,6 +248,33 @@ it('preserves the exact bounds of an API-created window when editing its reason'
   expect(location.pathname + location.search).toBe(`/maintenance/${id}`);
 });
 
+it('retries an edit after its inventory changes using the same draft and request key', async () => {
+  const etag = `"maintenance:${id}:1"`;
+  vi.spyOn(sloClient, 'get').mockRejectedValue(new Error('Name not loaded'));
+  vi.spyOn(sloClient, 'overview').mockResolvedValue({ items: [] } as unknown as OperationalOverview);
+  const update = vi.spyOn(maintenanceClient, 'update');
+  const fetch = vi.fn()
+    .mockResolvedValueOnce(Response.json({ code: 'maintenance_write_retry' }, { status: 409 }))
+    .mockResolvedValueOnce(Response.json({ ...record, reason: 'Updated reason', revision: '2', operation: 'edit' }, {
+      headers: { ETag: `"maintenance:${id}:2"` },
+    }));
+  vi.stubGlobal('fetch', fetch);
+
+  render(<ScheduleMaintenance context={context} existing={{ value: record, etag }} />);
+  const reason = screen.getByLabelText('Reason');
+  fireEvent.change(reason, { target: { value: 'Updated reason' } });
+  const save = screen.getByRole('button', { name: 'Save schedule' });
+  await waitFor(() => expect(save).toBeEnabled());
+  fireEvent.click(save);
+  expect(await screen.findByRole('alert')).toHaveTextContent('The affected SLO inventory changed. Try saving again.');
+  expect(screen.queryByRole('button', { name: 'Read latest revision' })).toBeNull();
+  expect(reason).toHaveValue('Updated reason');
+  expect(save).toBeEnabled();
+  await act(async () => { fireEvent.click(save); });
+  expect(update).toHaveBeenCalledTimes(2);
+  expect(update.mock.calls[1]).toEqual(update.mock.calls[0]);
+});
+
 it('reviews a concurrent SLO swap and reason before enabling the retained draft', async () => {
   const replacement = '70000000-0000-4000-8000-000000000002';
   const etag = `"maintenance:${id}:1"`;

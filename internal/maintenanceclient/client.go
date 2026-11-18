@@ -304,6 +304,12 @@ func problemFailure(ctx context.Context, mutation bool, status int, data []byte)
 			if problem.SuggestedStart != nil && problem.SuggestedEnd != nil && validTime(*problem.SuggestedStart) && validTime(*problem.SuggestedEnd) {
 				failure.Message += " Suggested bounds: " + problem.SuggestedStart.Format(time.RFC3339) + " to " + problem.SuggestedEnd.Format(time.RFC3339) + "."
 			}
+		case status == 409 && mutation && problem.Code == "maintenance_write_retry":
+			failure.BackendCode = problem.Code
+			failure.Message = "The affected SLO inventory changed. Retry the same request with the same idempotency key."
+		case status == 409 && !mutation && problem.Code == "maintenance_snapshot_changed":
+			failure.BackendCode = problem.Code
+			failure.Message = "The maintenance inventory changed. Restart from the first page."
 		case status == 409 && problem.Code == "maintenance_conflict":
 			failure.BackendCode = problem.Code
 			if problem.CurrentRevision != nil && validRevision(*problem.CurrentRevision) {

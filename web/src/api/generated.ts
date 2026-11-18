@@ -1076,10 +1076,7 @@ export interface paths {
         /** List maintenance windows */
         get: operations["listScopedMaintenance"];
         put?: never;
-        /**
-         * Create a scoped maintenance window
-         * @description Requires one Origin header equal to the configured public HTTPS origin.
-         */
+        /** Create a scoped maintenance window */
         post: operations["createScopedMaintenance"];
         delete?: never;
         options?: never;
@@ -1096,10 +1093,7 @@ export interface paths {
         };
         /** Read latest or historical maintenance revision */
         get: operations["getScopedMaintenance"];
-        /**
-         * Replace maintenance window details
-         * @description Requires one Origin header equal to the configured public HTTPS origin.
-         */
+        /** Replace maintenance window details */
         put: operations["editScopedMaintenance"];
         post?: never;
         delete?: never;
@@ -1117,10 +1111,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /**
-         * End maintenance prospectively
-         * @description Requires one Origin header equal to the configured public HTTPS origin.
-         */
+        /** End maintenance prospectively */
         post: operations["endScopedMaintenance"];
         delete?: never;
         options?: never;
@@ -1137,10 +1128,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /**
-         * Cancel scheduled maintenance
-         * @description Requires one Origin header equal to the configured public HTTPS origin.
-         */
+        /** Cancel scheduled maintenance */
         post: operations["cancelScopedMaintenance"];
         delete?: never;
         options?: never;
@@ -1157,10 +1145,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /**
-         * Include maintenance events again
-         * @description Requires one Origin header equal to the configured public HTTPS origin.
-         */
+        /** Include maintenance events again */
         post: operations["withdrawScopedMaintenance"];
         delete?: never;
         options?: never;
@@ -1179,7 +1164,7 @@ export interface paths {
         put?: never;
         /**
          * Inspect the current affected SLO inventory for a maintenance selector
-         * @description Read-only operation available to Viewers. Requires one Origin header equal to the configured public HTTPS origin. Scope and pagination are bound to the cursor. An empty valid inventory has a zero total.
+         * @description Read-only operation available to Viewers. Scope and pagination are bound to the cursor. Follow next_cursor to retrieve the remaining inventory. An empty valid inventory has a zero total.
          */
         post: operations["previewMaintenanceScope"];
         delete?: never;
@@ -1197,7 +1182,7 @@ export interface paths {
         };
         /**
          * Read the effective membership of a maintenance revision
-         * @description Effective membership includes retained participation bounds. A page with ready false describes a future or still-preparing population. A revision superseded before activation returns a final, ready, empty result. Continue with next_cursor until absent. On a continuation, an omitted revision uses the revision bound to the cursor. If the inventory changes, restart from the first page.
+         * @description Effective membership includes participation bounds, and one SLO can have several intervals. An explicit SLO selection can have ready membership before the window starts. A service-derived selection is ready when its membership and recorded participation bounds are available. A revision superseded before activation returns a final, ready, empty result. Continue with next_cursor until absent. An omitted revision on a continuation uses the revision bound to the cursor. After a 409 maintenance_snapshot_changed response, restart from the first page without the cursor. Omitting revision on a new first page can select a newer revision. To audit the same revision across restarts, first read the window revision and pass it explicitly from the first page onward.
          */
         get: operations["readMaintenanceImpact"];
         put?: never;
@@ -3295,9 +3280,9 @@ export interface components {
             total: string;
             /** Format: date-time */
             inventory_at: string;
-            /** @description False for future or preparing effective membership. True for final results including revisions superseded before activation. */
+            /** @description Whether the requested membership is available. Future explicit SLO selections can be ready. A service-derived selection remains pending until its recorded membership is available. Revisions superseded before activation have final empty membership. */
             ready: boolean;
-            /** @description Follow until absent to retrieve all participation intervals. One SLO can have several intervals. */
+            /** @description Follow until absent to retrieve the remaining results for this membership query. */
             next_cursor?: string;
         };
         MaintenanceReason: {
@@ -3479,6 +3464,10 @@ export interface components {
         IfMatch: string;
         /** @description One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split. */
         IdempotencyKey: string;
+        /** @description One Origin header equal to the configured public HTTPS origin. */
+        MaintenanceOrigin: string;
+        /** @description Session-bound CSRF token returned by the context endpoint. */
+        MaintenanceCsrfToken: string;
     };
     requestBodies: never;
     headers: never;
@@ -6090,6 +6079,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description One Origin header equal to the configured public HTTPS origin. */
+                Origin: components["parameters"]["MaintenanceOrigin"];
+                /** @description Session-bound CSRF token returned by the context endpoint. */
+                "X-CSRF-Token": components["parameters"]["MaintenanceCsrfToken"];
                 /** @description One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split. */
                 "Idempotency-Key": components["parameters"]["IdempotencyKey"];
             };
@@ -6111,6 +6104,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ScopedMaintenanceWindow"];
+                };
+            };
+            /** @description A revision or request key conflicted (maintenance_conflict), or affected inventory changed during validation (maintenance_write_retry). For maintenance_write_retry, retry the same request with the same idempotency key. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
             /** @description Request rejected */
@@ -6163,6 +6165,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description One Origin header equal to the configured public HTTPS origin. */
+                Origin: components["parameters"]["MaintenanceOrigin"];
+                /** @description Session-bound CSRF token returned by the context endpoint. */
+                "X-CSRF-Token": components["parameters"]["MaintenanceCsrfToken"];
                 /** @description Strong ETag of the maintenance revision. */
                 "If-Match": string;
                 /** @description One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split. */
@@ -6189,6 +6195,15 @@ export interface operations {
                     "application/json": components["schemas"]["ScopedMaintenanceWindow"];
                 };
             };
+            /** @description A revision or request key conflicted (maintenance_conflict), or affected inventory changed during validation (maintenance_write_retry). For maintenance_write_retry, retry the same request with the same idempotency key. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             /** @description Request rejected */
             default: {
                 headers: {
@@ -6204,6 +6219,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description One Origin header equal to the configured public HTTPS origin. */
+                Origin: components["parameters"]["MaintenanceOrigin"];
+                /** @description Session-bound CSRF token returned by the context endpoint. */
+                "X-CSRF-Token": components["parameters"]["MaintenanceCsrfToken"];
                 /** @description Strong ETag of the maintenance revision. */
                 "If-Match": string;
                 /** @description One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split. */
@@ -6245,6 +6264,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description One Origin header equal to the configured public HTTPS origin. */
+                Origin: components["parameters"]["MaintenanceOrigin"];
+                /** @description Session-bound CSRF token returned by the context endpoint. */
+                "X-CSRF-Token": components["parameters"]["MaintenanceCsrfToken"];
                 /** @description Strong ETag of the maintenance revision. */
                 "If-Match": string;
                 /** @description One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split. */
@@ -6286,6 +6309,10 @@ export interface operations {
         parameters: {
             query?: never;
             header: {
+                /** @description One Origin header equal to the configured public HTTPS origin. */
+                Origin: components["parameters"]["MaintenanceOrigin"];
+                /** @description Session-bound CSRF token returned by the context endpoint. */
+                "X-CSRF-Token": components["parameters"]["MaintenanceCsrfToken"];
                 /** @description Strong ETag of the maintenance revision. */
                 "If-Match": string;
                 /** @description One ASCII header value of 1 through 128 visible non-space characters. Commas are part of the key and are not split. */
@@ -6329,7 +6356,12 @@ export interface operations {
                 limit?: components["parameters"]["PageLimit"];
                 cursor?: components["parameters"]["PageCursor"];
             };
-            header?: never;
+            header: {
+                /** @description One Origin header equal to the configured public HTTPS origin. */
+                Origin: components["parameters"]["MaintenanceOrigin"];
+                /** @description Session-bound CSRF token returned by the context endpoint. */
+                "X-CSRF-Token": components["parameters"]["MaintenanceCsrfToken"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -6382,6 +6414,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MaintenanceImpactPage"];
+                };
+            };
+            /** @description The membership snapshot changed (maintenance_snapshot_changed). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
             /** @description Request rejected */

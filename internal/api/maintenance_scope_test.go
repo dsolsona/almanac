@@ -1,6 +1,7 @@
 package api
 
 import (
+	"net/http"
 	"slices"
 	"testing"
 	"uuid"
@@ -81,6 +82,30 @@ func TestMaintenanceScopeMergePreservesExclusiveSelector(t *testing.T) {
 		got, valid := ParseMaintenanceScope(data)
 		if !valid || got.Kind != step.kind || !slices.Equal(got.IDs, step.ids) {
 			t.Errorf("merge to %s = %s, want exact selector with IDs %v", step.kind, data, step.ids)
+		}
+	}
+}
+
+func TestScopedMaintenanceRequestsExposeRequiredAuthHeaders(t *testing.T) {
+	t.Parallel()
+	const origin = "https://example.test"
+	const token = "session-csrf-token"
+	create, err := NewCreateScopedMaintenanceRequestWithBody(origin, &CreateScopedMaintenanceParams{
+		Origin: origin, XCSRFToken: token, IdempotencyKey: "request-key",
+	}, "application/json", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	preview, err := NewPreviewMaintenanceScopeRequestWithBody(origin, &PreviewMaintenanceScopeParams{
+		Origin: origin, XCSRFToken: token,
+	}, "application/json", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, req := range []*http.Request{create, preview} {
+		if !slices.Equal(req.Header.Values("Origin"), []string{origin}) ||
+			!slices.Equal(req.Header.Values("X-CSRF-Token"), []string{token}) {
+			t.Errorf("%s has wrong auth headers: %v", req.URL.Path, req.Header)
 		}
 	}
 }

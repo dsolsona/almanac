@@ -127,7 +127,7 @@ export function ScheduleMaintenance({ context, existing }: { context: AuthContex
       dispatchEvent(new PopStateEvent('popstate'));
     } catch (failure) {
       if (!mounted.current) return;
-      if (failure instanceof SloFailure && !failure.uncertain) {
+      if (failure instanceof SloFailure && !failure.uncertain && failure.code !== 'maintenance_write_retry') {
         attempt.current = null;
         setConflict(!!windowRecord && failure.status === 409);
         setLatest(undefined);

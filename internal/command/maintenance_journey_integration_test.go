@@ -204,13 +204,12 @@ func verifyMaintenanceHTTP(t *testing.T, client *http.Client, baseURL, session s
 		if response.Header.Get("Location") != location {
 			t.Fatalf("%s create returned incorrect Location: %s", kind, data)
 		}
-		wantScopeJSON, err := scopes[i].MarshalJSON()
-		if err != nil {
-			t.Fatal(err)
-		}
-		wantScope, valid := api.ParseMaintenanceScope(wantScopeJSON)
-		if !valid {
-			t.Fatalf("invalid fixture selector: %s", wantScopeJSON)
+		var wantIDs []string
+		switch kind {
+		case "slos":
+			wantIDs = []string{slo.Id.String()}
+		case "services":
+			wantIDs = []string{slo.ServiceId.String()}
 		}
 		_, data = call(http.MethodGet, location+"?revision=1", "", "", nil, 200)
 		var saved api.ScopedMaintenanceWindow
@@ -223,8 +222,8 @@ func verifyMaintenanceHTTP(t *testing.T, client *http.Client, baseURL, session s
 				t.Fatal(err)
 			}
 			gotScope, valid := api.ParseMaintenanceScope(gotScopeJSON)
-			if !valid || gotScope.Kind != wantScope.Kind || !slices.Equal(gotScope.IDs, wantScope.IDs) {
-				t.Fatalf("%s selector = %s, want %s", kind, gotScopeJSON, wantScopeJSON)
+			if !valid || gotScope.Kind != kind || !slices.Equal(gotScope.IDs, wantIDs) {
+				t.Fatalf("%s selector = %s, want kind %q and IDs %v", kind, gotScopeJSON, kind, wantIDs)
 			}
 		}
 		if kind != "slos" {
