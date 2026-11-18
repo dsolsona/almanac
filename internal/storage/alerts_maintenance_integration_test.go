@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/dsolsona/almanac/internal/alert"
+	"github.com/dsolsona/almanac/internal/storage/dbgen"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -190,5 +191,54 @@ func TestIntegrationAlertMaintenanceFullyExcluded(t *testing.T) {
 	ev, err := alert.Evaluate(prepared.Input, f.limits)
 	if err != nil || ev.Truth != alert.Indeterminate {
 		t.Fatalf("fully excluded population became truth: %+v %v", ev, err)
+	}
+}
+
+func TestIntegrationAlertMaintenanceSuppressesOnInclusiveStart(t *testing.T) {
+	t.Parallel()
+	f := newAlertTestFixture(t)
+	policy := f.policy(t, "Covered firing")
+	f.drain(t, "covered firing source")
+	m := alertMaintenanceFixture(f)
+	request := m.input("covered-firing")
+	request.Start, request.End = f.at, f.at.Add(time.Minute)
+	window, err := CreateMaintenance(t.Context(), f.f.databaseURL, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	claim := f.claim(t, f.at)
+	prepared, err := alertMaintenancePrepare(t, f, claim)
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := prepared.Input
+	evaluation, err := alert.Evaluate(input, f.limits)
+	if err != nil || evaluation.Truth != alert.Breaching {
+		t.Fatalf("test requires eligible pre-window breach: %+v %v", evaluation, err)
+	}
+	clock := func() time.Time { return f.at.Add(time.Second) }
+	saved, err := f.runtime.commitAlertEvaluation(t.Context(), claim, input, f.limits, clock)
+	if err != nil || saved.Occurrence != nil || saved.EvaluationID == "" {
+		t.Fatalf("covered breach was not recorded without an occurrence: %+v %v", saved, err)
+	}
+	replayed, err := f.runtime.commitAlertEvaluation(t.Context(), claim, input, f.limits, clock)
+	if err != nil || replayed.EvaluationID != saved.EvaluationID || replayed.Occurrence != nil {
+		t.Fatalf("covered breach replay changed its decision: %+v %v", replayed, err)
+	}
+	row, err := dbgen.New(f.conn).ReadAlertEvaluation(t.Context(), mustPGUUID(saved.EvaluationID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var evidence struct{ Evaluation alert.Evaluation }
+	if err := unmarshalAlertData(row.Evidence, &evidence); err != nil {
+		t.Fatal(err)
+	}
+	coverage := evidence.Evaluation.Maintenance
+	if coverage == nil || !coverage.OpeningSuppressed || coverage.WindowID != window.ID ||
+		coverage.Revision != window.Revision || !coverage.Start.Equal(request.Start) || !coverage.End.Equal(request.End) {
+		t.Fatalf("recorded wrong suppression boundary or outcome: %+v", coverage)
+	}
+	if evidence.Evaluation.PolicyID != policy || evidence.Evaluation.Truth != alert.Breaching {
+		t.Fatalf("suppression changed the numerical evaluation: %+v", evidence.Evaluation)
 	}
 }
