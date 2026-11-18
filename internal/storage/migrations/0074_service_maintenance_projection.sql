@@ -209,3 +209,11 @@ CREATE FUNCTION public.almanac_slo_service_maintenance_pending(
         )
     );
 $$;
+
+-- Catalog ordering needs the effective status of every candidate when work
+-- exists. An uncorrelated read avoids per-SLO readiness checks in steady state.
+CREATE FUNCTION public.almanac_service_maintenance_work_pending()
+RETURNS boolean LANGUAGE sql STABLE AS $$
+    SELECT EXISTS (SELECT 1 FROM public.almanac_service_maintenance_projection WHERE NOT complete)
+        OR EXISTS (SELECT 1 FROM public.almanac_service_maintenance_membership_work);
+$$;

@@ -139,8 +139,10 @@ SELECT d.service_id,
  CASE WHEN coalesce(g.definition_revision=d.revision AND g.measurement_revision=d.measurement_revision
     AND g.exclusion_revision=exclusion_state.revision AND g.calculation_version=$1 AND p.performance_complete
     AND g.source_generation=coalesce(source.generation,0)
-             AND NOT public.almanac_slo_service_maintenance_pending(d.slo_id, $2::timestamptz
-                 - greatest(d.rolling_window_seconds, 21600)*interval '1 second', $2::timestamptz)
+             AND CASE WHEN (SELECT public.almanac_service_maintenance_work_pending())
+               THEN NOT public.almanac_slo_service_maintenance_pending(d.slo_id, cutoff.measurement_end
+                   - greatest(d.rolling_window_seconds, 21600)*interval '1 second', cutoff.measurement_end)
+               ELSE true END
     AND g.retention_start=to_timestamp(ceil(extract(epoch FROM ($2::timestamptz-interval '365 days'))/d.cadence_seconds)*d.cadence_seconds)
     AND g.evaluated_through>=to_timestamp(floor(extract(epoch FROM $2::timestamptz)/d.cadence_seconds)*d.cadence_seconds)
              AND coalesce(public.almanac_projection_deadline(p.current_valid_until),'-infinity'::timestamptz)>$2::timestamptz
@@ -153,6 +155,9 @@ JOIN public.almanac_slo_definitions d ON d.slo_id=s.id AND d.revision=s.definiti
 JOIN public.almanac_slo_exclusion_state exclusion_state ON exclusion_state.slo_id=d.slo_id
 LEFT JOIN public.almanac_slo_current_projections p ON p.slo_id=s.id
 LEFT JOIN public.almanac_slo_derived_generations g ON g.id=p.generation_id
+CROSS JOIN LATERAL (
+    VALUES (coalesce(public.almanac_projection_deadline(p.payload#>>'{current,window,end}'), g.evaluated_through))
+) cutoff(measurement_end)
 LEFT JOIN public.almanac_sli_source_generations source ON source.sli_id=d.sli_id AND source.measurement_revision=d.measurement_revision
 WHERE d.service_id=ANY($3::uuid[])
 `
@@ -200,8 +205,10 @@ SELECT d.service_id,
  CASE WHEN coalesce(g.definition_revision=d.revision AND g.measurement_revision=d.measurement_revision
     AND g.exclusion_revision=exclusion_state.revision AND g.calculation_version=$10 AND p.performance_complete
     AND g.source_generation=coalesce(source.generation,0)
-             AND NOT public.almanac_slo_service_maintenance_pending(d.slo_id, $11::timestamptz
-                 - greatest(d.rolling_window_seconds, 21600)*interval '1 second', $11::timestamptz)
+             AND CASE WHEN (SELECT public.almanac_service_maintenance_work_pending())
+               THEN NOT public.almanac_slo_service_maintenance_pending(d.slo_id, cutoff.measurement_end
+                   - greatest(d.rolling_window_seconds, 21600)*interval '1 second', cutoff.measurement_end)
+               ELSE true END
     AND g.retention_start=to_timestamp(ceil(extract(epoch FROM ($11::timestamptz-interval '365 days'))/d.cadence_seconds)*d.cadence_seconds)
     AND g.evaluated_through>=to_timestamp(floor(extract(epoch FROM $11::timestamptz)/d.cadence_seconds)*d.cadence_seconds)
              AND coalesce(public.almanac_projection_deadline(p.current_valid_until),'-infinity'::timestamptz)>$11::timestamptz
@@ -214,6 +221,9 @@ JOIN public.almanac_slo_definitions d ON d.slo_id=s.id AND d.revision=s.definiti
 JOIN public.almanac_slo_exclusion_state exclusion_state ON exclusion_state.slo_id=d.slo_id
 LEFT JOIN public.almanac_slo_current_projections p ON p.slo_id=s.id
 LEFT JOIN public.almanac_slo_derived_generations g ON g.id=p.generation_id
+CROSS JOIN LATERAL (
+    VALUES (coalesce(public.almanac_projection_deadline(p.payload#>>'{current,window,end}'), g.evaluated_through))
+) cutoff(measurement_end)
 LEFT JOIN public.almanac_sli_source_generations source ON source.sli_id=d.sli_id AND source.measurement_revision=d.measurement_revision
 WHERE d.service_id=ANY(SELECT id FROM scope) AND $12::text='slo_status'
 ), keys AS MATERIALIZED (

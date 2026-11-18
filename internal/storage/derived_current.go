@@ -103,7 +103,7 @@ func ReadCurrentSloStatus(ctx context.Context, databaseURL string, input Current
 		if started.Before(readStarted) {
 			return api.SloCurrentStatus{}, ErrInvalidSession
 		}
-		if err := publishMaintenanceConsumerPreparation(ctx, tx, maintenance, maintenancePreparationLive, input.Now); err != nil {
+		if err := publishCurrentMaintenancePreparation(ctx, tx, maintenance, input.Now); err != nil {
 			return api.SloCurrentStatus{}, err
 		}
 	}
@@ -112,6 +112,25 @@ func ReadCurrentSloStatus(ctx context.Context, databaseURL string, input Current
 		return api.SloCurrentStatus{}, err
 	}
 	return result, nil
+}
+
+// A maintenance change can invalidate the prepared work after the response
+// already entered its last-known or unavailable fallback. Roll back just the
+// obsolete work and finish the authenticated read with that fallback.
+func publishCurrentMaintenancePreparation(ctx context.Context, tx pgx.Tx, maintenance *maintenanceConsumerSession, clock func() time.Time) error {
+	work, err := tx.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer rollbackTransaction(work)
+	err = publishMaintenanceConsumerPreparation(ctx, work, maintenance, maintenancePreparationLive, clock)
+	if errors.Is(err, errReadSerialization) {
+		return work.Rollback(ctx)
+	}
+	if err != nil {
+		return err
+	}
+	return work.Commit(ctx)
 }
 
 func publishedCurrentStatus(row dbgen.GetPublishedCurrentProjectionRow) (api.SloCurrentStatus, error) {
@@ -225,10 +244,6 @@ func currentReadGeneration(ctx context.Context, q *dbgen.Queries, row dbgen.GetS
 }
 
 func readCurrentSloFromAggregates(ctx context.Context, q *dbgen.Queries, row dbgen.GetSloRow, now time.Time, maintenance *maintenanceConsumerSession) (api.SloCurrentStatus, error) {
-	start := now.Add(-time.Duration(max(row.RollingWindowSeconds, 21600)) * time.Second)
-	if err := requireServiceMaintenanceReady(ctx, q, row.ID, start, now); err != nil {
-		return api.SloCurrentStatus{}, err
-	}
 	source, err := q.GetSloOperationalContext(ctx, dbgen.GetSloOperationalContextParams{SliID: row.SliID, Revision: row.MeasurementRevision})
 	if err != nil {
 		return api.SloCurrentStatus{}, err
