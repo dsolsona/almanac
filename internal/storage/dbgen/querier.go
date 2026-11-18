@@ -253,7 +253,6 @@ type Querier interface {
 	ListAgentDatasourceDependencies(ctx context.Context, arg ListAgentDatasourceDependenciesParams) ([]AlmanacDatasource, error)
 	ListAgents(ctx context.Context, arg ListAgentsParams) ([]AlmanacAgent, error)
 	ListAlertCatalog(ctx context.Context, arg ListAlertCatalogParams) ([]ListAlertCatalogRow, error)
-	ListAlertMaintenanceSuppressions(ctx context.Context, arg ListAlertMaintenanceSuppressionsParams) ([]ListAlertMaintenanceSuppressionsRow, error)
 	ListAlertPolicies(ctx context.Context, arg ListAlertPoliciesParams) ([]ListAlertPoliciesRow, error)
 	ListAlertRangeHistory(ctx context.Context, arg ListAlertRangeHistoryParams) ([]AlmanacAlertRange, error)
 	// Series only reads immutable evidence. Effective-cutoff index bounds the scan;
@@ -516,6 +515,9 @@ type Querier interface {
 	RevokeAgentCredential(ctx context.Context, arg RevokeAgentCredentialParams) (RevokeAgentCredentialRow, error)
 	RevokeAndAuditUnrevokedAgentCredentials(ctx context.Context, arg RevokeAndAuditUnrevokedAgentCredentialsParams) (int64, error)
 	RotateLocalPassword(ctx context.Context, arg RotateLocalPasswordParams) (int64, error)
+	// Read a bounded range through the existing policy/revision/cutoff key,
+	// then inspect JSON for only those evaluations. A page can be sparse.
+	ScanAlertMaintenanceSuppressions(ctx context.Context, arg ScanAlertMaintenanceSuppressionsParams) ([]ScanAlertMaintenanceSuppressionsRow, error)
 	ScanAlertRetainedEvaluations(ctx context.Context, arg ScanAlertRetainedEvaluationsParams) ([]ScanAlertRetainedEvaluationsRow, error)
 	ScanAlertRetentionRanges(ctx context.Context, arg ScanAlertRetentionRangesParams) ([]AlmanacAlertRange, error)
 	ScanAlertTerminalOccurrences(ctx context.Context, arg ScanAlertTerminalOccurrencesParams) ([]AlmanacAlertOccurrence, error)

@@ -379,4 +379,31 @@ FROM source s CROSS JOIN generate_series($2::timestamptz,$3::timestamptz-interva
 	if cursor != "" {
 		t.Fatal("audit included a resumed evaluation")
 	}
+	// A sparse page still advances to older matching evidence. A large stretch
+	// of ordinary evaluations must not be scanned in a single API request.
+	_, err = f.conn.Exec(t.Context(), `
+INSERT INTO almanac_alert_evaluations
+    (id, policy_id, revision, scheduled_at, effective_cutoff, truth, source_generation, exclusion_revision,
+     claim_epoch, claim_token, input_digest, evidence, result, committed_at)
+SELECT gen_random_uuid(), prior.policy_id, prior.revision, boundary, boundary, 'clear',
+       prior.source_generation, prior.exclusion_revision, prior.claim_epoch, gen_random_uuid(),
+       prior.input_digest, prior.evidence #- '{Evaluation,Maintenance}', prior.result, boundary
+FROM (SELECT * FROM almanac_alert_evaluations WHERE policy_id = $1 ORDER BY effective_cutoff DESC LIMIT 1) prior
+CROSS JOIN generate_series($2::timestamptz + interval '1 minute', $2 + interval '500 minutes', interval '1 minute') boundary`, policy, resumeAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := ListAlertMaintenanceSuppressionsInput{
+		ReadAlertInput: ReadAlertInput{Runtime: f.runtime, Proof: m.proof, ID: policy, Now: f.clock},
+		Revision:       1, Limit: 1,
+	}
+	empty, err := ListAlertMaintenanceSuppressions(t.Context(), f.f.databaseURL, input)
+	if err != nil || len(empty.Items) != 0 || empty.NextCursor == "" {
+		t.Fatalf("audit did not bound a sparse source page: %+v %v", empty, err)
+	}
+	input.Cursor = empty.NextCursor
+	recovered, err := ListAlertMaintenanceSuppressions(t.Context(), f.f.databaseURL, input)
+	if err != nil || len(recovered.Items) != 1 || !recovered.Items[0].Cutoff.Equal(end.Add(-time.Minute)) {
+		t.Fatalf("sparse page skipped retained evidence: %+v %v", recovered, err)
+	}
 }

@@ -109,16 +109,6 @@ func (r *Runtime) commitAlertEvaluation(ctx context.Context, claim alertClaim, i
 		if err != nil {
 			return err
 		}
-		cutoff := input.Snapshot.Cutoff
-		start := cutoff
-		for _, window := range input.Windows {
-			if window.Start.Before(start) {
-				start = window.Start
-			}
-		}
-		if err := requireServiceMaintenanceReady(ctx, q, binding.SloID, start, cutoff); err != nil {
-			return err
-		}
 		policy, err := q.LockAlertPolicy(ctx, id)
 		if err != nil {
 			return err
@@ -130,6 +120,16 @@ func (r *Runtime) commitAlertEvaluation(ctx context.Context, claim alertClaim, i
 		} else if found {
 			result = saved
 			return nil
+		}
+		cutoff := input.Snapshot.Cutoff
+		start := cutoff
+		for _, window := range input.Windows {
+			if window.Start.Before(start) {
+				start = window.Start
+			}
+		}
+		if err := requireServiceMaintenanceReady(ctx, q, binding.SloID, start, cutoff); err != nil {
+			return err
 		}
 		if !policy.Enabled || policy.EvaluationRevision != claim.Revision || binding.EvaluationRevision != claim.Revision || measurement != binding.MeasurementRevision || definition != binding.DefinitionRevision {
 			return ErrAlertStale

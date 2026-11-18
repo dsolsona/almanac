@@ -7,6 +7,7 @@ import (
 
 	"github.com/dsolsona/almanac/internal/alert"
 	"github.com/dsolsona/almanac/internal/storage/dbgen"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type ListAlertMaintenanceSuppressionsInput struct {
@@ -47,13 +48,26 @@ func ListAlertMaintenanceSuppressions(ctx context.Context, databaseURL string, i
 		if !exists {
 			return ErrAlertNotFound
 		}
-		rows, err := q.ListAlertMaintenanceSuppressions(ctx, dbgen.ListAlertMaintenanceSuppressionsParams{
-			PolicyID: id, Revision: input.Revision, HasCursor: input.Cursor != "", AfterCutoff: timestamp(time.UnixMicro(cursor.Time)), AfterID: uuidOrZero(cursor.ID), PageLimit: int32(input.Limit + 1),
+		const scanLimit = 500
+		var after pgtype.Timestamptz
+		if input.Cursor != "" {
+			after = timestamp(time.UnixMicro(cursor.Time))
+		}
+		rows, err := q.ScanAlertMaintenanceSuppressions(ctx, dbgen.ScanAlertMaintenanceSuppressionsParams{
+			PolicyID: id, Revision: input.Revision, AfterCutoff: after, ScanLimit: scanLimit + 1,
 		})
 		if err != nil {
 			return err
 		}
-		for _, row := range rows[:min(len(rows), input.Limit)] {
+		consumed := 0
+		for _, row := range rows[:min(len(rows), scanLimit)] {
+			if row.Suppression != "" && len(page.Items) == input.Limit {
+				break
+			}
+			consumed++
+			if row.Suppression == "" {
+				continue
+			}
 			item := AlertMaintenanceSuppressionRecord{
 				EvaluationID: row.ID.String(), Cutoff: row.EffectiveCutoff.Time.UTC(), ScheduledAt: row.ScheduledAt.Time.UTC(), CommittedAt: row.CommittedAt.Time.UTC(),
 			}
@@ -67,8 +81,8 @@ func ListAlertMaintenanceSuppressions(ctx context.Context, databaseURL string, i
 			}
 			page.Items = append(page.Items, item)
 		}
-		if len(rows) > input.Limit {
-			last := rows[input.Limit-1]
+		if consumed < len(rows) {
+			last := rows[consumed-1]
 			page.NextCursor, err = encodeAlertReadCursor(alertReadCursor{
 				Version: 1, Kind: kind, Filter: filter, ID: last.ID.String(), Time: last.EffectiveCutoff.Time.UnixMicro(),
 			})
