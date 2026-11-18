@@ -33,6 +33,10 @@ func projectServiceMaintenancePage(ctx context.Context, tx pgx.Tx, pageLimit int
 	if err != nil {
 		return err
 	}
+	observedAuthority, err := q.ObserveServiceMaintenanceAuthority(ctx)
+	if err != nil {
+		return err
+	}
 	page, err := q.ListServiceMaintenanceProjectionSlos(ctx, dbgen.ListServiceMaintenanceProjectionSlosParams{
 		ExclusionID: claim.ExclusionID, Revision: claim.DesiredRevision, AfterSlo: claim.ThroughSlo, PageLimit: pageLimit,
 	})
@@ -62,8 +66,14 @@ func projectServiceMaintenancePage(ctx context.Context, tx pgx.Tx, pageLimit int
 			return err
 		}
 	}
-	if _, err := q.FenceServiceMaintenanceAuthority(ctx); err != nil {
+	fencedAuthority, err := q.FenceServiceMaintenanceAuthority(ctx)
+	if err != nil {
 		return err
+	}
+	// A skipped SLO can become relevant before the fence without a new
+	// membership job. Retry from the same cursor against fresh relevance.
+	if fencedAuthority != observedAuthority {
+		return ErrMaintenanceSnapshotChanged
 	}
 	_, err = q.LockObservedServiceMaintenanceProjection(ctx, dbgen.LockObservedServiceMaintenanceProjectionParams{
 		ExclusionID: claim.ExclusionID, Revision: claim.DesiredRevision, ThroughSlo: claim.ThroughSlo,

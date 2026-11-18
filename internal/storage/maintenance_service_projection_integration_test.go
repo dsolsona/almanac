@@ -3,6 +3,7 @@
 package storage
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -531,4 +532,80 @@ FROM almanac_slo_exclusion_changes WHERE exclusion_id=$1`, window.ID).Scan(&inst
 		}
 		return nil
 	})
+}
+
+type projectionFenceTx struct {
+	pgx.Tx
+	beforeFence func()
+}
+
+func (tx projectionFenceTx) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
+	if strings.HasPrefix(sql, "-- name: FenceServiceMaintenanceAuthority ") {
+		tx.beforeFence()
+	}
+	return tx.Tx.QueryRow(ctx, sql, args...)
+}
+
+func TestIntegrationMaintenanceServiceProjectionRetriesAfterServiceRestore(t *testing.T) {
+	t.Parallel()
+	f := newMaintenanceFixture(t)
+	ctx := t.Context()
+	q := dbgen.New(f.conn)
+	subject, err := q.GetSlo(ctx, mustPGUUID(f.ids[0]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := f.input("restore-during-projection")
+	input.ScopeKind, input.SloIDs, input.ServiceIDs = MaintenanceScopeServices, nil, []string{subject.ServiceID.String()}
+	input.Start, input.End = f.at.Add(5*time.Minute), f.at.Add(10*time.Minute)
+	window, err := CreateMaintenance(ctx, f.f.databaseURL, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.conn.Exec(ctx, `UPDATE almanac_services SET archived_at=$2 WHERE id=$1`, subject.ServiceID, f.at); err != nil {
+		t.Fatal(err)
+	}
+
+	inventory := integrationConnect(t, f.f.databaseURL)
+	defer closeIntegrationConn(inventory)
+	tx, err := f.conn.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rollbackTransaction(tx)
+	restored := false
+	turn := projectionFenceTx{Tx: tx, beforeFence: func() {
+		if _, err := inventory.Exec(ctx, `UPDATE almanac_services SET archived_at=NULL WHERE id=$1`, subject.ServiceID); err != nil {
+			t.Fatal(err)
+		}
+		restored = true
+	}}
+	err = projectServiceMaintenancePage(ctx, turn, 64, f.clock)
+	if !restored || !errors.Is(err, ErrMaintenanceSnapshotChanged) {
+		t.Fatalf("restored=%v, stale projection result=%v", restored, err)
+	}
+	if err := tx.Rollback(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	var through string
+	var complete bool
+	var work int
+	if err := f.conn.QueryRow(ctx, `
+SELECT through_slo, complete, (SELECT count(*) FROM almanac_service_maintenance_membership_work)
+FROM almanac_service_maintenance_projection WHERE exclusion_id=$1`, window.ID).Scan(&through, &complete, &work); err != nil ||
+		through != uuidOrZero("").String() || complete || work != 0 {
+		t.Fatalf("stale turn advanced cursor or queued membership: through=%s complete=%v jobs=%d: %v", through, complete, work, err)
+	}
+
+	if err := f.runtime.runServiceMaintenanceProjection(ctx, 64, time.Second, f.clock); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range f.ids {
+		snapshot, err := readSloExclusionSnapshot(ctx, q, mustPGUUID(id), window.Start, window.End)
+		if err != nil || len(snapshot.Intervals) != 1 || !snapshot.Intervals[0].Start.Equal(window.Start) ||
+			!snapshot.Intervals[0].End.Equal(window.End) {
+			t.Fatalf("retry did not install restored %s membership: %+v: %v", id, snapshot, err)
+		}
+	}
 }
