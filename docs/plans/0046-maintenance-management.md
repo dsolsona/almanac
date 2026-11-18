@@ -1,6 +1,8 @@
 # Maintenance management implementation plan
 
-The explicit-SLO API, CLI, browser lifecycle and timeline overlays have merged.
+The explicit-SLO [API](../tasks/F4-T53.md), [CLI](../tasks/F4-T54.md),
+[browser lifecycle](../tasks/F4-T57.md) and [timeline overlays](../tasks/F4-T56.md)
+have merged.
 The next increment implements
 [SPEC-0023](../specs/0023-maintenance-management.md) and
 [ADR-0053](../adr/0053-service-maintenance-workflow.md), building on

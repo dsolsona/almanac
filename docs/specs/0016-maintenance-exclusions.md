@@ -21,27 +21,29 @@ Operators must be able to explain which periods were excluded and why a report c
 
 ## Scope and non-goals
 
-Include one-time maintenance windows for explicit SLO IDs, scheduling, cancellation,
-audited revisions, UI/API/CLI parity and visible graph overlays. Include
-this in F4 before the initial release. Collection, ingestion and repair continue.
-Recurring schedules and automatic service/folder selectors are deferred. A separate
-notification silence may be created explicitly; maintenance does not imply one.
+Include one-time maintenance windows, scheduling, cancellation, audited revisions,
+UI/API/CLI parity and visible graph overlays. Collection, ingestion and repair
+continue. [SPEC-0023](0023-maintenance-management.md) governs scope and automatic
+suppression in the expanded workflow. Recurring schedules and folder selectors
+remain deferred. Operators can also create independent notification silences.
 
 ## Behavior and contracts
 
 ### Window identity, scope and time
 
-A maintenance record has a stable ID, title, required reason, UTC start/end, explicit
-SLO IDs, creator, timestamps and a revision. Bounds are half-open `[start,end)`;
-start must precede end. The UI accepts a timezone and previews exact UTC bounds.
+A maintenance record has a stable ID, title, required reason, UTC start/end, a
+scope selector, creator, timestamps and a revision. Bounds use the half-open range
+`[start,end)`. The start must precede the end. The UI accepts a timezone and previews exact UTC bounds.
 Ambiguous/nonexistent local times require explicit correction. Persist the selected
 UTC instants, not a recurring local-time expression.
 
-Resolve scope to explicit SLO IDs at creation. A future folder move or service change
-cannot add an SLO to old maintenance. A window affects the selected SLO's calculations,
-not other SLOs using the same SLI. A composite window excludes that period from every
-child contribution within that composite; independently evaluated child SLOs remain
-unchanged. Multiple windows combine by interval union, so overlaps count once.
+An explicit-SLO window fixes its selected IDs at creation. Service and all-service
+windows use the prospective membership rules in
+[SPEC-0023](0023-maintenance-management.md). A selected SLO receives its own
+calculation exclusion. Other consumers of the same SLI require their own
+coverage. A composite window excludes that period from every child contribution
+within the selected composite. Independently evaluated child SLOs require their
+own coverage. Multiple windows combine by interval union, so overlaps count once.
 
 Require bounds aligned with all applicable observation/slice grids and effective
 revisions in scope. Preview alignment errors and suggested common bounds; never
@@ -155,7 +157,8 @@ state, not a fabricated adjusted result. Secrets and raw queries are not window 
 - REVIEW-E01 (accepted): Scheduled exclusions are required. Permit retrospective
   changes only for administrators, with immutable audit/version history.
 - REVIEW-E02 (accepted): Initial explicit-SLO scope, aligned whole intervals, no recurrence,
-  and separate opt-in notification silences. Their effects must never be conflated.
+  and separate opt-in notification silences. SPEC-0023 amends scope and suppression
+  for the expanded workflow. Exclusion and silencing retain separate effects.
 - REVIEW-E03 (accepted): F4 delivery and the alert behavior when all evaluable time is
   excluded or an exclusion edit changes a current incident's calculation.
 
@@ -169,3 +172,5 @@ requires calculation, transaction/concurrency, API/CLI and browser evidence.
 - 2026-10-24: Drafted the requested maintenance-calculation feature after the initial
   design review.
 - 2026-10-24: Accepted in Crit review `0de0c0e42db6`; linked contracts reconciled.
+- 2026-11-18: Reconciled scope and automatic suppression with accepted
+  [SPEC-0023](0023-maintenance-management.md). Retained explicit-SLO compatibility.
