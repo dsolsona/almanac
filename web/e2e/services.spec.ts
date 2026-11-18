@@ -73,8 +73,16 @@ test('services persist metadata and dependencies, retain UUIDs on rename, and pr
  const zoom=page.getByLabel('Graph zoom',{exact:true}),beforeZoom=await zoom.textContent();
  await page.getByRole('button',{name:'Zoom in',exact:true}).click();await expect(zoom).not.toHaveText(beforeZoom!);
  await page.getByRole('button',{name:'Reset view',exact:true}).click();
- await page.getByRole('group',{name:'Service SLO status'}).getByRole('button',{name:'On track',exact:true}).click();
- await expect(page.getByText('No services match these statuses.',{exact:true})).toBeVisible();
+ const serviceIDs = (selector: string) => page.locator(selector).evaluateAll(nodes =>
+  nodes.map(node => node.getAttribute('data-id')).sort());
+ const onTrackIDs = await serviceIDs('.map-node[data-slo-state="on_track"]');
+ const onTrack = page.getByRole('group',{name:'Service SLO status'}).getByRole('button',{name:'On track',exact:true});
+ await onTrack.click();
+ await expect(onTrack).toHaveAttribute('aria-pressed','true');
+ await expect.poll(() => serviceIDs('.map-node[data-filter-match="true"]')).toEqual(onTrackIDs);
+ if (onTrackIDs.length === 0) {
+  await expect(page.getByText('No services match these statuses.',{exact:true})).toBeVisible();
+ }
  await page.getByRole('button',{name:'Reset view',exact:true}).click();
  await page.locator('.map-node').filter({hasText:providerName}).focus();await page.keyboard.press('Enter');
  await expect(page.locator('.map-node.selected')).toHaveAttribute('data-id',provider.body.id);
