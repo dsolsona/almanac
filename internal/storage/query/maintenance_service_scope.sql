@@ -28,7 +28,8 @@ ORDER BY d.cadence_seconds;
 
 -- A witness is sufficient to suppress an occurrence. Look up the membership
 -- and immutable selector revision effective at the evaluation cutoff. Projection
--- state cannot participate in this decision.
+-- state cannot participate in this decision. Timestamps establish eligibility
+-- at the cutoff; the immutable revision sequence establishes precedence.
 -- name: ReadMaintenanceSuppressionWitness :one
 WITH assignment AS MATERIALIZED (
     SELECT a.service_id, a.effective_at, s.archived_at, (
@@ -71,7 +72,7 @@ WHERE c.recorded_at <= sqlc.arg(cutoff)::timestamptz
       SELECT latest.revision
       FROM public.almanac_maintenance_exclusion_revisions latest
       WHERE latest.exclusion_id = c.exclusion_id AND latest.recorded_at <= sqlc.arg(cutoff)::timestamptz
-      ORDER BY latest.recorded_at DESC, latest.revision DESC LIMIT 1
+      ORDER BY latest.revision DESC LIMIT 1
   )
 ORDER BY c.exclusion_id, c.revision
 LIMIT 1;

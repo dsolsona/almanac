@@ -142,3 +142,29 @@ func TestIntegrationMaintenanceServicePreviewIsPaged(t *testing.T) {
 		t.Fatalf("missing service looked like empty inventory: %v", err)
 	}
 }
+
+func TestIntegrationMaintenanceServiceSuppressionUsesRevisionOrder(t *testing.T) {
+	t.Parallel()
+	f := newMaintenanceFixture(t)
+	f.now = f.at.Add(time.Minute)
+	input := f.input("revision-order")
+	input.ScopeKind, input.SloIDs = MaintenanceScopeAllServices, nil
+	window, err := CreateMaintenance(t.Context(), f.f.databaseURL, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Aggregate revision remains monotonic across separate authorized requests
+	// even if the installation's wall clock moves backward between them.
+	f.now = f.at
+	cancel, err := CancelMaintenance(t.Context(), f.f.databaseURL, MaintenanceCommandInput{
+		Scoped: true, Proof: f.proof, ID: window.ID, Revision: window.Revision, Reason: "Window cancelled",
+		IdempotencyKey: "cancel-revision-order", RequestID: "cancel-revision-order", Now: f.clock,
+	})
+	if err != nil || cancel.Revision != 2 || !cancel.UpdatedAt.Before(window.UpdatedAt) {
+		t.Fatalf("fixture did not commit a later revision with an earlier clock: %+v, %v", cancel, err)
+	}
+	if witness := serviceSuppressionAt(t, f, f.ids[0], window.Start); witness != nil {
+		t.Fatalf("older revision overrode the cancellation: %+v", witness)
+	}
+}

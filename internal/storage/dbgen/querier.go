@@ -447,7 +447,8 @@ type Querier interface {
 	ReadMaintenanceState(ctx context.Context, sloID pgtype.UUID) (int64, error)
 	// A witness is sufficient to suppress an occurrence. Look up the membership
 	// and immutable selector revision effective at the evaluation cutoff. Projection
-	// state cannot participate in this decision.
+	// state cannot participate in this decision. Timestamps establish eligibility
+	// at the cutoff; the immutable revision sequence establishes precedence.
 	ReadMaintenanceSuppressionWitness(ctx context.Context, arg ReadMaintenanceSuppressionWitnessParams) (ReadMaintenanceSuppressionWitnessRow, error)
 	// Caller supplies at most 24 missing exact hour starts from one day snapshot.
 	// An older generation's failure cannot veto a distinct current repair key.

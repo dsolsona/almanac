@@ -326,7 +326,7 @@ WHERE c.recorded_at <= $1::timestamptz
       SELECT latest.revision
       FROM public.almanac_maintenance_exclusion_revisions latest
       WHERE latest.exclusion_id = c.exclusion_id AND latest.recorded_at <= $1::timestamptz
-      ORDER BY latest.recorded_at DESC, latest.revision DESC LIMIT 1
+      ORDER BY latest.revision DESC LIMIT 1
   )
 ORDER BY c.exclusion_id, c.revision
 LIMIT 1
@@ -346,7 +346,8 @@ type ReadMaintenanceSuppressionWitnessRow struct {
 
 // A witness is sufficient to suppress an occurrence. Look up the membership
 // and immutable selector revision effective at the evaluation cutoff. Projection
-// state cannot participate in this decision.
+// state cannot participate in this decision. Timestamps establish eligibility
+// at the cutoff; the immutable revision sequence establishes precedence.
 func (q *Queries) ReadMaintenanceSuppressionWitness(ctx context.Context, arg ReadMaintenanceSuppressionWitnessParams) (ReadMaintenanceSuppressionWitnessRow, error) {
 	row := q.db.QueryRow(ctx, readMaintenanceSuppressionWitness, arg.Cutoff, arg.SloID)
 	var i ReadMaintenanceSuppressionWitnessRow
