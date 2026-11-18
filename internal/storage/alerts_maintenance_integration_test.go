@@ -3,6 +3,7 @@
 package storage
 
 import (
+	"crypto/sha256"
 	"errors"
 	"testing"
 	"time"
@@ -280,6 +281,42 @@ func TestIntegrationAlertMaintenanceRejectsUnprojectedPopulation(t *testing.T) {
 	clock := func() time.Time { return claim.ScheduledAt.Add(time.Second) }
 	if result, err := f.runtime.commitAlertEvaluation(t.Context(), claim, stale, f.limits, clock); !errors.Is(err, ErrDerivedPending) || result.EvaluationID != "" {
 		t.Fatalf("published stale evidence while membership was being projected: %+v %v", result, err)
+	}
+
+	// Publish an identical receipt after the initial lookup, while a
+	// projection is pending. A competing successful commit can become
+	// visible at this boundary under READ COMMITTED.
+	receiptID := newAlertID()
+	record, err := marshalAlertData(alertCommitResult{FormatVersion: 1, EvaluationID: receiptID.String()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := marshalAlertData(stale)
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := sha256.Sum256(encoded)
+	var insertErr error
+	published := false
+	interleavingClock := func() time.Time {
+		if !published {
+			published = true
+			_, insertErr = f.conn.Exec(t.Context(), `
+INSERT INTO almanac_alert_evaluations
+    (id, policy_id, revision, scheduled_at, effective_cutoff, truth, source_generation, exclusion_revision,
+     claim_epoch, claim_token, input_digest, evidence, result, committed_at)
+VALUES ($1, $2, $3, $4, $4, 'breaching', $5, $6, $7, $8, $9, '{}', $10, $4)`,
+				receiptID, claim.PolicyID, claim.Revision, claim.ScheduledAt, stale.Snapshot.SourceGeneration,
+				stale.Snapshot.ExclusionRevision, claim.Epoch, claim.Token, digest[:], record)
+		}
+		return clock()
+	}
+	replayed, err := f.runtime.commitAlertEvaluation(t.Context(), claim, stale, f.limits, interleavingClock)
+	if insertErr != nil || err != nil || replayed.EvaluationID != receiptID.String() {
+		t.Fatalf("pending projection hid a committed receipt: %+v, commit=%v insert=%v", replayed, err, insertErr)
+	}
+	if _, err := f.conn.Exec(t.Context(), "DELETE FROM almanac_alert_evaluations WHERE id=$1", receiptID); err != nil {
+		t.Fatal(err)
 	}
 	if err := f.runtime.runServiceMaintenanceProjection(t.Context(), 4, time.Second, clock); err != nil {
 		t.Fatal(err)
