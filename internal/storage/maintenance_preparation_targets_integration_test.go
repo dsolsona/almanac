@@ -295,8 +295,9 @@ func TestIntegrationMaintenancePreparationTargetPopulatedUpgrade(t *testing.T) {
 	if !ok || pg.Code != "23514" {
 		t.Fatalf("rewind did not restore old queue constraints: %v", err)
 	}
+	latest := latestTestSchemaVersion(t)
 	upgraded, err := Upgrade(t.Context(), f.f.databaseURL)
-	if err != nil || upgraded.Applied != 3 || upgraded.DatabaseSchemaVersion != 69 {
+	if err != nil || upgraded.Applied != latest-66 || upgraded.DatabaseSchemaVersion != latest {
 		t.Fatalf("upgrade %+v %v", upgraded, err)
 	}
 	if snapshot() != before {

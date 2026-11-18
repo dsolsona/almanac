@@ -104,6 +104,7 @@ func setLegacyMaintenanceAnalysis(t *testing.T, conn *pgx.Conn, legacy bool) {
 // Rewind the additive 0068 queue checkpoints without altering older work identity.
 func dropMaintenanceAuthorityFixture(t *testing.T, conn *pgx.Conn) {
 	t.Helper()
+	dropServiceMaintenanceFixture(t, conn)
 	if _, err := conn.Exec(t.Context(), `DROP INDEX public.almanac_authority_due_idx,
 public.almanac_maintenance_input_start_idx,public.almanac_maintenance_input_end_idx,
 public.almanac_maintenance_retarget_idx;
@@ -116,5 +117,27 @@ DROP COLUMN boundary_through,DROP COLUMN attempts,DROP COLUMN failure_version,
 DROP COLUMN failure_reason,DROP COLUMN lease_token,DROP COLUMN lease_epoch,
 DROP COLUMN lease_until,DROP COLUMN claimed_version,DROP COLUMN claimed_revision,DROP COLUMN last_tick`); err != nil {
 		t.Fatalf("reconstruct pre-0068 authority queue: %v", err)
+	}
+}
+
+// Rewind the service maintenance suffix in descending order. The caller also
+// restores its historical schema and trims the migration ledger before upgrading.
+func dropServiceMaintenanceFixture(t *testing.T, conn *pgx.Conn) {
+	t.Helper()
+	for version := latestTestSchemaVersion(t); version >= 70; version-- {
+		var statement string
+		switch version {
+		case 70:
+			statement = `DROP TRIGGER almanac_slo_initial_service_assignment ON public.almanac_slos;
+DROP TRIGGER almanac_slo_changed_service_assignment ON public.almanac_slos;
+DROP TRIGGER almanac_service_maintenance_archive ON public.almanac_services;
+DROP TABLE public.almanac_slo_service_assignments, public.almanac_service_maintenance_authority;
+DROP FUNCTION public.almanac_record_active_slo_service(), public.almanac_fence_service_archive();`
+		default:
+			t.Fatalf("missing service maintenance fixture teardown for migration %04d", version)
+		}
+		if _, err := conn.Exec(t.Context(), statement); err != nil {
+			t.Fatalf("reconstruct pre-%04d service maintenance schema: %v", version, err)
+		}
 	}
 }

@@ -12,9 +12,7 @@ import (
 
 func TestIntegrationCanonicalReceiptPopulatedUpgrade(t *testing.T) {
 	t.Parallel()
-	if latest := latestTestSchemaVersion(t); latest != 69 {
-		t.Fatalf("update exact0060 reconstruction: latest=%d", latest)
-	}
+	latest := latestTestSchemaVersion(t)
 	s := newSelfHealFixture(t, "receipt-upgrade", true)
 	if _, err := execObservationFixture(t, s.conn, s.sliID, `UPDATE almanac_sli_observations SET outcome='failed',good_count=NULL,total_count=NULL,error_code='network',ingestion_generation=0 WHERE sli_id=$1 AND interval_start<$2`, s.sliID, s.historyStart.Add(time.Hour)); err != nil {
 		t.Fatal(err)
@@ -45,7 +43,7 @@ func TestIntegrationCanonicalReceiptPopulatedUpgrade(t *testing.T) {
 	}
 	before := snapshot()
 	result, err := Upgrade(t.Context(), s.f.databaseURL)
-	if err != nil || result.Applied != 9 || result.DatabaseSchemaVersion != 69 {
+	if err != nil || result.Applied != latest-60 || result.DatabaseSchemaVersion != latest {
 		t.Fatalf("upgrade %+v %v", result, err)
 	}
 	if snapshot() != before {
