@@ -579,10 +579,10 @@ type AlmanacServiceMaintenanceProjectionCompleted struct {
 }
 
 type AlmanacServiceMaintenanceUncertainGrid struct {
-	SloID       pgtype.UUID                                         `json:"slo_id"`
-	ServiceID   pgtype.UUID                                         `json:"service_id"`
-	UncertainAt pgtype.Multirange[pgtype.Range[pgtype.Timestamptz]] `json:"uncertain_at"`
-	PreserveAt  pgtype.Multirange[pgtype.Range[pgtype.Timestamptz]] `json:"preserve_at"`
+	SloID             pgtype.UUID                                         `json:"slo_id"`
+	ServiceID         pgtype.UUID                                         `json:"service_id"`
+	UncertainAt       pgtype.Multirange[pgtype.Range[pgtype.Timestamptz]] `json:"uncertain_at"`
+	PublishedRevision int64                                               `json:"published_revision"`
 }
 
 type AlmanacSession struct {
