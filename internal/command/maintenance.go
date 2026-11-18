@@ -22,7 +22,7 @@ func maintenanceCommand(parent context.Context, args []string, stdout, stderr io
 	operation, jsonOut := "maintenance", requestedJSON(args)
 	fail := func(err error) int { return writeDatasourceFailure(stdout, stderr, operation, jsonOut, err) }
 	if len(args) == 0 {
-		return fail(datasourceInvalid("choose list, get, timeline, create, update, end, cancel or withdraw"))
+		return fail(datasourceInvalid("choose list, get, preview, impact, timeline, create, update, end, cancel or withdraw"))
 	}
 	in := maintenanceclient.Input{Action: args[0]}
 	operation += " " + in.Action
@@ -32,11 +32,22 @@ func maintenanceCommand(parent context.Context, args []string, stdout, stderr io
 	output := fs.String("output", "text", "text or json")
 	timeout := fs.Duration("timeout", 30*time.Second, "request deadline, up to 2m")
 	var inputFile, start, end string
+	if in.Action != "preview" && in.Action != "impact" {
+		fs.BoolVar(&in.Scoped, "scoped", false, "use service, individual SLO or all-services maintenance")
+	}
 	switch in.Action {
-	case "list", "timeline":
+	case "list", "timeline", "preview", "impact":
 		fs.IntVar(&in.Limit, "limit", 50, "page size")
 		fs.StringVar(&in.Cursor, "cursor", "", "opaque page cursor")
-		if in.Action == "timeline" {
+		switch in.Action {
+		case "preview":
+			in.Scoped = true
+			fs.StringVar(&inputFile, "input-file", "", "protected scope JSON input or -")
+		case "impact":
+			in.Scoped = true
+			fs.StringVar(&in.ID, "maintenance-id", "", "window UUID")
+			fs.StringVar(&in.Revision, "revision", "", "historical revision")
+		case "timeline":
 			fs.StringVar(&in.ID, "slo-id", "", "SLO UUID")
 			fs.StringVar(&start, "start", "", "inclusive UTC RFC3339 bound")
 			fs.StringVar(&end, "end", "", "exclusive UTC RFC3339 bound")
@@ -73,7 +84,7 @@ func maintenanceCommand(parent context.Context, args []string, stdout, stderr io
 	if !maintenanceclient.ValidateOptions(in) {
 		return fail(datasourceInvalid("invalid maintenance options"))
 	}
-	if in.Mutation() {
+	if in.Mutation() || in.Action == "preview" {
 		if inputFile == "-" {
 			in.Body, err = io.ReadAll(io.LimitReader(os.Stdin, maxDatasourceInputBytes+1))
 		} else {
@@ -118,6 +129,20 @@ func maintenanceCommand(parent context.Context, args []string, stdout, stderr io
 	if in.Mutation() && identity.Role != "administrator" && identity.Role != "editor" {
 		return fail(datasourceForbidden())
 	}
+	if in.Scoped {
+		client, ok := ops.(maintenanceclient.ScopedOperations)
+		if !ok {
+			return fail(datasourceInvalid("scoped maintenance operations unavailable"))
+		}
+		result, err := maintenanceclient.DoScoped(ctx, client, editor, in)
+		if err != nil {
+			return fail(err)
+		}
+		if err := locked.Close(); err != nil {
+			return fail(datasourceProfileFailure(err))
+		}
+		return writeScopedMaintenance(stdout, stderr, operation, jsonOut, result)
+	}
 	client, ok := ops.(maintenanceclient.Operations)
 	if !ok {
 		return fail(datasourceInvalid("maintenance operations unavailable"))
@@ -157,6 +182,85 @@ func maintenanceCommand(parent context.Context, args []string, stdout, stderr io
 		item.Reason, item.Revision, item.Operation, result.ETag)
 	for _, id := range item.SloIds {
 		fmt.Fprintf(stdout, "SLO: %s\n", id)
+	}
+	return 0
+}
+
+func writeScopedMaintenance(stdout, stderr io.Writer, operation string, jsonOut bool, result maintenanceclient.ScopedResult) int {
+	if jsonOut {
+		var output any = result
+		switch {
+		case result.Page != nil:
+			output = result.Page
+		case result.Impact != nil:
+			output = result.Impact
+		case result.Timeline != nil:
+			output = result.Timeline
+		}
+		data, err := json.Marshal(output)
+		if err != nil {
+			return writeDatasourceFailure(stdout, stderr, operation, true, err)
+		}
+		return writeDatasourceSuccess(stdout, stderr, true, operation, data)
+	}
+	var cursor *string
+	switch {
+	case result.Page != nil:
+		for _, item := range result.Page.Items {
+			kind, _ := item.Scope.Discriminator()
+			fmt.Fprintf(stdout, "%s\t%q\t%s\t%s\t%s\t%s\n", item.Id, item.Title,
+				item.Start.Format(time.RFC3339), item.End.Format(time.RFC3339), item.Operation, kind)
+		}
+		cursor = result.Page.NextCursor
+	case result.Impact != nil:
+		countContext := ""
+		if operation == "maintenance impact" {
+			countContext = "distinct SLOs, "
+		}
+		fmt.Fprintf(stdout, "Affected SLOs: %s (%sinventory at %s)\n", result.Impact.Total, countContext, result.Impact.InventoryAt.Format(time.RFC3339Nano))
+		if !result.Impact.Ready {
+			fmt.Fprintln(stdout, "Effective maintenance membership is being prepared.")
+		}
+		for _, item := range result.Impact.Items {
+			fmt.Fprintf(stdout, "%s\t%q\t%s\t%q", item.SloId, item.SloName, item.ServiceId, item.ServiceName)
+			if item.Start != nil {
+				fmt.Fprintf(stdout, "\t%s\t%s", item.Start.Format(time.RFC3339Nano), item.End.Format(time.RFC3339Nano))
+			}
+			fmt.Fprintln(stdout)
+		}
+		cursor = result.Impact.NextCursor
+	case result.Timeline != nil:
+		if result.Timeline.Pending {
+			fmt.Fprintln(stdout, "Some effective maintenance intervals are being prepared.")
+		}
+		for _, item := range result.Timeline.Items {
+			fmt.Fprintf(stdout, "%s\t%q\t%s\t%s\trevision %s\n", item.Window.Id, item.Window.Title,
+				item.Start.Format(time.RFC3339Nano), item.End.Format(time.RFC3339Nano), item.Window.Revision)
+		}
+		cursor = result.Timeline.NextCursor
+	default:
+		item := result.Window
+		fmt.Fprintf(stdout, "%q (%s)\nUTC: %s to %s\nReason: %q\nRevision: %s (%s)\nETag: %s\n",
+			item.Title, item.Id, item.Start.Format(time.RFC3339), item.End.Format(time.RFC3339),
+			item.Reason, item.Revision, item.Operation, result.ETag)
+		kind, _ := item.Scope.Discriminator()
+		switch kind {
+		case "slos":
+			scope, _ := item.Scope.AsMaintenanceSloScope()
+			for _, id := range scope.SloIds {
+				fmt.Fprintf(stdout, "SLO: %s\n", id)
+			}
+		case "services":
+			scope, _ := item.Scope.AsMaintenanceServiceScope()
+			for _, id := range scope.ServiceIds {
+				fmt.Fprintf(stdout, "Service: %s\n", id)
+			}
+		case "all_services":
+			fmt.Fprintln(stdout, "Scope: All services")
+		}
+	}
+	if cursor != nil {
+		fmt.Fprintf(stdout, "Next cursor: %s\n", *cursor)
 	}
 	return 0
 }

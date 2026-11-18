@@ -4,6 +4,7 @@ package maintenanceclient
 import (
 	"bytes"
 	"context"
+	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"io"
 	"net/http"
@@ -33,6 +34,7 @@ type Input struct {
 	Limit                                   int
 	Start, End                              time.Time
 	Body                                    []byte
+	Scoped                                  bool
 }
 
 func (in Input) Mutation() bool {
@@ -84,6 +86,10 @@ func ValidateOptions(in Input) bool {
 	switch in.Action {
 	case "list":
 		return page
+	case "preview":
+		return in.Scoped && page
+	case "impact":
+		return in.Scoped && page && hasID && (in.Revision == "" || validRevision(in.Revision))
 	case "get":
 		return hasID && (in.Revision == "" || validRevision(in.Revision))
 	case "timeline":
@@ -101,29 +107,38 @@ func ValidateOptions(in Input) bool {
 // Validate the envelope before opening a profile and pass the exact body through
 // so canonical ID validation and replay identity stay with the API.
 func ValidBody(in Input) bool {
-	if !in.Mutation() {
+	if !in.Mutation() && in.Action != "preview" {
 		return len(in.Body) == 0
 	}
+	var keys map[string]jsontext.Value
+	if json.Unmarshal(in.Body, &keys) != nil {
+		return false
+	}
+	if in.Action == "preview" {
+		return in.Scoped && len(keys) == 1 && validSelector(keys["scope"])
+	}
 	var fields struct {
-		Title  *string    `json:"title"`
-		Reason *string    `json:"reason"`
-		Start  *time.Time `json:"start"`
-		End    *time.Time `json:"end"`
-		SloIDs *[]string  `json:"slo_ids"`
+		Title  *string        `json:"title"`
+		Reason *string        `json:"reason"`
+		Start  *time.Time     `json:"start"`
+		End    *time.Time     `json:"end"`
+		SloIDs *[]string      `json:"slo_ids"`
+		Scope  jsontext.Value `json:"scope"`
 	}
 	if json.Unmarshal(in.Body, &fields, json.RejectUnknownMembers(true)) != nil ||
 		fields.Reason == nil || strings.TrimSpace(*fields.Reason) == "" {
 		return false
 	}
-	var keys map[string]any
-	if json.Unmarshal(in.Body, &keys) != nil {
-		return false
-	}
 	switch in.Action {
 	case "create", "update":
-		return len(keys) == 5 && fields.Title != nil && strings.TrimSpace(*fields.Title) != "" &&
-			fields.Start != nil && fields.End != nil && fields.SloIDs != nil &&
-			len(*fields.SloIDs) >= 1 && len(*fields.SloIDs) <= 100
+		if len(keys) != 5 || fields.Title == nil || strings.TrimSpace(*fields.Title) == "" ||
+			fields.Start == nil || fields.End == nil {
+			return false
+		}
+		if in.Scoped {
+			return validSelector(fields.Scope)
+		}
+		return fields.SloIDs != nil && len(*fields.SloIDs) >= 1 && len(*fields.SloIDs) <= 100
 	case "end":
 		return len(keys) == 2 && fields.End != nil
 	default:
@@ -139,7 +154,7 @@ type Result struct {
 
 func Do(ctx context.Context, ops Operations, auth api.RequestEditorFn, in Input) (Result, error) {
 	var result Result
-	if !ValidateOptions(in) || !ValidBody(in) {
+	if in.Scoped || !ValidateOptions(in) || !ValidBody(in) {
 		return result, &datasourceclient.Failure{Code: "invalid_request", Message: "Invalid maintenance input."}
 	}
 	id, _ := validID(in.ID)
@@ -148,16 +163,7 @@ func Do(ctx context.Context, ops Operations, auth api.RequestEditorFn, in Input)
 	if in.Cursor != "" {
 		cursor = new(api.PageCursor(in.Cursor))
 	}
-	editor := auth
-	if in.Mutation() {
-		editor = func(ctx context.Context, r *http.Request) error {
-			if err := auth(ctx, r); err != nil {
-				return err
-			}
-			r.GetBody = nil // Explicitly reconcile an uncertain write before replay.
-			return nil
-		}
-	}
+	editor := maintenanceEditor(auth, in.Mutation())
 	var response *http.Response
 	var err error
 	body := bytes.NewReader(in.Body)
@@ -185,24 +191,9 @@ func Do(ctx context.Context, ops Operations, auth api.RequestEditorFn, in Input)
 	case "withdraw":
 		response, err = ops.WithdrawMaintenanceWithBody(ctx, id, &api.WithdrawMaintenanceParams{IfMatch: in.ETag, IdempotencyKey: key}, content, body, editor)
 	}
-	if err != nil || response == nil {
-		if response != nil && response.Body != nil {
-			response.Body.Close()
-		}
-		return result, responseFailure(ctx, in.Mutation(), 0)
-	}
-	defer response.Body.Close()
-	const maxResponse = 4 << 20
-	data, err := io.ReadAll(io.LimitReader(response.Body, maxResponse+1))
-	if err != nil || len(data) > maxResponse {
-		return result, responseFailure(ctx, in.Mutation(), response.StatusCode)
-	}
-	expected := http.StatusOK
-	if in.Action == "create" {
-		expected = http.StatusCreated
-	}
-	if response.StatusCode != expected {
-		return result, problemFailure(ctx, in.Mutation(), response.StatusCode, data)
+	data, err := maintenanceResponse(ctx, in, response, err)
+	if err != nil {
+		return result, err
 	}
 	if in.Action == "list" || in.Action == "timeline" {
 		var page api.MaintenancePage
@@ -227,6 +218,42 @@ func Do(ctx context.Context, ops Operations, auth api.RequestEditorFn, in Input)
 	}
 	result.Window, result.ETag = &record, etag
 	return result, nil
+}
+
+func maintenanceEditor(auth api.RequestEditorFn, mutation bool) api.RequestEditorFn {
+	if !mutation {
+		return auth
+	}
+	return func(ctx context.Context, r *http.Request) error {
+		if err := auth(ctx, r); err != nil {
+			return err
+		}
+		r.GetBody = nil // Explicitly reconcile an uncertain write before replay.
+		return nil
+	}
+}
+
+func maintenanceResponse(ctx context.Context, in Input, response *http.Response, err error) ([]byte, error) {
+	if err != nil || response == nil {
+		if response != nil && response.Body != nil {
+			response.Body.Close()
+		}
+		return nil, responseFailure(ctx, in.Mutation(), 0)
+	}
+	defer response.Body.Close()
+	const maxResponse = 4 << 20
+	data, err := io.ReadAll(io.LimitReader(response.Body, maxResponse+1))
+	if err != nil || len(data) > maxResponse {
+		return nil, responseFailure(ctx, in.Mutation(), response.StatusCode)
+	}
+	expected := http.StatusOK
+	if in.Action == "create" {
+		expected = http.StatusCreated
+	}
+	if response.StatusCode != expected {
+		return nil, problemFailure(ctx, in.Mutation(), response.StatusCode, data)
+	}
+	return data, nil
 }
 
 func validWindow(record api.MaintenanceWindow) bool {
