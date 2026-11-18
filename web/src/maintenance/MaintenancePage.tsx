@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { AuthContext } from '../auth/client.ts';
-import { Button, LoadingIndicator, PageHeader, Pager, RefreshButton, StatusChip, Toolbar, ToolbarSpacer, resourceRowClick } from '../components/ui/index.ts';
-import { sloClient, type ServerClock } from '../slos/client.ts';
+import { LoadingIndicator, PageHeader, Pager, RefreshButton, StatusChip, Toolbar, ToolbarSpacer, resourceRowClick } from '../components/ui/index.ts';
+import type { ServerClock } from '../slos/client.ts';
 import { maintenanceClient, type MaintenancePage as WindowPage, type MaintenanceWindow } from './client.ts';
+import { MaintenanceLifecycle } from './MaintenanceLifecycle.tsx';
+import { MaintenanceScope } from './MaintenanceScope.tsx';
 import { ScheduleMaintenance } from './ScheduleMaintenance.tsx';
 import './maintenance.css';
 
@@ -18,9 +20,13 @@ function windowStatus(window: MaintenanceWindow, now: number) {
   return { label: 'In progress', tone: 'warning' } as const;
 }
 
+function readWindowClock(clock?: ServerClock) {
+  return clock ? clock.time + Math.max(0, performance.now() - clock.receivedAt) : Date.now();
+}
+
 function useWindowClock(clock: ServerClock | undefined, windows: MaintenanceWindow[]) {
   const [tick, setTick] = useState(0);
-  const now = clock ? clock.time + Math.max(0, performance.now() - clock.receivedAt) : Date.now();
+  const now = readWindowClock(clock);
   const next = windows.reduce((boundary, window) => {
     if (window.tombstone) return boundary;
     const start = Date.parse(window.start);
@@ -30,7 +36,7 @@ function useWindowClock(clock: ServerClock | undefined, windows: MaintenanceWind
 
   useEffect(() => {
     if (next === Infinity) return;
-    const delay = next - (clock ? clock.time + Math.max(0, performance.now() - clock.receivedAt) : Date.now());
+    const delay = next - readWindowClock(clock);
     const timer = window.setTimeout(() => setTick(value => value + 1), Math.min(2_147_483_647, Math.max(1, Math.ceil(delay))));
     return () => window.clearTimeout(timer);
   }, [clock, next, tick]);
@@ -107,33 +113,15 @@ function WindowList({ canWrite }: { canWrite: boolean }) {
   </>;
 }
 
-function ScopeLink({ id }: { id: string }) {
-  const [name, setName] = useState('');
-  useEffect(() => {
-    const controller = new AbortController();
-    sloClient.get(id, controller.signal).then(result => {
-      if (!controller.signal.aborted) setName(result.value.display_name);
-    }).catch(() => {});
-    return () => controller.abort();
-  }, [id]);
-  return <a href={`/slos/${id}`} data-app-route>{name || id}</a>;
-}
-
-function ScopeLinks({ ids }: { ids: string[] }) {
-  const [visible, setVisible] = useState(10);
-  return <>
-    <ul>{ids.slice(0, visible).map(id => <li key={id}><ScopeLink id={id} /></li>)}</ul>
-    {ids.length > visible && <Button variant="ghost" onClick={() => setVisible(value => value + 10)}>Show more SLOs</Button>}
-  </>;
-}
-
-function WindowDetail({ id, revision }: { id: string; revision: string }) {
+function WindowDetail({ id, revision, context }: { id: string; revision: string; context: AuthContext }) {
   const [result, setResult] = useState<Awaited<ReturnType<typeof maintenanceClient.get>>>();
   const [error, setError] = useState('');
   const [refresh, setRefresh] = useState(0);
+  const detailRead = useRef<AbortController>(undefined);
 
   useEffect(() => {
     const controller = new AbortController();
+    detailRead.current = controller;
     setError('');
     maintenanceClient.get(id, revision, controller.signal).then(result => {
       if (!controller.signal.aborted) setResult(result);
@@ -145,10 +133,25 @@ function WindowDetail({ id, revision }: { id: string; revision: string }) {
 
   const window = result?.value;
   const now = useWindowClock(result?.serverClock, window ? [window] : []);
+  const heading = useRef<HTMLHeadingElement>(null);
   const previous = window && BigInt(window.revision) - 1n;
+  function acceptLifecycleRevision(next: Awaited<ReturnType<typeof maintenanceClient.get>>) {
+    detailRead.current?.abort();
+    setError('');
+    setResult(next);
+  }
+  function applyLifecycleUpdate(next: Awaited<ReturnType<typeof maintenanceClient.get>>) {
+    acceptLifecycleRevision(next);
+    requestAnimationFrame(() => heading.current?.focus());
+    setRefresh(value => value + 1);
+  }
   return <>
-    <PageHeader title={window?.title ?? 'Maintenance window'} breadcrumb={{ href: root, label: 'Maintenance', current: window?.title ?? 'Window' }}
-      actions={<RefreshButton label="Refresh maintenance window" onClick={() => setRefresh(value => value + 1)} />} />
+    <PageHeader headingRef={heading} title={window?.title ?? 'Maintenance window'} breadcrumb={{ href: root, label: 'Maintenance', current: window?.title ?? 'Window' }}
+      actions={<>
+        {!revision && result && <MaintenanceLifecycle context={context} record={result.value} etag={result.etag} now={now} readNow={() => readWindowClock(result.serverClock)}
+          fallbackFocus={heading} onRevisionRead={acceptLifecycleRevision} onUpdated={applyLifecycleUpdate} />}
+        <RefreshButton label="Refresh maintenance window" onClick={() => setRefresh(value => value + 1)} />
+      </>} />
     {error && <p className="ui-error" role="alert">{error}</p>}
     {!window && !error && <LoadingIndicator label="Loading maintenance window" />}
     {window && <>
@@ -158,7 +161,7 @@ function WindowDetail({ id, revision }: { id: string; revision: string }) {
           <dt>Starts (UTC)</dt><dd><time dateTime={window.start}>{timeLabel(window.start)}</time></dd>
           <dt>Ends (UTC)</dt><dd><time dateTime={window.end}>{timeLabel(window.end)}</time></dd>
           <dt>Reason</dt><dd className="maintenance-reason">{window.reason}</dd>
-          <dt>Affected SLOs</dt><dd><ScopeLinks ids={window.slo_ids} /></dd>
+          <dt>Affected SLOs</dt><dd><MaintenanceScope ids={window.slo_ids} links /></dd>
         </dl>
       </section>
       <section className="maintenance-panel maintenance-detail" aria-labelledby="maintenance-history-heading">
@@ -169,6 +172,8 @@ function WindowDetail({ id, revision }: { id: string; revision: string }) {
           {revision && <a data-app-route href={`${root}/${id}`}>Latest revision</a>}
         </nav>
       </section>
+      {!revision && result && <MaintenanceLifecycle historical context={context} record={window} etag={result.etag} now={now} readNow={() => readWindowClock(result.serverClock)}
+        fallbackFocus={heading} onRevisionRead={acceptLifecycleRevision} onUpdated={applyLifecycleUpdate} />}
     </>}
   </>;
 }
@@ -187,6 +192,6 @@ export function MaintenancePage({ context }: { context: AuthContext }) {
 
   return <div className="maintenance-page">{id === 'new'
     ? canWrite ? <ScheduleMaintenance context={context} /> : <><PageHeader title="Schedule maintenance" /><p role="alert">An editor or administrator can schedule maintenance.</p></>
-    : id ? <WindowDetail key={route} id={id} revision={new URLSearchParams(query).get('revision') ?? ''} />
+    : id ? <WindowDetail key={route} id={id} context={context} revision={new URLSearchParams(query).get('revision') ?? ''} />
       : <WindowList canWrite={canWrite} />}</div>;
 }

@@ -38,7 +38,11 @@ export function Dialog({ open, onClose, title, children, triggerRef, initialFocu
     else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first?.focus();}
   }
 
-  return <dialog ref={dialogRef} className="ui-dialog" aria-labelledby={titleId} onKeyDown={containFocus} onCancel={(event) => { event.preventDefault(); requestClose(); }}>
+  return <dialog ref={dialogRef} className="ui-dialog" aria-labelledby={titleId} onKeyDown={containFocus} onCancel={event => {
+    if (event.target !== event.currentTarget) return;
+    event.preventDefault();
+    requestClose();
+  }}>
     <header className="ui-dialog__header">
       <h2 id={titleId}>{title}</h2>
       <Button variant="ghost" aria-label="Close dialog" onClick={requestClose}>×</Button>

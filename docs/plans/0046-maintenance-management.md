@@ -18,8 +18,8 @@ historical permissions come from [SPEC-0016](../specs/0016-maintenance-exclusion
    Define the API in `api/openapi.yaml` and regenerate the clients. Exercise
    future scheduling, stale revisions, replay, cancellation, prospective end,
    administrator corrections and SLO overlay overlap queries against PostgreSQL.
-   Connect [browser scheduling and inspection](../tasks/F4-T55.md), the remaining
-   lifecycle and timeline controls, and the [management CLI](../tasks/F4-T54.md) and verify the authenticated journey.
+   Connect [browser scheduling and inspection](../tasks/F4-T55.md), [lifecycle actions](../tasks/F4-T57.md),
+   [timeline overlays](../tasks/F4-T56.md), and the [management CLI](../tasks/F4-T54.md) and verify the authenticated journey.
    Describe calculation exclusions and their evidence in stage 2. Reserve
    notification-pause copy and controls for stage 3, when delivery suppression
    is available.
