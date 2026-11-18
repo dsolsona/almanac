@@ -1,6 +1,8 @@
 -- The active grid inventory keeps selector publication independent of the
 -- number of SLOs matching a selector. Service and installation counts are
 -- maintained with the same authority lock as prospective assignments.
+LOCK TABLE public.almanac_services, public.almanac_slos IN SHARE ROW EXCLUSIVE MODE;
+
 CREATE TABLE public.almanac_maintenance_service_grids (
     service_id uuid NOT NULL REFERENCES public.almanac_services(id),
     cadence_seconds integer NOT NULL,

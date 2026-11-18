@@ -305,7 +305,7 @@ func mutateMaintenance(ctx context.Context, databaseURL string, input CreateMain
 			return empty, err
 		}
 	} else if op == "create" || op == "edit" || op == "end" {
-		if err := validateServiceMaintenanceSelector(ctx, q, input, op); err != nil {
+		if err := validateServiceMaintenanceSelector(ctx, q, input, op, old.End, now); err != nil {
 			return empty, err
 		}
 	}
