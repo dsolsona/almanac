@@ -31,6 +31,7 @@ export function OperationalControlsSection() {
   const [sectionName, setSectionName] = useState('');
   const [role, setRole] = useState<string|null>(null);
   const [dependencyIDs,setDependencyIDs]=useState(['payments']);
+  const [maintenanceServiceIDs, setMaintenanceServiceIDs] = useState(['payments']);
   const [labels,setLabels]=useState<readonly (readonly [string,string])[]>([['team','store'],['env','production']]);
   const serviceOptions:ComboboxOption[]=[{id:'payments',label:'Payments',detail:'Commerce'},{id:'identity',label:'Identity',detail:'Platform'},{id:'inventory',label:'Inventory',detail:'Commerce'}];
   const percent = (value: string) => `${value}%`;
@@ -76,6 +77,15 @@ export function OperationalControlsSection() {
       <p className="ui-label">Removable labels</p><LabelChips labels={labels} onRemove={index=>setLabels(values=>values.filter((_,i)=>i!==index))}/>
       <p className="ui-label">Disabled label removal</p><LabelChips labels={[["env","production"]]} onRemove={()=>{}} disabled/>
       <Combobox id="catalogue-dependencies" label="Dependencies" value={null} options={serviceOptions} onChange={id=>{if(id)setDependencyIDs(values=>[...values,id]);}} multiple={{selected:serviceOptions.filter(option=>dependencyIDs.includes(option.id)),onRemove:id=>setDependencyIDs(values=>values.filter(value=>value!==id)),removeLabel:option=>`Remove dependency ${option.label}`}} placeholder="Search services…"/>
+      <Combobox id="catalogue-maintenance-services" label="Maintenance services" value={null} options={serviceOptions}
+        onChange={id => { if (id) setMaintenanceServiceIDs(ids => [...ids, id]); }}
+        multiple={{
+          selected: serviceOptions.filter(option => maintenanceServiceIDs.includes(option.id)),
+          onRemove: id => setMaintenanceServiceIDs(ids => ids.filter(value => value !== id)),
+          placement: 'below',
+          selectionLabel: 'Selected services',
+        }}
+        placeholder="Search services…"/>
       <div className="catalogue-chip-row" aria-label="Service SLO summaries"><StatusChip tone="healthy" label="On track"/><StatusChip tone="breached" label="Breached"/><StatusChip tone="stale" label="Unknown"/><StatusChip tone="none" label="No SLOs"/></div>
     </Panel>
 

@@ -1,3 +1,5 @@
+Maintenance exploration, 2026-11-17: [interactive maintenance journeys](maintenance/README.md) cover scheduling, scope, lifecycle, alert suppression and SLO duration overlays. Fictional prototype only; detailed review pending.
+
 # UI mocks: unified SLI, SLO, datasource and agent screens
 
 Alerting exploration, 2026-11-12: [five interactive directions](alert-options/README.md)
