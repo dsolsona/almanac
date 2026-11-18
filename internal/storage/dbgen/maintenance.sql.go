@@ -164,8 +164,8 @@ func (q *Queries) InsertMaintenanceIdentity(ctx context.Context, arg InsertMaint
 }
 
 const insertMaintenanceRevision = `-- name: InsertMaintenanceRevision :exec
-INSERT INTO public.almanac_maintenance_exclusion_revisions(exclusion_id,revision,title,reason,starts_at,ends_at,operation,tombstone,actor_id,recorded_at,request_id,audit_id)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+INSERT INTO public.almanac_maintenance_exclusion_revisions(exclusion_id,revision,title,reason,starts_at,ends_at,operation,tombstone,actor_id,recorded_at,request_id,audit_id,scope_kind)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
 `
 
 type InsertMaintenanceRevisionParams struct {
@@ -181,6 +181,7 @@ type InsertMaintenanceRevisionParams struct {
 	RecordedAt  pgtype.Timestamptz `json:"recorded_at"`
 	RequestID   string             `json:"request_id"`
 	AuditID     pgtype.UUID        `json:"audit_id"`
+	ScopeKind   string             `json:"scope_kind"`
 }
 
 func (q *Queries) InsertMaintenanceRevision(ctx context.Context, arg InsertMaintenanceRevisionParams) error {
@@ -197,6 +198,7 @@ func (q *Queries) InsertMaintenanceRevision(ctx context.Context, arg InsertMaint
 		arg.RecordedAt,
 		arg.RequestID,
 		arg.AuditID,
+		arg.ScopeKind,
 	)
 	return err
 }
@@ -263,23 +265,33 @@ func (q *Queries) ListMaintenanceGrids(ctx context.Context, sloID pgtype.UUID) (
 }
 
 const listMaintenanceIdentities = `-- name: ListMaintenanceIdentities :many
-SELECT id,created_at FROM public.almanac_maintenance_exclusions
-WHERE (created_at,id)>($1::timestamptz,$2::uuid) ORDER BY created_at,id LIMIT $3
+SELECT e.id,e.created_at,r.revision FROM public.almanac_maintenance_exclusions e
+JOIN public.almanac_maintenance_exclusion_revisions r ON r.exclusion_id = e.id AND r.revision = e.current_revision
+WHERE (e.created_at,e.id)>($1::timestamptz,$2::uuid)
+  AND ($3::boolean OR r.scope_kind = 'slos')
+ORDER BY e.created_at,e.id LIMIT $4
 `
 
 type ListMaintenanceIdentitiesParams struct {
 	AfterTime pgtype.Timestamptz `json:"after_time"`
 	AfterID   pgtype.UUID        `json:"after_id"`
+	Scoped    bool               `json:"scoped"`
 	PageLimit int32              `json:"page_limit"`
 }
 
 type ListMaintenanceIdentitiesRow struct {
 	ID        pgtype.UUID        `json:"id"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	Revision  int64              `json:"revision"`
 }
 
 func (q *Queries) ListMaintenanceIdentities(ctx context.Context, arg ListMaintenanceIdentitiesParams) ([]ListMaintenanceIdentitiesRow, error) {
-	rows, err := q.db.Query(ctx, listMaintenanceIdentities, arg.AfterTime, arg.AfterID, arg.PageLimit)
+	rows, err := q.db.Query(ctx, listMaintenanceIdentities,
+		arg.AfterTime,
+		arg.AfterID,
+		arg.Scoped,
+		arg.PageLimit,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -287,7 +299,7 @@ func (q *Queries) ListMaintenanceIdentities(ctx context.Context, arg ListMainten
 	items := []ListMaintenanceIdentitiesRow{}
 	for rows.Next() {
 		var i ListMaintenanceIdentitiesRow
-		if err := rows.Scan(&i.ID, &i.CreatedAt); err != nil {
+		if err := rows.Scan(&i.ID, &i.CreatedAt, &i.Revision); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -423,7 +435,7 @@ func (q *Queries) LockMaintenanceState(ctx context.Context, sloID pgtype.UUID) (
 }
 
 const readMaintenanceRevision = `-- name: ReadMaintenanceRevision :one
-SELECT r.exclusion_id, r.revision, r.title, r.reason, r.starts_at, r.ends_at, r.operation, r.tombstone, r.actor_id, r.recorded_at, r.request_id, r.audit_id,e.creator_id,e.created_at,e.updated_at FROM public.almanac_maintenance_exclusions e
+SELECT r.exclusion_id, r.revision, r.title, r.reason, r.starts_at, r.ends_at, r.operation, r.tombstone, r.actor_id, r.recorded_at, r.request_id, r.audit_id, r.scope_kind,e.creator_id,e.created_at,e.updated_at FROM public.almanac_maintenance_exclusions e
 JOIN public.almanac_maintenance_exclusion_revisions r ON r.exclusion_id=e.id
 AND r.revision=CASE WHEN $1::bigint=0 THEN e.current_revision ELSE $1::bigint END
 WHERE e.id=$2
@@ -447,6 +459,7 @@ type ReadMaintenanceRevisionRow struct {
 	RecordedAt  pgtype.Timestamptz `json:"recorded_at"`
 	RequestID   string             `json:"request_id"`
 	AuditID     pgtype.UUID        `json:"audit_id"`
+	ScopeKind   string             `json:"scope_kind"`
 	CreatorID   pgtype.UUID        `json:"creator_id"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
@@ -468,6 +481,7 @@ func (q *Queries) ReadMaintenanceRevision(ctx context.Context, arg ReadMaintenan
 		&i.RecordedAt,
 		&i.RequestID,
 		&i.AuditID,
+		&i.ScopeKind,
 		&i.CreatorID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -480,7 +494,7 @@ WITH latest AS (
  SELECT DISTINCT ON (exclusion_id) exclusion_id,exclusion_revision,included FROM public.almanac_slo_exclusion_changes
  WHERE slo_id=$1 AND revision<=$4::bigint ORDER BY exclusion_id,revision DESC
 )
-SELECT r.exclusion_id, r.revision, r.title, r.reason, r.starts_at, r.ends_at, r.operation, r.tombstone, r.actor_id, r.recorded_at, r.request_id, r.audit_id FROM latest c JOIN public.almanac_maintenance_exclusion_revisions r ON r.exclusion_id=c.exclusion_id AND r.revision=c.exclusion_revision
+SELECT r.exclusion_id, r.revision, r.title, r.reason, r.starts_at, r.ends_at, r.operation, r.tombstone, r.actor_id, r.recorded_at, r.request_id, r.audit_id, r.scope_kind FROM latest c JOIN public.almanac_maintenance_exclusion_revisions r ON r.exclusion_id=c.exclusion_id AND r.revision=c.exclusion_revision
 WHERE c.included AND NOT r.tombstone AND r.starts_at<$2::timestamptz AND r.ends_at>$3::timestamptz
 ORDER BY r.starts_at,r.ends_at,r.exclusion_id
 `
@@ -519,6 +533,7 @@ func (q *Queries) ReadMaintenanceSnapshot(ctx context.Context, arg ReadMaintenan
 			&i.RecordedAt,
 			&i.RequestID,
 			&i.AuditID,
+			&i.ScopeKind,
 		); err != nil {
 			return nil, err
 		}

@@ -16,8 +16,11 @@ WHERE e.id=sqlc.arg(id);
 -- name: ListMaintenanceScopes :many
 SELECT slo_id FROM public.almanac_maintenance_exclusion_scopes WHERE exclusion_id=$1 AND revision=$2 ORDER BY slo_id;
 -- name: ListMaintenanceIdentities :many
-SELECT id,created_at FROM public.almanac_maintenance_exclusions
-WHERE (created_at,id)>(sqlc.arg(after_time)::timestamptz,sqlc.arg(after_id)::uuid) ORDER BY created_at,id LIMIT sqlc.arg(page_limit);
+SELECT e.id,e.created_at,r.revision FROM public.almanac_maintenance_exclusions e
+JOIN public.almanac_maintenance_exclusion_revisions r ON r.exclusion_id = e.id AND r.revision = e.current_revision
+WHERE (e.created_at,e.id)>(sqlc.arg(after_time)::timestamptz,sqlc.arg(after_id)::uuid)
+  AND (sqlc.arg(scoped)::boolean OR r.scope_kind = 'slos')
+ORDER BY e.created_at,e.id LIMIT sqlc.arg(page_limit);
 -- name: ListMaintenanceGrids :many
 SELECT d.slo_id,d.revision,d.cadence_seconds,d.activated_at,d.evaluation_valid_from,m.effective_from,m.measurement_kind,m.component_mode
 FROM public.almanac_slo_definitions d JOIN public.almanac_sli_measurements m ON m.sli_id=d.sli_id AND m.revision=d.measurement_revision
@@ -29,8 +32,8 @@ UPDATE public.almanac_maintenance_exclusions SET current_revision=$2,updated_at=
 -- name: InsertMaintenanceAudit :one
 INSERT INTO public.almanac_audit_events(actor,subject_id,action,outcome,occurred_at,request_id) VALUES ($1,$2,$3,'success',$4,$5) RETURNING id;
 -- name: InsertMaintenanceRevision :exec
-INSERT INTO public.almanac_maintenance_exclusion_revisions(exclusion_id,revision,title,reason,starts_at,ends_at,operation,tombstone,actor_id,recorded_at,request_id,audit_id)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12);
+INSERT INTO public.almanac_maintenance_exclusion_revisions(exclusion_id,revision,title,reason,starts_at,ends_at,operation,tombstone,actor_id,recorded_at,request_id,audit_id,scope_kind)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13);
 -- name: InsertMaintenanceScope :exec
 INSERT INTO public.almanac_maintenance_exclusion_scopes(exclusion_id,revision,slo_id) VALUES ($1,$2,$3);
 -- name: AdvanceMaintenanceState :one

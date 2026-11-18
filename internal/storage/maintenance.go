@@ -40,11 +40,22 @@ type MaintenanceAlignmentError struct {
 func (e *MaintenanceAlignmentError) Error() string { return ErrMaintenanceAlignment.Error() }
 func (e *MaintenanceAlignmentError) Unwrap() error { return ErrMaintenanceAlignment }
 
+type MaintenanceScopeKind string
+
+const (
+	MaintenanceScopeSlos        MaintenanceScopeKind = "slos"
+	MaintenanceScopeServices    MaintenanceScopeKind = "services"
+	MaintenanceScopeAllServices MaintenanceScopeKind = "all_services"
+)
+
 type MaintenanceRecord struct {
 	ID, Title, Reason, CreatorID, ActorID, Operation, RequestID, AuditID string
 	Revision                                                             int64
 	Start, End, CreatedAt, UpdatedAt                                     time.Time
+	ScopeKind                                                            MaintenanceScopeKind
 	SloIDs                                                               []string
+	ServiceIDs                                                           []string  `json:",omitempty"`
+	EffectiveStart, EffectiveEnd                                         time.Time `json:",omitzero"`
 	Tombstone                                                            bool
 }
 
@@ -54,13 +65,16 @@ type CreateMaintenanceInput struct {
 	Revision                  int64
 	Title, Reason             string
 	Start, End                time.Time
-	SloIDs                    []string
+	ScopeKind                 MaintenanceScopeKind
+	SloIDs, ServiceIDs        []string
+	Scoped                    bool
 	IdempotencyKey, RequestID string
 	Now                       func() time.Time
 }
 type EditMaintenanceInput = CreateMaintenanceInput
 
 type MaintenanceCommandInput struct {
+	Scoped                            bool
 	Proof                             DatasourceProof
 	ID                                string
 	Revision                          int64
@@ -68,6 +82,7 @@ type MaintenanceCommandInput struct {
 	Now                               func() time.Time
 }
 type EndMaintenanceInput struct {
+	Scoped                            bool
 	Proof                             DatasourceProof
 	ID                                string
 	Revision                          int64
@@ -76,12 +91,14 @@ type EndMaintenanceInput struct {
 	Now                               func() time.Time
 }
 type ReadMaintenanceInput struct {
+	Scoped   bool
 	Proof    DatasourceProof
 	ID       string
 	Revision int64
 	Now      func() time.Time
 }
 type ListMaintenanceInput struct {
+	Scoped bool
 	Proof  DatasourceProof
 	Limit  int
 	Cursor string
@@ -91,6 +108,7 @@ type MaintenancePage struct {
 	Items      []MaintenanceRecord
 	NextCursor string
 	Overflow   *MaintenanceOverflow
+	Pending    bool
 }
 
 type MaintenanceOverflow struct {
@@ -98,7 +116,6 @@ type MaintenanceOverflow struct {
 	Count      int64
 }
 
-// These internal operations are not wired to HTTP/CLI or production calculators.
 func CreateMaintenance(ctx context.Context, databaseURL string, input CreateMaintenanceInput) (MaintenanceRecord, error) {
 	return mutateMaintenance(ctx, databaseURL, input, "create")
 }
@@ -106,7 +123,7 @@ func EditMaintenance(ctx context.Context, databaseURL string, input EditMaintena
 	return mutateMaintenance(ctx, databaseURL, input, "edit")
 }
 func EndMaintenance(ctx context.Context, databaseURL string, input EndMaintenanceInput) (MaintenanceRecord, error) {
-	return mutateMaintenance(ctx, databaseURL, CreateMaintenanceInput{Proof: input.Proof, ID: input.ID, Revision: input.Revision, End: input.End, Reason: input.Reason, IdempotencyKey: input.IdempotencyKey, RequestID: input.RequestID, Now: input.Now}, "end")
+	return mutateMaintenance(ctx, databaseURL, CreateMaintenanceInput{Scoped: input.Scoped, Proof: input.Proof, ID: input.ID, Revision: input.Revision, End: input.End, Reason: input.Reason, IdempotencyKey: input.IdempotencyKey, RequestID: input.RequestID, Now: input.Now}, "end")
 }
 func CancelMaintenance(ctx context.Context, databaseURL string, input MaintenanceCommandInput) (MaintenanceRecord, error) {
 	return mutateMaintenance(ctx, databaseURL, maintenanceCommand(input), "cancel")
@@ -115,7 +132,7 @@ func WithdrawMaintenance(ctx context.Context, databaseURL string, input Maintena
 	return mutateMaintenance(ctx, databaseURL, maintenanceCommand(input), "withdraw")
 }
 func maintenanceCommand(input MaintenanceCommandInput) CreateMaintenanceInput {
-	return CreateMaintenanceInput{Proof: input.Proof, ID: input.ID, Revision: input.Revision, Reason: input.Reason, IdempotencyKey: input.IdempotencyKey, RequestID: input.RequestID, Now: input.Now}
+	return CreateMaintenanceInput{Scoped: input.Scoped, Proof: input.Proof, ID: input.ID, Revision: input.Revision, Reason: input.Reason, IdempotencyKey: input.IdempotencyKey, RequestID: input.RequestID, Now: input.Now}
 }
 
 func validMaintenanceTime(at time.Time) bool {
@@ -154,7 +171,8 @@ func mutateMaintenance(ctx context.Context, databaseURL string, input CreateMain
 	}
 	if op == "create" || op == "edit" {
 		var err error
-		input.SloIDs, err = maintenanceScope(input.SloIDs)
+		input.Scoped = input.Scoped || input.ScopeKind != ""
+		input.ScopeKind, input.SloIDs, input.ServiceIDs, err = normalizeMaintenanceSelector(input.ScopeKind, input.SloIDs, input.ServiceIDs)
 		if err != nil || !validMaintenanceText(input.Title, 512) || !validMaintenanceTime(input.Start) || !validMaintenanceTime(input.End) || !input.Start.Before(input.End) {
 			return empty, ErrMaintenanceInvalid
 		}
@@ -167,7 +185,12 @@ func mutateMaintenance(ctx context.Context, databaseURL string, input CreateMain
 		Title, Reason string
 		Start, End    time.Time
 		SloIDs        []string
-	}{input.ID, input.Revision, input.Title, input.Reason, input.Start, input.End, input.SloIDs}
+		ScopeKind     MaintenanceScopeKind `json:",omitempty"`
+		ServiceIDs    []string             `json:",omitempty"`
+	}{ID: input.ID, Revision: input.Revision, Title: input.Title, Reason: input.Reason, Start: input.Start, End: input.End, SloIDs: input.SloIDs}
+	if input.Scoped {
+		request.ScopeKind, request.ServiceIDs = input.ScopeKind, input.ServiceIDs
+	}
 	raw, err := json.Marshal(request, json.Deterministic(true))
 	if err != nil {
 		return empty, err
@@ -180,10 +203,14 @@ func mutateMaintenance(ctx context.Context, databaseURL string, input CreateMain
 	defer closeInitialOwnerConnection(conn)
 	defer rollbackTransaction(tx)
 	operation := "maintenance." + op
-	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1,0))", user.ID.String()+":"+operation+":"+input.IdempotencyKey); err != nil {
+	receiptOperation := operation
+	if input.Scoped {
+		receiptOperation = "maintenance.scoped." + op
+	}
+	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1,0))", user.ID.String()+":"+receiptOperation+":"+input.IdempotencyKey); err != nil {
 		return empty, err
 	}
-	receiptKey := dbgen.FindAgentLifecycleReceiptParams{ActorID: user.ID, Operation: operation, IdempotencyKey: input.IdempotencyKey}
+	receiptKey := dbgen.FindAgentLifecycleReceiptParams{ActorID: user.ID, Operation: receiptOperation, IdempotencyKey: input.IdempotencyKey}
 	receipt, err := q.FindAgentLifecycleReceipt(ctx, receiptKey)
 	now := normalizedAgentNow(input.Now)
 	if err == nil && now.Before(receipt.ExpiresAt.Time) {
@@ -200,13 +227,16 @@ func mutateMaintenance(ctx context.Context, databaseURL string, input CreateMain
 		if err := finishAgentRead(ctx, tx, input.Now, started, user, installation, session); err != nil {
 			return empty, err
 		}
+		if saved.Record.ScopeKind == "" {
+			saved.Record.ScopeKind = MaintenanceScopeSlos
+		}
 		return saved.Record, nil
 	}
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return empty, err
 	}
 	if err == nil {
-		if _, err := q.DeleteExpiredAgentLifecycleReceipt(ctx, dbgen.DeleteExpiredAgentLifecycleReceiptParams{ActorID: user.ID, Operation: operation, IdempotencyKey: input.IdempotencyKey, Now: timestamp(now)}); err != nil {
+		if _, err := q.DeleteExpiredAgentLifecycleReceipt(ctx, dbgen.DeleteExpiredAgentLifecycleReceiptParams{ActorID: user.ID, Operation: receiptOperation, IdempotencyKey: input.IdempotencyKey, Now: timestamp(now)}); err != nil {
 			return empty, err
 		}
 	}
@@ -219,18 +249,19 @@ func mutateMaintenance(ctx context.Context, databaseURL string, input CreateMain
 		if err != nil {
 			return empty, err
 		}
-		if root.CurrentRevision != input.Revision {
-			return empty, &MaintenanceConflictError{CurrentRevision: root.CurrentRevision}
-		}
 		old, err = readMaintenanceRecord(ctx, q, id, root.CurrentRevision)
 		if err != nil {
 			return empty, err
 		}
-		if old.Tombstone {
+		if !input.Scoped && old.ScopeKind != MaintenanceScopeSlos {
+			return empty, ErrMaintenanceNotFound
+		}
+		if root.CurrentRevision != input.Revision || old.Tombstone {
 			return empty, &MaintenanceConflictError{CurrentRevision: old.Revision}
 		}
 		if op != "edit" {
-			input.Title, input.Start, input.SloIDs = old.Title, old.Start, slices.Clone(old.SloIDs)
+			input.Title, input.Start, input.ScopeKind = old.Title, old.Start, old.ScopeKind
+			input.SloIDs, input.ServiceIDs = slices.Clone(old.SloIDs), slices.Clone(old.ServiceIDs)
 			if op != "end" {
 				input.End = old.End
 			}
@@ -259,12 +290,24 @@ func mutateMaintenance(ctx context.Context, databaseURL string, input CreateMain
 			return empty, err
 		}
 	}
+	broad := isServiceMaintenanceScope(old.ScopeKind) || isServiceMaintenanceScope(input.ScopeKind)
+	if broad {
+		if _, err := q.AdvanceServiceMaintenanceAuthority(ctx); err != nil {
+			return empty, err
+		}
+	}
 	now = normalizedAgentNow(input.Now)
 	if err := maintenancePermission(op, user.Role, old, input, now); err != nil {
 		return empty, err
 	}
-	if err := validateMaintenanceGrids(ctx, q, input.SloIDs, input.Start, input.End); err != nil {
-		return empty, err
+	if input.ScopeKind == MaintenanceScopeSlos {
+		if err := validateMaintenanceGrids(ctx, q, input.SloIDs, input.Start, input.End); err != nil {
+			return empty, err
+		}
+	} else if op == "create" || op == "edit" || op == "end" {
+		if err := validateServiceMaintenanceSelector(ctx, q, input, op); err != nil {
+			return empty, err
+		}
 	}
 	if op == "create" {
 		if err := q.InsertMaintenanceIdentity(ctx, dbgen.InsertMaintenanceIdentityParams{ID: id, CreatorID: user.ID, CreatedAt: timestamp(now)}); err != nil {
@@ -279,12 +322,23 @@ func mutateMaintenance(ctx context.Context, databaseURL string, input CreateMain
 		return empty, err
 	}
 	tombstone := op == "cancel" || op == "withdraw"
-	if err := q.InsertMaintenanceRevision(ctx, dbgen.InsertMaintenanceRevisionParams{ExclusionID: id, Revision: revision, Title: input.Title, Reason: input.Reason, StartsAt: timestamp(input.Start), EndsAt: timestamp(input.End), Operation: op, Tombstone: tombstone, ActorID: user.ID, RecordedAt: timestamp(now), RequestID: input.RequestID, AuditID: auditID}); err != nil {
+	if err := q.InsertMaintenanceRevision(ctx, dbgen.InsertMaintenanceRevisionParams{ExclusionID: id, Revision: revision, Title: input.Title, Reason: input.Reason, StartsAt: timestamp(input.Start), EndsAt: timestamp(input.End), Operation: op, Tombstone: tombstone, ActorID: user.ID, RecordedAt: timestamp(now), RequestID: input.RequestID, AuditID: auditID, ScopeKind: string(input.ScopeKind)}); err != nil {
 		return empty, err
 	}
 	for _, value := range input.SloIDs {
 		sloID, _ := canonicalUUID(value)
 		if err := q.InsertMaintenanceScope(ctx, dbgen.InsertMaintenanceScopeParams{ExclusionID: id, Revision: revision, SloID: sloID}); err != nil {
+			return empty, err
+		}
+	}
+	for _, serviceID := range input.ServiceIDs {
+		serviceID, _ := canonicalUUID(serviceID)
+		if err := q.InsertMaintenanceServiceSelector(ctx, dbgen.InsertMaintenanceServiceSelectorParams{ExclusionID: id, Revision: revision, ServiceID: serviceID}); err != nil {
+			return empty, err
+		}
+	}
+	if broad {
+		if err := q.EnqueueServiceMaintenanceProjection(ctx, dbgen.EnqueueServiceMaintenanceProjectionParams{ExclusionID: id, DesiredRevision: revision}); err != nil {
 			return empty, err
 		}
 	}
@@ -331,7 +385,7 @@ func mutateMaintenance(ctx context.Context, databaseURL string, input CreateMain
 	if err != nil {
 		return empty, err
 	}
-	if err := q.InsertAgentLifecycleReceipt(ctx, dbgen.InsertAgentLifecycleReceiptParams{ActorID: user.ID, Operation: operation, IdempotencyKey: input.IdempotencyKey, Digest: digest[:], Result: saved, CreatedAt: timestamp(now), ExpiresAt: timestamp(now.Add(24 * time.Hour))}); err != nil {
+	if err := q.InsertAgentLifecycleReceipt(ctx, dbgen.InsertAgentLifecycleReceiptParams{ActorID: user.ID, Operation: receiptOperation, IdempotencyKey: input.IdempotencyKey, Digest: digest[:], Result: saved, CreatedAt: timestamp(now), ExpiresAt: timestamp(now.Add(24 * time.Hour))}); err != nil {
 		return empty, err
 	}
 	ended := normalizedAgentNow(input.Now)
@@ -441,7 +495,18 @@ func readMaintenanceRecord(ctx context.Context, q *dbgen.Queries, id pgtype.UUID
 	for i, id := range scope {
 		ids[i] = id.String()
 	}
-	return MaintenanceRecord{ID: id.String(), Revision: r.Revision, Title: r.Title, Reason: r.Reason, Start: r.StartsAt.Time.UTC(), End: r.EndsAt.Time.UTC(), SloIDs: ids, Tombstone: r.Tombstone, CreatorID: r.CreatorID.String(), ActorID: r.ActorID.String(), CreatedAt: r.CreatedAt.Time.UTC(), UpdatedAt: r.RecordedAt.Time.UTC(), Operation: r.Operation, RequestID: r.RequestID, AuditID: r.AuditID.String()}, nil
+	var services []string
+	if r.ScopeKind == string(MaintenanceScopeServices) {
+		rows, err := q.ListMaintenanceServiceSelectors(ctx, dbgen.ListMaintenanceServiceSelectorsParams{ExclusionID: id, Revision: r.Revision})
+		if err != nil {
+			return MaintenanceRecord{}, err
+		}
+		services = make([]string, len(rows))
+		for i, row := range rows {
+			services[i] = row.String()
+		}
+	}
+	return MaintenanceRecord{ID: id.String(), Revision: r.Revision, Title: r.Title, Reason: r.Reason, Start: r.StartsAt.Time.UTC(), End: r.EndsAt.Time.UTC(), ScopeKind: MaintenanceScopeKind(r.ScopeKind), SloIDs: ids, ServiceIDs: services, Tombstone: r.Tombstone, CreatorID: r.CreatorID.String(), ActorID: r.ActorID.String(), CreatedAt: r.CreatedAt.Time.UTC(), UpdatedAt: r.RecordedAt.Time.UTC(), Operation: r.Operation, RequestID: r.RequestID, AuditID: r.AuditID.String()}, nil
 }
 
 func ReadMaintenance(ctx context.Context, databaseURL string, input ReadMaintenanceInput) (MaintenanceRecord, error) {
@@ -459,6 +524,18 @@ func ReadMaintenance(ctx context.Context, databaseURL string, input ReadMaintena
 	if err != nil {
 		return MaintenanceRecord{}, err
 	}
+	if !input.Scoped && result.ScopeKind != MaintenanceScopeSlos {
+		return MaintenanceRecord{}, ErrMaintenanceNotFound
+	}
+	if !input.Scoped && input.Revision > 0 {
+		current, err := q.ReadMaintenanceRevision(ctx, dbgen.ReadMaintenanceRevisionParams{ID: id})
+		if err != nil {
+			return MaintenanceRecord{}, err
+		}
+		if current.ScopeKind != string(MaintenanceScopeSlos) {
+			return MaintenanceRecord{}, ErrMaintenanceNotFound
+		}
+	}
 	if err := finishAgentRead(ctx, tx, input.Now, started, user, installation, session); err != nil {
 		return MaintenanceRecord{}, err
 	}
@@ -470,7 +547,11 @@ func ListMaintenance(ctx context.Context, databaseURL string, input ListMaintena
 	if input.Now == nil || input.Proof.SessionVerifier == ([32]byte{}) {
 		return page, ErrMaintenanceInvalid
 	}
-	limit, cursor, err := validateAgentPage("maintenance", "", input.Limit, input.Cursor)
+	kind := "maintenance"
+	if input.Scoped {
+		kind = "scoped-maintenance"
+	}
+	limit, cursor, err := validateAgentPage(kind, "", input.Limit, input.Cursor)
 	if err != nil {
 		return page, ErrMaintenanceInvalid
 	}
@@ -484,21 +565,21 @@ func ListMaintenance(ctx context.Context, databaseURL string, input ListMaintena
 	if cursor.Time.IsZero() {
 		after = timestamp(time.Unix(0, 0))
 	}
-	rows, err := q.ListMaintenanceIdentities(ctx, dbgen.ListMaintenanceIdentitiesParams{AfterTime: after, AfterID: uuidOrZero(cursor.ID), PageLimit: int32(limit + 1)})
+	rows, err := q.ListMaintenanceIdentities(ctx, dbgen.ListMaintenanceIdentitiesParams{AfterTime: after, AfterID: uuidOrZero(cursor.ID), PageLimit: int32(limit + 1), Scoped: input.Scoped})
 	if err != nil {
 		return page, err
 	}
 	if len(rows) > limit {
 		rows = rows[:limit]
 		last := rows[len(rows)-1]
-		page.NextCursor, err = encodeAgentCursor(agentCursor{Version: 1, Kind: "maintenance", Time: last.CreatedAt.Time.UTC(), ID: last.ID.String()})
+		page.NextCursor, err = encodeAgentCursor(agentCursor{Version: 1, Kind: kind, Time: last.CreatedAt.Time.UTC(), ID: last.ID.String()})
 		if err != nil {
 			return page, err
 		}
 	}
 	page.Items = make([]MaintenanceRecord, 0, len(rows))
 	for _, row := range rows {
-		record, err := readMaintenanceRecord(ctx, q, row.ID, 0)
+		record, err := readMaintenanceRecord(ctx, q, row.ID, row.Revision)
 		if err != nil {
 			return MaintenancePage{}, err
 		}
