@@ -38,21 +38,23 @@ DECLARE
 BEGIN
     subject_id := NEW.id;
 
-    SELECT d.revision, d.service_id, GREATEST(s.updated_at, d.activated_at) AS effective_at
+    SELECT d.revision, d.service_id, d.cadence_seconds, GREATEST(s.updated_at, d.activated_at) AS effective_at
     INTO STRICT current_assignment
     FROM public.almanac_slos s
     JOIN public.almanac_slo_definitions d ON d.slo_id = s.id AND d.revision = s.definition_revision
     WHERE s.id = subject_id;
 
-    SELECT a.definition_revision, a.service_id, a.effective_at
+    SELECT a.definition_revision, a.service_id, a.effective_at, d.cadence_seconds
     INTO prior_assignment
     FROM public.almanac_slo_service_assignments a
+    JOIN public.almanac_slo_definitions d ON d.slo_id = a.slo_id AND d.revision = a.definition_revision
     WHERE a.slo_id = subject_id
     ORDER BY a.effective_at DESC, a.definition_revision DESC
     LIMIT 1;
 
     IF FOUND THEN
-        IF prior_assignment.service_id = current_assignment.service_id THEN
+        IF prior_assignment.service_id = current_assignment.service_id
+           AND prior_assignment.cadence_seconds = current_assignment.cadence_seconds THEN
             RETURN NULL;
         END IF;
         IF current_assignment.effective_at < prior_assignment.effective_at

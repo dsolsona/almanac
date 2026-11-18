@@ -156,6 +156,11 @@ func TestIntegrationMaintenanceServiceProjectionPreservesMembership(t *testing.T
 
 func moveMaintenanceSLO(t *testing.T, f maintenanceFixture, serviceID string, revision int64, at time.Time) {
 	t.Helper()
+	moveMaintenanceSLOAtCadence(t, f, serviceID, revision, at, 0)
+}
+
+func moveMaintenanceSLOAtCadence(t *testing.T, f maintenanceFixture, serviceID string, revision int64, at time.Time, cadence int) {
+	t.Helper()
 	tx, err := f.conn.Begin(t.Context())
 	if err != nil {
 		t.Fatal(err)
@@ -163,9 +168,9 @@ func moveMaintenanceSLO(t *testing.T, f maintenanceFixture, serviceID string, re
 	defer rollbackTransaction(tx)
 	if _, err := tx.Exec(t.Context(), `
 		INSERT INTO almanac_slo_definitions(slo_id,revision,service_id,sli_id,measurement_revision,target,rolling_window_seconds,cadence_seconds,activated_at,evaluation_valid_from)
-		SELECT slo_id,$3,$2,sli_id,measurement_revision,target,rolling_window_seconds,cadence_seconds,$4,$4
+		SELECT slo_id,$3,$2,sli_id,measurement_revision,target,rolling_window_seconds,coalesce(nullif($5::integer,0),cadence_seconds),$4,$4
 		FROM almanac_slo_definitions WHERE slo_id=$1 AND revision=$3::bigint-1
-	`, f.ids[0], serviceID, revision, at); err != nil {
+	`, f.ids[0], serviceID, revision, at, cadence); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := tx.Exec(t.Context(), `UPDATE almanac_slos SET definition_revision=$2, updated_at=$3 WHERE id=$1`, f.ids[0], revision, at); err != nil {
@@ -240,10 +245,10 @@ func TestIntegrationMaintenanceServiceProjectionRejectsStaleMembershipCursor(t *
 	if err := f.runtime.runServiceMaintenanceProjection(t.Context(), 64, time.Second, f.clock); err != nil {
 		t.Fatal(err)
 	}
-	claim := dbgen.AlmanacServiceMaintenanceMembershipWork{SloID: subject.ID, ThroughExclusion: mustPGUUID(window.ID)}
+	claim := dbgen.AlmanacServiceMaintenanceMembershipWork{SloID: subject.ID, ThroughExclusion: mustPGUUID(window.ID), AffectedFrom: timestamp(window.Start)}
 	if _, err := f.conn.Exec(t.Context(), `
-		INSERT INTO almanac_service_maintenance_membership_work(slo_id, through_exclusion) VALUES ($1,$2)
-	`, claim.SloID, claim.ThroughExclusion); err != nil {
+		INSERT INTO almanac_service_maintenance_membership_work(slo_id, through_exclusion, affected_from) VALUES ($1,$2,$3)
+	`, claim.SloID, claim.ThroughExclusion, claim.AffectedFrom); err != nil {
 		t.Fatal(err)
 	}
 	destination, _, err := CreateObjective(t.Context(), f.f.databaseURL, CreateObjectiveInput{
@@ -324,4 +329,98 @@ func TestIntegrationMaintenanceServiceImpactCursorFencesProjectionAndRevision(t 
 	if err != nil || !next.Ready || len(next.Items) != 1 || next.NextCursor != "" || !next.Items[0].End.Equal(window.End) {
 		t.Fatalf("historical impact did not page its own revision: %+v, %v", next, err)
 	}
+}
+
+func TestIntegrationMaintenanceServiceProjectionKeepsHistoricalGridsAndParts(t *testing.T) {
+	t.Parallel()
+	f := newMaintenanceFixture(t)
+	q := dbgen.New(f.conn)
+	subject, err := q.GetSlo(t.Context(), mustPGUUID(f.ids[0]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, _, err := CreateObjective(t.Context(), f.f.databaseURL, CreateObjectiveInput{
+		Proof: f.proof, Name: "grid-history-destination", DisplayName: "Outside selection",
+		IdempotencyKey: "grid-history-destination", RequestID: "grid-history-destination", Now: f.clock,
+	}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	orphan := createProjectionFixtureSLO(t, f, other.ID)
+	input := f.input("previous-grid-window")
+	input.ScopeKind, input.SloIDs, input.ServiceIDs = MaintenanceScopeServices, nil, []string{subject.ServiceID.String()}
+	input.Start, input.End = f.at.Add(time.Minute), f.at.Add(3*time.Minute)
+	earlier, err := CreateMaintenance(t.Context(), f.f.databaseURL, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The unrelated objective remains locked while projection pages the selected
+	// service. Its lock must not delay publication.
+	lock := integrationConnect(t, f.f.databaseURL)
+	defer closeIntegrationConn(lock)
+	held, err := lock.Begin(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rollbackTransaction(held)
+	if _, err := dbgen.New(held).LockMaintenanceSlo(t.Context(), mustPGUUID(orphan)); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.runtime.runServiceMaintenanceProjection(t.Context(), 64, time.Second, f.clock); err != nil {
+		t.Fatal(err)
+	}
+
+	input.IdempotencyKey = "three-grid-parts"
+	input.Start, input.End = f.at.Add(5*time.Minute), f.at.Add(30*time.Minute)
+	current, err := CreateMaintenance(t.Context(), f.f.databaseURL, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := f.at
+	moveMaintenanceSLOAtCadence(t, f, other.ID, 2, base.Add(10*time.Minute), 120)
+	moveMaintenanceSLOAtCadence(t, f, subject.ServiceID.String(), 3, base.Add(12*time.Minute), 60)
+	moveMaintenanceSLOAtCadence(t, f, other.ID, 4, base.Add(15*time.Minute), 120)
+	moveMaintenanceSLOAtCadence(t, f, subject.ServiceID.String(), 5, base.Add(20*time.Minute), 120)
+	f.now = base.Add(20 * time.Minute)
+	if err := requireServiceMaintenanceReady(t.Context(), q, subject.ID, earlier.Start, earlier.End); err != nil {
+		t.Fatalf("earlier completed window was held by the later move: %v", err)
+	}
+	if err := f.runtime.runServiceMaintenanceProjection(t.Context(), 64, time.Second, f.clock); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := readSloExclusionSnapshot(t.Context(), q, subject.ID, current.Start, current.End)
+	want := [][2]time.Time{
+		{current.Start, base.Add(10 * time.Minute)},
+		{base.Add(12 * time.Minute), base.Add(15 * time.Minute)},
+		{base.Add(20 * time.Minute), current.End},
+	}
+	if err != nil || len(snapshot.Intervals) != len(want) {
+		t.Fatalf("projected coverage = %+v, err = %v", snapshot, err)
+	}
+	for i, bounds := range want {
+		if !snapshot.Intervals[i].Start.Equal(bounds[0]) || !snapshot.Intervals[i].End.Equal(bounds[1]) {
+			t.Fatalf("part %d = %+v, want %v", i, snapshot.Intervals[i], bounds)
+		}
+	}
+	var count int
+	var projected bool
+	if err := f.conn.QueryRow(t.Context(), `
+		SELECT (SELECT count(*) FROM almanac_maintenance_changed_inputs WHERE slo_id=$1 AND revision=$2),
+		       (SELECT complete FROM almanac_service_maintenance_projection WHERE exclusion_id=$3)
+	`, f.ids[0], snapshot.Revision, current.ID).Scan(&count, &projected); err != nil || count != 3 || !projected {
+		t.Fatalf("indexed %d parts, projection advanced=%t: %v", count, projected, err)
+	}
+}
+
+func createProjectionFixtureSLO(t *testing.T, f maintenanceFixture, serviceID string) string {
+	t.Helper()
+	_, slo, err := CreateObjective(t.Context(), f.f.databaseURL, CreateObjectiveInput{
+		Proof: f.proof, Name: "unrelated-projection-slo", DisplayName: "Unrelated SLO",
+		ServiceID: serviceID, SliID: f.sliID, Target: "0.99", RollingWindowSeconds: 3600,
+		IdempotencyKey: "unrelated-projection-slo", RequestID: "unrelated-projection-slo", Now: f.clock,
+	}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return slo.ID
 }

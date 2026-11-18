@@ -3,7 +3,21 @@
 ALTER TABLE public.almanac_slo_exclusion_changes
     ADD COLUMN effective_coverage tstzmultirange,
     ADD CONSTRAINT almanac_service_effective_coverage_shape CHECK (
-        effective_coverage IS NULL OR included = (NOT isempty(effective_coverage)));
+        effective_coverage IS NULL OR included = (NOT isempty(effective_coverage))) NOT VALID;
+
+-- Service rejoins can produce more than two disjoint changes in one revision.
+ALTER TABLE public.almanac_maintenance_change_sets
+    DROP CONSTRAINT almanac_maintenance_change_sets_range_count_check,
+    ALTER COLUMN range_count TYPE integer,
+    ADD CHECK (range_count >= 0);
+ALTER TABLE public.almanac_maintenance_changed_inputs
+    DROP CONSTRAINT almanac_maintenance_changed_inputs_part_check,
+    ALTER COLUMN part TYPE integer,
+    ADD CHECK (part > 0);
+ALTER TABLE public.almanac_slo_exclusion_work
+    DROP CONSTRAINT almanac_slo_exclusion_work_progress_part_check,
+    ALTER COLUMN progress_part TYPE integer,
+    ADD CHECK (progress_part >= 0);
 
 DO $$
 DECLARE scope_fk name;
@@ -48,7 +62,7 @@ DECLARE
     new_coverage tstzmultirange := '{}';
     changes tstzmultirange;
     piece tstzrange;
-    ordinal smallint := 0;
+    ordinal integer := 0;
 BEGIN
     INSERT INTO public.almanac_maintenance_compatibility(slo_id)
     VALUES (wanted_slo) ON CONFLICT DO NOTHING;

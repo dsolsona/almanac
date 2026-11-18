@@ -366,13 +366,13 @@ type AlmanacMaintenanceChangeSet struct {
 	SloID        pgtype.UUID `json:"slo_id"`
 	Revision     int64       `json:"revision"`
 	ScopeOrdinal int64       `json:"scope_ordinal"`
-	RangeCount   int16       `json:"range_count"`
+	RangeCount   int32       `json:"range_count"`
 }
 
 type AlmanacMaintenanceChangedInput struct {
 	SloID        pgtype.UUID                      `json:"slo_id"`
 	Revision     int64                            `json:"revision"`
-	Part         int16                            `json:"part"`
+	Part         int32                            `json:"part"`
 	ScopeOrdinal int64                            `json:"scope_ordinal"`
 	InputRange   pgtype.Range[pgtype.Timestamptz] `json:"input_range"`
 	ScopeKey     pgtype.Range[pgtype.Int8]        `json:"scope_key"`
@@ -560,8 +560,9 @@ type AlmanacServiceMaintenanceAuthority struct {
 }
 
 type AlmanacServiceMaintenanceMembershipWork struct {
-	SloID            pgtype.UUID `json:"slo_id"`
-	ThroughExclusion pgtype.UUID `json:"through_exclusion"`
+	SloID            pgtype.UUID        `json:"slo_id"`
+	ThroughExclusion pgtype.UUID        `json:"through_exclusion"`
+	AffectedFrom     pgtype.Timestamptz `json:"affected_from"`
 }
 
 type AlmanacServiceMaintenanceProjection struct {
@@ -802,7 +803,7 @@ type AlmanacSloExclusionWork struct {
 	AffectedEnd       pgtype.Timestamptz `json:"affected_end"`
 	NextAttemptAt     pgtype.Timestamptz `json:"next_attempt_at"`
 	ProcessedRevision int64              `json:"processed_revision"`
-	ProgressPart      int16              `json:"progress_part"`
+	ProgressPart      int32              `json:"progress_part"`
 	ProgressHour      pgtype.Timestamptz `json:"progress_hour"`
 	ProgressUntil     pgtype.Timestamptz `json:"progress_until"`
 	ScheduledThrough  pgtype.Timestamptz `json:"scheduled_through"`

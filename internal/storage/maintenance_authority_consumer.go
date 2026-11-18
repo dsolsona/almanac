@@ -236,18 +236,23 @@ func advanceMaintenanceAuthority(ctx context.Context, tx pgx.Tx, claim dbgen.Alm
 		if err != nil {
 			return err
 		}
-		ranges, err := q.ReadMaintenanceAuthorityRanges(ctx, dbgen.ReadMaintenanceAuthorityRangesParams{SloID: row.ID, Revision: revision})
+		ranges, err := q.ReadMaintenanceAuthorityRanges(ctx, dbgen.ReadMaintenanceAuthorityRangesParams{SloID: row.ID, Revision: revision, AfterPart: progress.ProgressPart, RowLimit: int32(o.MaxBuckets)})
 		if err != nil {
 			return err
 		}
-		if len(ranges) != int(count) {
+		if progress.ProgressPart > count || len(ranges) != min(o.MaxBuckets, int(count-progress.ProgressPart)) {
 			return ErrMaintenanceInvalid
 		}
 		if !progress.ProgressUntil.Valid {
 			progress.ProgressUntil = timestamp(horizon)
 		}
-		for int(progress.ProgressPart) < len(ranges) && buckets < o.MaxBuckets {
-			part := ranges[progress.ProgressPart]
+		for _, part := range ranges {
+			if buckets >= o.MaxBuckets {
+				break
+			}
+			if part.Part != progress.ProgressPart+1 {
+				return ErrMaintenanceInvalid
+			}
 			start := maxTime(part.StartsAt.Time.Truncate(time.Hour), floor)
 			end := maintenanceAuthorityEarlier(part.EndsAt.Time.Add(window).Truncate(time.Hour).Add(time.Hour), progress.ProgressUntil.Time)
 			if progress.ProgressHour.Valid {
@@ -269,7 +274,7 @@ func advanceMaintenanceAuthority(ctx context.Context, tx pgx.Tx, claim dbgen.Alm
 				break
 			}
 		}
-		if int(progress.ProgressPart) < len(ranges) {
+		if progress.ProgressPart < count {
 			break
 		}
 		progress.ProcessedRevision = revision

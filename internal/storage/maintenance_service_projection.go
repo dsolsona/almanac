@@ -34,7 +34,7 @@ func projectServiceMaintenancePage(ctx context.Context, tx pgx.Tx, pageLimit int
 		return err
 	}
 	ids, err := q.ListServiceMaintenanceProjectionSlos(ctx, dbgen.ListServiceMaintenanceProjectionSlosParams{
-		AfterSlo: claim.ThroughSlo, PageLimit: int32(pageLimit),
+		ExclusionID: claim.ExclusionID, Revision: claim.DesiredRevision, AfterSlo: claim.ThroughSlo, PageLimit: int32(pageLimit),
 	})
 	if err != nil {
 		return err
@@ -113,7 +113,7 @@ func projectServiceMaintenanceMembershipClaim(ctx context.Context, q *dbgen.Quer
 		return err
 	}
 	_, err := q.LockObservedServiceMaintenanceMembershipWork(ctx, dbgen.LockObservedServiceMaintenanceMembershipWorkParams{
-		SloID: claim.SloID, ThroughExclusion: claim.ThroughExclusion,
+		SloID: claim.SloID, ThroughExclusion: claim.ThroughExclusion, AffectedFrom: claim.AffectedFrom,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
@@ -122,7 +122,7 @@ func projectServiceMaintenanceMembershipClaim(ctx context.Context, q *dbgen.Quer
 		return err
 	}
 	targets, err := q.ListServiceMaintenanceMembershipTargets(ctx, dbgen.ListServiceMaintenanceMembershipTargetsParams{
-		AfterExclusion: claim.ThroughExclusion, PageLimit: int32(pageLimit),
+		AfterExclusion: claim.ThroughExclusion, AffectedFrom: claim.AffectedFrom, PageLimit: int32(pageLimit),
 	})
 	if err != nil {
 		return err

@@ -546,13 +546,15 @@ func (q *Queries) ListServiceMaintenanceCadences(ctx context.Context, arg ListSe
 const listServiceMaintenanceMembershipTargets = `-- name: ListServiceMaintenanceMembershipTargets :many
 SELECT p.exclusion_id, p.desired_revision
 FROM public.almanac_service_maintenance_projection p
-WHERE p.exclusion_id > $1::uuid
-ORDER BY p.exclusion_id LIMIT $2::integer
+JOIN public.almanac_maintenance_exclusion_revisions r ON r.exclusion_id = p.exclusion_id AND r.revision = p.desired_revision
+WHERE p.exclusion_id > $1::uuid AND r.ends_at > $2::timestamptz
+ORDER BY p.exclusion_id LIMIT $3::integer
 `
 
 type ListServiceMaintenanceMembershipTargetsParams struct {
-	AfterExclusion pgtype.UUID `json:"after_exclusion"`
-	PageLimit      int32       `json:"page_limit"`
+	AfterExclusion pgtype.UUID        `json:"after_exclusion"`
+	AffectedFrom   pgtype.Timestamptz `json:"affected_from"`
+	PageLimit      int32              `json:"page_limit"`
 }
 
 type ListServiceMaintenanceMembershipTargetsRow struct {
@@ -561,7 +563,7 @@ type ListServiceMaintenanceMembershipTargetsRow struct {
 }
 
 func (q *Queries) ListServiceMaintenanceMembershipTargets(ctx context.Context, arg ListServiceMaintenanceMembershipTargetsParams) ([]ListServiceMaintenanceMembershipTargetsRow, error) {
-	rows, err := q.db.Query(ctx, listServiceMaintenanceMembershipTargets, arg.AfterExclusion, arg.PageLimit)
+	rows, err := q.db.Query(ctx, listServiceMaintenanceMembershipTargets, arg.AfterExclusion, arg.AffectedFrom, arg.PageLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -581,17 +583,36 @@ func (q *Queries) ListServiceMaintenanceMembershipTargets(ctx context.Context, a
 }
 
 const listServiceMaintenanceProjectionSlos = `-- name: ListServiceMaintenanceProjectionSlos :many
-SELECT id FROM public.almanac_slos WHERE id > $1::uuid
-ORDER BY id LIMIT $2::integer
+SELECT s.id FROM public.almanac_slos s
+WHERE s.id > $1::uuid
+  AND (
+      EXISTS (
+          SELECT 1 FROM public.almanac_service_maintenance_intervals(
+              $2::uuid, $3::bigint, s.id, NULL
+          )
+      ) OR (
+          SELECT c.included FROM public.almanac_slo_exclusion_changes c
+          WHERE c.slo_id = s.id AND c.exclusion_id = $2
+          ORDER BY c.revision DESC LIMIT 1
+      )
+  )
+ORDER BY s.id LIMIT $4::integer
 `
 
 type ListServiceMaintenanceProjectionSlosParams struct {
-	AfterSlo  pgtype.UUID `json:"after_slo"`
-	PageLimit int32       `json:"page_limit"`
+	AfterSlo    pgtype.UUID `json:"after_slo"`
+	ExclusionID pgtype.UUID `json:"exclusion_id"`
+	Revision    int64       `json:"revision"`
+	PageLimit   int32       `json:"page_limit"`
 }
 
 func (q *Queries) ListServiceMaintenanceProjectionSlos(ctx context.Context, arg ListServiceMaintenanceProjectionSlosParams) ([]pgtype.UUID, error) {
-	rows, err := q.db.Query(ctx, listServiceMaintenanceProjectionSlos, arg.AfterSlo, arg.PageLimit)
+	rows, err := q.db.Query(ctx, listServiceMaintenanceProjectionSlos,
+		arg.AfterSlo,
+		arg.ExclusionID,
+		arg.Revision,
+		arg.PageLimit,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -635,16 +656,18 @@ const lockObservedServiceMaintenanceMembershipWork = `-- name: LockObservedServi
 SELECT w.slo_id
 FROM public.almanac_service_maintenance_membership_work w
 WHERE w.slo_id = $1 AND w.through_exclusion = $2
+  AND w.affected_from = $3::timestamptz
 FOR UPDATE SKIP LOCKED
 `
 
 type LockObservedServiceMaintenanceMembershipWorkParams struct {
-	SloID            pgtype.UUID `json:"slo_id"`
-	ThroughExclusion pgtype.UUID `json:"through_exclusion"`
+	SloID            pgtype.UUID        `json:"slo_id"`
+	ThroughExclusion pgtype.UUID        `json:"through_exclusion"`
+	AffectedFrom     pgtype.Timestamptz `json:"affected_from"`
 }
 
 func (q *Queries) LockObservedServiceMaintenanceMembershipWork(ctx context.Context, arg LockObservedServiceMaintenanceMembershipWorkParams) (pgtype.UUID, error) {
-	row := q.db.QueryRow(ctx, lockObservedServiceMaintenanceMembershipWork, arg.SloID, arg.ThroughExclusion)
+	row := q.db.QueryRow(ctx, lockObservedServiceMaintenanceMembershipWork, arg.SloID, arg.ThroughExclusion, arg.AffectedFrom)
 	var slo_id pgtype.UUID
 	err := row.Scan(&slo_id)
 	return slo_id, err
@@ -675,7 +698,7 @@ func (q *Queries) LockObservedServiceMaintenanceProjection(ctx context.Context, 
 }
 
 const lockServiceMaintenanceMembershipWork = `-- name: LockServiceMaintenanceMembershipWork :one
-SELECT w.slo_id, w.through_exclusion FROM public.almanac_service_maintenance_membership_work w
+SELECT w.slo_id, w.through_exclusion, w.affected_from FROM public.almanac_service_maintenance_membership_work w
 JOIN public.almanac_slos s ON s.id = w.slo_id
 ORDER BY w.slo_id LIMIT 1 FOR NO KEY UPDATE OF s SKIP LOCKED
 `
@@ -683,7 +706,7 @@ ORDER BY w.slo_id LIMIT 1 FOR NO KEY UPDATE OF s SKIP LOCKED
 func (q *Queries) LockServiceMaintenanceMembershipWork(ctx context.Context) (AlmanacServiceMaintenanceMembershipWork, error) {
 	row := q.db.QueryRow(ctx, lockServiceMaintenanceMembershipWork)
 	var i AlmanacServiceMaintenanceMembershipWork
-	err := row.Scan(&i.SloID, &i.ThroughExclusion)
+	err := row.Scan(&i.SloID, &i.ThroughExclusion, &i.AffectedFrom)
 	return i, err
 }
 

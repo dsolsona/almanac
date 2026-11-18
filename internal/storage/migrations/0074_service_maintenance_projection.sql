@@ -1,9 +1,14 @@
+-- Validate in a new transaction so 0073's ACCESS EXCLUSIVE lock is released.
+ALTER TABLE public.almanac_slo_exclusion_changes
+    VALIDATE CONSTRAINT almanac_service_effective_coverage_shape;
+
 CREATE INDEX almanac_service_maintenance_unprocessed_idx
     ON public.almanac_service_maintenance_projection(exclusion_id) WHERE NOT complete;
 
 CREATE TABLE public.almanac_service_maintenance_membership_work (
     slo_id uuid PRIMARY KEY REFERENCES public.almanac_slos(id),
-    through_exclusion uuid NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000'
+    through_exclusion uuid NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000',
+    affected_from timestamptz NOT NULL CHECK (isfinite(affected_from))
 );
 
 CREATE FUNCTION public.almanac_enqueue_service_maintenance_join() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -14,8 +19,10 @@ BEGIN
           ON r.exclusion_id = p.exclusion_id AND r.revision = p.desired_revision
         WHERE r.scope_kind <> 'slos' AND NOT r.tombstone AND r.ends_at > NEW.effective_at
     ) THEN
-        INSERT INTO public.almanac_service_maintenance_membership_work(slo_id) VALUES (NEW.slo_id)
-        ON CONFLICT (slo_id) DO UPDATE SET through_exclusion = DEFAULT;
+        INSERT INTO public.almanac_service_maintenance_membership_work(slo_id, affected_from)
+        VALUES (NEW.slo_id, NEW.effective_at)
+        ON CONFLICT (slo_id) DO UPDATE SET through_exclusion = DEFAULT,
+            affected_from = least(almanac_service_maintenance_membership_work.affected_from, excluded.affected_from);
     END IF;
     RETURN NULL;
 END $$;
@@ -28,7 +35,7 @@ CREATE TRIGGER almanac_service_maintenance_assignment_work
 -- before that revision was superseded or a subsequent page was requested.
 CREATE FUNCTION public.almanac_service_maintenance_intervals(
     wanted_exclusion uuid, wanted_revision bigint, wanted_slo uuid, inventory_at timestamptz
-) RETURNS TABLE(slo_id uuid, service_id uuid, starts_at timestamptz, ends_at timestamptz)
+) RETURNS TABLE(slo_id uuid, service_id uuid, starts_at timestamptz, ends_at timestamptz, cadence_seconds integer)
 LANGUAGE sql STABLE AS $$
     WITH bounds AS MATERIALIZED (
         SELECT r.starts_at, r.ends_at, r.scope_kind
@@ -36,13 +43,15 @@ LANGUAGE sql STABLE AS $$
         WHERE r.exclusion_id = wanted_exclusion AND r.revision = wanted_revision AND NOT r.tombstone
           AND r.scope_kind <> 'slos'
     ), assignments AS (
-        SELECT a.slo_id, a.service_id, a.effective_at,
+        SELECT a.slo_id, a.service_id, a.effective_at, d.cadence_seconds,
                lead(a.effective_at) OVER (PARTITION BY a.slo_id ORDER BY a.effective_at, a.definition_revision) AS leaves_at
-        FROM public.almanac_slo_service_assignments a CROSS JOIN bounds r
+        FROM public.almanac_slo_service_assignments a
+        JOIN public.almanac_slo_definitions d ON d.slo_id = a.slo_id AND d.revision = a.definition_revision
+        CROSS JOIN bounds r
         WHERE (wanted_slo IS NULL OR a.slo_id = wanted_slo)
           AND a.effective_at < r.ends_at AND (inventory_at IS NULL OR a.effective_at <= inventory_at)
     ), participation AS (
-        SELECT a.slo_id, a.service_id, greatest(a.effective_at, r.starts_at) AS starts_at,
+        SELECT a.slo_id, a.service_id, a.cadence_seconds, greatest(a.effective_at, r.starts_at) AS starts_at,
                least(a.leaves_at, s.archived_at, r.ends_at) AS ends_at
         FROM assignments a
         JOIN public.almanac_services s ON s.id = a.service_id
@@ -53,7 +62,7 @@ LANGUAGE sql STABLE AS $$
               AND selected.service_id = a.service_id
         )
     )
-    SELECT p.slo_id, p.service_id, p.starts_at, p.ends_at FROM participation p
+    SELECT p.slo_id, p.service_id, p.starts_at, p.ends_at, p.cadence_seconds FROM participation p
     WHERE p.starts_at < p.ends_at;
 $$;
 
@@ -63,7 +72,6 @@ CREATE FUNCTION public.almanac_project_service_maintenance_member(
 DECLARE
     previous public.almanac_slo_exclusion_changes;
     epoch constant timestamptz := '1970-01-01 UTC';
-    cadence interval;
     old_coverage tstzmultirange := '{}';
     new_coverage tstzmultirange := '{}';
     affected tstzrange;
@@ -92,17 +100,17 @@ BEGIN
         old_coverage := public.almanac_effective_maintenance_coverage(
             wanted_slo, wanted_exclusion, previous.exclusion_revision, previous.effective_coverage);
     END IF;
-    SELECT make_interval(secs => d.cadence_seconds) INTO STRICT cadence
-    FROM public.almanac_slos s JOIN public.almanac_slo_definitions d
-      ON d.slo_id = s.id AND d.revision = s.definition_revision WHERE s.id = wanted_slo;
-
+    -- Union adjacent participation on the same grid before rounding. A
+    -- service reassignment within the selector does not split an observation.
     WITH unioned AS (
-        SELECT unnest(range_agg(tstzrange(p.starts_at, p.ends_at, '[)'))) AS part
+        SELECT make_interval(secs => p.cadence_seconds) AS cadence,
+               unnest(range_agg(tstzrange(p.starts_at, p.ends_at, '[)'))) AS part
         FROM public.almanac_service_maintenance_intervals(wanted_exclusion, wanted_revision, wanted_slo, NULL) p
+        GROUP BY p.cadence_seconds
     ), aligned AS (
-        SELECT CASE WHEN a.floor_start = lower(a.part) THEN a.floor_start ELSE a.floor_start + cadence END AS starts_at,
-               date_bin(cadence, upper(a.part), epoch) AS ends_at
-        FROM (SELECT part, date_bin(cadence, lower(part), epoch) AS floor_start FROM unioned) a
+        SELECT CASE WHEN a.floor_start = lower(a.part) THEN a.floor_start ELSE a.floor_start + a.cadence END AS starts_at,
+               date_bin(a.cadence, upper(a.part), epoch) AS ends_at
+        FROM (SELECT cadence, part, date_bin(cadence, lower(part), epoch) AS floor_start FROM unioned) a
     )
     SELECT coalesce(range_agg(tstzrange(a.starts_at, a.ends_at, '[)')), '{}') INTO new_coverage
     FROM aligned a WHERE a.starts_at < a.ends_at;
@@ -145,8 +153,12 @@ CREATE FUNCTION public.almanac_maintenance_impact_intervals(
     wanted_exclusion uuid, wanted_revision bigint, inventory_at timestamptz
 ) RETURNS TABLE(slo_id uuid, service_id uuid, starts_at timestamptz, ends_at timestamptz)
 LANGUAGE sql STABLE AS $$
-    SELECT p.slo_id, p.service_id, p.starts_at, p.ends_at
-    FROM public.almanac_service_maintenance_intervals(wanted_exclusion, wanted_revision, NULL, inventory_at) p
+    SELECT p.slo_id, p.service_id, lower(p.part), upper(p.part)
+    FROM (
+        SELECT i.slo_id, i.service_id, unnest(range_agg(tstzrange(i.starts_at, i.ends_at, '[)'))) AS part
+        FROM public.almanac_service_maintenance_intervals(wanted_exclusion, wanted_revision, NULL, inventory_at) i
+        GROUP BY i.slo_id, i.service_id
+    ) p
     UNION ALL
     SELECT selected.slo_id, a.service_id, r.starts_at, r.ends_at
     FROM public.almanac_maintenance_exclusion_revisions r
@@ -172,7 +184,8 @@ CREATE FUNCTION public.almanac_slo_service_maintenance_pending(
         SELECT p.exclusion_id, p.desired_revision
         FROM public.almanac_service_maintenance_membership_work w
         JOIN public.almanac_service_maintenance_projection p ON p.exclusion_id > w.through_exclusion
-        WHERE w.slo_id = wanted_slo
+        JOIN public.almanac_maintenance_exclusion_revisions r ON r.exclusion_id = p.exclusion_id AND r.revision = p.desired_revision
+        WHERE w.slo_id = wanted_slo AND r.ends_at > w.affected_from
     ), requested AS MATERIALIZED (
         SELECT tstzrange(requested_start, requested_end, '[)') AS bounds
         WHERE requested_start < requested_end

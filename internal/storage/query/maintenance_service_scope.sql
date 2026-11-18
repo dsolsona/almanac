@@ -136,8 +136,20 @@ WHERE NOT p.complete
 ORDER BY p.exclusion_id LIMIT 1 FOR UPDATE OF e SKIP LOCKED;
 
 -- name: ListServiceMaintenanceProjectionSlos :many
-SELECT id FROM public.almanac_slos WHERE id > sqlc.arg(after_slo)::uuid
-ORDER BY id LIMIT sqlc.arg(page_limit)::integer;
+SELECT s.id FROM public.almanac_slos s
+WHERE s.id > sqlc.arg(after_slo)::uuid
+  AND (
+      EXISTS (
+          SELECT 1 FROM public.almanac_service_maintenance_intervals(
+              sqlc.arg(exclusion_id)::uuid, sqlc.arg(revision)::bigint, s.id, NULL
+          )
+      ) OR (
+          SELECT c.included FROM public.almanac_slo_exclusion_changes c
+          WHERE c.slo_id = s.id AND c.exclusion_id = sqlc.arg(exclusion_id)
+          ORDER BY c.revision DESC LIMIT 1
+      )
+  )
+ORDER BY s.id LIMIT sqlc.arg(page_limit)::integer;
 
 -- name: ApplyServiceMaintenanceProjectionMember :one
 SELECT public.almanac_project_service_maintenance_member(
@@ -149,14 +161,15 @@ UPDATE public.almanac_service_maintenance_projection SET through_slo = sqlc.arg(
 WHERE exclusion_id = sqlc.arg(exclusion_id) AND desired_revision = sqlc.arg(revision)::bigint;
 
 -- name: LockServiceMaintenanceMembershipWork :one
-SELECT w.slo_id, w.through_exclusion FROM public.almanac_service_maintenance_membership_work w
+SELECT w.slo_id, w.through_exclusion, w.affected_from FROM public.almanac_service_maintenance_membership_work w
 JOIN public.almanac_slos s ON s.id = w.slo_id
 ORDER BY w.slo_id LIMIT 1 FOR NO KEY UPDATE OF s SKIP LOCKED;
 
 -- name: ListServiceMaintenanceMembershipTargets :many
 SELECT p.exclusion_id, p.desired_revision
 FROM public.almanac_service_maintenance_projection p
-WHERE p.exclusion_id > sqlc.arg(after_exclusion)::uuid
+JOIN public.almanac_maintenance_exclusion_revisions r ON r.exclusion_id = p.exclusion_id AND r.revision = p.desired_revision
+WHERE p.exclusion_id > sqlc.arg(after_exclusion)::uuid AND r.ends_at > sqlc.arg(affected_from)::timestamptz
 ORDER BY p.exclusion_id LIMIT sqlc.arg(page_limit)::integer;
 
 -- name: AdvanceServiceMaintenanceMembershipWork :exec
@@ -245,4 +258,5 @@ FOR UPDATE SKIP LOCKED;
 SELECT w.slo_id
 FROM public.almanac_service_maintenance_membership_work w
 WHERE w.slo_id = sqlc.arg(slo_id) AND w.through_exclusion = sqlc.arg(through_exclusion)
+  AND w.affected_from = sqlc.arg(affected_from)::timestamptz
 FOR UPDATE SKIP LOCKED;
