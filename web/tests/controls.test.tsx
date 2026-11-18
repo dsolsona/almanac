@@ -1,9 +1,10 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { createRef } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Catalogue } from '../src/catalogue/Catalogue.tsx';
 import { SliRecentStrip } from '../src/components/charts/SliRecentStrip.tsx';
-import { DatePicker, LoadingIndicator, MeasurementChoiceCards, QueryEditor, Switch } from '../src/components/ui/index.ts';
+import { DatePicker, Dialog, LoadingIndicator, MeasurementChoiceCards, QueryEditor, Switch } from '../src/components/ui/index.ts';
 import { addDays, addMonths, formatCalendarDate, parseCalendarDate } from '../src/components/ui/dateMath.ts';
 import '../src/styles/global.css';
 
@@ -19,6 +20,17 @@ afterEach(() => {
   cleanup();
   if (!originalShowModal) Reflect.deleteProperty(HTMLDialogElement.prototype, 'showModal');
   if (!originalClose) Reflect.deleteProperty(HTMLDialogElement.prototype, 'close');
+});
+
+it('cancels only the focused nested dialog', () => {
+  const closeParent = vi.fn();
+  const closeChild = vi.fn();
+  render(<Dialog open title="Parent dialog" onClose={closeParent} triggerRef={createRef()}>
+    <Dialog open title="Child dialog" onClose={closeChild} triggerRef={createRef()}><p>Calendar</p></Dialog>
+  </Dialog>);
+  fireEvent(screen.getByRole('dialog', { name: 'Child dialog' }), new Event('cancel', { cancelable: true }));
+  expect(closeChild).toHaveBeenCalledOnce();
+  expect(closeParent).not.toHaveBeenCalled();
 });
 
 describe('feedback controls', () => {

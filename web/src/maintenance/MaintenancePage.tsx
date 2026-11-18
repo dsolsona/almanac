@@ -19,9 +19,13 @@ function windowStatus(window: MaintenanceWindow, now: number) {
   return { label: 'In progress', tone: 'warning' } as const;
 }
 
+function readWindowClock(clock?: ServerClock) {
+  return clock ? clock.time + Math.max(0, performance.now() - clock.receivedAt) : Date.now();
+}
+
 function useWindowClock(clock: ServerClock | undefined, windows: MaintenanceWindow[]) {
   const [tick, setTick] = useState(0);
-  const now = clock ? clock.time + Math.max(0, performance.now() - clock.receivedAt) : Date.now();
+  const now = readWindowClock(clock);
   const next = windows.reduce((boundary, window) => {
     if (window.tombstone) return boundary;
     const start = Date.parse(window.start);
@@ -31,7 +35,7 @@ function useWindowClock(clock: ServerClock | undefined, windows: MaintenanceWind
 
   useEffect(() => {
     if (next === Infinity) return;
-    const delay = next - (clock ? clock.time + Math.max(0, performance.now() - clock.receivedAt) : Date.now());
+    const delay = next - readWindowClock(clock);
     const timer = window.setTimeout(() => setTick(value => value + 1), Math.min(2_147_483_647, Math.max(1, Math.ceil(delay))));
     return () => window.clearTimeout(timer);
   }, [clock, next, tick]);
@@ -132,9 +136,11 @@ function WindowDetail({ id, revision, context }: { id: string; revision: string;
   const [result, setResult] = useState<Awaited<ReturnType<typeof maintenanceClient.get>>>();
   const [error, setError] = useState('');
   const [refresh, setRefresh] = useState(0);
+  const detailRead = useRef<AbortController>(undefined);
 
   useEffect(() => {
     const controller = new AbortController();
+    detailRead.current = controller;
     setError('');
     maintenanceClient.get(id, revision, controller.signal).then(result => {
       if (!controller.signal.aborted) setResult(result);
@@ -148,7 +154,8 @@ function WindowDetail({ id, revision, context }: { id: string; revision: string;
   const now = useWindowClock(result?.serverClock, window ? [window] : []);
   const heading = useRef<HTMLHeadingElement>(null);
   const previous = window && BigInt(window.revision) - 1n;
-  function applyLifecycleUpdate(next: { value: MaintenanceWindow; etag: string }) {
+  function applyLifecycleUpdate(next: Awaited<ReturnType<typeof maintenanceClient.get>>) {
+    detailRead.current?.abort();
     setResult(next);
     requestAnimationFrame(() => heading.current?.focus());
     setRefresh(value => value + 1);
@@ -156,7 +163,7 @@ function WindowDetail({ id, revision, context }: { id: string; revision: string;
   return <>
     <PageHeader headingRef={heading} title={window?.title ?? 'Maintenance window'} breadcrumb={{ href: root, label: 'Maintenance', current: window?.title ?? 'Window' }}
       actions={<>
-        {!revision && result && <MaintenanceLifecycle context={context} record={result.value} etag={result.etag} now={now} onUpdated={applyLifecycleUpdate} />}
+        {!revision && result && <MaintenanceLifecycle context={context} record={result.value} etag={result.etag} now={now} readNow={() => readWindowClock(result.serverClock)} onUpdated={applyLifecycleUpdate} />}
         <RefreshButton label="Refresh maintenance window" onClick={() => setRefresh(value => value + 1)} />
       </>} />
     {error && <p className="ui-error" role="alert">{error}</p>}
@@ -179,7 +186,7 @@ function WindowDetail({ id, revision, context }: { id: string; revision: string;
           {revision && <a data-app-route href={`${root}/${id}`}>Latest revision</a>}
         </nav>
       </section>
-      {!revision && result && <MaintenanceLifecycle historical context={context} record={window} etag={result.etag} now={now} onUpdated={applyLifecycleUpdate} />}
+      {!revision && result && <MaintenanceLifecycle historical context={context} record={window} etag={result.etag} now={now} readNow={() => readWindowClock(result.serverClock)} onUpdated={applyLifecycleUpdate} />}
     </>}
   </>;
 }

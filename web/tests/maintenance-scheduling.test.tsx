@@ -27,12 +27,94 @@ const record: MaintenanceWindow = {
   revision: '1', operation: 'create', tombstone: false, start: '2026-11-18T02:00:01Z', end: '2026-11-18T02:00:02Z',
   created_at: now, updated_at: now, creator_id: id, actor_id: id, audit_id: id,
 };
+const dialogMethod = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, 'showModal');
 
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+  if (!dialogMethod) Reflect.deleteProperty(HTMLDialogElement.prototype, 'showModal');
   vi.useRealTimers();
   history.replaceState({}, '', '/');
+});
+
+async function showDetail(window: MaintenanceWindow) {
+  vi.useFakeTimers({ toFake: ['Date', 'performance', 'setTimeout', 'clearTimeout'] });
+  vi.setSystemTime(new Date(now));
+  if (!dialogMethod) Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {
+    configurable: true, value(this: HTMLDialogElement) { this.setAttribute('open', ''); },
+  });
+  const serverClock = { time: Date.parse(now), receivedAt: performance.now() };
+  const get = vi.spyOn(maintenanceClient, 'get').mockResolvedValue({
+    value: window, etag: `"maintenance:${id}:1"`, serverClock,
+  });
+  vi.spyOn(sloClient, 'get').mockRejectedValue(new Error('Name not loaded'));
+  history.replaceState({}, '', `/maintenance/${id}`);
+  render(<MaintenancePage context={context} />);
+  await act(async () => {});
+  return get;
+}
+
+it('preserves an early-end draft when its window ends naturally', async () => {
+  await showDetail({ ...record, start: '2026-11-18T01:00:00Z' });
+  fireEvent.click(screen.getByRole('button', { name: 'End maintenance early' }));
+  const reason = screen.getByLabelText('Reason for this change');
+  fireEvent.change(reason, { target: { value: 'Traffic switch finished.' } });
+  act(() => vi.advanceTimersByTime(2000));
+  expect(screen.getByRole('dialog', { name: 'End this maintenance early?' })).toBeVisible();
+  expect(reason).toHaveValue('Traffic switch finished.');
+  expect(screen.getByRole('button', { name: 'End maintenance' })).toBeDisabled();
+});
+
+it('checks the early-end time at submission and clears its validation error on edit', async () => {
+  await showDetail({ ...record, start: '2026-11-18T01:00:00Z', end: '2026-11-18T03:00:00Z' });
+  const submit = vi.fn(async () => new Response('{}', { status: 503 }));
+  vi.stubGlobal('fetch', submit);
+  fireEvent.click(screen.getByRole('button', { name: 'End maintenance early' }));
+  const time = screen.getByLabelText('New end time (UTC)');
+  fireEvent.change(time, { target: { value: '02:01' } });
+  fireEvent.change(screen.getByLabelText('Reason for this change'), { target: { value: 'Traffic switch finished.' } });
+  act(() => vi.advanceTimersByTime(120_000));
+  fireEvent.click(screen.getByRole('button', { name: 'End maintenance' }));
+  expect(submit).not.toHaveBeenCalled();
+  expect(screen.getByRole('alert')).toHaveTextContent('Choose a future time before the scheduled end.');
+  fireEvent.change(time, { target: { value: '02:03' } });
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+});
+
+it('keeps a cancellation draft and blocks confirmation if the latest window has started', async () => {
+  await showDetail({ ...record, start: '2026-11-18T03:00:00Z', end: '2026-11-18T04:00:00Z' });
+  const newer = { ...record, revision: '2', operation: 'edit', start: '2026-11-18T01:59:00Z', end: '2026-11-18T04:00:00Z' };
+  vi.stubGlobal('fetch', vi.fn(async (_url: string, request: RequestInit) => request.method === 'POST'
+    ? new Response(JSON.stringify({ code: 'maintenance_conflict' }), { status: 409 })
+    : new Response(JSON.stringify(newer), { headers: { ETag: `"maintenance:${id}:2"` } })));
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel scheduled maintenance' }));
+  const reason = screen.getByLabelText('Reason for this change');
+  fireEvent.change(reason, { target: { value: 'Postpone the work.' } });
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Cancel maintenance' })); });
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Read latest revision' })); });
+  expect(reason).toHaveValue('Postpone the work.');
+  expect(screen.getByRole('button', { name: 'Cancel maintenance' })).toBeDisabled();
+});
+
+it('keeps a saved cancellation when a stale detail read resolves before the effect refresh', async () => {
+  const scheduled = { ...record, start: '2026-11-18T03:00:00Z', end: '2026-11-18T04:00:00Z' };
+  const get = await showDetail(scheduled);
+  let finishStaleRead: (() => void) | undefined;
+  get.mockImplementationOnce(() => new Promise(resolve => {
+    finishStaleRead = () => resolve({ value: scheduled, etag: `"maintenance:${id}:1"` });
+  })).mockRejectedValueOnce(new Error('Refresh unavailable'));
+  fireEvent.click(screen.getByRole('button', { name: 'Refresh maintenance window' }));
+  const cancelled = { ...scheduled, revision: '2', operation: 'cancel', tombstone: true };
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(cancelled), {
+    headers: { ETag: `"maintenance:${id}:2"` },
+  })));
+  vi.spyOn(window, 'requestAnimationFrame').mockImplementation(() => { finishStaleRead?.(); return 1; });
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel scheduled maintenance' }));
+  fireEvent.change(screen.getByLabelText('Reason for this change'), { target: { value: 'Postpone the work.' } });
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Cancel maintenance' })); });
+  expect(screen.getByText('Cancelled', { exact: true })).toBeVisible();
+  expect(screen.getByRole('alert')).toHaveTextContent('Refresh unavailable');
 });
 
 it('updates the list and detail at the server-time window boundaries', async () => {
