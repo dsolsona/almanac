@@ -89,6 +89,35 @@ test('last-known SLO status stays readable and exposes the original evaluation',
  }
 });
 
+test('dense maintenance shows a counted marker and keeps later windows inspectable', { tag: '@matrix' }, async ({ page }, info) => {
+ const theme = info.project.name.endsWith('dark') ? 'dark' : 'light';
+ await page.addInitScript(value => localStorage.setItem('almanac-theme', value), theme);
+ await installSloFixture(page);
+ const items = Array.from({ length: 201 }, (_, index) => {
+  const id = `70000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`;
+  const from = Date.parse('2026-11-08T02:30:00Z') + (index * 20 + (index === 200 ? 360 : 0)) * 60_000;
+  const start = new Date(from).toISOString();
+  const end = new Date(from + 10 * 60_000).toISOString();
+  return { id, title: `Maintenance ${index + 1}`, reason: 'Scheduled work.', start, end, tombstone: false, slo_ids: [sloID],
+   revision: '1', operation: 'create', created_at: start, updated_at: start, creator_id: id, actor_id: id, audit_id: id };
+ });
+ await page.route(`**/api/v1/slos/${sloID}/maintenance?*`, route => {
+  const cursor = new URL(route.request().url()).searchParams.get('cursor');
+  return route.fulfill({ json: cursor ? { items: items.slice(200) } : {
+   items: items.slice(0, 200), next_cursor: 'last-window', overflow: { start: items[199]!.start, end: items[200]!.end, count: '2' },
+  } });
+ });
+ await page.goto(`/slos/${sloID}?range=7d`);
+ const budget = page.getByRole('region', { name: 'Your error budget' });
+ await expect(budget.locator('.slo-maintenance-band')).toHaveCount(199);
+ await expect(budget.locator('.slo-maintenance-overflow')).toHaveCount(1);
+ await budget.screenshot({ path: `../.local/maintenance-overflow-${info.project.name}.png` });
+ await budget.getByRole('button', { name: '2 more maintenance windows' }).press('Enter');
+ await expect(page.locator('#slo-maintenance-periods > summary')).toBeFocused();
+ await page.getByRole('button', { name: 'Next windows', exact: true }).click();
+ await expect(page.getByRole('link', { name: 'Maintenance 201', exact: true })).toBeVisible();
+});
+
 test('maintenance bands identify the whole period and the budget tooltip escapes the card', { tag: '@matrix' }, async ({ page }, info) => {
  const theme = info.project.name.endsWith('dark') ? 'dark' : 'light';
  await page.addInitScript(value => localStorage.setItem('almanac-theme', value), theme);

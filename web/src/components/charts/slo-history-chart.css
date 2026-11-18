@@ -3,4 +3,5 @@
 .slo-history-chart svg{text-rendering:auto}
 
 .slo-maintenance-band{fill:var(--neutral-wash);stroke:var(--neutral);stroke-width:1;stroke-dasharray:3 3;pointer-events:none}
+.slo-maintenance-overflow{stroke:var(--neutral);stroke-width:4;stroke-dasharray:2 3;stroke-linecap:round}
 .slo-maintenance-inspection{display:grid;gap:4px}.slo-point-tooltip .slo-maintenance-inspection strong{font:600 13px var(--font-body)}

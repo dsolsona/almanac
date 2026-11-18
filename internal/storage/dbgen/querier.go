@@ -490,6 +490,7 @@ type Querier interface {
 	SetDatasourceEpochConfigurationRevision(ctx context.Context, arg SetDatasourceEpochConfigurationRevisionParams) error
 	SetDatasourceReassignmentUnavailable(ctx context.Context, arg SetDatasourceReassignmentUnavailableParams) (int64, error)
 	SetServiceCatalogMetadata(ctx context.Context, arg SetServiceCatalogMetadataParams) error
+	SummarizeSloMaintenanceOverflow(ctx context.Context, arg SummarizeSloMaintenanceOverflowParams) (SummarizeSloMaintenanceOverflowRow, error)
 	// Old handoffs may have prepublished a later boundary; shorten its predecessor too.
 	SupersedeFutureSliOwnershipEpochs(ctx context.Context, arg SupersedeFutureSliOwnershipEpochsParams) error
 	TouchMaintenanceInputGuard(ctx context.Context, sloID pgtype.UUID) error

@@ -11,11 +11,25 @@ import (
 
 type ListSloMaintenanceInput struct {
 	ListMaintenanceInput
-	SloID      string
-	Start, End time.Time
+	SloID           string
+	Start, End      time.Time
+	IncludeOverflow bool
 }
 
 func ListSloMaintenance(ctx context.Context, databaseURL string, input ListSloMaintenanceInput) (MaintenancePage, error) {
+	if !input.IncludeOverflow || input.Cursor != "" {
+		return listSloMaintenance(ctx, databaseURL, input, pgx.TxOptions{})
+	}
+	var page MaintenancePage
+	err := retryOperationalRead(ctx, func() error {
+		var err error
+		page, err = listSloMaintenance(ctx, databaseURL, input, pgx.TxOptions{IsoLevel: pgx.RepeatableRead})
+		return err
+	})
+	return page, err
+}
+
+func listSloMaintenance(ctx context.Context, databaseURL string, input ListSloMaintenanceInput, options pgx.TxOptions) (MaintenancePage, error) {
 	sloID, ok := canonicalUUID(input.SloID)
 	if !ok || input.Now == nil || input.Proof.SessionVerifier == ([32]byte{}) ||
 		!validMaintenanceOverlayTime(input.Start) || !validMaintenanceOverlayTime(input.End) || !input.Start.Before(input.End) {
@@ -27,7 +41,7 @@ func ListSloMaintenance(ctx context.Context, databaseURL string, input ListSloMa
 	if err != nil {
 		return MaintenancePage{}, ErrMaintenanceInvalid
 	}
-	conn, q, tx, user, installation, session, started, err := beginAgentReadWithRoles(ctx, databaseURL, input.Proof.SessionVerifier, input.Now, "administrator", "editor", "viewer")
+	conn, q, tx, user, installation, session, started, err := beginAgentReadWithOptions(ctx, databaseURL, input.Proof.SessionVerifier, input.Now, options, "administrator", "editor", "viewer")
 	if err != nil {
 		return MaintenancePage{}, err
 	}
@@ -58,6 +72,23 @@ func ListSloMaintenance(ctx context.Context, databaseURL string, input ListSloMa
 		page.NextCursor, err = encodeAgentCursor(agentCursor{Version: 1, Kind: kind, AgentID: scope, Time: last.StartsAt.Time.UTC(), ID: last.ExclusionID.String()})
 		if err != nil {
 			return MaintenancePage{}, err
+		}
+		if input.IncludeOverflow && input.Cursor == "" {
+			// Keep a normal list page. The cluster replaces its last band and
+			// therefore includes that record as well as the later pages.
+			afterTime, afterID := timestamp(after), uuidOrZero(cursor.ID)
+			if limit > 1 {
+				previous := rows[limit-2]
+				afterTime, afterID = previous.StartsAt, previous.ExclusionID
+			}
+			overflow, err := q.SummarizeSloMaintenanceOverflow(ctx, dbgen.SummarizeSloMaintenanceOverflowParams{
+				SloID: sloID, WindowStart: timestamp(input.Start), WindowEnd: timestamp(input.End),
+				AfterTime: afterTime, AfterID: afterID,
+			})
+			if err != nil {
+				return MaintenancePage{}, err
+			}
+			page.Overflow = &MaintenanceOverflow{Start: overflow.StartsAt.Time.UTC(), End: overflow.EndsAt.Time.UTC(), Count: overflow.WindowCount}
 		}
 	}
 	page.Items = make([]MaintenanceRecord, 0, len(rows))

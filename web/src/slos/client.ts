@@ -277,12 +277,18 @@ async function requestUncached<T>(path: string, init: RequestInit = {}, mutation
   const overlayBounds = maintenanceSloID ? new URLSearchParams(path.split('?')[1] ?? '') : undefined;
   const overlayStart = Date.parse(overlayBounds?.get('start') ?? '');
   const overlayEnd = Date.parse(overlayBounds?.get('end') ?? '');
+  const overflow = value.overflow;
+  const validOverflow = overflow === undefined || (!!maintenanceSloID && !!value.next_cursor &&
+    record(overflow) && typeof overflow.count === 'string' && /^[1-9][0-9]*$/.test(overflow.count) &&
+    utcTimestamp(overflow.start) && utcTimestamp(overflow.end) &&
+    Date.parse(String(overflow.start)) >= overlayStart && Date.parse(String(overflow.end)) <= overlayEnd &&
+    Date.parse(String(overflow.start)) <= Date.parse(String(overflow.end)));
   const valid = isMaintenanceRoot || maintenanceID || maintenanceSloID
     ? maintenanceSloID || isMaintenanceRoot && !init.method
       ? Array.isArray(value.items) && value.items.length <= 200 && value.items.every(item =>
         maintenance(item) && (!maintenanceSloID || (item.tombstone === false &&
           item.slo_ids.includes(maintenanceSloID) && Date.parse(item.start) < overlayEnd && overlayStart < Date.parse(item.end)))) &&
-        (value.next_cursor === undefined || typeof value.next_cursor === 'string' && value.next_cursor.length <= 512)
+        (value.next_cursor === undefined || typeof value.next_cursor === 'string' && value.next_cursor.length <= 512) && validOverflow
       : maintenance(value) && response.headers.get('ETag') === `"maintenance:${value.id}:${value.revision}"`
     : isOverview ? uuid(value.snapshot_id)&&value.snapshot_id!=='00000000-0000-0000-0000-000000000000'&&validOperationalOverview(value)
     : valuesPath ? validHistoryValues(value,valuesPath[2]!,valuesPath[1]!,new URLSearchParams(path.split('?')[1]??''))
@@ -307,7 +313,7 @@ export function write(context: AuthContext, body: unknown, key?: string, etag?: 
 export const sloClient = {
   maintenance: (id: string, start: string, end: string, cursor: string, signal: AbortSignal) =>
     request<components['schemas']['MaintenancePage']>(
-      `/api/v1/slos/${id}/maintenance?${new URLSearchParams({ start, end, limit: '200', ...(cursor ? { cursor } : {}) })}`,
+      `/api/v1/slos/${id}/maintenance?${new URLSearchParams({ start, end, limit: '200', ...(cursor ? { cursor } : { include_overflow: 'true' }) })}`,
       { signal },
     ).then(result => result.value),
   values: (id:string,generation:string,lane:HistoryLane,offset:number,signal?:AbortSignal) => request<HistoryValuePage>(`/api/v1/slos/${id}/history/${generation}/values?${new URLSearchParams({lane,offset:String(offset),limit:'50'})}`,{signal}).then(x=>x.value),

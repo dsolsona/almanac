@@ -19,3 +19,4 @@
 .slo-maintenance-page-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .slo-maintenance-legend { display: inline-flex; align-items: center; gap: 6px; }
 .slo-maintenance-legend i { width: 14px; height: 10px; border: 1px dashed var(--neutral); background: var(--neutral-wash); }
+.slo-maintenance-cluster-action::before { content: ''; display: inline-block; width: 14px; margin-inline-end: 6px; border-top: 3px dotted var(--neutral); }

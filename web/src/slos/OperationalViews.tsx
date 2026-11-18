@@ -10,7 +10,7 @@ import { beginJourney, journeyContentReady } from '../telemetry/client.ts';
 import './slos.css';
 import './slo-reference.css';
 import './slo-detail.css';
-import { SloMaintenanceList, useSloMaintenance } from './SloMaintenanceTimeline.tsx';
+import { openSloMaintenanceList, SloMaintenanceList, useSloMaintenance } from './SloMaintenanceTimeline.tsx';
 import { SloHistoryChart } from '../components/charts/SloHistoryChart.tsx';
 import { SloCompletedDays, SloDefinitionPanels, SloSummary, SloVerdict } from './SloDetailPanels.tsx';
 import { durationText, percentExact } from './detailFormat.ts';
@@ -290,8 +290,13 @@ export function OperationalDetailView({id,definition:providedDefinition,location
   const controls=<div className="slo-history-controls"><div role="group" aria-label="Objective history period">{rangeOptions.map(value=><Button key={value} variant={range===value?'selected':'outline'} aria-pressed={range===value} onClick={()=>changeView({range:value})}>{value==='1y'?'1 y':value.replace('d',' d')}</Button>)}</div><div role="group" aria-label="Timezone">{(['UTC','local'] as const).map(value=><Button key={value} variant={zone===value?'selected':'outline'} aria-pressed={zone===value} onClick={()=>changeView({tz:value})}>{value==='UTC'?'UTC':'Local'}</Button>)}</div></div>;
   const warning=source?qualityWarning(source.current.quality,source.current.performance,source.current.window):'';
   const chartGeneration=detail?.generation?.generation_id;
-  const maintenanceLegend=!!maintenance.page?.items.length&&<span className="slo-maintenance-legend"><i aria-hidden="true"/>Maintenance period</span>;
-  const plot=(kind:'budget'|'burn'|'attainment',compact=false)=>detail&&<SloHistoryChart kind={kind} samples={kind==='budget'?detail.budget_series.samples:kind==='burn'?detail.burn_series.samples:detail.attainment_series.samples} start={detail.range.effective_start} end={detail.range.effective_end} target={definition.target} compact={compact} zone={zone} generation={chartGeneration} burnLabel={activeBurnLabel} maintenance={maintenance.page?.items}/>;
+  const overflow=maintenance.page?.overflow;
+  const maintenanceBands=overflow?maintenance.page?.items.slice(0,-1):maintenance.page?.items;
+  const maintenanceLegend=!!maintenanceBands?.length&&<>
+    <span className="slo-maintenance-legend"><i aria-hidden="true"/>Maintenance period</span>
+    {overflow&&<Button variant="link" className="slo-maintenance-cluster-action" aria-controls="slo-maintenance-periods" onClick={openSloMaintenanceList}>{overflow.count} more maintenance windows</Button>}
+  </>;
+  const plot=(kind:'budget'|'burn'|'attainment',compact=false)=>detail&&<SloHistoryChart kind={kind} samples={kind==='budget'?detail.budget_series.samples:kind==='burn'?detail.burn_series.samples:detail.attainment_series.samples} start={detail.range.effective_start} end={detail.range.effective_end} target={definition.target} compact={compact} zone={zone} generation={chartGeneration} burnLabel={activeBurnLabel} maintenance={maintenanceBands} maintenanceOverflow={overflow}/>;
   return <section className="app-slo-detail slo-detail-b" aria-label="Operational SLO detail">{heading}<div className="slo-detail-stack">
     {source&&<SloVerdict value={source} warning={warning}/>}
     {statusError&&<p role="status" className="slo-detail-notice">Current status could not refresh. Showing the last confirmed evaluation{source?` at ${source.current.evaluation_at}`:''}.</p>}

@@ -3004,6 +3004,16 @@ export interface components {
         MaintenancePage: {
             items: components["schemas"]["MaintenanceWindow"][];
             next_cursor?: string;
+            overflow?: components["schemas"]["MaintenanceOverflow"];
+        };
+        /** @description Chart grouping for the last first-page window and all following windows. The bounds are clipped to the requested range and enclose the grouped windows. They do not describe continuous exclusion coverage. */
+        MaintenanceOverflow: {
+            /** Format: date-time */
+            start: string;
+            /** Format: date-time */
+            end: string;
+            /** @description Exact decimal window count. */
+            count: string;
         };
         Problem: {
             code: string;
@@ -5679,6 +5689,8 @@ export interface operations {
             query: {
                 limit?: components["parameters"]["PageLimit"];
                 cursor?: components["parameters"]["PageCursor"];
+                /** @description Include a counted chart marker on an overflowing first page. */
+                include_overflow?: boolean;
                 /** @description UTC instant with at most microsecond precision. */
                 start: string;
                 /** @description UTC instant with at most microsecond precision. */

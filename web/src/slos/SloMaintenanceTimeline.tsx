@@ -7,6 +7,14 @@ import { sloClient } from './client.ts';
 type Page = components['schemas']['MaintenancePage'];
 type Layer = { key: string; page?: Page; error?: boolean };
 
+export function openSloMaintenanceList() {
+  const list = document.querySelector<HTMLDetailsElement>('#slo-maintenance-periods');
+  if (!list) return;
+  list.open = true;
+  list.scrollIntoView({ block: 'start' });
+  list.querySelector('summary')?.focus({ preventScroll: true });
+}
+
 export function useSloMaintenance(id: string, start: string | undefined, end: string | undefined, refresh: number) {
   const [layer, setLayer] = useState<Layer>();
   const key = JSON.stringify([id, start, end, refresh]);
@@ -53,11 +61,13 @@ function MaintenancePages({ id, start, end, zone, first }: Omit<ListProps, 'page
     return () => controller.abort();
   }, [cursor, page, id, start, end]);
 
-  return <details className="slo-detail-disclosure">
-    <summary>Maintenance periods{first.next_cursor ? <span>First 200 shown on the graphs</span> : <span>{first.items.length} in this period</span>}</summary>
+  return <details id="slo-maintenance-periods" className="slo-detail-disclosure">
+    <summary>Maintenance periods{first.overflow ? <span>{first.overflow.count} grouped on the graphs</span>
+      : first.next_cursor ? <span>First 200 shown on the graphs</span> : <span>{first.items.length} in this period</span>}</summary>
     <div>
       <p className="small">Shaded periods mark scheduled exclusions for this SLO. Each graph reports its own calculation and data coverage.</p>
-      {first.next_cursor && <p className="small">Browse additional windows here or choose a shorter graph range.</p>}
+      {first.overflow && <p className="small">The grouped marker spans the additional windows. Open a window to see its exact bounds.</p>}
+      {first.next_cursor && !first.overflow && <p className="small">Browse additional windows here or choose a shorter graph range.</p>}
       {error && !page && <p role="status">This page could not be loaded. Go back and try again.</p>}
       {!page && !error && <p role="status">Loading maintenance periods…</p>}
       {page && <ul className="slo-maintenance-events">{page.items.map(window => <li key={window.id}>

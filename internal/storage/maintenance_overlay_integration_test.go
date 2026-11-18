@@ -8,6 +8,45 @@ import (
 	"time"
 )
 
+func TestIntegrationMaintenanceOverlayCountsOverflow(t *testing.T) {
+	t.Parallel()
+	f := newMaintenanceFixture(t)
+	ctx, database := t.Context(), f.f.databaseURL
+	start := f.input("first").Start
+	for index, key := range []string{"first", "second", "third", "other-slo", "outside"} {
+		input := f.input(key)
+		input.Start = start.Add(time.Duration(index) * time.Minute)
+		if key == "other-slo" {
+			input.Start = start
+			input.SloIDs = []string{f.ids[1]}
+		}
+		if _, err := CreateMaintenance(ctx, database, input); err != nil {
+			t.Fatal(err)
+		}
+	}
+	end := start.Add(4 * time.Minute)
+	list := ListSloMaintenanceInput{
+		ListMaintenanceInput: ListMaintenanceInput{Proof: f.proof, Limit: 2, Now: f.clock},
+		SloID:                f.ids[0], Start: start, End: end, IncludeOverflow: true,
+	}
+	page, err := ListSloMaintenance(ctx, database, list)
+	if err != nil || len(page.Items) != 2 || page.NextCursor == "" || page.Overflow == nil ||
+		page.Overflow.Count != 2 || !page.Overflow.Start.Equal(start.Add(time.Minute)) || !page.Overflow.End.Equal(end) {
+		t.Fatalf("counted overflow page %+v, cluster %+v: %v", page, page.Overflow, err)
+	}
+	list.Cursor = page.NextCursor
+	page, err = ListSloMaintenance(ctx, database, list)
+	if err != nil || len(page.Items) != 1 || page.NextCursor != "" || page.Overflow != nil {
+		t.Fatalf("later list page %+v: %v", page, err)
+	}
+	list.Cursor = ""
+	list.Limit = 3
+	page, err = ListSloMaintenance(ctx, database, list)
+	if err != nil || len(page.Items) != 3 || page.NextCursor != "" || page.Overflow != nil {
+		t.Fatalf("exact-limit page %+v: %v", page, err)
+	}
+}
+
 func TestIntegrationMaintenanceOverlayCursorAndCurrentScope(t *testing.T) {
 	f := newMaintenanceFixture(t)
 	input := f.input("first")

@@ -8,14 +8,14 @@ import { pointTime, inspectionIndex } from './pointInspection.ts';
 type Sample=components['schemas']['SloOperationalSample'];
 export type MaintenanceBand = Pick<components['schemas']['MaintenanceWindow'], 'id' | 'title' | 'start' | 'end' | 'reason'>;
 const emptyBands: MaintenanceBand[] = [];
-type Props={maintenance?:MaintenanceBand[];kind:'budget'|'burn'|'attainment';samples:Sample[];start:string;end:string;target:string;compact?:boolean;zone?:'UTC'|'local';generation?:string;burnLabel?:string};
+type Props={maintenance?:MaintenanceBand[];maintenanceOverflow?:components['schemas']['MaintenanceOverflow'];kind:'budget'|'burn'|'attainment';samples:Sample[];start:string;end:string;target:string;compact?:boolean;zone?:'UTC'|'local';generation?:string;burnLabel?:string};
 const labels:Record<Sample['state'],string>={observed:'Complete evaluation',missing:'Missing',partial:'Partial data',stale:'Stale',zero_traffic:'Zero traffic',known_empty:'Known empty',expired:'Expired history',not_applicable:'Not applicable',excluded:'Excluded by maintenance'};
 function previewText(value: string, max: number) {
  const characters = [...value];
  return characters.length > max ? `${characters.slice(0, max).join('')}…` : value;
 }
 export { pointTime } from './pointInspection.ts';
-export function SloHistoryChart({kind,samples,start,end,target,compact=false,zone='UTC',generation,burnLabel='1 h',maintenance=emptyBands}:Props) {
+export function SloHistoryChart({kind,samples,start,end,target,compact=false,zone='UTC',generation,burnLabel='1 h',maintenance=emptyBands,maintenanceOverflow}:Props) {
  const host=useRef<HTMLDivElement>(null),tooltip=useRef<HTMLDivElement>(null);
  const [inspectionTime,setInspectionTime]=useState<number>();
  const [width,setWidth]=useState(980),[index,setIndex]=useState<number|null>(null),[pointerY,setPointerY]=useState<number|undefined>(undefined);
@@ -86,6 +86,9 @@ export function SloHistoryChart({kind,samples,start,end,target,compact=false,zon
  {ticks.map((t,i)=><g key={i}><line className="gridline" x1={left} x2={right} y1={y(t)} y2={y(t)}/><text className="axis" x="55" y={y(t)+4} textAnchor="end">{Number(t.toFixed(kind==='attainment'?3:2))}{unit}</text></g>)}
  <line className="ref" x1={left} x2={right} y1={y(kind==='budget'?0:kind==='burn'?1:Number(target)*100)} y2={y(kind==='budget'?0:kind==='burn'?1:Number(target)*100)}/>
  {plotted}
+ {maintenanceOverflow&&<line className="slo-maintenance-overflow" x1={timeX(Date.parse(maintenanceOverflow.start))} x2={timeX(Date.parse(maintenanceOverflow.end))} y1={top+2} y2={top+2}>
+   <title>{maintenanceOverflow.count} additional maintenance windows from {pointTime(maintenanceOverflow.start,zone,true)} to {pointTime(maintenanceOverflow.end,zone,true)}</title>
+ </line>}
  {tickFractions.map((fraction,i)=>{const t=min+fraction*(max-min);return <text className="axis" key={i} x={left+fraction*(right-left)} y={height-7} textAnchor={i===0?'start':i===tickFractions.length-1?'end':'middle'}>{new Date(t).toLocaleDateString('en-GB',{day:'2-digit',month:'short',...(zone==='UTC'?{timeZone:'UTC'}:{})})}{i===tickFractions.length-1?` ${zone==='UTC'?'UTC':'local'}`:''}</text>;})}
  {selected&&<g><line className="cursor" x1={x(selected)} x2={x(selected)} y1={top} y2={bottom}/>{allowed(selected)&&<circle className="inspection-dot" cx={x(selected)} cy={y(numeric(selected)!)} r="4.5"/>}</g>}
  </svg>}
