@@ -355,6 +355,81 @@ func runObjectiveCLIJourney(t *testing.T, binary, dir, profile, sliID, databaseU
 		t.Fatal("CLI and API evaluation differ")
 	}
 	verifyMaintenanceHTTP(t, httpClient, baseURL, record.Session, objective)
+	func() {
+		cadence := time.Duration(objective.CadenceSeconds) * time.Second
+		from := time.Now().UTC().Truncate(cadence).Add(20 * cadence)
+		to := from.Add(2 * cadence)
+		body := api.MaintenanceWrite{Title: "CLI maintenance", Reason: "Test scheduled replacement", Start: from, End: to}
+		body.SloIds = append(body.SloIds, objective.Id)
+		file := writeInput("maintenance-create.json", body)
+		read := func(document objectiveJourneyDocument) (api.MaintenanceWindow, string) {
+			t.Helper()
+			var window api.MaintenanceWindow
+			var tag string
+			if json.Unmarshal(document.Result["maintenance"], &window) != nil ||
+				json.Unmarshal(document.Result["etag"], &tag) != nil || tag == "" {
+				t.Fatal("invalid maintenance CLI result")
+			}
+			return window, tag
+		}
+		created, tag := read(run(0, "maintenance", "create", "--input-file="+file, "--idempotency-key=cli-create-maintenance"))
+		replay, replayTag := read(run(0, "maintenance", "create", "--input-file="+file, "--idempotency-key=cli-create-maintenance"))
+		if created.Id != replay.Id || replayTag != tag || created.Revision != "1" {
+			t.Fatal("CLI replay changed maintenance identity")
+		}
+		id := "--maintenance-id=" + created.Id.String()
+		timeline := run(0, "maintenance", "timeline", "--slo-id="+sloID, "--start="+from.Add(time.Microsecond).Format(time.RFC3339Nano), "--end="+to.Format(time.RFC3339))
+		var windows []api.MaintenanceWindow
+		if json.Unmarshal(timeline.Result["items"], &windows) != nil || len(windows) != 1 || windows[0].Id != created.Id {
+			t.Fatal("CLI timeline did not contain the scoped window")
+		}
+		body.Reason = "Updated reason"
+		updated, latestTag := read(run(0, "maintenance", "update", id, "--input-file="+writeInput("maintenance-update.json", body),
+			"--idempotency-key=cli-update-maintenance", "--if-match="+tag))
+		if updated.Revision != "2" || updated.Reason != body.Reason {
+			t.Fatal("CLI update lost revision")
+		}
+		reason := "--input-file=" + writeInput("maintenance-cancel.json", api.MaintenanceReason{Reason: "Postpone work"})
+		stale := run(5, "maintenance", "cancel", id, reason, "--idempotency-key=cli-stale-cancel", "--if-match="+tag)
+		if stale.Error == nil || stale.Error.Code != "conflict" {
+			t.Fatal("CLI stale write did not report conflict")
+		}
+		cancelled, _ := read(run(0, "maintenance", "cancel", id, reason, "--idempotency-key=cli-cancel", "--if-match="+latestTag))
+		if !cancelled.Tombstone || cancelled.Operation != "cancel" {
+			t.Fatal("CLI cancellation omitted tombstone")
+		}
+		historical, historicalTag := read(run(0, "maintenance", "get", id, "--revision=1"))
+		if historical.Id != created.Id || historical.Reason != created.Reason || historicalTag != tag {
+			t.Fatal("CLI history did not retain original revision")
+		}
+		list := run(0, "maintenance", "list")
+		if json.Unmarshal(list.Result["items"], &windows) != nil {
+			t.Fatal("CLI list did not return a page")
+		}
+		found := false
+		for _, window := range windows {
+			found = found || window.Id == cancelled.Id && window.Tombstone
+		}
+		if !found {
+			t.Fatal("CLI list omitted cancellation history")
+		}
+		body.Start = time.Now().UTC().Truncate(cadence)
+		body.End = body.Start.Add(10 * cadence)
+		active, activeTag := read(run(0, "maintenance", "create", "--input-file="+writeInput("maintenance-active.json", body), "--idempotency-key=cli-active"))
+		id = "--maintenance-id=" + active.Id.String()
+		end := api.MaintenanceEnd{End: body.Start.Add(5 * cadence), Reason: "Work will finish early"}
+		shortened, endTag := read(run(0, "maintenance", "end", id, "--input-file="+writeInput("maintenance-end.json", end),
+			"--idempotency-key=cli-end", "--if-match="+activeTag))
+		if shortened.Operation != "end" || shortened.Revision != "2" || !shortened.Start.Equal(body.Start) || !shortened.End.Equal(end.End) {
+			t.Fatal("CLI early end did not preserve elapsed coverage")
+		}
+		reason = "--input-file=" + writeInput("maintenance-withdraw.json", api.MaintenanceReason{Reason: "Restore affected measurements"})
+		withdrawn, _ := read(run(0, "maintenance", "withdraw", id, reason, "--idempotency-key=cli-withdraw", "--if-match="+endTag))
+		if withdrawn.Id != active.Id || withdrawn.Operation != "withdraw" || withdrawn.Revision != "3" || !withdrawn.Tombstone {
+			t.Fatal("CLI withdrawal did not retain the audited revision")
+		}
+
+	}()
 }
 func containsObjectiveService(values []api.Service, id string) bool {
 	for _, value := range values {
