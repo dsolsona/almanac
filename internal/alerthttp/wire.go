@@ -54,6 +54,12 @@ func evaluationDTO(value alert.Evaluation, target string) api.AlertEvaluation {
 	if value.RecoveryComparison != nil {
 		result.RecoveryComparison = &api.AlertRecoveryComparison{Snapshot: snapshotDTO(value.RecoveryComparison.Snapshot), Truth: api.AlertTruth(value.RecoveryComparison.Truth), Conditions: conditionResultsDTO(value.RecoveryComparison.Conditions, target)}
 	}
+	if coverage := value.Maintenance; coverage != nil {
+		result.MaintenanceSuppression = &api.AlertMaintenanceSuppression{
+			WindowId: wireID(coverage.WindowID), Revision: strconv.FormatInt(coverage.Revision, 10),
+			Start: coverage.Start.UTC(), End: coverage.End.UTC(), OpeningSuppressed: coverage.OpeningSuppressed,
+		}
+	}
 	return result
 }
 

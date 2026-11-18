@@ -159,6 +159,9 @@ func prepareAlertEvidenceSnapshot(ctx context.Context, q *dbgen.Queries, tx pgx.
 		durations = append(durations, duration)
 	}
 	slices.Sort(durations)
+	if err := requireServiceMaintenanceReady(ctx, q, binding.SloID, cutoff.Add(-durations[len(durations)-1]), cutoff); err != nil {
+		return result, err
+	}
 	grace := cadence + time.Duration(source.SettlingDelaySeconds)*time.Second + sli.DispatchPhase(row.SliID.String(), int(row.CadenceSeconds))
 	windows := make([]slo.WindowInput, 0, len(durations))
 	for _, duration := range durations {

@@ -979,6 +979,143 @@ paths:
             ETag: {schema: {type: string}}
           content: {application/json: {schema: {$ref: '#/components/schemas/MaintenanceWindow'}}}
         'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/scoped-maintenance:
+    get:
+      operationId: listScopedMaintenance
+      summary: List maintenance windows
+      security: [{SessionCookie: []}]
+      parameters:
+        - {$ref: '#/components/parameters/PageLimit'}
+        - {$ref: '#/components/parameters/PageCursor'}
+      responses:
+        '200':
+          description: List maintenance windows
+          content: {application/json: {schema: {$ref: '#/components/schemas/ScopedMaintenancePage'}}}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+    post:
+      operationId: createScopedMaintenance
+      summary: Create an scoped maintenance window
+      security: [{SessionCookie: [], CsrfToken: []}]
+      parameters:
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ScopedMaintenanceWrite'}}}}
+      responses:
+        '201':
+          description: Create an scoped maintenance window
+          headers:
+            ETag: {schema: {type: string}}
+            Location: {schema: {type: string}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/ScopedMaintenanceWindow'}}}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/scoped-maintenance/{maintenance_id}:
+    get:
+      operationId: getScopedMaintenance
+      summary: Read latest or historical maintenance revision
+      security: [{SessionCookie: []}]
+      parameters:
+        - {name: maintenance_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: revision, in: query, description: Canonical positive signed 64-bit decimal revision., schema: {type: string, pattern: '^[1-9][0-9]{0,18}$'}}
+      responses:
+        '200':
+          description: Read latest or historical maintenance revision
+          headers:
+            ETag: {schema: {type: string}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/ScopedMaintenanceWindow'}}}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+    put:
+      operationId: editScopedMaintenance
+      summary: Replace maintenance window details
+      security: [{SessionCookie: [], CsrfToken: []}]
+      parameters:
+        - {name: maintenance_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: If-Match, in: header, required: true, description: Strong ETag of the maintenance revision., schema: {type: string}}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ScopedMaintenanceWrite'}}}}
+      responses:
+        '200':
+          description: Replace maintenance window details
+          headers:
+            ETag: {schema: {type: string}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/ScopedMaintenanceWindow'}}}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/scoped-maintenance/{maintenance_id}/end:
+    post:
+      operationId: endScopedMaintenance
+      summary: End maintenance prospectively
+      security: [{SessionCookie: [], CsrfToken: []}]
+      parameters:
+        - {name: maintenance_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: If-Match, in: header, required: true, description: Strong ETag of the maintenance revision., schema: {type: string}}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/MaintenanceEnd'}}}}
+      responses:
+        '200':
+          description: End maintenance prospectively
+          headers:
+            ETag: {schema: {type: string}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/ScopedMaintenanceWindow'}}}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/scoped-maintenance/{maintenance_id}/cancel:
+    post:
+      operationId: cancelScopedMaintenance
+      summary: Cancel scheduled maintenance
+      security: [{SessionCookie: [], CsrfToken: []}]
+      parameters:
+        - {name: maintenance_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: If-Match, in: header, required: true, description: Strong ETag of the maintenance revision., schema: {type: string}}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/MaintenanceReason'}}}}
+      responses:
+        '200':
+          description: Cancel scheduled maintenance
+          headers:
+            ETag: {schema: {type: string}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/ScopedMaintenanceWindow'}}}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/scoped-maintenance/{maintenance_id}/withdraw:
+    post:
+      operationId: withdrawScopedMaintenance
+      summary: Include maintenance events again
+      security: [{SessionCookie: [], CsrfToken: []}]
+      parameters:
+        - {name: maintenance_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: If-Match, in: header, required: true, description: Strong ETag of the maintenance revision., schema: {type: string}}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/MaintenanceReason'}}}}
+      responses:
+        '200':
+          description: Include maintenance events again
+          headers:
+            ETag: {schema: {type: string}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/ScopedMaintenanceWindow'}}}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/scoped-maintenance/preview:
+    post:
+      operationId: previewMaintenanceScope
+      summary: Inspect the current affected SLO inventory for a maintenance selector
+      description: Read-only operation available to Viewers. Scope and pagination are bound to the cursor. An empty valid inventory has a zero total.
+      security: [{SessionCookie: [], CsrfToken: []}]
+      parameters:
+        - {$ref: '#/components/parameters/PageLimit'}
+        - {$ref: '#/components/parameters/PageCursor'}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/MaintenanceScopePreview'}}}}
+      responses:
+        '200': {description: Bounded current impact at the reported inventory time, content: {application/json: {schema: {$ref: '#/components/schemas/MaintenanceImpactPage'}}}}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/scoped-maintenance/{maintenance_id}/impact:
+    get:
+      operationId: readMaintenanceImpact
+      summary: Read the effective membership of a maintenance revision
+      description: Effective membership includes retained participation bounds. A page with ready false indicates calculation-scope preparation is incomplete.
+      security: [{SessionCookie: []}]
+      parameters:
+        - {name: maintenance_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: revision, in: query, description: Canonical positive signed 64-bit decimal revision., schema: {type: string, pattern: '^[1-9][0-9]{0,18}$'}}
+        - {$ref: '#/components/parameters/PageLimit'}
+        - {$ref: '#/components/parameters/PageCursor'}
+      responses:
+        '200': {description: Bounded effective membership, content: {application/json: {schema: {$ref: '#/components/schemas/MaintenanceImpactPage'}}}}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
   /api/v1/slos/{slo_id}/maintenance:
     get:
       operationId: listSloMaintenance
@@ -995,6 +1132,23 @@ paths:
         '200':
           description: List effective maintenance overlapping a UTC timeline range
           content: {application/json: {schema: {$ref: '#/components/schemas/MaintenancePage'}}}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/slos/{slo_id}/scoped-maintenance:
+    get:
+      operationId: listSloScopedMaintenance
+      summary: List effective maintenance overlapping a UTC timeline range
+      security: [{SessionCookie: []}]
+      parameters:
+        - {$ref: '#/components/parameters/SloId'}
+        - {$ref: '#/components/parameters/PageLimit'}
+        - {$ref: '#/components/parameters/PageCursor'}
+        - {name: include_overflow, in: query, description: Include a counted chart marker on an overflowing first page., schema: {type: boolean}}
+        - {name: start, in: query, required: true, description: UTC instant with at most microsecond precision., schema: {type: string, format: date-time}}
+        - {name: end, in: query, required: true, description: UTC instant with at most microsecond precision., schema: {type: string, format: date-time}}
+      responses:
+        '200':
+          description: List effective maintenance overlapping a UTC timeline range
+          content: {application/json: {schema: {$ref: '#/components/schemas/ScopedMaintenanceTimelinePage'}}}
         'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
   /api/v1/services:
     get:
@@ -1671,6 +1825,17 @@ components:
         truth: {$ref: '#/components/schemas/AlertTruth'}
         conditions: {type: array, items: {$ref: '#/components/schemas/AlertConditionResult'}}
         recovery_comparison: {$ref: '#/components/schemas/AlertRecoveryComparison'}
+        maintenance_suppression: {$ref: '#/components/schemas/AlertMaintenanceSuppression'}
+    AlertMaintenanceSuppression:
+      type: object
+      additionalProperties: false
+      required: [window_id, revision, start, end, opening_suppressed]
+      properties:
+        window_id: {type: string, format: uuid}
+        revision: {$ref: '#/components/schemas/AlertVersion'}
+        start: {$ref: '#/components/schemas/AlertTimestamp'}
+        end: {$ref: '#/components/schemas/AlertTimestamp'}
+        opening_suppressed: {type: boolean, description: A matching decision would otherwise have opened an occurrence.}
     AlertObjective:
       type: object
       additionalProperties: false
@@ -3131,6 +3296,100 @@ components:
         start: {type: string, format: date-time}
         end: {type: string, format: date-time}
         slo_ids: {type: array, minItems: 1, maxItems: 100, uniqueItems: true, items: {type: string, format: uuid}}
+    ScopedMaintenanceWindow:
+      type: object
+      additionalProperties: false
+      required: [id, title, reason, scope, revision, operation, tombstone, start, end, created_at, updated_at, creator_id, actor_id, audit_id]
+      properties:
+        id: {type: string, format: uuid}
+        title: {type: string, minLength: 1, maxLength: 512, description: Maximum 512 UTF-8 bytes.}
+        reason: {type: string, minLength: 1, maxLength: 4096, description: Maximum 4096 UTF-8 bytes.}
+        scope: {$ref: '#/components/schemas/MaintenanceScope'}
+        revision: {type: string, pattern: '^[1-9][0-9]{0,18}$'}
+        operation: {type: string, enum: [create, edit, end, cancel, withdraw]}
+        tombstone: {type: boolean}
+        start: {type: string, format: date-time}
+        end: {type: string, format: date-time}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        creator_id: {type: string, format: uuid}
+        actor_id: {type: string, format: uuid}
+        audit_id: {type: string, format: uuid}
+    ScopedMaintenanceWrite:
+      type: object
+      additionalProperties: false
+      required: [title, reason, start, end, scope]
+      properties:
+        title: {type: string, minLength: 1, maxLength: 512, description: Maximum 512 UTF-8 bytes.}
+        reason: {type: string, minLength: 1, maxLength: 4096, description: Maximum 4096 UTF-8 bytes.}
+        start: {type: string, format: date-time}
+        end: {type: string, format: date-time}
+        scope: {$ref: '#/components/schemas/MaintenanceScope'}
+    MaintenanceScope:
+      oneOf:
+        - {$ref: '#/components/schemas/MaintenanceSloScope'}
+        - {$ref: '#/components/schemas/MaintenanceServiceScope'}
+        - {$ref: '#/components/schemas/MaintenanceAllServicesScope'}
+      discriminator:
+        propertyName: kind
+        mapping:
+          slos: '#/components/schemas/MaintenanceSloScope'
+          services: '#/components/schemas/MaintenanceServiceScope'
+          all_services: '#/components/schemas/MaintenanceAllServicesScope'
+    MaintenanceSloScope:
+      type: object
+      additionalProperties: false
+      required: [kind, slo_ids]
+      properties:
+        kind: {type: string, enum: [slos]}
+        slo_ids: {type: array, minItems: 1, maxItems: 100, uniqueItems: true, items: {type: string, format: uuid}}
+    MaintenanceServiceScope:
+      type: object
+      additionalProperties: false
+      required: [kind, service_ids]
+      properties:
+        kind: {type: string, enum: [services]}
+        service_ids: {type: array, minItems: 1, maxItems: 100, uniqueItems: true, items: {type: string, format: uuid}}
+    MaintenanceAllServicesScope:
+      type: object
+      additionalProperties: false
+      required: [kind]
+      properties:
+        kind: {type: string, enum: [all_services]}
+    ScopedMaintenancePage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/ScopedMaintenanceWindow'}}
+        next_cursor: {type: string}
+    MaintenanceScopePreview:
+      type: object
+      additionalProperties: false
+      required: [scope]
+      properties:
+        scope: {$ref: '#/components/schemas/MaintenanceScope'}
+    MaintenanceImpactMember:
+      type: object
+      additionalProperties: false
+      required: [slo_id, slo_name, service_id, service_name]
+      properties:
+        slo_id: {type: string, format: uuid}
+        slo_name: {type: string}
+        service_id: {type: string, format: uuid}
+        service_name: {type: string}
+        start: {type: string, format: date-time, description: Inclusive recorded participation start. Omitted for inventory previews.}
+        end: {type: string, format: date-time, description: Exclusive recorded participation end. Omitted for inventory previews.}
+    MaintenanceImpactPage:
+      type: object
+      additionalProperties: false
+      required: [items, total, inventory_at, ready]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/MaintenanceImpactMember'}}
+        total: {type: string, pattern: '^(0|[1-9][0-9]*)$', description: Exact number of distinct affected SLOs across the inventory or effective membership page set.}
+        inventory_at: {type: string, format: date-time}
+        ready: {type: boolean, description: False if effective membership is still being prepared.}
+        next_cursor: {type: string}
     MaintenanceReason:
       type: object
       additionalProperties: false
@@ -3144,6 +3403,25 @@ components:
       properties:
         reason: {type: string, minLength: 1, maxLength: 4096, description: Maximum 4096 UTF-8 bytes.}
         end: {type: string, format: date-time}
+    ScopedMaintenanceTimelinePage:
+      type: object
+      additionalProperties: false
+      required: [items, pending]
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/ScopedMaintenanceTimelineInterval'}
+        pending: {type: boolean, description: Some effective memberships in this range are still being prepared.}
+        next_cursor: {type: string}
+        overflow: {$ref: '#/components/schemas/MaintenanceOverflow'}
+    ScopedMaintenanceTimelineInterval:
+      type: object
+      additionalProperties: false
+      required: [window, start, end]
+      properties:
+        window: {$ref: '#/components/schemas/ScopedMaintenanceWindow'}
+        start: {type: string, format: date-time, description: Inclusive effective SLO participation start.}
+        end: {type: string, format: date-time, description: Exclusive effective SLO participation end.}
     MaintenancePage:
       type: object
       required: [items]

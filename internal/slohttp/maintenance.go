@@ -14,8 +14,14 @@ import (
 )
 
 const maintenancePath = "/api/v1/maintenance"
+const scopedMaintenancePath = "/api/v1/scoped-maintenance"
 
 func (h *Handler) maintenance(w http.ResponseWriter, r *http.Request, requestID string, proof storage.DatasourceProof, parts []string, query url.Values) {
+	scoped := parts[0] == "scoped-maintenance"
+	if scoped && len(parts) == 2 && parts[1] == "preview" {
+		h.previewMaintenance(w, r, requestID, proof, query)
+		return
+	}
 	id, action, method := "", "", r.Method
 	allow := "GET, POST"
 	switch len(parts) {
@@ -28,6 +34,10 @@ func (h *Handler) maintenance(w http.ResponseWriter, r *http.Request, requestID 
 		parsed, err := uuid.Parse(id)
 		if err != nil || parsed == uuid.Nil || parsed.String() != id {
 			problem(w, 404, "not_found", requestID)
+			return
+		}
+		if scoped && len(parts) == 3 && parts[2] == "impact" {
+			h.maintenanceImpact(w, r, requestID, proof, id, query)
 			return
 		}
 		allow = "GET, PUT"
@@ -49,7 +59,7 @@ func (h *Handler) maintenance(w http.ResponseWriter, r *http.Request, requestID 
 		return
 	}
 	if len(parts) < 3 && method == http.MethodGet {
-		h.readMaintenance(w, r, requestID, proof, id, query)
+		h.readMaintenance(w, r, requestID, proof, id, query, scoped)
 		return
 	}
 	if action == "" || (len(parts) == 3 && method != http.MethodPost) {
@@ -81,26 +91,34 @@ func (h *Handler) maintenance(w http.ResponseWriter, r *http.Request, requestID 
 		return
 	}
 	command := storage.MaintenanceCommandInput{Proof: proof, ID: id, Revision: revision,
-		IdempotencyKey: r.Header.Get("Idempotency-Key"), RequestID: requestID, Now: h.now}
+		IdempotencyKey: r.Header.Get("Idempotency-Key"), RequestID: requestID, Now: h.now, Scoped: scoped}
 	ctx := r.Context()
 	var record storage.MaintenanceRecord
 	var err error
 	switch action {
 	case "create", "edit":
-		var req struct {
-			Title  string    `json:"title"`
-			Reason string    `json:"reason"`
-			Start  time.Time `json:"start"`
-			End    time.Time `json:"end"`
-			SloIDs []string  `json:"slo_ids"`
-		}
-		if json.Unmarshal(body, &req, json.RejectUnknownMembers(true)) != nil {
-			problem(w, 400, "invalid_request", requestID)
-			return
-		}
 		input := storage.CreateMaintenanceInput{Proof: proof, ID: id, Revision: revision,
-			IdempotencyKey: command.IdempotencyKey, RequestID: requestID, Now: h.now,
-			Title: req.Title, Reason: req.Reason, Start: req.Start, End: req.End, SloIDs: req.SloIDs}
+			IdempotencyKey: command.IdempotencyKey, RequestID: requestID, Now: h.now, Scoped: scoped}
+		if scoped {
+			if !decodeScopedMaintenanceWrite(body, &input) {
+				problem(w, 400, "invalid_request", requestID)
+				return
+			}
+		} else {
+			var legacy struct {
+				Title  string    `json:"title"`
+				Reason string    `json:"reason"`
+				Start  time.Time `json:"start"`
+				End    time.Time `json:"end"`
+				SloIDs []string  `json:"slo_ids"`
+			}
+			if json.Unmarshal(body, &legacy, json.RejectUnknownMembers(true)) != nil {
+				problem(w, 400, "invalid_request", requestID)
+				return
+			}
+			input.Title, input.Reason = legacy.Title, legacy.Reason
+			input.Start, input.End, input.SloIDs = legacy.Start, legacy.End, legacy.SloIDs
+		}
 		if action == "create" {
 			record, err = storage.CreateMaintenance(ctx, h.databaseURL, input)
 		} else {
@@ -114,7 +132,7 @@ func (h *Handler) maintenance(w http.ResponseWriter, r *http.Request, requestID 
 		}
 		record, err = storage.EndMaintenance(ctx, h.databaseURL, storage.EndMaintenanceInput{
 			Proof: proof, ID: id, Revision: revision, IdempotencyKey: command.IdempotencyKey,
-			RequestID: requestID, Now: h.now, End: req.End, Reason: req.Reason,
+			RequestID: requestID, Now: h.now, End: req.End, Reason: req.Reason, Scoped: scoped,
 		})
 	case "cancel", "withdraw":
 		var req api.MaintenanceReason
@@ -136,12 +154,16 @@ func (h *Handler) maintenance(w http.ResponseWriter, r *http.Request, requestID 
 	status = 200
 	if action == "create" {
 		status = 201
-		w.Header().Set("Location", maintenancePath+"/"+record.ID)
+		path := maintenancePath
+		if scoped {
+			path = scopedMaintenancePath
+		}
+		w.Header().Set("Location", path+"/"+record.ID)
 	}
-	writeMaintenance(w, status, record)
+	writeMaintenance(w, status, record, scoped)
 }
 
-func (h *Handler) readMaintenance(w http.ResponseWriter, r *http.Request, requestID string, proof storage.DatasourceProof, id string, query url.Values) {
+func (h *Handler) readMaintenance(w http.ResponseWriter, r *http.Request, requestID string, proof storage.DatasourceProof, id string, query url.Values, scoped bool) {
 	if hasBody(r) || hasConditional(r) {
 		problem(w, 400, "invalid_request", requestID)
 		return
@@ -152,29 +174,28 @@ func (h *Handler) readMaintenance(w http.ResponseWriter, r *http.Request, reques
 			problem(w, 400, "invalid_request", requestID)
 			return
 		}
-		page, err := storage.ListMaintenance(r.Context(), h.databaseURL, storage.ListMaintenanceInput{Proof: proof, Limit: limit, Cursor: cursor, Now: h.now})
-		writeMaintenancePage(w, page, err, requestID)
+		page, err := storage.ListMaintenance(r.Context(), h.databaseURL, storage.ListMaintenanceInput{Proof: proof, Limit: limit, Cursor: cursor, Now: h.now, Scoped: scoped})
+		if scoped {
+			writeScopedMaintenancePage(w, page, err, requestID)
+		} else {
+			writeMaintenancePage(w, page, err, requestID)
+		}
 		return
 	}
-	revision := int64(0)
-	if len(query) != 0 {
-		raw := query.Get("revision")
-		value, err := strconv.ParseInt(raw, 10, 64)
-		if len(query) != 1 || len(query["revision"]) != 1 || err != nil || value < 1 || strconv.FormatInt(value, 10) != raw {
-			problem(w, 400, "invalid_request", requestID)
-			return
-		}
-		revision = value
+	revision, valid := maintenanceRevisionQuery(query)
+	if !valid || len(query) != 0 {
+		problem(w, 400, "invalid_request", requestID)
+		return
 	}
-	record, err := storage.ReadMaintenance(r.Context(), h.databaseURL, storage.ReadMaintenanceInput{Proof: proof, ID: id, Revision: revision, Now: h.now})
+	record, err := storage.ReadMaintenance(r.Context(), h.databaseURL, storage.ReadMaintenanceInput{Proof: proof, ID: id, Revision: revision, Now: h.now, Scoped: scoped})
 	if err != nil {
 		maintenanceError(w, err, requestID)
 		return
 	}
-	writeMaintenance(w, 200, record)
+	writeMaintenance(w, 200, record, scoped)
 }
 
-func (h *Handler) sloMaintenance(w http.ResponseWriter, r *http.Request, requestID string, proof storage.DatasourceProof, id string, query url.Values) {
+func (h *Handler) sloMaintenance(w http.ResponseWriter, r *http.Request, requestID string, proof storage.DatasourceProof, id string, query url.Values, scoped bool) {
 	if r.Method != http.MethodGet {
 		w.Header().Set("Allow", "GET")
 		problem(w, 405, "method_not_allowed", requestID)
@@ -201,11 +222,28 @@ func (h *Handler) sloMaintenance(w http.ResponseWriter, r *http.Request, request
 		return
 	}
 	page, err := storage.ListSloMaintenance(r.Context(), h.databaseURL, storage.ListSloMaintenanceInput{
-		ListMaintenanceInput: storage.ListMaintenanceInput{Proof: proof, Limit: limit, Cursor: cursor, Now: h.now},
+		ListMaintenanceInput: storage.ListMaintenanceInput{Proof: proof, Limit: limit, Cursor: cursor, Now: h.now, Scoped: scoped},
 		SloID:                id, Start: start, End: end,
 		IncludeOverflow: includeOverflow,
 	})
-	writeMaintenancePage(w, page, err, requestID)
+	if scoped {
+		writeScopedMaintenanceTimeline(w, page, err, requestID)
+	} else {
+		writeMaintenancePage(w, page, err, requestID)
+	}
+}
+
+func maintenanceRevisionQuery(query url.Values) (int64, bool) {
+	values, present := query["revision"]
+	if !present {
+		return 0, true
+	}
+	query.Del("revision")
+	if len(values) != 1 {
+		return 0, false
+	}
+	value, err := strconv.ParseInt(values[0], 10, 64)
+	return value, err == nil && value > 0 && strconv.FormatInt(value, 10) == values[0]
 }
 
 func maintenanceDTO(record storage.MaintenanceRecord) api.MaintenanceWindow {
@@ -221,9 +259,13 @@ func maintenanceDTO(record storage.MaintenanceRecord) api.MaintenanceWindow {
 	}
 }
 
-func writeMaintenance(w http.ResponseWriter, status int, record storage.MaintenanceRecord) {
+func writeMaintenance(w http.ResponseWriter, status int, record storage.MaintenanceRecord, scoped bool) {
 	w.Header().Set("ETag", etag("maintenance", record.ID, record.Revision))
-	write(w, status, maintenanceDTO(record))
+	if scoped {
+		write(w, status, scopedMaintenanceDTO(record))
+	} else {
+		write(w, status, maintenanceDTO(record))
+	}
 }
 
 func writeMaintenancePage(w http.ResponseWriter, page storage.MaintenancePage, err error, requestID string) {
@@ -255,6 +297,8 @@ func maintenanceError(w http.ResponseWriter, err error, requestID string) {
 		if conflict, ok := errors.AsType[*storage.MaintenanceConflictError](err); ok {
 			p.CurrentRevision = new(strconv.FormatInt(conflict.CurrentRevision, 10))
 		}
+	case errors.Is(err, storage.ErrMaintenanceSnapshotChanged):
+		status, p.Code, p.Message = 409, "maintenance_snapshot_changed", "The maintenance inventory changed. Reload the first page."
 	case errors.Is(err, storage.ErrMaintenanceAlignment):
 		status, p.Code, p.Message = 400, "maintenance_alignment", "Choose bounds aligned with the affected SLO observation grids."
 		if alignment, ok := errors.AsType[*storage.MaintenanceAlignmentError](err); ok {

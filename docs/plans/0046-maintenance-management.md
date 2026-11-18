@@ -9,6 +9,8 @@ The next increment implements
 [plan 0039](0039-maintenance-exclusion-authority.md) and the calculation and
 permissions in [SPEC-0016](../specs/0016-maintenance-exclusions.md).
 
+[F4-T62](../tasks/F4-T62.md) records implementation and verification.
+
 ## Dependencies
 
 1. Define the selector and impact API, preserve the explicit-SLO compatibility
