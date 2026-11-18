@@ -133,6 +133,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/alert-policies/{policy_id}/maintenance-suppressions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                policy_id: components["parameters"]["AlertPolicyId"];
+            };
+            cookie?: never;
+        };
+        /** Audit retained openings suppressed by maintenance on a policy revision */
+        get: operations["listAlertMaintenanceSuppressions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/alerts": {
         parameters: {
             query?: never;
@@ -1651,6 +1670,18 @@ export interface components {
             end: components["schemas"]["AlertTimestamp"];
             /** @description A matching decision would otherwise have opened an occurrence. */
             opening_suppressed: boolean;
+        };
+        AlertMaintenanceSuppressionPage: {
+            items: components["schemas"]["AlertMaintenanceSuppressionRecord"][];
+            next_cursor?: string;
+        };
+        AlertMaintenanceSuppressionRecord: {
+            /** Format: uuid */
+            evaluation_id: string;
+            effective_cutoff: components["schemas"]["AlertTimestamp"];
+            scheduled_at: components["schemas"]["AlertTimestamp"];
+            committed_at: components["schemas"]["AlertTimestamp"];
+            maintenance: components["schemas"]["AlertMaintenanceSuppression"];
         };
         AlertObjective: {
             target: components["schemas"]["AlertExactDecimal"];
@@ -3650,6 +3681,33 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AlertRangePage"];
+                };
+            };
+            default: components["responses"]["AlertProblem"];
+        };
+    };
+    listAlertMaintenanceSuppressions: {
+        parameters: {
+            query: {
+                revision: components["schemas"]["AlertVersion"];
+                limit?: components["parameters"]["AlertLimit"];
+                cursor?: components["parameters"]["AlertCursor"];
+            };
+            header?: never;
+            path: {
+                policy_id: components["parameters"]["AlertPolicyId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Retained decisions ordered newest first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertMaintenanceSuppressionPage"];
                 };
             };
             default: components["responses"]["AlertProblem"];

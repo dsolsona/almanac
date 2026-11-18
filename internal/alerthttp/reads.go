@@ -191,6 +191,37 @@ func (h *Handler) ranges(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, rangePageDTO(page))
 }
 
+func (h *Handler) maintenanceSuppressions(w http.ResponseWriter, r *http.Request) {
+	info := requestInfo(r)
+	input, valid := h.readInput(r, "policy_id")
+	if !valid {
+		problem(w, 404, "not_found", info.id)
+		return
+	}
+	limit, cursor, valid := pageQuery(info.query, "revision")
+	rawRevision := info.query.Get("revision")
+	revision, err := strconv.ParseInt(rawRevision, 10, 64)
+	if !noReadBody(r) || !valid || err != nil || revision < 1 || strconv.FormatInt(revision, 10) != rawRevision {
+		problem(w, 400, "invalid_request", info.id)
+		return
+	}
+	page, err := storage.ListAlertMaintenanceSuppressions(r.Context(), h.databaseURL, storage.ListAlertMaintenanceSuppressionsInput{
+		ReadAlertInput: input, Revision: revision, Limit: limit, Cursor: cursor,
+	})
+	if err != nil {
+		storageError(w, err, info.id)
+		return
+	}
+	result := api.AlertMaintenanceSuppressionPage{Items: make([]api.AlertMaintenanceSuppressionRecord, 0, len(page.Items)), NextCursor: optionalString(page.NextCursor)}
+	for _, item := range page.Items {
+		result.Items = append(result.Items, api.AlertMaintenanceSuppressionRecord{
+			EvaluationId: wireID(item.EvaluationID), EffectiveCutoff: item.Cutoff, ScheduledAt: item.ScheduledAt, CommittedAt: item.CommittedAt,
+			Maintenance: maintenanceSuppressionDTO(item.Suppression),
+		})
+	}
+	writeJSON(w, 200, result)
+}
+
 func (h *Handler) processing(w http.ResponseWriter, r *http.Request) {
 	info := requestInfo(r)
 	if !noReadBody(r) || !validQuery(info.query, "policy_id") || !validID(info.query.Get("policy_id")) {

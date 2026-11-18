@@ -11,6 +11,7 @@ func (h *Handler) registerRoutes() {
 		h.mux.HandleFunc("POST /api/v1/alert-policies/{policy_id}/"+action, func(w http.ResponseWriter, r *http.Request) { r.SetPathValue("action", action); h.policyCommand(w, r) })
 	}
 	h.mux.HandleFunc("GET /api/v1/alert-policies/{policy_id}/ranges", h.ranges)
+	h.mux.HandleFunc("GET /api/v1/alert-policies/{policy_id}/maintenance-suppressions", h.maintenanceSuppressions)
 	h.mux.HandleFunc("GET /api/v1/alerts", h.listAlerts)
 	h.mux.HandleFunc("GET /api/v1/alerts/{occurrence_id}", h.getAlert)
 	h.mux.HandleFunc("POST /api/v1/alerts/{occurrence_id}/acknowledge", h.acknowledge)

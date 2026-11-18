@@ -179,6 +179,8 @@ DROP FUNCTION public.almanac_enqueue_service_maintenance_join(),
     public.almanac_service_maintenance_intervals(uuid, bigint, uuid, timestamptz);
 DROP TABLE public.almanac_service_maintenance_projection_completed, public.almanac_service_maintenance_membership_work;
 DROP INDEX public.almanac_service_maintenance_unprocessed_idx;`
+		case 75:
+			statement = `DROP INDEX public.almanac_alert_maintenance_suppression_audit_idx;`
 		default:
 			t.Fatalf("missing service maintenance fixture teardown for migration %04d", version)
 		}

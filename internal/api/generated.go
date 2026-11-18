@@ -3409,6 +3409,26 @@ type AlertMaintenanceSuppression struct {
 	WindowId openapi_types.UUID `json:"window_id"`
 }
 
+// AlertMaintenanceSuppressionPage defines model for AlertMaintenanceSuppressionPage.
+type AlertMaintenanceSuppressionPage struct {
+	Items      []AlertMaintenanceSuppressionRecord `json:"items"`
+	NextCursor *string                             `json:"next_cursor,omitempty"`
+}
+
+// AlertMaintenanceSuppressionRecord defines model for AlertMaintenanceSuppressionRecord.
+type AlertMaintenanceSuppressionRecord struct {
+	// CommittedAt UTC timestamp with Z suffix.
+	CommittedAt AlertTimestamp `json:"committed_at"`
+
+	// EffectiveCutoff UTC timestamp with Z suffix.
+	EffectiveCutoff AlertTimestamp              `json:"effective_cutoff"`
+	EvaluationId    openapi_types.UUID          `json:"evaluation_id"`
+	Maintenance     AlertMaintenanceSuppression `json:"maintenance"`
+
+	// ScheduledAt UTC timestamp with Z suffix.
+	ScheduledAt AlertTimestamp `json:"scheduled_at"`
+}
+
 // AlertObjective defines model for AlertObjective.
 type AlertObjective struct {
 	CadenceSeconds int64 `json:"cadence_seconds"`
@@ -5568,6 +5588,13 @@ type EnableAlertPolicyParams struct {
 	IfMatch ResourceIfMatch `json:"If-Match"`
 }
 
+// ListAlertMaintenanceSuppressionsParams defines parameters for ListAlertMaintenanceSuppressions.
+type ListAlertMaintenanceSuppressionsParams struct {
+	Revision AlertVersion `form:"revision" json:"revision"`
+	Limit    *AlertLimit  `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor   *AlertCursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
+
 // ListAlertRangesParams defines parameters for ListAlertRanges.
 type ListAlertRangesParams struct {
 	Revision AlertVersion `form:"revision" json:"revision"`
@@ -6911,6 +6938,11 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /api/v1/alert-policies/{policy_id}/enable (the `EnableAlertPolicy` operationId).
 	EnableAlertPolicy(ctx context.Context, policyId AlertPolicyId, params *EnableAlertPolicyParams, body EnableAlertPolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListAlertMaintenanceSuppressions Audit retained openings suppressed by maintenance on a policy revision
+	//
+	// Corresponds with GET /api/v1/alert-policies/{policy_id}/maintenance-suppressions (the `ListAlertMaintenanceSuppressions` operationId).
+	ListAlertMaintenanceSuppressions(ctx context.Context, policyId AlertPolicyId, params *ListAlertMaintenanceSuppressionsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListAlertRanges Read recorded ranges for an immutable policy revision
 	//
@@ -8340,6 +8372,21 @@ func (c *Client) EnableAlertPolicyWithBody(ctx context.Context, policyId AlertPo
 // Corresponds with POST /api/v1/alert-policies/{policy_id}/enable (the `EnableAlertPolicy` operationId).
 func (c *Client) EnableAlertPolicy(ctx context.Context, policyId AlertPolicyId, params *EnableAlertPolicyParams, body EnableAlertPolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewEnableAlertPolicyRequest(c.Server, policyId, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ListAlertMaintenanceSuppressions Audit retained openings suppressed by maintenance on a policy revision
+//
+// Corresponds with GET /api/v1/alert-policies/{policy_id}/maintenance-suppressions (the `ListAlertMaintenanceSuppressions` operationId).
+func (c *Client) ListAlertMaintenanceSuppressions(ctx context.Context, policyId AlertPolicyId, params *ListAlertMaintenanceSuppressionsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListAlertMaintenanceSuppressionsRequest(c.Server, policyId, params)
 	if err != nil {
 		return nil, err
 	}
@@ -11528,6 +11575,87 @@ func NewEnableAlertPolicyRequestWithBody(server string, policyId AlertPolicyId, 
 
 		req.Header.Set("If-Match", headerParam1)
 
+	}
+
+	return req, nil
+}
+
+// NewListAlertMaintenanceSuppressionsRequest constructs an http.Request for the ListAlertMaintenanceSuppressions method
+func NewListAlertMaintenanceSuppressionsRequest(server string, policyId AlertPolicyId, params *ListAlertMaintenanceSuppressionsParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "policy_id", policyId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/alert-policies/%s/maintenance-suppressions", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "revision", params.Revision, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", *params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else {
+				for _, qp := range strings.Split(queryFrag, "&") {
+					rawQueryFragments = append(rawQueryFragments, qp)
+				}
+			}
+
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
 	}
 
 	return req, nil
@@ -16412,6 +16540,13 @@ type ClientWithResponsesInterface interface {
 	// Corresponds with POST /api/v1/alert-policies/{policy_id}/enable (the `EnableAlertPolicy` operationId).
 	EnableAlertPolicyWithResponse(ctx context.Context, policyId AlertPolicyId, params *EnableAlertPolicyParams, body EnableAlertPolicyJSONRequestBody, reqEditors ...RequestEditorFn) (*EnableAlertPolicyResponse, error)
 
+	// ListAlertMaintenanceSuppressionsWithResponse Audit retained openings suppressed by maintenance on a policy revision
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/alert-policies/{policy_id}/maintenance-suppressions (the `ListAlertMaintenanceSuppressions` operationId).
+	ListAlertMaintenanceSuppressionsWithResponse(ctx context.Context, policyId AlertPolicyId, params *ListAlertMaintenanceSuppressionsParams, reqEditors ...RequestEditorFn) (*ListAlertMaintenanceSuppressionsResponse, error)
+
 	// ListAlertRangesWithResponse Read recorded ranges for an immutable policy revision
 	//
 	// Returns a wrapper object for the known response body format(s).
@@ -18463,6 +18598,54 @@ func (r EnableAlertPolicyResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r EnableAlertPolicyResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type ListAlertMaintenanceSuppressionsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *AlertMaintenanceSuppressionPage
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *AlertProblem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListAlertMaintenanceSuppressionsResponse) GetJSON200() *AlertMaintenanceSuppressionPage {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListAlertMaintenanceSuppressionsResponse) GetApplicationproblemJSONDefault() *AlertProblem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListAlertMaintenanceSuppressionsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListAlertMaintenanceSuppressionsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListAlertMaintenanceSuppressionsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListAlertMaintenanceSuppressionsResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -23205,6 +23388,19 @@ func (c *ClientWithResponses) EnableAlertPolicyWithResponse(ctx context.Context,
 	return ParseEnableAlertPolicyResponse(rsp)
 }
 
+// ListAlertMaintenanceSuppressionsWithResponse Audit retained openings suppressed by maintenance on a policy revision
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/alert-policies/{policy_id}/maintenance-suppressions (the `ListAlertMaintenanceSuppressions` operationId).
+func (c *ClientWithResponses) ListAlertMaintenanceSuppressionsWithResponse(ctx context.Context, policyId AlertPolicyId, params *ListAlertMaintenanceSuppressionsParams, reqEditors ...RequestEditorFn) (*ListAlertMaintenanceSuppressionsResponse, error) {
+	rsp, err := c.ListAlertMaintenanceSuppressions(ctx, policyId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListAlertMaintenanceSuppressionsResponse(rsp)
+}
+
 // ListAlertRangesWithResponse Read recorded ranges for an immutable policy revision
 //
 // Returns a wrapper object for the known response body format(s).
@@ -25607,6 +25803,39 @@ func ParseEnableAlertPolicyResponse(rsp *http.Response) (*EnableAlertPolicyRespo
 			headers.ETag = &value
 		}
 		response.Headers200 = &headers
+	}
+
+	return response, nil
+}
+
+// ParseListAlertMaintenanceSuppressionsResponse parses an HTTP response from a ListAlertMaintenanceSuppressionsWithResponse call
+func ParseListAlertMaintenanceSuppressionsResponse(rsp *http.Response) (*ListAlertMaintenanceSuppressionsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListAlertMaintenanceSuppressionsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AlertMaintenanceSuppressionPage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest AlertProblem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
 	}
 
 	return response, nil
@@ -29066,6 +29295,9 @@ type ServerInterface interface {
 	// EnableAlertPolicy Enable with a fresh evaluation revision (Editor or Administrator)
 	// (POST /api/v1/alert-policies/{policy_id}/enable)
 	EnableAlertPolicy(w http.ResponseWriter, r *http.Request, policyId AlertPolicyId, params EnableAlertPolicyParams)
+	// ListAlertMaintenanceSuppressions Audit retained openings suppressed by maintenance on a policy revision
+	// (GET /api/v1/alert-policies/{policy_id}/maintenance-suppressions)
+	ListAlertMaintenanceSuppressions(w http.ResponseWriter, r *http.Request, policyId AlertPolicyId, params ListAlertMaintenanceSuppressionsParams)
 	// ListAlertRanges Read recorded ranges for an immutable policy revision
 	// (GET /api/v1/alert-policies/{policy_id}/ranges)
 	ListAlertRanges(w http.ResponseWriter, r *http.Request, policyId AlertPolicyId, params ListAlertRangesParams)
@@ -30493,6 +30725,74 @@ func (siw *ServerInterfaceWrapper) EnableAlertPolicy(w http.ResponseWriter, r *h
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.EnableAlertPolicy(w, r, policyId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListAlertMaintenanceSuppressions operation middleware
+func (siw *ServerInterfaceWrapper) ListAlertMaintenanceSuppressions(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "policy_id" -------------
+	var policyId AlertPolicyId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "policy_id", r.PathValue("policy_id"), &policyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "policy_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListAlertMaintenanceSuppressionsParams
+
+	// ------------- Required query parameter "revision" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "revision", r.URL.Query(), &params.Revision, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "revision"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "revision", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "cursor"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAlertMaintenanceSuppressions(w, r, policyId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -34435,6 +34735,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/alert-policies/{policy_id}/disable", wrapper.DisableAlertPolicy)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/alert-policies/{policy_id}/retry", wrapper.RetryAlertPolicy)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/alert-policies/{policy_id}/ranges", wrapper.ListAlertRanges)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/alert-policies/{policy_id}/maintenance-suppressions", wrapper.ListAlertMaintenanceSuppressions)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/alerts", wrapper.ListAlerts)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/alerts/{occurrence_id}", wrapper.GetAlert)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/alerts/{occurrence_id}/acknowledge", wrapper.AcknowledgeAlert)

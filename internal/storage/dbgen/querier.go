@@ -253,6 +253,7 @@ type Querier interface {
 	ListAgentDatasourceDependencies(ctx context.Context, arg ListAgentDatasourceDependenciesParams) ([]AlmanacDatasource, error)
 	ListAgents(ctx context.Context, arg ListAgentsParams) ([]AlmanacAgent, error)
 	ListAlertCatalog(ctx context.Context, arg ListAlertCatalogParams) ([]ListAlertCatalogRow, error)
+	ListAlertMaintenanceSuppressions(ctx context.Context, arg ListAlertMaintenanceSuppressionsParams) ([]ListAlertMaintenanceSuppressionsRow, error)
 	ListAlertPolicies(ctx context.Context, arg ListAlertPoliciesParams) ([]ListAlertPoliciesRow, error)
 	ListAlertRangeHistory(ctx context.Context, arg ListAlertRangeHistoryParams) ([]AlmanacAlertRange, error)
 	// Series only reads immutable evidence. Effective-cutoff index bounds the scan;
