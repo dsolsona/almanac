@@ -21,5 +21,6 @@ export async function installSloFixture(page:Page,detail=sloFixture()) {
  const generation={generation_id:'60000000-0000-4000-8000-000000000001',source_generation:'1',measurement_revision:'1',definition_revision:'1',exclusion_revision:'0',calculation_version:'slo-v1',evaluated_through:detail.current.evaluation_at,published_at:detail.current.evaluation_at,calculation_lag_seconds:0};
  await page.route(`**/api/v1/slos/${sloID}/status`,route=>route.fulfill({json:{...detail,slo:detail.objective,generation} satisfies CurrentStatus&OperationalDetail}));
  await page.route(`**/api/v1/slos/${sloID}/operational?*`,route=>route.fulfill({json:detail}));
+ await page.route(`**/api/v1/slos/${sloID}/scoped-maintenance?*`,route=>route.fulfill({ status: 404, body: '404 page not found' }));
  await page.route(`**/api/v1/slos/${sloID}/maintenance?*`,route=>route.fulfill({json:{items:[]}}));
 }

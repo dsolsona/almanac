@@ -38,7 +38,7 @@ function validEvaluation(x: Record<string, unknown>): boolean {
       (item.state==='observed' ? typeof item.attainment==='string' : item.attainment===null));
 }
 const utcTimestamp=(v:unknown): v is string => typeof v==='string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z$/.test(v) && Number.isFinite(Date.parse(v));
-function maintenanceTimeKey(value: unknown): string | undefined {
+export function maintenanceTimeKey(value: unknown): string | undefined {
   if (!utcTimestamp(value)) return undefined;
   const fraction = value.slice(20, -1);
   if (fraction.length > 6) return undefined;
