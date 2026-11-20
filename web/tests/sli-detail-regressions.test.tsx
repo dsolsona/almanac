@@ -15,6 +15,14 @@ function setup(items:SliObservation[],options:{older?:boolean;cadence?:number}={
   history.replaceState({},'',`/slis/${sliID}`);
   vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL)=>{
     const url=String(input);
+    if (url.endsWith('/measurements?period=30d')) return json({
+      bucket_seconds: 10800,
+      buckets: [
+        {start:'2026-11-11T01:00:00Z', end:'2026-11-11T04:00:00Z', good:'90', total:'100', observed:179, missing:1, zero_traffic:0, known_empty:0, failed:0, incomplete:0},
+        {start:'2026-11-11T04:00:00Z', end:'2026-11-11T07:00:00Z', good:null, total:null, observed:0, missing:180, zero_traffic:0, known_empty:0, failed:0, incomplete:0},
+        {start:'2026-11-11T07:00:00Z', end:'2026-11-11T10:00:00Z', good:'990', total:'1000', observed:180, missing:0, zero_traffic:0, known_empty:0, failed:0, incomplete:0},
+      ],
+    });
     if(url.includes('/observations'))return json(url.includes('cursor=older')?{...fixtureHistory,items:[],inspected_start:'2026-11-11T08:10:00Z',inspected_end:'2026-11-11T09:00:00Z',missing_intervals:[{interval_start:'2026-11-11T08:10:00Z',interval_end:'2026-11-11T09:00:00Z'}]}:{...fixtureHistory,items,next_cursor:options.older?'older':'',inspected_start:options.cadence===15?'2026-11-11T09:59:45Z':fixtureHistory.inspected_start});
     if(url.startsWith('/api/v1/datasources'))return json({items:[datasource],next_cursor:''});
     const resource={...sli,polling_interval_seconds:options.cadence??60,linked_slos:{items:[],total_count:0}};
@@ -64,4 +72,18 @@ it('calls the minimum a lowest interval when cadence is not one minute',async()=
   setup([{...complete[0]!,interval_start:'2026-11-11T09:59:45Z',interval_end:'2026-11-11T10:00:00Z'}],{cadence:15});
   await waitFor(()=>expect(document.querySelectorAll('.interval-state')).toHaveLength(1));
   expect(document.querySelector('.sli-detail-inline-note')).toHaveTextContent('Lowest interval');
+});
+
+it('loads a bounded 30-day measurements series independently of exact intervals', async () => {
+  setup(complete);
+  await screen.findByRole('heading', {name: 'Measurements'});
+  await userEvent.click(screen.getByRole('radio', {name: '30d'}));
+  await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url]) =>
+    String(url).endsWith('/measurements?period=30d'))).toBe(true));
+  await screen.findByText('98.18%');
+  expect(document.querySelectorAll('.interval-state')).toHaveLength(3);
+  expect(document.querySelectorAll('.interval-state.partial')).toHaveLength(1);
+  expect(document.querySelectorAll('.gap')).toHaveLength(1);
+  await userEvent.click(screen.getByRole('radio', {name: '1h'}));
+  expect(document.querySelectorAll('.interval-state')).toHaveLength(60);
 });

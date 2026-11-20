@@ -70,6 +70,16 @@ No hosted billing, organization switching, or public marketing site is included.
 
 ## Behavior and contracts
 
+### SLI measurements
+
+The Measurements chart offers 1h, 3h, 6h, 24h, 7d and 30d ranges. The first
+hour shows exact intervals. Longer ranges render up to 240 cadence-aligned
+buckets of the current measurement revision, ending at the latest due interval
+and clipped to eligibility. A bucket shows the ratio of exact summed good and
+total counts when traffic is present and exposes its coverage and outcomes.
+Empty buckets have no ratio. Inspection reports bucket sums, and the exact
+interval table remains independently paginated.
+
 ### Shared foundations before screens
 
 Create `web/DESIGN_SYSTEM.md`, shared controls in `web/src/components/ui/`, charts

@@ -423,3 +423,20 @@ LIMIT $3;
 -- name: LatestSliAcceptedAt :one
 SELECT max(recorded_at)::timestamptz FROM public.almanac_sli_observations
 WHERE sli_id = $1 AND interval_start >= $2 AND outcome IN ('observed', 'complete_empty');
+
+-- name: BucketSliMeasurements :many
+SELECT date_bin(make_interval(secs => sqlc.arg(bucket_seconds)::double precision),
+                interval_start, sqlc.arg(range_end)::timestamptz)::timestamptz AS bucket_start,
+       coalesce(sum(good_count)::text, '')::text AS good,
+       coalesce(sum(total_count)::text, '')::text AS total,
+       count(*) FILTER (WHERE outcome = 'observed' AND total_count > 0) AS observed,
+       count(*) FILTER (WHERE outcome = 'observed' AND total_count = 0) AS zero_traffic,
+       count(*) FILTER (WHERE outcome = 'complete_empty') AS known_empty,
+       count(*) FILTER (WHERE outcome = 'failed') AS failed,
+       count(*) FILTER (WHERE outcome = 'incomplete') AS incomplete
+FROM public.almanac_sli_observations
+WHERE sli_id = sqlc.arg(sli_id) AND measurement_revision = sqlc.arg(measurement_revision)
+  AND interval_start >= sqlc.arg(range_start)::timestamptz
+  AND interval_start < sqlc.arg(range_end)::timestamptz
+GROUP BY 1
+ORDER BY 1;
