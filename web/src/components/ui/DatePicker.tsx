@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
 import { addDays, addMonths, daysInMonth, formatCalendarDate, parseCalendarDate, weekday, type CalendarDate } from './dateMath.ts';
 import { Button } from './Button.tsx';
 import { Dialog } from './Dialog.tsx';
@@ -46,16 +46,37 @@ export function DatePicker({ label, value, onValueChange, hint, disabled = false
   const triggerRef = useRef<HTMLButtonElement>(null);
   const focusedRef = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
+
+  return <div className="ui-date-picker">
+    <span className="ui-date-picker__label" id={labelId}>{label}</span>
+    <Button ref={triggerRef} variant="outline" disabled={disabled} aria-labelledby={`${labelId} ${valueId}`} aria-describedby={hintId} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(true)}>
+      <span aria-hidden="true">▦</span> <span id={valueId}>{selected ? dateLabel(selected) : 'Choose date'}</span>
+    </Button>
+    {hint && <span className="ui-date-picker__hint" id={hintId}>{hint}</span>}
+    <Dialog open={open} onClose={() => setOpen(false)} title={`Choose ${label}`} triggerRef={triggerRef} initialFocusRef={focusedRef}>
+      <div className="ui-calendar">
+        {open && <Calendar value={value} today={today} focusedRef={focusedRef} onValueChange={date => { onValueChange(date); setOpen(false); }} />}
+        <div className="ui-calendar__actions">
+          <Button variant="ghost" onClick={() => { onValueChange(''); setOpen(false); }}>Clear</Button>
+          <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+        </div>
+      </div>
+    </Dialog>
+  </div>;
+}
+
+export function Calendar({ value, rangeEnd, today, focusedRef, onValueChange }: {
+  value: string;
+  rangeEnd?: string;
+  today: CalendarDate;
+  focusedRef: RefObject<HTMLButtonElement | null>;
+  onValueChange: (value: string) => void;
+}) {
+  const selected = parseCalendarDate(value);
   const [month, setMonth] = useState<CalendarDate>(selected ?? today);
   const [focused, setFocused] = useState<CalendarDate>(selected ?? today);
 
-  useEffect(() => { if (open) focusedRef.current?.focus(); }, [open, focused, month]);
-
-  function showCalendar() {
-    setMonth(selected ?? today);
-    setFocused(selected ?? today);
-    setOpen(true);
-  }
+  useEffect(() => { focusedRef.current?.focus(); }, [focusedRef, focused, month]);
 
   function shiftMonth(amount: number) {
     const next = addMonths(month, amount);
@@ -92,40 +113,28 @@ export function DatePicker({ label, value, onValueChange, hint, disabled = false
     return day >= 1 && day <= days ? day : null;
   });
 
-  return <div className="ui-date-picker">
-    <span className="ui-date-picker__label" id={labelId}>{label}</span>
-    <Button ref={triggerRef} variant="outline" disabled={disabled} aria-labelledby={`${labelId} ${valueId}`} aria-describedby={hintId} aria-haspopup="dialog" aria-expanded={open} onClick={showCalendar}>
-      <span aria-hidden="true">▦</span> <span id={valueId}>{selected ? dateLabel(selected) : 'Choose date'}</span>
-    </Button>
-    {hint && <span className="ui-date-picker__hint" id={hintId}>{hint}</span>}
-    <Dialog open={open} onClose={() => setOpen(false)} title={`Choose ${label}`} triggerRef={triggerRef} initialFocusRef={focusedRef}>
-      <div className="ui-calendar">
-        <div className="ui-calendar__navigation">
-          <Button variant="ghost" aria-label="Previous month" disabled={month.year === 1 && month.month === 1} onClick={() => shiftMonth(-1)}>‹</Button>
-          <h3 aria-live="polite" aria-atomic="true">{monthLabel(month)}</h3>
-          <Button variant="ghost" aria-label="Next month" disabled={month.year === 9999 && month.month === 12} onClick={() => shiftMonth(1)}>›</Button>
-        </div>
-        <div className="ui-calendar__grid" role="grid" aria-label={monthLabel(month)}>
-          <div role="row">{weekdays.map((day) => <span role="columnheader" className="ui-calendar__weekday" key={day} aria-label={day}>{day.slice(0, 2)}</span>)}</div>
-          {Array.from({ length: rows }, (_, row) => <div role="row" key={`week-${row}`}>
-            {cells.slice(row * 7, row * 7 + 7).map((day, column) => {
-              if (!day) return <span role="gridcell" aria-hidden="true" className="ui-calendar__blank" key={`blank-${row}-${column}`} />;
-              const date = { year: month.year, month: month.month, day };
-              const dateValue = formatCalendarDate(date);
-              const isSelected = selected !== null && dateValue === formatCalendarDate(selected);
-              const isToday = dateValue === formatCalendarDate(today);
-              const isFocused = dateValue === formatCalendarDate(focused);
-              return <span role="gridcell" key={day} aria-selected={isSelected}>
-                <button ref={isFocused ? focusedRef : undefined} type="button" tabIndex={isFocused ? 0 : -1} className={`ui-calendar__day${isSelected ? ' is-selected' : ''}${isToday ? ' is-today' : ''}`} aria-label={`${accessibleDateLabel(date)}${isSelected ? ', selected' : ''}${isToday ? ', today' : ''}`} aria-current={isToday ? 'date' : undefined} onKeyDown={(event) => handleKeyDown(event, date)} onClick={() => { onValueChange(dateValue); setOpen(false); }}>{day}</button>
-              </span>;
-            })}
-          </div>)}
-        </div>
-        <div className="ui-calendar__actions">
-          <Button variant="ghost" onClick={() => { onValueChange(''); setOpen(false); }}>Clear</Button>
-          <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-        </div>
-      </div>
-    </Dialog>
-  </div>;
+  return <>
+    <div className="ui-calendar__navigation">
+      <Button variant="ghost" aria-label="Previous month" disabled={month.year === 1 && month.month === 1} onClick={() => shiftMonth(-1)}>‹</Button>
+      <h3 aria-live="polite" aria-atomic="true">{monthLabel(month)}</h3>
+      <Button variant="ghost" aria-label="Next month" disabled={month.year === 9999 && month.month === 12} onClick={() => shiftMonth(1)}>›</Button>
+    </div>
+    <div className="ui-calendar__grid" role="grid" aria-label={monthLabel(month)} aria-multiselectable={rangeEnd !== undefined || undefined}>
+      <div role="row">{weekdays.map((day) => <span role="columnheader" className="ui-calendar__weekday" key={day} aria-label={day}>{day.slice(0, 2)}</span>)}</div>
+      {Array.from({ length: rows }, (_, row) => <div role="row" key={`week-${row}`}>
+        {cells.slice(row * 7, row * 7 + 7).map((day, column) => {
+          if (!day) return <span role="gridcell" aria-hidden="true" className="ui-calendar__blank" key={`blank-${row}-${column}`} />;
+          const date = { year: month.year, month: month.month, day };
+          const dateValue = formatCalendarDate(date);
+          const isSelected = (selected !== null && dateValue === value) || dateValue === rangeEnd;
+          const isBetween = rangeEnd !== undefined && dateValue > value && dateValue < rangeEnd;
+          const isToday = dateValue === formatCalendarDate(today);
+          const isFocused = dateValue === formatCalendarDate(focused);
+          return <span role="gridcell" key={day} aria-selected={isSelected || isBetween} className={isBetween ? 'is-in-range' : undefined}>
+            <button ref={isFocused ? focusedRef : undefined} type="button" tabIndex={isFocused ? 0 : -1} className={`ui-calendar__day${isSelected ? ' is-selected' : ''}${isToday ? ' is-today' : ''}`} aria-label={`${accessibleDateLabel(date)}${isSelected ? ', selected' : ''}${isToday ? ', today' : ''}`} aria-current={isToday ? 'date' : undefined} onKeyDown={(event) => handleKeyDown(event, date)} onClick={() => { setFocused(date); onValueChange(dateValue); }}>{day}</button>
+          </span>;
+        })}
+      </div>)}
+    </div>
+  </>;
 }
