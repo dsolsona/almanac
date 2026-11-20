@@ -3,7 +3,7 @@ import type { AuthContext } from '../auth/client.ts';
 import { LoadingIndicator, PageHeader, Pager, RefreshButton, StatusChip, Toolbar, ToolbarSpacer, resourceRowClick } from '../components/ui/index.ts';
 import type { ServerClock } from '../slos/client.ts';
 import { maintenanceClient, type MaintenancePage as WindowPage, type MaintenanceWindow } from './client.ts';
-import { MaintenanceWindowImpact } from './MaintenanceImpact.tsx';
+import { MaintenanceTime, MaintenanceWindowImpact } from './MaintenanceImpact.tsx';
 import { scopeIDs, scopeLabels } from './ScopePicker.tsx';
 import { MaintenanceLifecycle } from './MaintenanceLifecycle.tsx';
 import { MaintenanceScope } from './MaintenanceScope.tsx';
@@ -12,8 +12,17 @@ import './maintenance.css';
 
 const root = '/maintenance';
 const format = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' });
+const scheduleDate = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeZone: 'UTC' });
 const timeLabel = (time: string) => format.format(new Date(time));
 const errorText = (error: unknown) => error instanceof Error ? error.message : 'The request could not be completed.';
+
+function ScheduleTime({ value }: { value: string }) {
+  const clock = value.slice(11, -1).replace(/\.0+$/, '').replace(/^(\d\d:\d\d):00$/, '$1');
+  return <time dateTime={value} title={value}>
+    <strong>{clock}</strong>
+    <span>{scheduleDate.format(new Date(value))}</span>
+  </time>;
+}
 
 function windowStatus(window: MaintenanceWindow, now: number) {
   if (window.tombstone) return { label: window.operation === 'cancel' ? 'Cancelled' : 'Withdrawn', tone: 'none' } as const;
@@ -155,10 +164,15 @@ function WindowDetail({ id, revision, editing, context }: { id: string; revision
   }, [editing, revision, canEdit, isFuture]);
   if (editing && result && openedForEdit && canEdit) return <ScheduleMaintenance context={context} existing={result} />;
 
-  return <>
+  return <article>
     <PageHeader headingRef={heading} title={window?.title ?? 'Maintenance window'} breadcrumb={{ href: root, label: 'Maintenance', current: window?.title ?? 'Window' }}
+      summary={window && <span className="maintenance-window-status">
+        <StatusChip {...windowStatus(window, now)} />
+        {revision && <span>Viewing revision {window.revision}</span>}
+      </span>}
       actions={<>
-        {!revision && !editing && canEdit && isFuture && <a data-app-route href={`${root}/${id}?edit=1`} className="ui-button ui-button--outline">Edit schedule</a>}
+        {!revision && !editing && canEdit && isFuture && <a data-app-route href={`${root}/${id}?edit=1`} className="ui-button ui-button--primary">Edit schedule</a>}
+        {revision && window && <a data-app-route href={`${root}/${id}`} className="ui-button ui-button--outline">Latest revision</a>}
         {!revision && result && <MaintenanceLifecycle context={context} record={result.value} etag={result.etag} now={now} readNow={() => readWindowClock(result.serverClock)}
           fallbackFocus={heading} onRevisionRead={acceptLifecycleRevision} onUpdated={applyLifecycleUpdate} />}
         <RefreshButton label="Refresh maintenance window" onClick={() => setRefresh(value => value + 1)} />
@@ -167,36 +181,38 @@ function WindowDetail({ id, revision, editing, context }: { id: string; revision
     {editing && result && !isFuture && <p role="status">The window is no longer scheduled. Its current details are shown.</p>}
     {editing && result && !canEdit && <p role="status">An editor or administrator can change the schedule.</p>}
     {!window && !error && <LoadingIndicator label="Loading maintenance window" />}
-    {window && <>
-      <section className="maintenance-panel maintenance-detail" aria-label="Maintenance details">
-        <StatusChip {...windowStatus(window, now)} />
-        <dl>
-          <dt>Starts (UTC)</dt><dd><time dateTime={window.start}>{timeLabel(window.start)}</time></dd>
-          <dt>Ends (UTC)</dt><dd><time dateTime={window.end}>{timeLabel(window.end)}</time></dd>
-          <dt>Reason</dt><dd className="maintenance-reason">{window.reason}</dd>
-          <dt>Scope</dt><dd><MaintenanceScope key={window.revision} scope={window.scope} links /></dd>
+    {window && <div className="maintenance-window-content">
+      <section className="ui-panel maintenance-window-overview" aria-labelledby="maintenance-window-heading">
+        <header><h2 id="maintenance-window-heading">Schedule</h2><span>UTC</span></header>
+        <dl className="maintenance-window-times">
+          <div><dt>Starts</dt><dd><ScheduleTime value={window.start} /></dd></div>
+          <div><dt>Ends</dt><dd><ScheduleTime value={window.end} /></dd></div>
         </dl>
+        <div className="maintenance-window-context">
+          <div><h3>Reason</h3><p className="maintenance-reason">{window.reason}</p></div>
+          <section className="maintenance-window-scope" aria-labelledby="maintenance-window-scope">
+            <h3 id="maintenance-window-scope">Scope</h3>
+            <MaintenanceScope key={window.revision} scope={window.scope} links />
+          </section>
+        </div>
       </section>
       {isFuture
-        ? <section className="maintenance-panel maintenance-detail" aria-labelledby="maintenance-impact-heading">
-          <h2 id="maintenance-impact-heading">Affected SLOs</h2>
+        ? <section className="maintenance-window-impact" aria-labelledby="maintenance-pending-impact">
+          <h2 id="maintenance-pending-impact">Affected SLOs</h2>
           <p className="ui-hint">Recorded SLO participation will appear when the window starts.</p>
         </section>
-        : <div className="maintenance-panel maintenance-detail">
-          <MaintenanceWindowImpact key={`${window.revision}:${refresh}`} id={window.id} revision={window.revision} />
-        </div>}
-      <section className="maintenance-panel maintenance-detail" aria-labelledby="maintenance-history-heading">
-        <h2 id="maintenance-history-heading">Revision history</h2>
-        <p>Revision {window.revision} · <time dateTime={window.updated_at}>{timeLabel(window.updated_at)} UTC</time></p>
-        <nav aria-label="Maintenance revisions" className="maintenance-history-links">
+        : <MaintenanceWindowImpact key={`${window.revision}:${refresh}`} id={window.id} revision={window.revision} />}
+      <footer className="maintenance-window-footer">
+        <details className="maintenance-disclosure">
+          <summary>Revision history</summary>
+          <p>Revision {window.revision} · <MaintenanceTime value={window.updated_at} /></p>
           {previous !== undefined && previous > 0n && <a data-app-route href={`${root}/${id}?revision=${previous}`}>Previous revision</a>}
-          {revision && <a data-app-route href={`${root}/${id}`}>Latest revision</a>}
-        </nav>
-      </section>
-      {!revision && result && <MaintenanceLifecycle historical context={context} record={window} etag={result.etag} now={now} readNow={() => readWindowClock(result.serverClock)}
-        fallbackFocus={heading} onRevisionRead={acceptLifecycleRevision} onUpdated={applyLifecycleUpdate} />}
-    </>}
-  </>;
+        </details>
+        {!revision && result && <MaintenanceLifecycle historical context={context} record={window} etag={result.etag} now={now} readNow={() => readWindowClock(result.serverClock)}
+          fallbackFocus={heading} onRevisionRead={acceptLifecycleRevision} onUpdated={applyLifecycleUpdate} />}
+      </footer>
+    </div>}
+  </article>;
 }
 
 export function MaintenancePage({ context }: { context: AuthContext }) {

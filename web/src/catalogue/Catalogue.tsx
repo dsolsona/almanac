@@ -3,8 +3,10 @@ import { SliRecentStrip } from '../components/charts/SliRecentStrip.tsx';
 import { OperationalControlsSection } from './OperationalControlsSection.tsx';
 import { AlertPolicyExample } from './AlertPolicyExample.tsx';
 import { AlertOccurrenceExample } from './AlertOccurrenceExample.tsx';
+import { MaintenanceWindowPicker } from '../maintenance/MaintenanceWindowPicker.tsx';
 import { ApplicationShell, Button, DatePicker, Dialog, LoadingIndicator, MeasurementChoiceCards, Panel, QueryEditor, SelectField, StatusBadge, Switch, TextField, ThemeToggle } from '../components/ui/index.ts';
 import '../styles/catalogue.css';
+import '../maintenance/maintenance.css';
 
 const AlertDetailExample = lazy(() => import('./AlertDetailExample.tsx').then(module => ({ default: module.AlertDetailExample })));
 const ChartsSection = lazy(() => import('./ChartsSection.tsx').then((module) => ({ default: module.ChartsSection })));
@@ -48,6 +50,7 @@ export function Catalogue() {
   const [feedback, setFeedback] = useState('No local action yet.');
   const [shellFeedback, setShellFeedback] = useState('This is a local application shell example.');
   const [demoDate, setDemoDate] = useState('2026-10-25');
+  const [demoWindow, setDemoWindow] = useState({ start: '2026-10-25T14:30', end: '2026-10-25T16:00' });
   const [demoQuery, setDemoQuery] = useState('sum(rate(requests_total{status=~"2.."}[1m]))');
   const [chartsOpen, setChartsOpen] = useState(false);
   const [alertDetailOpen, setAlertDetailOpen] = useState(() => window.location.hash.startsWith('#alert-detail'));
@@ -103,7 +106,13 @@ export function Catalogue() {
       <section className="catalogue-section" id="forms" aria-labelledby="forms-heading">
         <div className="section-heading"><p className="eyebrow mono">03 / INPUT</p><h2 id="forms-heading">Form controls</h2><p>Labels stay visible; hints and errors are linked to their controls for assistive technology.</p></div>
         <div className="form-grid">
-          <Panel heading="Text fields"><div className="field-stack"><TextField id="catalogue-name" label="Datasource name" hint="A short name used in navigation." placeholder="Production metrics"/><TextField id="catalogue-invalid" label="Query interval" defaultValue="not a duration" error="Enter a duration such as 30s or 5m."/><TextField id="catalogue-disabled" label="Read-only identifier" value="datasource_01HZXK8T5D9W" disabled onChange={() => undefined}/><TextField id="catalogue-long" label="Long label example — preserve the complete wording at narrow widths" hint="Descriptions can wrap onto additional lines without clipping." placeholder="Type a longer description"/></div></Panel>
+          <Panel heading="Text fields"><div className="field-stack">
+            <TextField id="catalogue-name" label="Datasource name" hint="A short name used in navigation." placeholder="Production metrics"/>
+            <TextField id="catalogue-invalid" label="Query interval" defaultValue="not a duration" error="Enter a duration such as 30s or 5m."/>
+            <TextField id="catalogue-disabled" label="Read-only identifier" value="datasource_01HZXK8T5D9W" disabled onChange={() => undefined}/>
+            <TextField id="catalogue-long" label="Long label example — preserve the complete wording at narrow widths" hint="Descriptions can wrap onto additional lines without clipping." placeholder="Type a longer description"/>
+            <MaintenanceWindowPicker bounds={demoWindow} onChange={setDemoWindow} />
+          </div></Panel>
           <Panel heading="Native select"><div className="field-stack"><SelectField id="catalogue-range" label="Evaluation range" options={[{ value: '', label: 'Choose a range' }, { value: '6h', label: 'Last 6 hours' }, { value: '24h', label: 'Last 24 hours' }, { value: 'custom', label: 'Custom range', disabled: true }]} hint="Choose a local example range."/><SelectField id="catalogue-error-select" label="Data source" options={[{ value: '', label: 'Select a source' }]} error="Choose a source before continuing."/></div></Panel>
         </div>
       </section>

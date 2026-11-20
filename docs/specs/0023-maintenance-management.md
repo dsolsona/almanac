@@ -35,6 +35,9 @@ Each window uses one scope mode:
 
 Use a searchable shared picker for each selected mode. All services needs no picker.
 Show the selected scope separately from the affected SLO count and preview.
+On the window detail page, show the current state, exact UTC bounds and reason
+above the recorded SLO participation table. Show the configured scope separately
+and keep earlier revisions accessible from Revision history.
 
 Resolve service membership at activation and include later joins
 prospectively. For calculation exclusion, coverage consists of complete
@@ -72,7 +75,10 @@ First-version scope details
   `slo_ids` field with an empty sentinel for all services or truncate an
   effective population into that field.
 
-Store exact UTC `[start,end)` bounds. Show the chosen timezone and exact UTC preview.
+Store exact UTC `[start,end)` bounds. The scheduling form applies both endpoints
+from one calendar range with 24-hour UTC times. The duration follows from the
+selected endpoints.
+Show the chosen timezone and exact UTC preview.
 Reject nonexistent/ambiguous local input unless an unambiguous instant is selected.
 Alignment follows SPEC-0016: no silent expansion or invented fractional counts.
 Reason, duration, scope, roles and expected revisions are validated atomically.
@@ -82,7 +88,7 @@ service-scoped historical declaration that needs that grid history to validate i
 
 ### UI presentation
 
-Creation follows Context (title and reason), Scope, then Schedule. Custom duration edits inline with presets. Fleet-scale selection and impact inspection follow AC-08.
+Creation follows Context (title and reason), Scope, then Schedule. Fleet-scale selection and impact inspection follow AC-08.
 
 Use **Without maintenance** for the eligible compliance population and **Including maintenance** for the comparison that restores maintenance events. Explain both choices beside the control. Historical withdrawal is presented as **Include maintenance events…**, with successful and failed events, recalculation and notification consequences explicit in confirmation. Keep this advanced correction separate from the ordinary End early operation.
 
@@ -176,7 +182,7 @@ its persistence/API design is a prerequisite rather than an assumed implementati
 - AC-07: Bound large/all-service writes and activation, including membership/send
   races, restart, invalidation and ordinary page performance acceptance.
 
-- AC-08: Reuse shared Almanac pickers, calendar, duration presets, form, list and chart patterns. Search service/owner or objective context across the full catalogue; bound suggestions and paginate affected-objective inspection. A 50-service fixture must not render 50 checkbox choices or expand the entire affected population into the form.
+- AC-08: Reuse shared Almanac pickers, calendar, form, list and chart patterns. Search service/owner or objective context across the full catalogue; bound suggestions and paginate affected-objective inspection. A 50-service fixture must not render 50 checkbox choices or expand the entire affected population into the form.
 
 ## Implementation dependencies
 

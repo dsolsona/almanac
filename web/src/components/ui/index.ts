@@ -12,7 +12,7 @@ export { ThemeToggle } from './ThemeToggle.tsx';
 export { ThemeChoice } from './ThemeToggle.tsx';
 export { RoleChip } from './RoleChip.tsx';
 export { Switch } from './Switch.tsx';
-export { DatePicker } from './DatePicker.tsx';
+export { Calendar, DatePicker } from './DatePicker.tsx';
 export { LoadingIndicator } from './LoadingIndicator.tsx';
 export { MeasurementChoiceCards } from './MeasurementChoiceCards.tsx';
 export { QueryEditor } from './QueryEditor.tsx';
