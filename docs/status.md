@@ -1,10 +1,9 @@
-Explicit-SLO maintenance merged on 2026-11-18. The next increment adds
-selected services, individually selected SLOs and all services as three
-scope choices, with prospective membership and suppression of new in-Almanac
-alert occurrences. [SPEC-0023](specs/0023-maintenance-management.md) and
-[ADR-0053](adr/0053-service-maintenance-workflow.md) record the accepted
-contract. [Plan 0046](plans/0046-maintenance-management.md) records implementation
-dependencies. Progress-only visuals remain accessible through the review PRs.
+Scoped maintenance merged on 2026-11-18 at `779c2e8`. Editors can schedule
+selected services, individual SLOs or all services, preview affected objectives,
+and inspect recorded participation on SLO charts. Calculations omit eligible
+maintenance observations, and maintenance suppresses new in-Almanac alert
+occurrences for the affected SLOs. [F4-T62](tasks/F4-T62.md) records verification
+and links the design evidence from CI.
 
 Alert review correction, 2026-11-17: [PR #129](https://github.com/dsolsona/almanac/pull/129)
 has one valid CodeRabbit finding: identical successive success notices can inherit
