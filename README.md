@@ -183,6 +183,15 @@ Create requests the latest complete interval after allowing for the source's dat
 delay, so the first saved interval can precede creation. Subsequent queries are
 spread across the configured frequency while retaining complete measurement windows.
 
+After the first live observation, run `make seed-demo-sli SLI=demo RANGE=7d`
+with the SLI's resource name. Choose `1d`, `7d`, `14d`, or `30d`. The
+command writes synthetic counts only into absent, settled intervals within
+the current SLI definition's valid dates and prints the effective range and
+insert count. Existing observations and definition dates are preserved.
+Linked SLOs recalculate asynchronously using their existing evaluation dates.
+A newly created SLI or SLO therefore has less eligible history than the
+requested range. Use this fixture only for local demo data.
+
 When updating this code, rebuild the app with `make run`, then stop the attached
 local agent with Ctrl-C and start it again with `make agent` to use the updated
 agent binary. The launcher uses the running app's image; starting it replaces any

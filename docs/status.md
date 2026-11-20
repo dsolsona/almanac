@@ -1,3 +1,7 @@
+Local demo history, 2026-11-20. [F4-T63](tasks/F4-T63.md) adds a one-SLI
+fixture command and verifies exact recalculation on an existing SLO. Manual
+backfill and automatic repair remain open in [plan 0047](plans/0047-sli-history-and-recovery.md).
+
 Scoped maintenance merged on 2026-11-18 at `779c2e8`. Editors can schedule
 selected services, individual SLOs or all services, preview affected objectives,
 and inspect recorded participation on SLO charts. Calculations omit eligible

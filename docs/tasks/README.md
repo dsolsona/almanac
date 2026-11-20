@@ -1,3 +1,5 @@
+[F4-T63](F4-T63.md) adds a single-SLI local history fixture and verifies linked SLO recalculation.
+
 [F4-T62](F4-T62.md) delivers service-scoped maintenance, effective intervals and occurrence suppression.
 
 [F4-T59](F4-T59.md) connects editing a future maintenance schedule to the shared form.
