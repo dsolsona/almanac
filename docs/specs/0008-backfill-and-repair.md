@@ -4,7 +4,7 @@
 - Created: 2026-10-24
 - Accepted: 2026-10-24
 - Approval: Crit review `7fd22977b6c0`; approved 2026-10-24 after all comments resolved
-- Implementation: single-SLI Prometheus collection and repair in review in [F4-T64](../tasks/F4-T64.md).
+- Implementation: in progress
 - Related: [SPEC-0003](0003-ingestion-and-recovery.md), [SPEC-0009](0009-agent-protocol-and-ownership.md), [ADR-0003](../adr/0003-bounded-buffering-and-historical-isolation.md)
 
 ## Purpose and responsibilities
