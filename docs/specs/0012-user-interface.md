@@ -77,7 +77,9 @@ hour shows exact intervals. Longer ranges render up to 240 cadence-aligned
 buckets of the current measurement revision, ending at the latest due interval
 and clipped to eligibility. A bucket shows the ratio of exact summed good and
 total counts when traffic is present and exposes its coverage and outcomes.
-Empty buckets have no ratio. Inspection reports bucket sums, and the exact
+The trace connects consecutive values with straight segments. Markers appear
+for isolated values and the active sample. Empty buckets have no ratio.
+Inspection reports bucket sums, and the exact
 interval table remains independently paginated.
 
 ### Shared foundations before screens

@@ -138,7 +138,7 @@ test('define an SLI and see its first collected interval', async ({ page }) => {
 
 test('inspect exact SLI measurements in both themes and at mobile width',async({page},testInfo)=>{
   await page.goto(`/slis/${sliID}`);
-  await expect(page.locator('.chart-point').first()).toBeVisible();
+  await expect(page.locator('.sli-measurement-svg .line, .sli-measurement-svg .chart-point').first()).toBeVisible();
   await expect(page.locator('#sli-intervals')).not.toHaveAttribute('open','');
   const resource=await expectOk(api(page,'GET',`/api/v1/slis/${sliID}`));
   expect(resource.body.latest_observation.good_count).toBe('99');
@@ -149,12 +149,12 @@ test('inspect exact SLI measurements in both themes and at mobile width',async({
     await page.evaluate(theme=>localStorage.setItem('almanac-theme',theme),theme);
     await page.reload();
     await expect(page.locator('.sli-measurement-summary > div:first-child dd')).toHaveText('99.00%');
-    await expect(page.locator('.chart-point').first()).toBeVisible();
+    await expect(page.locator('.sli-measurement-svg .line, .sli-measurement-svg .chart-point').first()).toBeVisible();
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
     const chart=page.getByRole('group',{name:/Interactive measurements/});
     await chart.focus();await page.keyboard.press('End');
     // Settling leaves recent slots uncollected; navigate to an actual collected point.
-    const observedIndex=Number(await page.locator('.chart-point').last().getAttribute('data-interval'));
+    const observedIndex=Number(await page.locator('.interval-state.observed').last().getAttribute('data-interval'));
     const intervalCount=await page.locator('.interval-state').count();
     for(let i=intervalCount-1;i>observedIndex;i--)await page.keyboard.press('ArrowLeft');
     await expect(page.getByRole('tooltip')).toContainText('99.00%');
@@ -170,7 +170,7 @@ test('inspect exact SLI measurements in both themes and at mobile width',async({
       await ranges.getByRole('radio', {name: period, exact: true}).click();
       expect((await response).ok()).toBe(true);
       await expect(page.locator('.sli-measurement-summary > div:nth-child(2) dd')).toHaveText('99.00%');
-      await expect(page.locator('.chart-point').first()).toBeVisible();
+      await expect(page.locator('.sli-measurement-svg .line, .sli-measurement-svg .chart-point').first()).toBeVisible();
       expect(await page.locator('.interval-state').count()).toBeLessThanOrEqual(240);
       rangeTimings.push(performance.now() - started);
     }

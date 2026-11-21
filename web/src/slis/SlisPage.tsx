@@ -607,6 +607,7 @@ export function SlisPage({ context }: { context: AuthContext }) {
       </section>
       <SliObjectives projection={projection} unavailable={projectionMissing}/>
       <details className="sli-detail-disclosure" id="sli-intervals"><summary>Recent intervals<span>{exactRows.length} inspected · {withoutRatio} without a ratio · exact values</span></summary>
+        {measurementPeriod !== '1h' && historyError && <p className="sli-error" role="alert">{historyError}</p>}
         <div className="sli-interval-filter"><SegmentedControl size="sm" label="Show intervals" value={historyFilter} onChange={setHistoryFilter} options={[{value:'all',label:'All loaded',count:exactRows.length},{value:'problems',label:'Failed & missing',count:problems}]}/><span>Newest first · event counts per interval</span></div>
         {earliest&&<p className="sli-detail-note sli-muted">History before {formatTime(earliest)} is unavailable.</p>}
         {missing.length>0&&<p className="sr-only">Missing intervals: {missing.map(range=>`${formatTime(range.interval_start)} – ${formatTime(range.interval_end)}`).join('; ')}</p>}

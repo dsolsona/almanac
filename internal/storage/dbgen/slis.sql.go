@@ -56,6 +56,28 @@ func (q *Queries) AdvanceSliLastAttemptedInterval(ctx context.Context, arg Advan
 }
 
 const bucketSliMeasurements = `-- name: BucketSliMeasurements :many
+WITH outcomes AS (
+    SELECT c.interval_start, c.outcome, c.good_count, c.total_count
+    FROM public.almanac_sli_observations c
+    WHERE c.sli_id = $3 AND c.measurement_revision = $4
+      AND c.interval_start >= $5::timestamptz
+      AND c.interval_start < $2::timestamptz
+    UNION ALL
+    SELECT latest.interval_start, latest.outcome, NULL::numeric, NULL::numeric
+    FROM (
+        SELECT DISTINCT ON (a.interval_start) a.interval_start, a.outcome
+        FROM public.almanac_sli_execution_attempts a
+        WHERE a.sli_id = $3 AND a.measurement_revision = $4
+          AND a.interval_start >= $5::timestamptz
+          AND a.interval_start < $2::timestamptz
+          AND NOT EXISTS (
+              SELECT 1 FROM public.almanac_sli_observations c
+              WHERE c.sli_id = a.sli_id AND c.measurement_revision = a.measurement_revision
+                AND c.interval_start = a.interval_start
+          )
+        ORDER BY a.interval_start DESC, a.recorded_at DESC, a.execution_id DESC
+    ) latest
+)
 SELECT date_bin(make_interval(secs => $1::double precision),
                 interval_start, $2::timestamptz)::timestamptz AS bucket_start,
        coalesce(sum(good_count)::text, '')::text AS good,
@@ -65,10 +87,7 @@ SELECT date_bin(make_interval(secs => $1::double precision),
        count(*) FILTER (WHERE outcome = 'complete_empty') AS known_empty,
        count(*) FILTER (WHERE outcome = 'failed') AS failed,
        count(*) FILTER (WHERE outcome = 'incomplete') AS incomplete
-FROM public.almanac_sli_observations
-WHERE sli_id = $3 AND measurement_revision = $4
-  AND interval_start >= $5::timestamptz
-  AND interval_start < $2::timestamptz
+FROM outcomes
 GROUP BY 1
 ORDER BY 1
 `

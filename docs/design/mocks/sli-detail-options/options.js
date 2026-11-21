@@ -44,7 +44,7 @@ function graph(large = false, volume = false, states = false) {
     ${[100, 98, 96, 94, 92].map(value => `<line class="grid" x1="${left}" x2="${right}" y1="${y(value)}" y2="${y(value)}"/><text x="35" y="${y(value) + 4}" text-anchor="end">${value}%</text>`).join('')}
     ${rows.map((row, i) => row.outcome === 'observed' ? '' : `<rect class="gap" x="${x(i) - markWidth / 2}" y="${top}" width="${markWidth}" height="${bottom - top}"/>`).join('')}
     ${segments.map(points => `<path class="area" d="M${points[0][0]},${bottom} ${points.map(([px, py]) => `L${px},${py}`).join(' ')} L${points.at(-1)[0]},${bottom} Z"/><path class="line" d="${points.map(([px, py], i) => `${i ? 'L' : 'M'}${px},${py}`).join(' ')}"/>`).join('')}
-    ${states ? rows.map((row, i) => row.good === null ? '' : `<circle class="chart-point" data-point="${i}" cx="${x(i)}" cy="${y(100 * row.good / row.total)}" r="2.5"/>`).join('') : ''}
+    ${states ? rows.map((row, i) => row.good === null || rows[i - 1]?.good != null || rows[i + 1]?.good != null ? '' : `<circle class="chart-point" cx="${x(i)}" cy="${y(100 * row.good / row.total)}" r="2.5"/>`).join('') : ''}
     ${volume ? `<text x="${left}" y="${bottom + 23}">${mobile ? 'Requests · 2,000 / minute' : 'Total requests · 2,000 per observed minute'}</text>${rows.map((row, i) => row.outcome === 'observed' ? `<rect class="volume" x="${x(i) - markWidth / 2}" y="${bottom + 34}" width="${markWidth}" height="26"/>` : '').join('')}` : ''}
     ${states ? `<g class="interval-states"><text x="${left}" y="${bottom + 22}">${mobile ? 'Collection · one square / min' : 'Collection · one square per minute'}</text>${rows.map((row, i) => { const size = Math.min(12, markWidth); return `<rect class="interval-state ${row.outcome}" x="${x(i) - size / 2}" y="${bottom + 31}" width="${size}" height="${size}"><title>${row.start}–${row.end} UTC · ${row.outcome === 'failed' ? 'Query error' : row.outcome === 'missing' ? 'Missing' : 'Observed'}${row.good === null ? ' · no ratio' : ` · ${ratio(row.good, row.total)}`}</title></rect>`; }).join('')}</g>` : ''}
     ${states ? `<g class="inspection-cursor" data-left="${left}" data-right="${right}" hidden><line class="inspection-line" y1="${top}" y2="${bottom + 43}"/><circle class="active-dot" r="5"/></g>` : ''}
@@ -155,22 +155,22 @@ function inspectInterval(frame, index, clientY) {
   const row = rows[index];
   frame.dataset.index = index;
   const cursor = frame.querySelector('.inspection-cursor');
-  const point = frame.querySelector(`[data-point="${index}"]`);
   const left = Number(cursor.dataset.left), right = Number(cursor.dataset.right);
   const x = left + index * (right - left) / (rows.length - 1);
   cursor.removeAttribute('hidden');
   cursor.querySelector('line').setAttribute('x1', x);
   cursor.querySelector('line').setAttribute('x2', x);
   const dot = cursor.querySelector('circle');
-  dot.toggleAttribute('hidden', !point);
-  if (point) { dot.setAttribute('cx', point.getAttribute('cx')); dot.setAttribute('cy', point.getAttribute('cy')); }
+  const pointY = row.good === null ? null : 18 + (100 - 100 * row.good / row.total) / 8 * (222 - 18);
+  dot.toggleAttribute('hidden', pointY === null);
+  if (pointY !== null) { dot.setAttribute('cx', x); dot.setAttribute('cy', pointY); }
   const label = row.outcome === 'observed' ? 'Observed' : row.outcome === 'failed' ? 'Query error' : 'Missing';
   const tooltip = frame.querySelector('.chart-tooltip');
   tooltip.innerHTML = `<p class="small">11 Nov 2026 · ${row.start}–${row.end} UTC</p><p class="tooltip-result">${row.good === null ? 'No ratio available' : ratio(row.good, row.total)}</p><p>${status(row.outcome === 'observed' ? 'good' : row.outcome === 'failed' ? 'warn' : 'none', label)}</p>${row.good === null ? `<p class="tooltip-reason">${row.outcome === 'failed' ? 'Good query timed out' : 'No observation received'}. Counts are unknown.</p>` : `<dl><div><dt>Good</dt><dd>${format(row.good)}</dd></div><div><dt>Total</dt><dd>${format(row.total)}</dd></div><div><dt>Unsuccessful</dt><dd>${format(row.total - row.good)}</dd></div></dl>`}`;
   tooltip.hidden = false;
   const bounds = frame.getBoundingClientRect();
   const svg = frame.querySelector('svg');
-  const position = svg.createSVGPoint(); position.x = x; position.y = point ? Number(point.getAttribute('cy')) : 100;
+  const position = svg.createSVGPoint(); position.x = x; position.y = pointY ?? 100;
   const screen = position.matrixTransform(svg.getScreenCTM());
   tooltip.style.left = `${Math.max(0, Math.min(screen.x - bounds.left + 16, bounds.width - tooltip.offsetWidth))}px`;
   const anchorY = (clientY ?? screen.y) - bounds.top;
