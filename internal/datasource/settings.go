@@ -39,17 +39,18 @@ type TLSSettings struct {
 }
 
 type Settings struct {
-	Name                   string      `json:"name"`
-	DisplayName            string      `json:"display_name"`
-	Provider               string      `json:"provider"`
-	ConfigurationFormat    string      `json:"configuration_format"`
-	Endpoint               string      `json:"endpoint"`
-	TLS                    TLSSettings `json:"tls"`
-	AuthenticationMode     string      `json:"authentication_mode"`
-	AuthenticationUser     string      `json:"authentication_username,omitempty"`
-	PollingIntervalSeconds int         `json:"polling_interval_seconds"`
-	SettlingDelaySeconds   int         `json:"settling_delay_seconds"`
-	AgentID                string      `json:"agent_id"`
+	Name                    string      `json:"name"`
+	DisplayName             string      `json:"display_name"`
+	Provider                string      `json:"provider"`
+	ConfigurationFormat     string      `json:"configuration_format"`
+	Endpoint                string      `json:"endpoint"`
+	TLS                     TLSSettings `json:"tls"`
+	AuthenticationMode      string      `json:"authentication_mode"`
+	AuthenticationUser      string      `json:"authentication_username,omitempty"`
+	PollingIntervalSeconds  int         `json:"polling_interval_seconds"`
+	SettlingDelaySeconds    int         `json:"settling_delay_seconds"`
+	HistoricalRetentionDays *int        `json:"historical_retention_days,omitempty"`
+	AgentID                 string      `json:"agent_id"`
 }
 
 func DefaultSettings(name, displayName, endpoint, agentID string) Settings {
@@ -68,7 +69,7 @@ func (s Settings) Validate() error {
 		len(s.Endpoint) == 0 || len(s.Endpoint) > MaximumEndpointBytes || prometheus.ValidateEndpoint(s.Endpoint) != nil ||
 		s.PollingIntervalSeconds < MinimumPollingInterval || s.PollingIntervalSeconds > MaximumPollingInterval ||
 		s.SettlingDelaySeconds != PrometheusSettlingDelay || !canonicalUUID(s.AgentID) ||
-		!validAuthenticationMode(s.AuthenticationMode) {
+		(!validAuthenticationMode(s.AuthenticationMode) || s.HistoricalRetentionDays != nil && (*s.HistoricalRetentionDays < 0 || *s.HistoricalRetentionDays > 36500)) {
 		return ErrInvalidSettings
 	}
 	u, err := url.Parse(s.Endpoint)
@@ -163,7 +164,11 @@ func validCABundle(value string) bool {
 func Capabilities() []agentprotocol.Capability {
 	result := make([]agentprotocol.Capability, 0, 4)
 	for _, provider := range []string{"prometheus", "victoriatraces", "tempo", "loki"} {
-		result = append(result, agentprotocol.Capability{Provider: provider, ConfigurationFormats: []string{provider + "-http-v1"}, Operations: []string{"collect", "connection_test", "query_preview"}})
+		operations := []string{"collect", "connection_test", "query_preview"}
+		if provider == "prometheus" {
+			operations = append(operations, "backfill")
+		}
+		result = append(result, agentprotocol.Capability{Provider: provider, ConfigurationFormats: []string{provider + "-http-v1"}, Operations: operations})
 	}
 	return result
 }

@@ -39,7 +39,7 @@ feature; mark irrelevant sections as such with a brief reason.
 | [SPEC-0005](0005-openslo-and-resource-model.md) | OpenSLO and resource model | accepted | not started |
 | [SPEC-0006](0006-slo-calculation-and-reporting.md) | SLO calculation and reporting | accepted | not started |
 | [SPEC-0007](0007-storage-and-retention.md) | Storage and retention | accepted | not started |
-| [SPEC-0008](0008-backfill-and-repair.md) | Backfill and repair | accepted | not started |
+| [SPEC-0008](0008-backfill-and-repair.md) | Backfill and repair | accepted | Single-SLI Prometheus workflow in review |
 | [SPEC-0009](0009-agent-protocol-and-ownership.md) | Agent protocol and ownership | accepted | not started |
 | [SPEC-0010](0010-api-and-cli.md) | API and CLI | accepted | not started |
 | [SPEC-0011](0011-alerting-and-notifications.md) | Alerting and notifications | accepted | not started |

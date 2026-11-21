@@ -37,7 +37,8 @@ WHERE grant_row.agent_id = sqlc.arg(agent_id)
   );
 
 -- name: ActivateDatasourceAgent :one
-UPDATE public.almanac_datasources SET agent_id = $2, version = version + 1, updated_at = $3, assignment_configuration_revision = $4
+UPDATE public.almanac_datasources SET agent_id = $2, version = version + 1,
+    historical_configuration_version = historical_configuration_version + 1, updated_at = $3, assignment_configuration_revision = $4
 WHERE id = $1 AND version < 9223372036854775807 RETURNING *;
 
 -- name: LockDatasourceReassignmentAgents :many

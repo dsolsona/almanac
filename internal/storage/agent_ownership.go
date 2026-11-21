@@ -418,11 +418,15 @@ func RenewAgentOwnershipWithHeartbeat(ctx context.Context, databaseURL, credenti
 }
 
 func beginAgentOwnershipTransaction(ctx context.Context, databaseURL string, credentialUUID pgtype.UUID, verifier [32]byte, runtimes ...*Runtime) (*agentOwnershipTransaction, error) {
+	return beginAgentOwnershipTraffic(ctx, databaseURL, credentialUUID, verifier, LiveTraffic, runtimes...)
+}
+
+func beginAgentOwnershipTraffic(ctx context.Context, databaseURL string, credentialUUID pgtype.UUID, verifier [32]byte, traffic TrafficClass, runtimes ...*Runtime) (*agentOwnershipTransaction, error) {
 	runtime, err := runtimeOption(runtimes)
 	if err != nil {
 		return nil, err
 	}
-	conn, err := acquireConnection(ctx, databaseURL, runtime, LiveTraffic)
+	conn, err := acquireConnection(ctx, databaseURL, runtime, traffic)
 	if err != nil {
 		return nil, err
 	}

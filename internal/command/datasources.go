@@ -422,7 +422,17 @@ func datasourceUUID(id any) string {
 
 func validDatasourceWriteInput(data []byte) bool {
 	var value map[string]jsontext.Value
-	if json.Unmarshal(data, &value) != nil || !exactFields(value, "name", "display_name", "provider", "configuration_format", "endpoint", "tls", "authentication", "polling_interval_seconds", "agent_id") {
+	if json.Unmarshal(data, &value) != nil {
+		return false
+	}
+	if raw, exists := value["historical_retention_days"]; exists {
+		var retention int
+		if json.Unmarshal(raw, &retention) != nil || retention < 0 || retention > 36500 {
+			return false
+		}
+		delete(value, "historical_retention_days")
+	}
+	if !exactFields(value, "name", "display_name", "provider", "configuration_format", "endpoint", "tls", "authentication", "polling_interval_seconds", "agent_id") {
 		return false
 	}
 	var tlsValue, authValue map[string]jsontext.Value

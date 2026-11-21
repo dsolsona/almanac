@@ -1739,6 +1739,60 @@ func (e SliFreshness) Valid() bool {
 	}
 }
 
+// Defines values for SliBackfillJobState.
+const (
+	SliBackfillJobStateCancelled         SliBackfillJobState = "cancelled"
+	SliBackfillJobStateCompleted         SliBackfillJobState = "completed"
+	SliBackfillJobStateCompletedWithGaps SliBackfillJobState = "completed-with-gaps"
+	SliBackfillJobStateQueued            SliBackfillJobState = "queued"
+	SliBackfillJobStateRunning           SliBackfillJobState = "running"
+)
+
+// Valid indicates whether the value is a known member of the SliBackfillJobState enum.
+func (e SliBackfillJobState) Valid() bool {
+	switch e {
+	case SliBackfillJobStateCancelled:
+		return true
+	case SliBackfillJobStateCompleted:
+		return true
+	case SliBackfillJobStateCompletedWithGaps:
+		return true
+	case SliBackfillJobStateQueued:
+		return true
+	case SliBackfillJobStateRunning:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SliBackfillPlanGapsState.
+const (
+	Automatic        SliBackfillPlanGapsState = "automatic"
+	Eligible         SliBackfillPlanGapsState = "eligible"
+	Manual           SliBackfillPlanGapsState = "manual"
+	OutsideRetention SliBackfillPlanGapsState = "outside-retention"
+	PreviousFailure  SliBackfillPlanGapsState = "previous-failure"
+)
+
+// Valid indicates whether the value is a known member of the SliBackfillPlanGapsState enum.
+func (e SliBackfillPlanGapsState) Valid() bool {
+	switch e {
+	case Automatic:
+		return true
+	case Eligible:
+		return true
+	case Manual:
+		return true
+	case OutsideRetention:
+		return true
+	case PreviousFailure:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SliObservationErrorCode.
 const (
 	SliObservationErrorCodeAssignmentRevoked SliObservationErrorCode = "assignment_revoked"
@@ -3892,21 +3946,24 @@ type CredentialPage struct {
 
 // Datasource defines model for Datasource.
 type Datasource struct {
-	AgentId                openapi_types.UUID             `json:"agent_id"`
-	Authentication         DatasourceAuthentication       `json:"authentication"`
-	ConfigurationFormat    DatasourceConfigurationFormat  `json:"configuration_format"`
-	CreatedAt              time.Time                      `json:"created_at"`
-	DisplayName            string                         `json:"display_name"`
-	Endpoint               string                         `json:"endpoint"`
-	Id                     openapi_types.UUID             `json:"id"`
-	Name                   string                         `json:"name"`
-	PollingIntervalSeconds int                            `json:"polling_interval_seconds"`
-	Provider               DatasourceProvider             `json:"provider"`
-	Reassignment           *DatasourceReassignment        `json:"reassignment,omitempty"`
-	SettlingDelaySeconds   DatasourceSettlingDelaySeconds `json:"settling_delay_seconds"`
-	Tls                    DatasourceTLS                  `json:"tls"`
-	UpdatedAt              time.Time                      `json:"updated_at"`
-	Version                string                         `json:"version"`
+	AgentId             openapi_types.UUID            `json:"agent_id"`
+	Authentication      DatasourceAuthentication      `json:"authentication"`
+	ConfigurationFormat DatasourceConfigurationFormat `json:"configuration_format"`
+	CreatedAt           time.Time                     `json:"created_at"`
+	DisplayName         string                        `json:"display_name"`
+	Endpoint            string                        `json:"endpoint"`
+
+	// HistoricalRetentionDays Source lookback in whole days. Zero clears the configured value.
+	HistoricalRetentionDays *int                           `json:"historical_retention_days,omitempty"`
+	Id                      openapi_types.UUID             `json:"id"`
+	Name                    string                         `json:"name"`
+	PollingIntervalSeconds  int                            `json:"polling_interval_seconds"`
+	Provider                DatasourceProvider             `json:"provider"`
+	Reassignment            *DatasourceReassignment        `json:"reassignment,omitempty"`
+	SettlingDelaySeconds    DatasourceSettlingDelaySeconds `json:"settling_delay_seconds"`
+	Tls                     DatasourceTLS                  `json:"tls"`
+	UpdatedAt               time.Time                      `json:"updated_at"`
+	Version                 string                         `json:"version"`
 }
 
 // DatasourceConfigurationFormat defines model for Datasource.ConfigurationFormat.
@@ -3964,14 +4021,17 @@ type DatasourceWrite struct {
 	} `json:"authentication"`
 
 	// CancelReassignment Update-only cancellation intent. Requires a matching pending reassignment to the requested source agent; returns 409 if it already completed.
-	CancelReassignment     *bool                              `json:"cancel_reassignment,omitempty"`
-	ConfigurationFormat    DatasourceWriteConfigurationFormat `json:"configuration_format"`
-	DisplayName            string                             `json:"display_name"`
-	Endpoint               string                             `json:"endpoint"`
-	Name                   string                             `json:"name"`
-	PollingIntervalSeconds int                                `json:"polling_interval_seconds"`
-	Provider               DatasourceWriteProvider            `json:"provider"`
-	Tls                    DatasourceTLS                      `json:"tls"`
+	CancelReassignment  *bool                              `json:"cancel_reassignment,omitempty"`
+	ConfigurationFormat DatasourceWriteConfigurationFormat `json:"configuration_format"`
+	DisplayName         string                             `json:"display_name"`
+	Endpoint            string                             `json:"endpoint"`
+
+	// HistoricalRetentionDays Source lookback in whole days. Zero clears the configured value.
+	HistoricalRetentionDays *int                    `json:"historical_retention_days,omitempty"`
+	Name                    string                  `json:"name"`
+	PollingIntervalSeconds  int                     `json:"polling_interval_seconds"`
+	Provider                DatasourceWriteProvider `json:"provider"`
+	Tls                     DatasourceTLS           `json:"tls"`
 }
 
 // DatasourceWriteAuthenticationMode defines model for DatasourceWrite.Authentication.Mode.
@@ -4706,6 +4766,70 @@ type SliCollectionProgress string
 
 // SliFreshness defines model for Sli.Freshness.
 type SliFreshness string
+
+// SliBackfillAdmission defines model for SliBackfillAdmission.
+type SliBackfillAdmission struct {
+	ChunkCount int                 `json:"chunk_count"`
+	End        time.Time           `json:"end"`
+	Id         *openapi_types.UUID `json:"id,omitempty"`
+	Plan       *SliBackfillPlan    `json:"plan,omitempty"`
+	Start      time.Time           `json:"start"`
+}
+
+// SliBackfillJob defines model for SliBackfillJob.
+type SliBackfillJob struct {
+	Automatic bool `json:"automatic"`
+
+	// CanonicalConflict Historical counts differed from an existing canonical observation.
+	CanonicalConflict  *bool               `json:"canonical_conflict,omitempty"`
+	Chunks             int                 `json:"chunks"`
+	Committed          int                 `json:"committed"`
+	End                time.Time           `json:"end"`
+	Gaps               int                 `json:"gaps"`
+	Id                 openapi_types.UUID  `json:"id"`
+	RecoveredIntervals *int                `json:"recovered_intervals,omitempty"`
+	RequestedIntervals *int                `json:"requested_intervals,omitempty"`
+	Start              time.Time           `json:"start"`
+	State              SliBackfillJobState `json:"state"`
+}
+
+// SliBackfillJobState defines model for SliBackfillJob.State.
+type SliBackfillJobState string
+
+// SliBackfillPlan defines model for SliBackfillPlan.
+type SliBackfillPlan struct {
+	AutomaticIntervals      int `json:"automatic_intervals"`
+	CadenceSeconds          int `json:"cadence_seconds"`
+	ChunkCount              int `json:"chunk_count"`
+	CoveredIntervals        int `json:"covered_intervals"`
+	DatasourceRetentionDays int `json:"datasource_retention_days"`
+	EligibleIntervals       int `json:"eligible_intervals"`
+	GapCount                int `json:"gap_count"`
+	Gaps                    []struct {
+		End       time.Time                `json:"end"`
+		Intervals int                      `json:"intervals"`
+		Start     time.Time                `json:"start"`
+		State     SliBackfillPlanGapsState `json:"state"`
+	} `json:"gaps"`
+	ManualIntervals           int       `json:"manual_intervals"`
+	MissingIntervals          int       `json:"missing_intervals"`
+	OutsideRetentionIntervals int       `json:"outside_retention_intervals"`
+	PreviousFailureIntervals  int       `json:"previous_failure_intervals"`
+	RecoveryStart             time.Time `json:"recovery_start"`
+}
+
+// SliBackfillPlanGapsState defines model for SliBackfillPlan.Gaps.State.
+type SliBackfillPlanGapsState string
+
+// SliBackfillRequest defines model for SliBackfillRequest.
+type SliBackfillRequest struct {
+	End     time.Time `json:"end"`
+	Preview bool      `json:"preview"`
+
+	// RetryExhausted Administrator-only explicit retry of previously failed intervals in the requested range.
+	RetryExhausted *bool     `json:"retry_exhausted,omitempty"`
+	Start          time.Time `json:"start"`
+}
 
 // SliCreateRequest defines model for SliCreateRequest.
 type SliCreateRequest struct {
@@ -6001,6 +6125,11 @@ type PatchSliMetadataParams struct {
 	IfMatch SliIfMatch `json:"If-Match"`
 }
 
+// RequestSliBackfillParams defines parameters for RequestSliBackfill.
+type RequestSliBackfillParams struct {
+	IdempotencyKey string `json:"Idempotency-Key"`
+}
+
 // GetSliMeasurementsParams defines parameters for GetSliMeasurements.
 type GetSliMeasurementsParams struct {
 	Period GetSliMeasurementsParamsPeriod `form:"period" json:"period"`
@@ -6281,6 +6410,9 @@ type CreateSliJSONRequestBody = SliCreateRequest
 
 // PatchSliMetadataJSONRequestBody defines body for PatchSliMetadata for application/json ContentType.
 type PatchSliMetadataJSONRequestBody = SliMetadataWrite
+
+// RequestSliBackfillJSONRequestBody defines body for RequestSliBackfill for application/json ContentType.
+type RequestSliBackfillJSONRequestBody = SliBackfillRequest
 
 // CreateSloJSONRequestBody defines body for CreateSlo for application/json ContentType.
 type CreateSloJSONRequestBody = SloCreateRequest
@@ -7486,6 +7618,36 @@ type ClientInterface interface {
 	//
 	// Corresponds with PATCH /api/v1/slis/{sli_id} (the `PatchSliMetadata` operationId).
 	PatchSliMetadata(ctx context.Context, sliId SliId, params *PatchSliMetadataParams, body PatchSliMetadataJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListSliBackfills Read the twenty most recent historical collection jobs
+	//
+	// Corresponds with GET /api/v1/slis/{sli_id}/backfills (the `ListSliBackfills` operationId).
+	ListSliBackfills(ctx context.Context, sliId SliId, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RequestSliBackfillWithBody Preview or request historical collection for one SLI
+	//
+	// Requires an Origin matching the configured public origin.
+	//
+	// Takes any type of body and a specified content type.
+	//
+	// Corresponds with POST /api/v1/slis/{sli_id}/backfills (the `RequestSliBackfill` operationId).
+	RequestSliBackfillWithBody(ctx context.Context, sliId SliId, params *RequestSliBackfillParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RequestSliBackfill Preview or request historical collection for one SLI
+	//
+	// Requires an Origin matching the configured public origin.
+	//
+	// Takes a body of the `application/json` content type.
+	//
+	// Corresponds with POST /api/v1/slis/{sli_id}/backfills (the `RequestSliBackfill` operationId).
+	RequestSliBackfill(ctx context.Context, sliId SliId, params *RequestSliBackfillParams, body RequestSliBackfillJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CancelSliBackfill Cancel outstanding chunks for a historical collection job
+	//
+	// Requires an Origin matching the configured public origin.
+	//
+	// Corresponds with DELETE /api/v1/slis/{sli_id}/backfills/{job_id} (the `CancelSliBackfill` operationId).
+	CancelSliBackfill(ctx context.Context, sliId SliId, jobId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetSliMeasurements Read a bounded series for the SLI Measurements chart
 	//
@@ -9719,6 +9881,76 @@ func (c *Client) PatchSliMetadataWithBody(ctx context.Context, sliId SliId, para
 // Corresponds with PATCH /api/v1/slis/{sli_id} (the `PatchSliMetadata` operationId).
 func (c *Client) PatchSliMetadata(ctx context.Context, sliId SliId, params *PatchSliMetadataParams, body PatchSliMetadataJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPatchSliMetadataRequest(c.Server, sliId, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// ListSliBackfills Read the twenty most recent historical collection jobs
+//
+// Corresponds with GET /api/v1/slis/{sli_id}/backfills (the `ListSliBackfills` operationId).
+func (c *Client) ListSliBackfills(ctx context.Context, sliId SliId, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListSliBackfillsRequest(c.Server, sliId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RequestSliBackfillWithBody Preview or request historical collection for one SLI
+//
+// Requires an Origin matching the configured public origin.
+//
+// Takes any type of body and a specified content type.
+//
+// Corresponds with POST /api/v1/slis/{sli_id}/backfills (the `RequestSliBackfill` operationId).
+func (c *Client) RequestSliBackfillWithBody(ctx context.Context, sliId SliId, params *RequestSliBackfillParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRequestSliBackfillRequestWithBody(c.Server, sliId, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// RequestSliBackfill Preview or request historical collection for one SLI
+//
+// Requires an Origin matching the configured public origin.
+//
+// Takes a body of the `application/json` content type.
+//
+// Corresponds with POST /api/v1/slis/{sli_id}/backfills (the `RequestSliBackfill` operationId).
+func (c *Client) RequestSliBackfill(ctx context.Context, sliId SliId, params *RequestSliBackfillParams, body RequestSliBackfillJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRequestSliBackfillRequest(c.Server, sliId, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// CancelSliBackfill Cancel outstanding chunks for a historical collection job
+//
+// Requires an Origin matching the configured public origin.
+//
+// Corresponds with DELETE /api/v1/slis/{sli_id}/backfills/{job_id} (the `CancelSliBackfill` operationId).
+func (c *Client) CancelSliBackfill(ctx context.Context, sliId SliId, jobId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCancelSliBackfillRequest(c.Server, sliId, jobId)
 	if err != nil {
 		return nil, err
 	}
@@ -14854,6 +15086,141 @@ func NewPatchSliMetadataRequestWithBody(server string, sliId SliId, params *Patc
 	return req, nil
 }
 
+// NewListSliBackfillsRequest constructs an http.Request for the ListSliBackfills method
+func NewListSliBackfillsRequest(server string, sliId SliId) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "sli_id", sliId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/slis/%s/backfills", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewRequestSliBackfillRequest calls the generic RequestSliBackfill builder with application/json body
+func NewRequestSliBackfillRequest(server string, sliId SliId, params *RequestSliBackfillParams, body RequestSliBackfillJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewRequestSliBackfillRequestWithBody(server, sliId, params, "application/json", bodyReader)
+}
+
+// NewRequestSliBackfillRequestWithBody constructs an http.Request for the RequestSliBackfill method, with any body, and a specified content type
+func NewRequestSliBackfillRequestWithBody(server string, sliId SliId, params *RequestSliBackfillParams, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "sli_id", sliId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/slis/%s/backfills", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithOptions("simple", false, "Idempotency-Key", params.IdempotencyKey, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Idempotency-Key", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewCancelSliBackfillRequest constructs an http.Request for the CancelSliBackfill method
+func NewCancelSliBackfillRequest(server string, sliId SliId, jobId openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "sli_id", sliId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "job_id", jobId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/slis/%s/backfills/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetSliMeasurementsRequest constructs an http.Request for the GetSliMeasurements method
 func NewGetSliMeasurementsRequest(server string, sliId SliId, params *GetSliMeasurementsParams) (*http.Request, error) {
 	var err error
@@ -17330,6 +17697,40 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with PATCH /api/v1/slis/{sli_id} (the `PatchSliMetadata` operationId).
 	PatchSliMetadataWithResponse(ctx context.Context, sliId SliId, params *PatchSliMetadataParams, body PatchSliMetadataJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchSliMetadataResponse, error)
+
+	// ListSliBackfillsWithResponse Read the twenty most recent historical collection jobs
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/slis/{sli_id}/backfills (the `ListSliBackfills` operationId).
+	ListSliBackfillsWithResponse(ctx context.Context, sliId SliId, reqEditors ...RequestEditorFn) (*ListSliBackfillsResponse, error)
+
+	// RequestSliBackfillWithBodyWithResponse Preview or request historical collection for one SLI
+	//
+	// Requires an Origin matching the configured public origin.
+	//
+	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/slis/{sli_id}/backfills (the `RequestSliBackfill` operationId).
+	RequestSliBackfillWithBodyWithResponse(ctx context.Context, sliId SliId, params *RequestSliBackfillParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RequestSliBackfillResponse, error)
+
+	// RequestSliBackfillWithResponse Preview or request historical collection for one SLI
+	//
+	// Requires an Origin matching the configured public origin.
+	//
+	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /api/v1/slis/{sli_id}/backfills (the `RequestSliBackfill` operationId).
+	RequestSliBackfillWithResponse(ctx context.Context, sliId SliId, params *RequestSliBackfillParams, body RequestSliBackfillJSONRequestBody, reqEditors ...RequestEditorFn) (*RequestSliBackfillResponse, error)
+
+	// CancelSliBackfillWithResponse Cancel outstanding chunks for a historical collection job
+	//
+	// Requires an Origin matching the configured public origin.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with DELETE /api/v1/slis/{sli_id}/backfills/{job_id} (the `CancelSliBackfill` operationId).
+	CancelSliBackfillWithResponse(ctx context.Context, sliId SliId, jobId openapi_types.UUID, reqEditors ...RequestEditorFn) (*CancelSliBackfillResponse, error)
 
 	// GetSliMeasurementsWithResponse Read a bounded series for the SLI Measurements chart
 	//
@@ -21802,6 +22203,150 @@ func (r PatchSliMetadataResponse) ContentType() string {
 	return ""
 }
 
+type ListSliBackfillsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *[]SliBackfillJob
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r ListSliBackfillsResponse) GetJSON200() *[]SliBackfillJob {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r ListSliBackfillsResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r ListSliBackfillsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r ListSliBackfillsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListSliBackfillsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ListSliBackfillsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type RequestSliBackfillResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *SliBackfillAdmission
+	// JSON202 the response for an HTTP 202 `application/json` response
+	JSON202 *SliBackfillAdmission
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r RequestSliBackfillResponse) GetJSON200() *SliBackfillAdmission {
+	return r.JSON200
+}
+
+// GetJSON202 returns the response for an HTTP 202 `application/json` response
+func (r RequestSliBackfillResponse) GetJSON202() *SliBackfillAdmission {
+	return r.JSON202
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r RequestSliBackfillResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r RequestSliBackfillResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RequestSliBackfillResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RequestSliBackfillResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RequestSliBackfillResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type CancelSliBackfillResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r CancelSliBackfillResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r CancelSliBackfillResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r CancelSliBackfillResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CancelSliBackfillResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r CancelSliBackfillResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type GetSliMeasurementsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -24758,6 +25303,64 @@ func (c *ClientWithResponses) PatchSliMetadataWithResponse(ctx context.Context, 
 		return nil, err
 	}
 	return ParsePatchSliMetadataResponse(rsp)
+}
+
+// ListSliBackfillsWithResponse Read the twenty most recent historical collection jobs
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/slis/{sli_id}/backfills (the `ListSliBackfills` operationId).
+func (c *ClientWithResponses) ListSliBackfillsWithResponse(ctx context.Context, sliId SliId, reqEditors ...RequestEditorFn) (*ListSliBackfillsResponse, error) {
+	rsp, err := c.ListSliBackfills(ctx, sliId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListSliBackfillsResponse(rsp)
+}
+
+// RequestSliBackfillWithBodyWithResponse Preview or request historical collection for one SLI
+//
+// Requires an Origin matching the configured public origin.
+//
+// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/slis/{sli_id}/backfills (the `RequestSliBackfill` operationId).
+func (c *ClientWithResponses) RequestSliBackfillWithBodyWithResponse(ctx context.Context, sliId SliId, params *RequestSliBackfillParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RequestSliBackfillResponse, error) {
+	rsp, err := c.RequestSliBackfillWithBody(ctx, sliId, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRequestSliBackfillResponse(rsp)
+}
+
+// RequestSliBackfillWithResponse Preview or request historical collection for one SLI
+//
+// Requires an Origin matching the configured public origin.
+//
+// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /api/v1/slis/{sli_id}/backfills (the `RequestSliBackfill` operationId).
+func (c *ClientWithResponses) RequestSliBackfillWithResponse(ctx context.Context, sliId SliId, params *RequestSliBackfillParams, body RequestSliBackfillJSONRequestBody, reqEditors ...RequestEditorFn) (*RequestSliBackfillResponse, error) {
+	rsp, err := c.RequestSliBackfill(ctx, sliId, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRequestSliBackfillResponse(rsp)
+}
+
+// CancelSliBackfillWithResponse Cancel outstanding chunks for a historical collection job
+//
+// Requires an Origin matching the configured public origin.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with DELETE /api/v1/slis/{sli_id}/backfills/{job_id} (the `CancelSliBackfill` operationId).
+func (c *ClientWithResponses) CancelSliBackfillWithResponse(ctx context.Context, sliId SliId, jobId openapi_types.UUID, reqEditors ...RequestEditorFn) (*CancelSliBackfillResponse, error) {
+	rsp, err := c.CancelSliBackfill(ctx, sliId, jobId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCancelSliBackfillResponse(rsp)
 }
 
 // GetSliMeasurementsWithResponse Read a bounded series for the SLI Measurements chart
@@ -28564,6 +29167,108 @@ func ParsePatchSliMetadataResponse(rsp *http.Response) (*PatchSliMetadataRespons
 	return response, nil
 }
 
+// ParseListSliBackfillsResponse parses an HTTP response from a ListSliBackfillsWithResponse call
+func ParseListSliBackfillsResponse(rsp *http.Response) (*ListSliBackfillsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListSliBackfillsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []SliBackfillJob
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseRequestSliBackfillResponse parses an HTTP response from a RequestSliBackfillWithResponse call
+func ParseRequestSliBackfillResponse(rsp *http.Response) (*RequestSliBackfillResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RequestSliBackfillResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest SliBackfillAdmission
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest SliBackfillAdmission
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCancelSliBackfillResponse parses an HTTP response from a CancelSliBackfillWithResponse call
+func ParseCancelSliBackfillResponse(rsp *http.Response) (*CancelSliBackfillResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CancelSliBackfillResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case rsp.StatusCode == 204:
+		break // No content-type
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetSliMeasurementsResponse parses an HTTP response from a GetSliMeasurementsWithResponse call
 func ParseGetSliMeasurementsResponse(rsp *http.Response) (*GetSliMeasurementsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -29820,6 +30525,15 @@ type ServerInterface interface {
 	// PatchSliMetadata Update SLI display metadata
 	// (PATCH /api/v1/slis/{sli_id})
 	PatchSliMetadata(w http.ResponseWriter, r *http.Request, sliId SliId, params PatchSliMetadataParams)
+	// ListSliBackfills Read the twenty most recent historical collection jobs
+	// (GET /api/v1/slis/{sli_id}/backfills)
+	ListSliBackfills(w http.ResponseWriter, r *http.Request, sliId SliId)
+	// RequestSliBackfill Preview or request historical collection for one SLI
+	// (POST /api/v1/slis/{sli_id}/backfills)
+	RequestSliBackfill(w http.ResponseWriter, r *http.Request, sliId SliId, params RequestSliBackfillParams)
+	// CancelSliBackfill Cancel outstanding chunks for a historical collection job
+	// (DELETE /api/v1/slis/{sli_id}/backfills/{job_id})
+	CancelSliBackfill(w http.ResponseWriter, r *http.Request, sliId SliId, jobId openapi_types.UUID)
 	// GetSliMeasurements Read a bounded series for the SLI Measurements chart
 	// (GET /api/v1/slis/{sli_id}/measurements)
 	GetSliMeasurements(w http.ResponseWriter, r *http.Request, sliId SliId, params GetSliMeasurementsParams)
@@ -34030,6 +34744,121 @@ func (siw *ServerInterfaceWrapper) PatchSliMetadata(w http.ResponseWriter, r *ht
 	handler.ServeHTTP(w, r)
 }
 
+// ListSliBackfills operation middleware
+func (siw *ServerInterfaceWrapper) ListSliBackfills(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "sli_id" -------------
+	var sliId SliId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "sli_id", r.PathValue("sli_id"), &sliId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sli_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListSliBackfills(w, r, sliId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RequestSliBackfill operation middleware
+func (siw *ServerInterfaceWrapper) RequestSliBackfill(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "sli_id" -------------
+	var sliId SliId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "sli_id", r.PathValue("sli_id"), &sliId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sli_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params RequestSliBackfillParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey string
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RequestSliBackfill(w, r, sliId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CancelSliBackfill operation middleware
+func (siw *ServerInterfaceWrapper) CancelSliBackfill(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "sli_id" -------------
+	var sliId SliId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "sli_id", r.PathValue("sli_id"), &sliId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sli_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "job_id" -------------
+	var jobId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "job_id", r.PathValue("job_id"), &jobId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "job_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CancelSliBackfill(w, r, sliId, jobId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetSliMeasurements operation middleware
 func (siw *ServerInterfaceWrapper) GetSliMeasurements(w http.ResponseWriter, r *http.Request) {
 
@@ -35481,6 +36310,9 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/slis", wrapper.CreateSli)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/slis/{sli_id}", wrapper.GetSli)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/api/v1/slis/{sli_id}", wrapper.PatchSliMetadata)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/slis/{sli_id}/backfills", wrapper.ListSliBackfills)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/slis/{sli_id}/backfills", wrapper.RequestSliBackfill)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/api/v1/slis/{sli_id}/backfills/{job_id}", wrapper.CancelSliBackfill)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/slis/{sli_id}/observations", wrapper.ListSliObservations)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/slis/{sli_id}/measurements", wrapper.GetSliMeasurements)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/maintenance", wrapper.ListMaintenance)

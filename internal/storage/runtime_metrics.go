@@ -22,7 +22,7 @@ import (
 // Labels describe fixed traffic classes and stages, never users, SQL, URLs or
 // objective IDs. Tracing retains no query text or parameters.
 type runtimeMetrics struct {
-	queries           [3]queryMetrics
+	queries           [HistoricalTraffic + 1]queryMetrics
 	sourceKeys        atomic.Uint64
 	extremaBatches    atomic.Uint64
 	preparationErrors [2]atomic.Uint64
@@ -215,8 +215,8 @@ func (r *Runtime) MetricsHandler() http.Handler {
 			}
 			metric(&body, "almanac_ingestion_batch_duration_seconds_bucket", labels+`,le="+Inf"`, sample.count)
 		}
-		for class, name := range [...]string{"live", "interactive", "derived"} {
-			labels := fmt.Sprintf(`class=%q`, name)
+		for class := range r.pools {
+			labels := fmt.Sprintf(`class=%q`, trafficClassName(TrafficClass(class)))
 			if pool := r.pools[class]; pool != nil {
 				stat := pool.Stat()
 				metric(&body, "almanac_db_pool_connections", labels, stat.TotalConns())

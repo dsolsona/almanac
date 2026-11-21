@@ -1,3 +1,9 @@
+Single-SLI history, 2026-11-21. [PR #160](https://github.com/dsolsona/almanac/pull/160)
+includes the local demo fixture and the Prometheus backfill and repair workflow.
+[F4-T64](tasks/F4-T64.md) records the isolated browser evidence, restart recovery,
+and exact linked SLO results. [Plan 0047](plans/0047-sli-history-and-recovery.md)
+tracks the broader historical collection contract.
+
 Scoped maintenance merged on 2026-11-18 at `779c2e8`. Editors can schedule
 selected services, individual SLOs or all services, preview affected objectives,
 and inspect recorded participation on SLO charts. Calculations omit eligible

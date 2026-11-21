@@ -56,6 +56,8 @@ type collectionRunner struct {
 	initialPending    map[string]bool
 	active            map[string]activeCollection
 	activeSources     map[string]int
+	historicalSource  string
+	cancelHistorical  context.CancelFunc
 
 	pending          map[string]*pendingLiveResult
 	pendingOrder     []*pendingLiveResult
@@ -301,7 +303,7 @@ func (r *collectionRunner) nextScheduleDelay() time.Duration {
 		key := collectionKey(current)
 		assignment, exists := r.assignments[current.DatasourceID]
 		grant := measurementGrant(r.lease, current.SLIID, current.MeasurementRevision)
-		if !exists || assignment.DatasourceVersion != current.DatasourceVersion || r.activeSources[current.DatasourceID] >= maxCollectionPerSource || grant == nil {
+		if !exists || assignment.DatasourceVersion != current.DatasourceVersion || r.activeSources[current.DatasourceID] >= r.liveDatasourceCapacity(current.DatasourceID) || grant == nil {
 			continue
 		}
 		if grant.LastAttemptedIntervalEnd != nil && (grant.LastAttemptedIntervalEnd.UnixMicro()%(int64(assignment.PollingIntervalSeconds)*1_000_000) != 0 || grant.LastAttemptedIntervalEnd.After(now.Add(-time.Duration(assignment.SettlingDelaySeconds)*time.Second))) {
@@ -321,6 +323,14 @@ func (r *collectionRunner) nextScheduleDelay() time.Duration {
 		delay = min(delay, max(0, due.Sub(now)))
 	}
 	return delay
+}
+
+// The caller holds r.mu while accounting for live and historical requests.
+func (r *collectionRunner) liveDatasourceCapacity(id string) int {
+	if r.historicalSource == id {
+		return maxCollectionPerSource - 1
+	}
+	return maxCollectionPerSource
 }
 
 func (r *collectionRunner) signalSchedule() {
@@ -421,7 +431,10 @@ func (r *collectionRunner) dispatchDue(ctx context.Context) {
 		}
 		current, assignment, end := item.current, item.assignment, item.end
 		key := collectionKey(current)
-		if r.activeSources[current.DatasourceID] >= maxCollectionPerSource {
+		if r.historicalSource == current.DatasourceID {
+			r.cancelHistorical()
+		}
+		if r.activeSources[current.DatasourceID] >= r.liveDatasourceCapacity(current.DatasourceID) {
 			continue
 		}
 		lease := r.lease
@@ -522,6 +535,14 @@ func (r *collectionRunner) collectionClientLocked(definition collectionDefinitio
 	if source := r.sources[definition.assignment.DatasourceID]; source != nil {
 		return source, nil
 	}
+	source, err := newCollectionSource(definition)
+	if err == nil {
+		r.sources[definition.assignment.DatasourceID] = source
+	}
+	return source, err
+}
+
+func newCollectionSource(definition collectionDefinition) (*prometheus.Client, error) {
 	settings := datasource.Settings{Name: definition.assignment.Name, DisplayName: definition.assignment.Name,
 		Provider: definition.assignment.Provider, ConfigurationFormat: definition.assignment.ConfigurationFormat,
 		Endpoint:           definition.assignment.Endpoint,
@@ -542,7 +563,6 @@ func (r *collectionRunner) collectionClientLocked(definition collectionDefinitio
 	if err != nil {
 		return nil, err
 	}
-	r.sources[definition.assignment.DatasourceID] = source
 	return source, nil
 }
 

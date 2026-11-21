@@ -4,7 +4,7 @@
 - Created: 2026-10-24
 - Accepted: 2026-10-24
 - Approval: Crit review `7fd22977b6c0`; approved 2026-10-24 after all comments resolved
-- Implementation: not started
+- Implementation: in progress
 - Related: [SPEC-0003](0003-ingestion-and-recovery.md), [SPEC-0009](0009-agent-protocol-and-ownership.md), [ADR-0003](../adr/0003-bounded-buffering-and-historical-isolation.md)
 
 ## Purpose and responsibilities
@@ -68,7 +68,8 @@ audit record; ordinary resume cannot reset failed attempts invisibly.
 
 Every 60s the backend scans a bounded page of overdue expected intervals, beginning
 after a five-minute delivery allowance. Check at most 1,000 intervals per pass by
-default and persist the scan cursor. Look back at most 24h per routine scan; a separate
+default and persist the scan cursor. A sweep can spend unused interval budget
+on later SLIs, with at most 32 pages per scan. Look back at most 24h per routine scan; a separate
 bounded historical sweep traverses older retained gaps over time so long outages do
 not leave unexamined holes. Both scans share admission and active-range exclusion.
 
@@ -115,11 +116,54 @@ independently of agent limits.
 - AC-06: Requested/committed/unavailable/failed intervals are distinguishable; a
   partially recovered job never reports full completion.
 
+## Single-SLI Prometheus workflow
+
+An Editor or Administrator opens Historical backfill on the SLI detail page.
+The operator can choose one, seven, fourteen or thirty days, or supply a UTC
+range. Preview shows the aligned, eligible bounds and chunk count before the
+operator confirms a request. Viewers can read the job list. The
+`almanac backfills` CLI has preview, request, list and cancel commands.
+Administrators can include previously failed intervals in a custom range or pass
+`--retry-exhausted` to the CLI preview and request. Admission records the actor
+and retry selection. A change to the datasource's connection, credentials,
+assignment, timing or retention can reopen gaps for its own SLI measurements.
+Display-name changes preserve the existing retries.
+
+The assigned agent claims separately leased work over the agent HTTPS API
+with proof of its current ownership session. Prometheus instant-query chunks
+contain at most 64 intervals and span up to one day. If retention moves while
+work is queued or leased, only expired intervals are excluded.
+Historical observation provenance references the durable chunk. The backend
+accepts observations and commits chunk progress in a single transaction that
+also marks affected source ranges for the normal SLO workers. Existing
+observations and SLO validity dates retain their meaning. Historical empty
+responses without evidence of source availability remain gaps. Available
+intervals in a partial result are stored and the remaining gaps retain their
+retry budget. Conflicting counts are reported and existing coverage is preserved.
+
+The datasource definition can declare historical retention in whole days. An
+unset value means unknown source retention and best-effort recovery. The
+effective recovery limit for both manual and automatic work is the lesser of
+30 days and known datasource retention, further constrained by measurement
+validity. Gap inspection can include older intervals in its selected period
+and identifies them as outside the recovery window. Queue confirmation creates
+the job and the assigned agent starts it when capacity is available.
+
+Preview counts covered, eligible, automatic repair, manual work, outside
+retention and previous failures. Admission rechecks canonical coverage and
+active work under the SLI lock. Covered intervals and intervals already owned
+by another job are skipped. Progress includes the number of recovered
+observations and the number of committed batches.
+
+The Prometheus implementation replays up to 256 settled intervals per chunk.
+The recent and retained repair cursors share a 1,000-interval sweep budget.
+Other providers, historical configuration replay, and multi-SLI admission
+remain outside this increment.
+
 ## Review notes and evidence
 
 - **REVIEW-B01:** Backend chunk planning, scan timing, retry counts and concurrency
   are proposed defaults. They keep state inspectable and survive agent restarts.
 - **REVIEW-B02:** Historical work pauses on disconnect; only live work continues.
   This avoids spending source capacity on history that cannot be delivered.
-- Not implemented. Validate with controllable clocks, crash injection, overlap,
-  cancellation, partial provider history, and simultaneous live/historical load.
+- [F4-T64](../tasks/F4-T64.md) records tested behavior, screenshots and remaining verification.

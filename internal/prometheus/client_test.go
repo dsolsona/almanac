@@ -209,3 +209,22 @@ func TestQueryPreviewRejectsSeriesOutsideDiagnosticLabelBudgets(t *testing.T) {
 		})
 	}
 }
+
+func TestRetryAfterSeconds(t *testing.T) {
+	now := time.Date(2026, 11, 21, 17, 0, 0, 0, time.UTC)
+	for _, test := range []struct {
+		header string
+		want   int
+	}{
+		{"120", 120},
+		{now.Add(90 * time.Second).Format(http.TimeFormat), 90},
+		{now.Add(-time.Minute).Format(http.TimeFormat), 0},
+		{"-1", 0},
+		{"", 0},
+		{"172800", 86400},
+	} {
+		if got := retryAfterSeconds(test.header, now); got != test.want {
+			t.Errorf("Retry-After %q = %d, want %d", test.header, got, test.want)
+		}
+	}
+}

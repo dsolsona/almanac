@@ -76,6 +76,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.ingest(w, r, id)
 		return
 	}
+	if path == "/api/agent/v1/backfills/claim" || path == "/api/agent/v1/backfills/result" {
+		h.backfillAgent(w, r, id, path == "/api/agent/v1/backfills/claim")
+		return
+	}
 	if h.preflight != nil {
 		if err := h.preflight(r.Context()); err != nil {
 			h.writeProblem(w, http.StatusServiceUnavailable, "sli_unavailable", id)
@@ -110,6 +114,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(strings.TrimPrefix(path, prefix), "/")
 	if len(parts) == 1 && canonicalID(parts[0]) {
 		h.detail(w, r, id, proof, parts[0])
+		return
+	}
+	if len(parts) >= 2 && canonicalID(parts[0]) && parts[1] == "backfills" {
+		h.backfillJobs(w, r, id, proof, parts)
 		return
 	}
 	if len(parts) == 2 && canonicalID(parts[0]) && parts[1] == "observations" {

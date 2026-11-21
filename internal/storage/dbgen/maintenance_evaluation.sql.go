@@ -154,7 +154,7 @@ SELECT r.ordinal::integer AS ordinal,o.interval_start,o.outcome,
  o.recorded_at,o.ingestion_generation
 FROM (SELECT unnest($1::timestamptz[]) AS start_at,unnest($2::timestamptz[]) AS end_at,unnest($3::integer[]) AS row_cap,generate_series(1,cardinality($1::timestamptz[])) AS ordinal) r
 CROSS JOIN LATERAL (
- SELECT sli_id, measurement_revision, interval_start, outcome, good_count, total_count, result_digest, error_code, missing_components, execution_id, delivery_id, agent_id, session_generation, configuration_revision, lease_id, agent_created_at, recorded_at, ingestion_generation FROM public.almanac_sli_observations o
+ SELECT sli_id, measurement_revision, interval_start, outcome, good_count, total_count, result_digest, error_code, missing_components, execution_id, delivery_id, agent_id, session_generation, configuration_revision, lease_id, agent_created_at, recorded_at, ingestion_generation, backfill_chunk_id FROM public.almanac_sli_observations o
  WHERE o.sli_id=$4 AND o.measurement_revision=$5 AND o.interval_start>=r.start_at AND o.interval_start<r.end_at
  ORDER BY o.interval_start LIMIT r.row_cap
 ) o ORDER BY r.ordinal,o.interval_start

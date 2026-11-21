@@ -131,6 +131,7 @@ make publish IMAGE_REGISTRY=<prefix>       # multi-architecture images; only whe
 make run                      # build and start the local stack at https://localhost:18088 (alias: make start)
 make credentials              # the one-time initial administrator password
 make agent                    # run a local agent with a pasted credential
+make seed-demo-sli SLI=demo RANGE=7d # fill gaps in one local 99/100 demo SLI
 make loki                     # start only local Loki and wait for readiness
 make vt                       # start only local VictoriaTraces and wait for readiness
 make tempo                    # start only local Tempo and wait for readiness

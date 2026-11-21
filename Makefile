@@ -1,4 +1,4 @@
-.PHONY: loki vt tempo sources-start sources-stop setup shell stop-dev build _enter preview generate bootstrap run start stop logs credentials agent agent-seed images publish test test-integration test-browser test-e2e test-smoke test-perf check verify coverage _test _test_integration _test_browser _coverage _verify_sqlc_generated _verify_generated _report_sizes _ensure_web_assets _disk_check _disk_trim
+.PHONY: loki vt tempo sources-start sources-stop setup shell stop-dev build _enter preview generate bootstrap run start stop logs credentials agent agent-seed seed-demo-sli images publish test test-integration test-browser test-e2e test-smoke test-perf check verify coverage _test _test_integration _test_browser _coverage _verify_sqlc_generated _verify_generated _report_sizes _ensure_web_assets _disk_check _disk_trim
 
 .DEFAULT_GOAL := setup
 
@@ -27,6 +27,7 @@ Development tools
   stop-dev              Remove dev fixtures; keep dependency caches
   agent-seed            Create the reusable local-dev agent credential
   agent                 Run an agent with a privately pasted credential
+  seed-demo-sli         Fill gaps in one local 99/100 demo SLI (SLI=name RANGE=7d)
 
 Testing (automatically enters the development container)
   test                  Formatting, generated code, docs and Go/web unit tests
@@ -209,6 +210,11 @@ bootstrap:
 
 run start:
 	@set -eu; port=$${ALMANAC_PORT:-18088}; case "$$port" in ''|*[!0-9]*) echo 'ALMANAC_PORT must be a decimal port from 1 to 65535' >&2; exit 2;; esac; test "$${#port}" -le 5 || { echo 'ALMANAC_PORT must be a decimal port from 1 to 65535' >&2; exit 2; }; port=$$(printf '%s' "$$port" | sed 's/^0*//'); test -n "$$port" && test "$$port" -gt 0 && test "$$port" -le 65535 || { echo 'ALMANAC_PORT must be a decimal port from 1 to 65535' >&2; exit 2; }; command -v curl >/dev/null 2>&1 || { echo 'curl is required for local startup' >&2; exit 2; }; export ALMANAC_PORT=$$port; docker compose -f compose.yaml build; docker compose -f compose.yaml up -d --wait --wait-timeout 90 --force-recreate app; sh scripts/check-local-readiness.sh; sh scripts/local-dev-agent.sh start; printf '\nAlmanac is ready at https://localhost:%s\nAdmin login: admin\nRetrieve the one-time initial password with: make credentials\n' "$$port"
+
+seed-demo-sli: export ALMANAC_FIXTURE_SLI = $(SLI)
+seed-demo-sli: export ALMANAC_FIXTURE_RANGE = $(RANGE)
+seed-demo-sli:
+	@sh scripts/seed-demo-sli.sh
 
 stop:
 	docker compose -f compose.yaml --profile agent stop
