@@ -100,7 +100,7 @@ func (q *Queries) FindDatasourceReceipt(ctx context.Context, arg FindDatasourceR
 }
 
 const getDatasource = `-- name: GetDatasource :one
-SELECT id, name, display_name, version, provider, configuration_format, endpoint, tls, authentication_mode, authentication_username, password_envelope, password_revision, token_envelope, token_revision, polling_interval_seconds, settling_delay_seconds, agent_id, created_at, updated_at, assignment_configuration_revision, historical_retention_days FROM public.almanac_datasources WHERE id = $1
+SELECT id, name, display_name, version, provider, configuration_format, endpoint, tls, authentication_mode, authentication_username, password_envelope, password_revision, token_envelope, token_revision, polling_interval_seconds, settling_delay_seconds, agent_id, created_at, updated_at, assignment_configuration_revision, historical_configuration_version, historical_retention_days FROM public.almanac_datasources WHERE id = $1
 `
 
 func (q *Queries) GetDatasource(ctx context.Context, id pgtype.UUID) (AlmanacDatasource, error) {
@@ -127,6 +127,7 @@ func (q *Queries) GetDatasource(ctx context.Context, id pgtype.UUID) (AlmanacDat
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.AssignmentConfigurationRevision,
+		&i.HistoricalConfigurationVersion,
 		&i.HistoricalRetentionDays,
 	)
 	return i, err
@@ -200,7 +201,7 @@ INSERT INTO public.almanac_datasources (
     $13, $14, $15,
     $16, $17, $18, $19
 )
-RETURNING id, name, display_name, version, provider, configuration_format, endpoint, tls, authentication_mode, authentication_username, password_envelope, password_revision, token_envelope, token_revision, polling_interval_seconds, settling_delay_seconds, agent_id, created_at, updated_at, assignment_configuration_revision, historical_retention_days
+RETURNING id, name, display_name, version, provider, configuration_format, endpoint, tls, authentication_mode, authentication_username, password_envelope, password_revision, token_envelope, token_revision, polling_interval_seconds, settling_delay_seconds, agent_id, created_at, updated_at, assignment_configuration_revision, historical_configuration_version, historical_retention_days
 `
 
 type InsertDatasourceParams struct {
@@ -269,6 +270,7 @@ func (q *Queries) InsertDatasource(ctx context.Context, arg InsertDatasourcePara
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.AssignmentConfigurationRevision,
+		&i.HistoricalConfigurationVersion,
 		&i.HistoricalRetentionDays,
 	)
 	return i, err
@@ -329,7 +331,7 @@ func (q *Queries) InsertDatasourceReceipt(ctx context.Context, arg InsertDatasou
 }
 
 const listDatasources = `-- name: ListDatasources :many
-SELECT id, name, display_name, version, provider, configuration_format, endpoint, tls, authentication_mode, authentication_username, password_envelope, password_revision, token_envelope, token_revision, polling_interval_seconds, settling_delay_seconds, agent_id, created_at, updated_at, assignment_configuration_revision, historical_retention_days FROM public.almanac_datasources
+SELECT id, name, display_name, version, provider, configuration_format, endpoint, tls, authentication_mode, authentication_username, password_envelope, password_revision, token_envelope, token_revision, polling_interval_seconds, settling_delay_seconds, agent_id, created_at, updated_at, assignment_configuration_revision, historical_configuration_version, historical_retention_days FROM public.almanac_datasources
 WHERE ($1::uuid IS NULL OR agent_id = $1)
   AND (created_at, id) > ($2::timestamptz, $3::uuid)
 ORDER BY created_at, id
@@ -378,6 +380,7 @@ func (q *Queries) ListDatasources(ctx context.Context, arg ListDatasourcesParams
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.AssignmentConfigurationRevision,
+			&i.HistoricalConfigurationVersion,
 			&i.HistoricalRetentionDays,
 		); err != nil {
 			return nil, err
@@ -391,7 +394,7 @@ func (q *Queries) ListDatasources(ctx context.Context, arg ListDatasourcesParams
 }
 
 const lockDatasource = `-- name: LockDatasource :one
-SELECT id, name, display_name, version, provider, configuration_format, endpoint, tls, authentication_mode, authentication_username, password_envelope, password_revision, token_envelope, token_revision, polling_interval_seconds, settling_delay_seconds, agent_id, created_at, updated_at, assignment_configuration_revision, historical_retention_days FROM public.almanac_datasources WHERE id = $1 FOR UPDATE
+SELECT id, name, display_name, version, provider, configuration_format, endpoint, tls, authentication_mode, authentication_username, password_envelope, password_revision, token_envelope, token_revision, polling_interval_seconds, settling_delay_seconds, agent_id, created_at, updated_at, assignment_configuration_revision, historical_configuration_version, historical_retention_days FROM public.almanac_datasources WHERE id = $1 FOR UPDATE
 `
 
 func (q *Queries) LockDatasource(ctx context.Context, id pgtype.UUID) (AlmanacDatasource, error) {
@@ -418,6 +421,7 @@ func (q *Queries) LockDatasource(ctx context.Context, id pgtype.UUID) (AlmanacDa
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.AssignmentConfigurationRevision,
+		&i.HistoricalConfigurationVersion,
 		&i.HistoricalRetentionDays,
 	)
 	return i, err
@@ -454,9 +458,17 @@ SET name = $1, display_name = $2, version = version + 1,
     token_envelope = $11, token_revision = $12,
     polling_interval_seconds = $13,
     settling_delay_seconds = $14, agent_id = $15,
+    historical_configuration_version = historical_configuration_version + CASE WHEN
+      ROW(provider,configuration_format,endpoint,tls,authentication_mode,authentication_username,
+          password_revision,token_revision,polling_interval_seconds,settling_delay_seconds,agent_id,historical_retention_days)
+        IS DISTINCT FROM
+      ROW($3,$4,$5,$6,$7,$8,
+          $10,$12,$13,
+          $14,$15,$16)
+      THEN 1 ELSE 0 END,
     historical_retention_days = $16, updated_at = $17
 WHERE id = $18 AND version = $19
-RETURNING id, name, display_name, version, provider, configuration_format, endpoint, tls, authentication_mode, authentication_username, password_envelope, password_revision, token_envelope, token_revision, polling_interval_seconds, settling_delay_seconds, agent_id, created_at, updated_at, assignment_configuration_revision, historical_retention_days
+RETURNING id, name, display_name, version, provider, configuration_format, endpoint, tls, authentication_mode, authentication_username, password_envelope, password_revision, token_envelope, token_revision, polling_interval_seconds, settling_delay_seconds, agent_id, created_at, updated_at, assignment_configuration_revision, historical_configuration_version, historical_retention_days
 `
 
 type UpdateDatasourceParams struct {
@@ -525,6 +537,7 @@ func (q *Queries) UpdateDatasource(ctx context.Context, arg UpdateDatasourcePara
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.AssignmentConfigurationRevision,
+		&i.HistoricalConfigurationVersion,
 		&i.HistoricalRetentionDays,
 	)
 	return i, err

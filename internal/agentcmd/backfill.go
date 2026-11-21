@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/dsolsona/almanac/internal/prometheus"
 	"github.com/dsolsona/almanac/internal/sli"
 )
 
@@ -67,6 +68,7 @@ func (c *client) backfillRequest(parent context.Context, generation, action stri
 	}
 	req.Header.Set("Authorization", "Bearer "+c.token)
 	req.Header.Set("X-Agent-Session-Generation", generation)
+	req.Header.Set("X-Agent-Session-Proof", c.resume)
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
@@ -122,30 +124,14 @@ func (c *client) executeBackfill(parent context.Context, claim sli.BackfillClaim
 			outcomes = append(outcomes, sli.ExecutionOutcome{})
 			continue
 		}
-		if !c.collections.waitForLiveCapacity(ctx, definition) {
-			result.Failure = "deadline"
-			return result, parent.Err() == nil
+		outcome := c.backfillInterval(ctx, definition, source, end)
+		outcomes = append(outcomes, outcome)
+		if outcome.State == sli.OutcomeFailed && outcome.ErrorCode != "incomplete" {
+			for len(outcomes) < int(count) {
+				outcomes = append(outcomes, outcome)
+			}
+			break
 		}
-		good, err := source.QueryAt(ctx, definition.sli.GoodQuery, end)
-		if err != nil {
-			result.Failure = collectionErrorCode(err)
-			return result, parent.Err() == nil
-		}
-		if !c.collections.waitForLiveCapacity(ctx, definition) {
-			result.Failure = "deadline"
-			return result, parent.Err() == nil
-		}
-		total, err := source.QueryAt(ctx, definition.sli.TotalQuery, end)
-		if err != nil {
-			result.Failure = collectionErrorCode(err)
-			return result, parent.Err() == nil
-		}
-		outcome := collectedOutcomeAt(good, true, good.Class == "incomplete", total, true, total.Class == "incomplete", end)
-		if outcome == nil || outcome.State != sli.OutcomeObserved {
-			result.Failure = "incomplete"
-			return result, true
-		}
-		outcomes = append(outcomes, *outcome)
 	}
 	result.Outcomes = outcomes
 	return result, parent.Err() == nil
@@ -167,23 +153,49 @@ func (r *collectionRunner) backfillDefinition(claim sli.BackfillClaim) (collecti
 	return collectionDefinition{}, false
 }
 
-func (r *collectionRunner) waitForLiveCapacity(ctx context.Context, definition collectionDefinition) bool {
+func (c *client) backfillInterval(ctx context.Context, definition collectionDefinition, source *prometheus.Client, end time.Time) sli.ExecutionOutcome {
+	failed := func(code string) sli.ExecutionOutcome {
+		return sli.ExecutionOutcome{State: sli.OutcomeFailed, ErrorCode: code}
+	}
+	good, err := c.collections.queryBackfill(ctx, definition, source, definition.sli.GoodQuery, end)
+	if err != nil {
+		return failed(collectionErrorCode(err))
+	}
+	total, err := c.collections.queryBackfill(ctx, definition, source, definition.sli.TotalQuery, end)
+	if err != nil {
+		return failed(collectionErrorCode(err))
+	}
+	outcome := collectedOutcomeAt(good, true, good.Class == "incomplete", total, true, total.Class == "incomplete", end)
+	if outcome == nil || outcome.State != sli.OutcomeObserved {
+		return failed("incomplete")
+	}
+	return *outcome
+}
+
+func (r *collectionRunner) queryBackfill(ctx context.Context, definition collectionDefinition, source *prometheus.Client, query string, at time.Time) (prometheus.QueryResult, error) {
+	id := definition.assignment.DatasourceID
 	for ctx.Err() == nil {
 		r.mu.Lock()
-		sameAssignment := r.assignments[definition.assignment.DatasourceID] == definition.assignment
-		ready := r.clockSafe && !r.paused && r.activeSources[definition.assignment.DatasourceID] == 0
+		sameAssignment := r.assignments[id] == definition.assignment
+		ready := r.clockSafe && !r.paused && r.activeSources[id] == 0
+		if sameAssignment && ready {
+			queryCtx, cancel := context.WithCancel(ctx)
+			r.historicalSource, r.cancelHistorical = id, cancel
+			r.mu.Unlock()
+			result, err := source.QueryAt(queryCtx, query, at)
+			cancel()
+			r.mu.Lock()
+			r.historicalSource, r.cancelHistorical = "", nil
+			r.mu.Unlock()
+			return result, err
+		}
 		r.mu.Unlock()
 		if !sameAssignment {
-			return false
+			return prometheus.QueryResult{}, context.Canceled
 		}
-		if ready {
-			return true
-		}
-		if !waitBackfill(ctx, 100*time.Millisecond) {
-			return false
-		}
+		waitBackfill(ctx, 100*time.Millisecond)
 	}
-	return false
+	return prometheus.QueryResult{}, ctx.Err()
 }
 
 func waitBackfill(ctx context.Context, delay time.Duration) bool {

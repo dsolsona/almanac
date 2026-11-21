@@ -82,6 +82,7 @@ sql:
       - internal/storage/migrations/0077_service_maintenance_validate_bounds.sql
       - internal/storage/migrations/0078_backfill_queue.sql
       - internal/storage/migrations/0079_datasource_historical_retention.sql
+      - internal/storage/migrations/0080_validate_datasource_historical_retention.sql
     gen:
       go:
         package: dbgen

@@ -13,20 +13,50 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// commitBackfillChunk must run within the caller's authorized historical transaction.
-// A rejected or incomplete batch must roll back both progress and observation writes.
+func validateBackfillResult(result sli.BackfillChunkResult) error {
+	if !canonicalUUIDCheck(result.ChunkID) || result.Generation < 1 {
+		return ErrObservationInvalid
+	}
+	if result.Failure != "" {
+		failure := sli.ExecutionOutcome{State: sli.OutcomeFailed, ErrorCode: result.Failure}
+		if len(result.Outcomes) != 0 || failure.Validate() != nil {
+			return ErrObservationInvalid
+		}
+		return nil
+	}
+	if len(result.Outcomes) == 0 || len(result.Outcomes) > 256 {
+		return ErrObservationInvalid
+	}
+	for _, outcome := range result.Outcomes {
+		switch outcome.State {
+		case "":
+			if outcome.GoodCount != "" || outcome.TotalCount != "" || outcome.ErrorCode != "" || len(outcome.MissingComponents) != 0 {
+				return ErrObservationInvalid
+			}
+		case sli.OutcomeObserved, sli.OutcomeCompleteEmpty, sli.OutcomeFailed:
+			if outcome.Validate() != nil {
+				return ErrObservationInvalid
+			}
+		default:
+			return ErrObservationInvalid
+		}
+	}
+	return nil
+}
+
+// commitBackfillChunk fences progress and accepts new observations in one transaction.
 func commitBackfillChunk(ctx context.Context, tx pgx.Tx, agentID string, sessionGeneration, configurationRevision int64, now time.Time, result sli.BackfillChunkResult) error {
 	var sliID pgtype.UUID
 	var revision int64
 	var start, end time.Time
 	var cadenceSeconds, retentionDays int
 	err := tx.QueryRow(ctx, `
-SELECT c.sli_id, c.measurement_revision, c.range_start, c.range_end, c.cadence_seconds,d.historical_retention_days
+SELECT c.sli_id,c.measurement_revision,c.range_start,c.range_end,c.cadence_seconds,d.historical_retention_days
 FROM public.almanac_backfill_chunks c
 JOIN public.almanac_sli_measurements m ON m.sli_id=c.sli_id AND m.revision=c.measurement_revision
 JOIN public.almanac_datasources d ON d.id=m.datasource_id
-WHERE c.id=$1 AND c.agent_id=$2 AND c.generation=$3 AND c.state='leased' `,
-		result.ChunkID, agentID, result.Generation).Scan(&sliID, &revision, &start, &end, &cadenceSeconds, &retentionDays)
+WHERE c.id=$1 AND c.agent_id=$2 AND c.generation=$3 AND c.state='leased'
+FOR UPDATE OF c`, result.ChunkID, agentID, result.Generation).Scan(&sliID, &revision, &start, &end, &cadenceSeconds, &retentionDays)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrObservationDenied
 	}
@@ -34,20 +64,8 @@ WHERE c.id=$1 AND c.agent_id=$2 AND c.generation=$3 AND c.state='leased' `,
 		return operationError(ctx, "storage: historical chunk read failed", err)
 	}
 	cadence := time.Duration(cadenceSeconds) * time.Second
-	if len(result.Outcomes) == 0 || len(result.Outcomes) > 256 || !start.Add(time.Duration(len(result.Outcomes))*cadence).Equal(end) {
+	if !start.Add(time.Duration(len(result.Outcomes)) * cadence).Equal(end) {
 		return ErrObservationInvalid
-	}
-	for _, outcome := range result.Outcomes {
-		if outcome.State == "" {
-			continue
-		}
-		if (outcome.State != sli.OutcomeObserved && outcome.State != sli.OutcomeCompleteEmpty) || outcome.Validate() != nil {
-			return ErrObservationInvalid
-		}
-	}
-
-	if err := ensureSliPartitions(ctx, tx, start, end.Add(-cadence)); err != nil {
-		return operationError(ctx, "storage: historical observation partitions", err)
 	}
 	queries := dbgen.New(tx)
 	measurement, err := queries.LockSliMeasurementForObservation(ctx, dbgen.LockSliMeasurementForObservationParams{
@@ -59,75 +77,139 @@ WHERE c.id=$1 AND c.agent_id=$2 AND c.generation=$3 AND c.state='leased' `,
 	if err != nil {
 		return operationError(ctx, "storage: historical measurement lock failed", err)
 	}
-	if measurement.CurrentAgentID.String() != agentID || start.Before(measurement.EffectiveFrom.Time) || start.Before(now.Add(-backfillRecoveryLookback(retentionDays))) ||
+	if measurement.CurrentAgentID.String() != agentID || start.Before(measurement.EffectiveFrom.Time) ||
 		int(measurement.PollingIntervalSeconds) != cadenceSeconds {
 		return ErrObservationDenied
 	}
 
+	covered, err := historicalCoverage(ctx, tx, sliID, revision, start, end)
+	if err != nil {
+		return operationError(ctx, "storage: historical coverage read failed", err)
+	}
+	cutoff := now.Add(-backfillRecoveryLookback(retentionDays))
+	state, reason := "committed", ""
+	conflict := false
+	var starts []time.Time
+	var ids []uuid.UUID
+	var outcomes []string
+	var good, total []pgtype.Text
+	var digests [][]byte
+	for index, outcome := range result.Outcomes {
+		point := start.Add(time.Duration(index) * cadence)
+		existing, exists := covered[point.UnixMicro()]
+		if outcome.State == "" && !exists {
+			return ErrObservationInvalid
+		}
+		if !exists && point.Before(cutoff) {
+			if reason == "" {
+				state, reason = "unavailable", "expired"
+			}
+			continue
+		}
+		if outcome.State == "" || (exists && outcome.State == sli.OutcomeFailed) {
+			continue
+		}
+		if outcome.State == sli.OutcomeFailed {
+			if reason == "" || reason == "expired" || outcome.ErrorCode == "authentication" || outcome.ErrorCode == "unsupported" {
+				state, reason = "retry-wait", outcome.ErrorCode
+				if reason == "authentication" || reason == "unsupported" || reason == "assignment_revoked" {
+					state = "unavailable"
+				}
+			}
+			continue
+		}
+		item := sli.ObservationItem{SLIID: sliID.String(), MeasurementRevision: strconv.FormatInt(revision, 10),
+			IntervalStart: point, IntervalEnd: point.Add(cadence), Outcome: outcome}
+		digest, err := canonicalSliResultDigest(item)
+		if err != nil {
+			return ErrObservationInvalid
+		}
+		if exists {
+			conflict = conflict || !equalDigest(existing, digest[:])
+			continue
+		}
+		executionID, err := uuid.NewRandom()
+		if err != nil {
+			return err
+		}
+		starts = append(starts, point)
+		ids = append(ids, executionID)
+		outcomes = append(outcomes, string(outcome.State))
+		good = append(good, nullableString(outcome.GoodCount))
+		total = append(total, nullableString(outcome.TotalCount))
+		digests = append(digests, digest[:])
+	}
+
+	if conflict && (state == "committed" || reason == "expired") {
+		state, reason = "unavailable", "canonical_interval_conflict"
+	}
 	var accepted bool
-	if err := tx.QueryRow(ctx, `SELECT public.almanac_finish_backfill_chunk($1,$2,$3,$4,'committed',NULL,$5)`,
-		result.ChunkID, agentID, result.Generation, now, sessionGeneration).Scan(&accepted); err != nil {
+	if err := tx.QueryRow(ctx, `SELECT public.almanac_finish_backfill_chunk($1,$2,$3,$4,$5,$6,$7)`,
+		result.ChunkID, agentID, result.Generation, now, state, nullableString(reason), sessionGeneration).Scan(&accepted); err != nil {
 		return operationError(ctx, "storage: fence historical chunk commit", err)
 	}
 	if !accepted {
 		return ErrObservationDenied
 	}
-	for index, outcome := range result.Outcomes {
-		point := start.Add(time.Duration(index) * cadence)
-		item := sli.ObservationItem{
-			SLIID: sliID.String(), MeasurementRevision: strconv.FormatInt(revision, 10),
-			IntervalStart: point, IntervalEnd: point.Add(cadence), Outcome: outcome,
-		}
-		if err := acceptBackfillObservation(ctx, tx, queries, sliID, revision, agentID, sessionGeneration, configurationRevision, now, result.ChunkID, item); err != nil {
-			return err
+	if conflict {
+		if _, err := tx.Exec(ctx, `UPDATE public.almanac_backfill_chunks SET canonical_conflict=true WHERE id=$1`, result.ChunkID); err != nil {
+			return operationError(ctx, "storage: record historical observation conflict", err)
 		}
 	}
-	return nil
-}
-
-func acceptBackfillObservation(ctx context.Context, tx pgx.Tx, queries *dbgen.Queries, sliID pgtype.UUID, revision int64, agentID string, sessionGeneration, configurationRevision int64, now time.Time, chunkID string, item sli.ObservationItem) error {
-	coverage, err := queries.GetSliCoverageByCanonicalInterval(ctx, dbgen.GetSliCoverageByCanonicalIntervalParams{
-		SliID: sliID, MeasurementRevision: revision, IntervalStart: timestamp(item.IntervalStart),
-	})
-	if err == nil {
-		if coverage.Outcome != "observed" && coverage.Outcome != "complete_empty" {
-			return ErrObservationInvalid
-		}
-		// A live or earlier historical result already owns this canonical interval.
+	if len(starts) == 0 {
 		return nil
 	}
-	if !errors.Is(err, pgx.ErrNoRows) {
-		return operationError(ctx, "storage: historical observation coverage read failed", err)
+	if err := ensureSliPartitions(ctx, tx, starts[0], starts[len(starts)-1]); err != nil {
+		return operationError(ctx, "storage: historical observation partitions", err)
 	}
-	if item.Outcome.State == "" {
-		return ErrObservationInvalid
-	}
-	digest, err := canonicalSliResultDigest(item)
-	if err != nil {
-		return ErrObservationInvalid
-	}
-	good, total := nullableString(item.Outcome.GoodCount), nullableString(item.Outcome.TotalCount)
 	generation, err := queries.AdvanceSliSourceGeneration(ctx, dbgen.AdvanceSliSourceGenerationParams{
 		SliID: sliID, MeasurementRevision: revision, RecordedAt: timestamp(now),
 	})
 	if err != nil {
 		return operationError(ctx, "storage: historical observation generation failed", err)
 	}
-	executionID, err := uuid.NewRandom()
-	if err != nil {
-		return err
-	}
 	if _, err := tx.Exec(ctx, `
 INSERT INTO public.almanac_sli_observations
  (sli_id,measurement_revision,interval_start,outcome,good_count,total_count,result_digest,execution_id,delivery_id,
   agent_id,session_generation,configuration_revision,backfill_chunk_id,agent_created_at,recorded_at,ingestion_generation)
-VALUES ($1,$2,$3,$4,$5::text::numeric,$6::text::numeric,$7,$8,$8,$9,$10,$11,$12,$13,$13,$14)`,
-		sliID, revision, item.IntervalStart, item.Outcome.State, good, total, digest[:], executionID,
-		agentID, sessionGeneration, configurationRevision, chunkID, now, generation); err != nil {
+SELECT $1,$2,p.start,p.outcome,p.good::numeric,p.total::numeric,p.digest,p.id,p.id,$3,$4,$5,$6,$7,$7,$8
+FROM unnest($9::timestamptz[],$10::uuid[],$11::text[],$12::text[],$13::text[],$14::bytea[])
+  AS p(start,id,outcome,good,total,digest)`, sliID, revision, agentID, sessionGeneration,
+		configurationRevision, result.ChunkID, now, generation, starts, ids, outcomes, good, total, digests); err != nil {
 		return operationError(ctx, "storage: historical observation insert failed", err)
 	}
-	return queries.MarkSliObservation(ctx, dbgen.MarkSliObservationParams{
-		SliID: sliID, MeasurementRevision: revision, Generation: generation,
-		IntervalStart: timestamp(item.IntervalStart), IntervalEnd: timestamp(item.IntervalEnd), RecordedAt: timestamp(now),
-	})
+	for index, point := range starts {
+		hour := point.UTC().Truncate(time.Hour)
+		if index+1 < len(starts) && starts[index+1].UTC().Truncate(time.Hour).Equal(hour) {
+			continue
+		}
+		if err := queries.MarkSliObservation(ctx, dbgen.MarkSliObservationParams{
+			SliID: sliID, MeasurementRevision: revision, Generation: generation,
+			IntervalStart: timestamp(hour), IntervalEnd: timestamp(point.Add(cadence)), RecordedAt: timestamp(now),
+		}); err != nil {
+			return operationError(ctx, "storage: historical observation invalidation failed", err)
+		}
+	}
+	return nil
+}
+
+func historicalCoverage(ctx context.Context, tx pgx.Tx, sliID pgtype.UUID, revision int64, start, end time.Time) (map[int64][]byte, error) {
+	rows, err := tx.Query(ctx, `
+SELECT interval_start,result_digest FROM public.almanac_sli_observations
+WHERE sli_id=$1 AND measurement_revision=$2 AND interval_start >= $3 AND interval_start < $4
+  AND outcome IN ('observed','complete_empty')`, sliID, revision, start, end)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	coverage := make(map[int64][]byte)
+	for rows.Next() {
+		var point time.Time
+		var digest []byte
+		if err := rows.Scan(&point, &digest); err != nil {
+			return nil, err
+		}
+		coverage[point.UnixMicro()] = digest
+	}
+	return coverage, rows.Err()
 }

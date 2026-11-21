@@ -12,8 +12,9 @@ import (
 )
 
 const activateDatasourceAgent = `-- name: ActivateDatasourceAgent :one
-UPDATE public.almanac_datasources SET agent_id = $2, version = version + 1, updated_at = $3, assignment_configuration_revision = $4
-WHERE id = $1 AND version < 9223372036854775807 RETURNING id, name, display_name, version, provider, configuration_format, endpoint, tls, authentication_mode, authentication_username, password_envelope, password_revision, token_envelope, token_revision, polling_interval_seconds, settling_delay_seconds, agent_id, created_at, updated_at, assignment_configuration_revision, historical_retention_days
+UPDATE public.almanac_datasources SET agent_id = $2, version = version + 1,
+    historical_configuration_version = historical_configuration_version + 1, updated_at = $3, assignment_configuration_revision = $4
+WHERE id = $1 AND version < 9223372036854775807 RETURNING id, name, display_name, version, provider, configuration_format, endpoint, tls, authentication_mode, authentication_username, password_envelope, password_revision, token_envelope, token_revision, polling_interval_seconds, settling_delay_seconds, agent_id, created_at, updated_at, assignment_configuration_revision, historical_configuration_version, historical_retention_days
 `
 
 type ActivateDatasourceAgentParams struct {
@@ -52,6 +53,7 @@ func (q *Queries) ActivateDatasourceAgent(ctx context.Context, arg ActivateDatas
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.AssignmentConfigurationRevision,
+		&i.HistoricalConfigurationVersion,
 		&i.HistoricalRetentionDays,
 	)
 	return i, err
@@ -361,7 +363,7 @@ func (q *Queries) LatestDatasourceGrantExpiry(ctx context.Context, arg LatestDat
 }
 
 const listAgentDatasourceDependencies = `-- name: ListAgentDatasourceDependencies :many
-SELECT d.id, d.name, d.display_name, d.version, d.provider, d.configuration_format, d.endpoint, d.tls, d.authentication_mode, d.authentication_username, d.password_envelope, d.password_revision, d.token_envelope, d.token_revision, d.polling_interval_seconds, d.settling_delay_seconds, d.agent_id, d.created_at, d.updated_at, d.assignment_configuration_revision, d.historical_retention_days FROM public.almanac_datasources d
+SELECT d.id, d.name, d.display_name, d.version, d.provider, d.configuration_format, d.endpoint, d.tls, d.authentication_mode, d.authentication_username, d.password_envelope, d.password_revision, d.token_envelope, d.token_revision, d.polling_interval_seconds, d.settling_delay_seconds, d.agent_id, d.created_at, d.updated_at, d.assignment_configuration_revision, d.historical_configuration_version, d.historical_retention_days FROM public.almanac_datasources d
 WHERE (d.agent_id = $1 OR EXISTS (SELECT 1 FROM public.almanac_datasource_reassignments r WHERE r.datasource_id = d.id AND r.target_configuration_revision = 0 AND (r.source_agent_id = $1 OR r.target_agent_id = $1)))
   AND (d.created_at, d.id) > ($2::timestamptz, $3::uuid)
 ORDER BY d.created_at, d.id LIMIT $4
@@ -409,6 +411,7 @@ func (q *Queries) ListAgentDatasourceDependencies(ctx context.Context, arg ListA
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.AssignmentConfigurationRevision,
+			&i.HistoricalConfigurationVersion,
 			&i.HistoricalRetentionDays,
 		); err != nil {
 			return nil, err

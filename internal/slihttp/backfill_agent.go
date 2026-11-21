@@ -1,6 +1,8 @@
 package slihttp
 
 import (
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json/v2"
 	"errors"
 	"net/http"
@@ -23,17 +25,19 @@ func (h *Handler) backfillAgent(w http.ResponseWriter, r *http.Request, requestI
 		return
 	}
 	generations := r.Header.Values("X-Agent-Session-Generation")
-	if !bearerHeader(r.Header.Values("Authorization")) || len(generations) != 1 {
+	proofHeaders := r.Header.Values("X-Agent-Session-Proof")
+	if !bearerHeader(r.Header.Values("Authorization")) || len(generations) != 1 || len(proofHeaders) != 1 {
 		h.writeProblem(w, http.StatusUnauthorized, "unauthorized", requestID)
 		return
 	}
+	secret, proofErr := base64.RawURLEncoding.Strict().DecodeString(proofHeaders[0])
 	generation, err := strconv.ParseInt(generations[0], 10, 64)
 	credential, verifier, credentialErr := identity.AgentTokenVerifier(bearerToken(r.Header.Get("Authorization")))
-	if err != nil || generation < 1 || strconv.FormatInt(generation, 10) != generations[0] || credentialErr != nil {
+	if err != nil || generation < 1 || strconv.FormatInt(generation, 10) != generations[0] || credentialErr != nil || proofErr != nil || len(secret) != 32 || len(proofHeaders[0]) != 43 {
 		h.writeProblem(w, http.StatusUnauthorized, "unauthorized", requestID)
 		return
 	}
-	proof := storage.BackfillAgentProof{CredentialID: credential, Verifier: verifier, Generation: generation}
+	proof := storage.BackfillAgentProof{CredentialID: credential, Verifier: verifier, ResumeVerifier: sha256.Sum256(secret), Generation: generation}
 	if claim {
 		if hasBody(r) {
 			h.writeProblem(w, http.StatusBadRequest, "invalid_request", requestID)

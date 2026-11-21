@@ -2726,6 +2726,8 @@ export interface components {
             /** Format: date-time */
             end: string;
             preview: boolean;
+            /** @description Administrator-only explicit retry of previously failed intervals in the requested range. */
+            retry_exhausted?: boolean;
         };
         SliBackfillAdmission: {
             /** Format: uuid */
@@ -2752,6 +2754,8 @@ export interface components {
             gaps: number;
             requested_intervals?: number;
             recovered_intervals?: number;
+            /** @description Historical counts differed from an existing canonical observation. */
+            canonical_conflict?: boolean;
         };
         SliBackfillPlan: {
             /** Format: date-time */

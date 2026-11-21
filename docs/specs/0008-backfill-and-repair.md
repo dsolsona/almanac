@@ -122,13 +122,23 @@ The operator can choose one, seven, fourteen or thirty days, or supply a UTC
 range. Preview shows the aligned, eligible bounds and chunk count before the
 operator confirms a request. Viewers can read the job list. The
 `almanac backfills` CLI has preview, request, list and cancel commands.
+Administrators can include previously failed intervals in a custom range or pass
+`--retry-exhausted` to the CLI preview and request. Admission records the actor
+and retry selection. A change to the datasource's connection, credentials,
+assignment, timing or retention can reopen gaps for its own SLI measurements.
+Display-name changes preserve the existing retries.
 
-The assigned agent claims separately leased work over the agent HTTPS API.
+The assigned agent claims separately leased work over the agent HTTPS API
+with proof of its current ownership session. Prometheus instant-query chunks
+contain at most 64 intervals and span up to one day. If retention moves while
+work is queued or leased, only expired intervals are excluded.
 Historical observation provenance references the durable chunk. The backend
 accepts observations and commits chunk progress in a single transaction that
 also marks affected source ranges for the normal SLO workers. Existing
 observations and SLO validity dates retain their meaning. Historical empty
-responses without evidence of source availability remain gaps.
+responses without evidence of source availability remain gaps. Available
+intervals in a partial result are stored and the remaining gaps retain their
+retry budget. Conflicting counts are reported and existing coverage is preserved.
 
 The datasource definition can declare historical retention in whole days. An
 unset value means unknown source retention and best-effort recovery. The

@@ -50,6 +50,33 @@ test('request historical collection and see the recalculated SLO', async ({ page
     await expect(panel).toContainText('Datasource retention is 7 days.');
     await panel.getByRole('button', { name: 'Custom range' }).click();
     const dialog = page.getByRole('dialog', { name: 'Custom backfill range' });
+    const backfillRoute = `**/api/v1/slis/${id}/backfills`;
+    let intercepted!: () => void;
+    let release!: () => void;
+    const requestStarted = new Promise<void>(resolve => { intercepted = resolve; });
+    const unblockRoute = new Promise<void>(resolve => { release = resolve; });
+    await page.route(backfillRoute, async route => {
+      if (route.request().method() !== 'POST' || route.request().postDataJSON().start !== from) {
+        await route.fallback();
+        return;
+      }
+      intercepted();
+      await unblockRoute;
+      await route.abort().catch(() => {});
+    });
+    await dialog.getByLabel('Start (UTC)').fill(from.slice(0, 16));
+    await dialog.getByLabel('End (UTC)').fill(to.slice(0, 16));
+    await dialog.getByRole('button', { name: 'Preview range' }).click();
+    try {
+      await requestStarted;
+      await page.keyboard.press('Escape');
+      await expect(dialog).toHaveCount(0);
+      await expect(panel.getByRole('button', { name: 'Custom range' })).toBeFocused();
+    } finally {
+      release();
+      await page.unroute(backfillRoute);
+    }
+    await panel.getByRole('button', { name: 'Custom range' }).click();
     await dialog.getByLabel('Start (UTC)').fill(from.slice(0, 16));
     await dialog.getByLabel('End (UTC)').fill(to.slice(0, 16));
     await dialog.getByRole('button', { name: 'Preview range' }).click();

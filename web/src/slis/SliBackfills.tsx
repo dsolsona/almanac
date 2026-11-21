@@ -3,6 +3,7 @@ import type { AuthContext } from '../auth/client.ts';
 import { Dialog } from '../components/ui/Dialog.tsx';
 import { Button } from '../components/ui/Button.tsx';
 import { SelectField } from '../components/ui/SelectField.tsx';
+import { Switch } from '../components/ui/Switch.tsx';
 import { TextField } from '../components/ui/TextField.tsx';
 import { createSliClient, type Sli, type SliBackfillAdmission, type SliBackfillJob, type SliBackfillPlan } from './client.ts';
 
@@ -45,6 +46,7 @@ export function SliBackfills({ sli, context, canWrite }: { sli: Sli; context: Au
   const [history, setHistory] = useState<SliBackfillPlan | null>(null);
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');
+  const [retryExhausted, setRetryExhausted] = useState(false);
   const [jobs, setJobs] = useState<SliBackfillJob[]>([]);
   const [preview, setPreview] = useState<SliBackfillAdmission | null>(null);
   const [working, setWorking] = useState('');
@@ -52,24 +54,29 @@ export function SliBackfills({ sli, context, canWrite }: { sli: Sli; context: Au
   const [loadError, setLoadError] = useState('');
   const [loaded, setLoaded] = useState(false);
   const requestKey = useRef('');
+  const uncertainRequest = useRef<{ selection: string; key: string } | null>(null);
+  const pendingRequest = useRef<AbortController | null>(null);
+  useEffect(() => () => pendingRequest.current?.abort(), []);
 
   useEffect(() => {
     if (!open) return;
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
     let lastProgress: string | undefined;
+    let lastCoverage = 0;
     async function refresh() {
       try {
         const jobs = await client.backfills(sli.id, controller.signal);
         if (controller.signal.aborted) return;
         setJobs(jobs);
         const progress = JSON.stringify(jobs.map(job => [job.id, job.state, job.committed]));
-        if (progress !== lastProgress) {
+        if (progress !== lastProgress || Date.now() - lastCoverage >= 30_000) {
           const range = rangeFor(sli, preset);
           const coverage = await client.requestBackfill(sli.id, { start: range.start, end: range.end, preview: true }, context, crypto.randomUUID(), controller.signal);
           if (controller.signal.aborted) return;
           setHistory(coverage.plan ?? null);
           lastProgress = progress;
+          lastCoverage = Date.now();
         }
         setLoaded(true);
         setLoadError('');
@@ -87,26 +94,50 @@ export function SliBackfills({ sli, context, canWrite }: { sli: Sli; context: Au
     setError('');
   }
 
+  function closeDialog() {
+    pendingRequest.current?.abort();
+    pendingRequest.current = null;
+    setWorking('');
+    setDialog(null);
+    edit();
+    if (working === 'confirm') setError('The request may have reached Almanac. Check Backfill jobs for its status.');
+  }
+
   async function requestRange(confirmed: boolean) {
+    if (pendingRequest.current) return;
+    const controller = new AbortController();
+    pendingRequest.current = controller;
     setError('');
     setWorking(confirmed ? 'confirm' : 'preview');
     try {
       const selection = confirmed && preview ? { start: preview.start, end: preview.end }
         : dialog === 'custom' ? { start: new Date(`${start}Z`).toISOString(), end: new Date(`${end}Z`).toISOString() }
           : rangeFor(sli, preset);
-      if (!confirmed) requestKey.current = crypto.randomUUID();
-      const result = await client.requestBackfill(sli.id, { start: selection.start, end: selection.end, preview: !confirmed }, context, requestKey.current);
+      const retry = dialog === 'custom' && retryExhausted;
+      const selected = JSON.stringify([selection.start, selection.end, retry]);
+      if (!confirmed) {
+        requestKey.current = uncertainRequest.current?.selection === selected ? uncertainRequest.current.key : crypto.randomUUID();
+      } else {
+        uncertainRequest.current = { selection: selected, key: requestKey.current };
+      }
+      const key = confirmed ? requestKey.current : crypto.randomUUID();
+      const result = await client.requestBackfill(sli.id, { ...selection, preview: !confirmed, retry_exhausted: retry }, context, key, controller.signal);
+      if (controller.signal.aborted) return;
       if (confirmed) {
+        uncertainRequest.current = null;
         setPreview(null);
         setDialog(null);
-        setJobs(await client.backfills(sli.id));
       } else {
         setPreview(result);
       }
     } catch (failure) {
+      if (controller.signal.aborted) return;
       setError(failure instanceof RangeError ? 'Enter both UTC dates.' : failure instanceof Error ? failure.message : 'Could not request historical collection.');
     } finally {
-      setWorking('');
+      if (pendingRequest.current === controller) {
+        pendingRequest.current = null;
+        setWorking('');
+      }
     }
   }
 
@@ -129,7 +160,7 @@ export function SliBackfills({ sli, context, canWrite }: { sli: Sli; context: Au
       <div className="sli-backfill-toolbar">
         <SelectField id="sli-backfill-range" label="Gap history" value={preset} options={presets} onChange={event => setPreset(event.target.value)} />
         {canWrite && <div className="sli-actions">
-          <Button variant="outline" onClick={event => { trigger.current = event.currentTarget; edit(); setDialog('custom'); }}>Custom range</Button>
+          <Button variant="outline" onClick={event => { trigger.current = event.currentTarget; edit(); setRetryExhausted(false); setDialog('custom'); }}>Custom range</Button>
           <Button disabled={history?.eligible_intervals === 0} onClick={event => {
             trigger.current = event.currentTarget;
             edit();
@@ -145,7 +176,8 @@ export function SliBackfills({ sli, context, canWrite }: { sli: Sli; context: Au
       {jobs.length > 0 && <ul className="sli-backfill-jobs" aria-label="Backfill jobs">
         {jobs.map(job => <li key={job.id}>
           <div><strong>{states[job.state]}</strong>{job.automatic && <span> · Automatic repair</span>}<p>{utc(job.start)} to {utc(job.end)}</p>
-            <p>{job.recovered_intervals ?? 0} / {job.requested_intervals ?? 0} intervals recovered · {job.committed} / {job.chunks} chunks committed{job.gaps > 0 && ` · ${job.gaps} with gaps`}</p></div>
+            <p>{job.recovered_intervals ?? 0} / {job.requested_intervals ?? 0} intervals recovered · {job.committed} / {job.chunks} chunks committed{job.gaps > 0 && ` · ${job.gaps} with gaps`}</p>
+            {job.canonical_conflict && <p>Historical counts differed. Almanac kept the existing observations.</p>}</div>
           {canWrite && ['queued', 'running'].includes(job.state) && <Button variant="outline" disabled={!!working} pending={working === job.id} onClick={() => void cancel(job.id)}>Cancel job</Button>}
         </li>)}
       </ul>}
@@ -158,12 +190,15 @@ export function SliBackfills({ sli, context, canWrite }: { sli: Sli; context: Au
         {history.gap_count > history.gaps.length && <p className="sli-muted">Showing the newest {history.gaps.length} of {history.gap_count} gaps. Choose a shorter range to inspect older gaps.</p>}
       </>}
     </div>
-    <Dialog open={dialog !== null} onClose={() => { if (!working) { setDialog(null); edit(); } }} title={dialog === 'custom' ? 'Custom backfill range' : 'Review backfill'} triggerRef={trigger}>
+    <Dialog open={dialog !== null} onClose={closeDialog} title={dialog === 'custom' ? 'Custom backfill range' : 'Review backfill'} triggerRef={trigger}>
       <form className="sli-metadata-form" onSubmit={event => { event.preventDefault(); void requestRange(false); }}>
         {dialog === 'custom' && <div className="ui-form-grid">
           <TextField id="sli-backfill-start" type="datetime-local" step={1} label="Start (UTC)" required value={start} disabled={!!working} onChange={event => { setStart(event.target.value); edit(); }} />
           <TextField id="sli-backfill-end" type="datetime-local" step={1} label="End (UTC)" required value={end} disabled={!!working} onChange={event => { setEnd(event.target.value); edit(); }} />
         </div>}
+        {dialog === 'custom' && context.session?.role === 'administrator' &&
+          <Switch label="Include previously failed intervals" checked={retryExhausted} disabled={!!working}
+            onChange={event => { setRetryExhausted(event.target.checked); edit(); }} />}
         {preview && <div role="status">
           <p>{utc(preview.start)} to {utc(preview.end)} · {preview.chunk_count} {preview.chunk_count === 1 ? 'chunk' : 'chunks'}</p>
           {preview.plan && <dl className="sli-backfill-preview-facts">
@@ -181,7 +216,7 @@ export function SliBackfills({ sli, context, canWrite }: { sli: Sli; context: Au
         {working === 'preview' && <p role="status">Checking which intervals can be recovered…</p>}
         {error && <p className="sli-error" role="alert">{error}</p>}
         <div className="sli-actions">
-          <Button variant="outline" disabled={!!working} onClick={() => { setDialog(null); edit(); }}>Close</Button>
+          <Button variant="outline" onClick={closeDialog}>Close</Button>
           {dialog === 'custom' && <Button type="submit" variant="outline" pending={working === 'preview'}>Preview range</Button>}
           {preview && <Button disabled={preview.chunk_count === 0 || !!working} pending={working === 'confirm'} onClick={() => void requestRange(true)}>Queue backfill</Button>}
         </div>

@@ -2,7 +2,9 @@ package storage
 
 import (
 	"context"
+	"crypto/subtle"
 	"errors"
+	"slices"
 	"time"
 
 	"github.com/dsolsona/almanac/internal/sli"
@@ -10,9 +12,10 @@ import (
 )
 
 type BackfillAgentProof struct {
-	CredentialID string
-	Verifier     [32]byte
-	Generation   int64
+	CredentialID   string
+	Verifier       [32]byte
+	ResumeVerifier [32]byte
+	Generation     int64
 }
 
 func ClaimBackfill(ctx context.Context, databaseURL string, proof BackfillAgentProof, clock func() time.Time, runtimes ...*Runtime) (sli.BackfillClaim, error) {
@@ -40,12 +43,30 @@ JOIN public.almanac_datasources d ON d.id=m.datasource_id`, state.agentID, now, 
 	if err != nil {
 		return sli.BackfillClaim{}, operationError(ctx, "storage: claim historical chunk", err)
 	}
-	if claim.Start.Before(now.Add(-backfillRecoveryLookback(retentionDays))) {
+	cadence := time.Duration(claim.Cadence) * time.Second
+	cutoff := ceilSliBoundary(now.Add(-backfillRecoveryLookback(retentionDays)), cadence)
+	if !cutoff.Before(claim.End) {
 		if _, err := state.tx.Exec(ctx, `SELECT public.almanac_finish_backfill_chunk($1,$2,$3,$4,'unavailable','expired',$5)`,
 			claim.ID, state.agentID, claim.Generation, now, proof.Generation); err != nil {
 			return sli.BackfillClaim{}, operationError(ctx, "storage: expire historical claim", err)
 		}
 		claim = sli.BackfillClaim{}
+	} else if claim.Start.Before(cutoff) {
+		// Keep the leased suffix and its original fence and attempt budget.
+		if _, err := state.tx.Exec(ctx, `
+WITH suffix AS (
+  UPDATE public.almanac_backfill_chunks SET range_start=$2 WHERE id=$1
+  RETURNING job_id,sli_id,measurement_revision,agent_id,source_version,cadence_seconds,attempts,generation
+)
+INSERT INTO public.almanac_backfill_chunks
+  (job_id,sli_id,measurement_revision,agent_id,source_version,cadence_seconds,attempts,generation,
+   range_start,range_end,state,reason,finished_at,next_attempt_at)
+SELECT job_id,sli_id,measurement_revision,agent_id,source_version,cadence_seconds,attempts,generation,
+       $3,$2,'unavailable','expired',$4,$4 FROM suffix`, claim.ID, cutoff, claim.Start, now); err != nil {
+			return sli.BackfillClaim{}, operationError(ctx, "storage: expire historical claim prefix", err)
+		}
+		claim.Start = cutoff
+		claim.CoveredStarts = slices.DeleteFunc(claim.CoveredStarts, func(point time.Time) bool { return point.Before(cutoff) })
 	}
 	if err := state.tx.Commit(ctx); err != nil {
 		return sli.BackfillClaim{}, operationError(ctx, "storage: commit historical claim", err)
@@ -54,23 +75,19 @@ JOIN public.almanac_datasources d ON d.id=m.datasource_id`, state.agentID, now, 
 }
 
 func SubmitBackfill(ctx context.Context, databaseURL string, proof BackfillAgentProof, clock func() time.Time, result sli.BackfillChunkResult, runtimes ...*Runtime) error {
+	if err := validateBackfillResult(result); err != nil {
+		return err
+	}
 	state, now, revision, err := beginBackfillAgent(ctx, databaseURL, proof, clock, runtimes...)
 	if err != nil {
 		return err
 	}
 	defer closeAgentOwnershipTransaction(state)
-	if !canonicalUUIDCheck(result.ChunkID) || result.Generation < 1 {
-		return ErrObservationInvalid
-	}
 	if result.Failure == "" {
 		if err := commitBackfillChunk(ctx, state.tx, state.agentID.String(), proof.Generation, revision, now, result); err != nil {
 			return err
 		}
 	} else {
-		outcome := sli.ExecutionOutcome{State: sli.OutcomeFailed, ErrorCode: result.Failure}
-		if len(result.Outcomes) != 0 || outcome.Validate() != nil {
-			return ErrObservationInvalid
-		}
 		next := "retry-wait"
 		switch result.Failure {
 		case "authentication", "unsupported", "assignment_revoked":
@@ -107,7 +124,7 @@ func beginBackfillAgent(ctx context.Context, databaseURL string, proof BackfillA
 		return nil, time.Time{}, 0, ErrInvalidAgentCredential
 	}
 	owner, err := state.queries.LockLatestAgentOwnership(ctx, state.agentID)
-	if errors.Is(err, pgx.ErrNoRows) || (err == nil && (owner.Generation != proof.Generation || !now.Before(owner.ExpiresAt.Time))) {
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && (owner.Generation != proof.Generation || !now.Before(owner.ExpiresAt.Time) || subtle.ConstantTimeCompare(owner.ResumeVerifier, proof.ResumeVerifier[:]) != 1)) {
 		closeAgentOwnershipTransaction(state)
 		return nil, time.Time{}, 0, ErrObservationDenied
 	}

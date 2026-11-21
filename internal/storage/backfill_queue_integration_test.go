@@ -239,7 +239,162 @@ WHERE id=(SELECT datasource_id FROM public.almanac_sli_measurements WHERE sli_id
 		!plan.RecoveryStart.Equal(s.at.Add(-7*24*time.Hour)) || plan.Covered != 175 {
 		t.Fatalf("retention plan: %+v", plan)
 	}
-	if plan.Eligible != 9900 || plan.Chunks != 39 {
-		t.Fatalf("eligible 9900 intervals in 39 chunks, got %+v", plan)
+	if plan.Eligible != 9900 || plan.Chunks != 155 {
+		t.Fatalf("eligible 9900 intervals in 155 chunks, got %+v", plan)
+	}
+}
+
+func TestIntegrationBackfillKeepsPartialResultsAndRetryBudget(t *testing.T) {
+	t.Parallel()
+	s := newSelfHealFixture(t, "backfill-partial", true)
+	ctx := t.Context()
+	start := s.historyStart
+	end := start.Add(3 * time.Minute)
+	if _, err := s.conn.Exec(ctx, `DELETE FROM almanac_sli_observations WHERE sli_id=$1 AND interval_start >= $2 AND interval_start < $3`, s.sliID, start, end); err != nil {
+		t.Fatal(err)
+	}
+	input := BackfillRequest{
+		Proof: DatasourceProof{SessionVerifier: s.f.verifier}, SLIID: s.sliID,
+		Start: start, End: end, RequestKey: "partial", Now: s.clock,
+	}
+	admission, err := RequestBackfill(ctx, s.f.databaseURL, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var agentID string
+	if err := s.conn.QueryRow(ctx, `SELECT agent_id FROM almanac_backfill_chunks WHERE job_id=$1`, admission.ID).Scan(&agentID); err != nil {
+		t.Fatal(err)
+	}
+	observed := sli.ExecutionOutcome{State: sli.OutcomeObserved, GoodCount: "99", TotalCount: "100"}
+	missing := sli.ExecutionOutcome{State: sli.OutcomeFailed, ErrorCode: "incomplete"}
+	for attempt := range 3 {
+		now := s.at.Add(time.Duration(attempt) * 3 * time.Minute)
+		var result sli.BackfillChunkResult
+		if err := s.conn.QueryRow(ctx, `SELECT id,generation FROM almanac_claim_backfill_chunk($1,$2)`, agentID, now).Scan(&result.ChunkID, &result.Generation); err != nil {
+			t.Fatal(err)
+		}
+		result.Outcomes = []sli.ExecutionOutcome{{}, missing, {}}
+		if attempt == 0 {
+			result.Outcomes[0], result.Outcomes[2] = observed, observed
+		}
+		tx, err := s.conn.Begin(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := commitBackfillChunk(ctx, tx, agentID, 1, 1, now, result); err != nil {
+			rollbackTransaction(tx)
+			t.Fatal(err)
+		}
+		if err := tx.Commit(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	jobs, err := ListBackfills(ctx, s.f.databaseURL, input.Proof, s.sliID, s.clock)
+	if err != nil || len(jobs) != 1 || jobs[0].RecoveredIntervals != 2 || jobs[0].RequestedIntervals != 3 || jobs[0].State != "completed-with-gaps" {
+		t.Fatalf("partial job = %+v, %v", jobs, err)
+	}
+	discover := func() {
+		t.Helper()
+		tx, err := s.conn.Begin(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rollbackTransaction(tx)
+		if err := enqueueDiscoveredGaps(ctx, tx, s.sliID, 1, agentID, start, end, s.at, 60); err != nil {
+			t.Fatal(err)
+		}
+		if err := tx.Commit(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	discover()
+	input.RequestKey, input.Preview = "inspect-exhausted", true
+	preview, err := RequestBackfill(ctx, s.f.databaseURL, input)
+	if err != nil || preview.Plan == nil || preview.Plan.PreviousFailure != 1 || preview.Plan.Covered != 2 {
+		t.Fatalf("exhausted preview = %+v, %v", preview.Plan, err)
+	}
+	input.RetryExhausted = true
+	preview, err = RequestBackfill(ctx, s.f.databaseURL, input)
+	if err != nil || preview.Plan == nil || preview.Plan.Eligible != 1 {
+		t.Fatalf("explicit retry preview = %+v, %v", preview.Plan, err)
+	}
+	if _, err := s.conn.Exec(ctx, `UPDATE almanac_datasources SET historical_configuration_version=historical_configuration_version+1
+WHERE id=(SELECT datasource_id FROM almanac_sli_measurements WHERE sli_id=$1 AND revision=1)`, s.sliID); err != nil {
+		t.Fatal(err)
+	}
+	discover()
+	jobs, err = ListBackfills(ctx, s.f.databaseURL, input.Proof, s.sliID, s.clock)
+	if err != nil || len(jobs) != 2 {
+		t.Fatalf("expected one automatic cycle after datasource change, got %+v, %v", jobs, err)
+	}
+}
+
+func TestIntegrationBackfillFencesOwnerAndTrimsMovingRetention(t *testing.T) {
+	t.Parallel()
+	s := newSelfHealFixture(t, "backfill-owner-retention", true)
+	ctx := t.Context()
+	start := s.at.Add(-7 * 24 * time.Hour)
+	end := start.Add(3 * time.Minute)
+	if _, err := s.conn.Exec(ctx, `UPDATE almanac_sli_measurements SET effective_from=$2 WHERE sli_id=$1`, s.sliID, start); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.conn.Exec(ctx, `UPDATE almanac_datasources SET historical_retention_days=7
+WHERE id=(SELECT datasource_id FROM almanac_sli_measurements WHERE sli_id=$1)`, s.sliID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := RequestBackfill(ctx, s.f.databaseURL, BackfillRequest{
+		Proof: DatasourceProof{SessionVerifier: s.f.verifier}, SLIID: s.sliID, Start: start, End: end,
+		RequestKey: "retention-moving", Now: s.clock,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var proof BackfillAgentProof
+	var credentialVerifier []byte
+	err := s.conn.QueryRow(ctx, `SELECT c.id,c.verifier FROM almanac_agent_credentials c
+JOIN almanac_sli_measurements m ON m.agent_id=c.agent_id WHERE m.sli_id=$1`, s.sliID).Scan(&proof.CredentialID, &credentialVerifier)
+	if err != nil {
+		t.Fatal(err)
+	}
+	copy(proof.Verifier[:], credentialVerifier)
+	proof.ResumeVerifier = ownershipVerifier(ownershipBytes(32, 82))
+	s.now = s.at.Add(time.Second)
+	owner, err := AcquireAgentOwnership(ctx, s.f.databaseURL, proof.CredentialID, proof.Verifier, proof.ResumeVerifier, s.clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	proof.Generation = owner.Generation
+	if _, err := s.conn.Exec(ctx, `UPDATE almanac_agent_runtime_status SET generation=$2,
+ last_heartbeat_at=$3, scheduler_health='ready', applied_configuration_revision=desired_configuration_revision
+ WHERE agent_id=(SELECT agent_id FROM almanac_sli_measurements WHERE sli_id=$1)`, s.sliID, proof.Generation, s.now); err != nil {
+		t.Fatal(err)
+	}
+	stale := proof
+	stale.ResumeVerifier = ownershipVerifier(ownershipBytes(32, 81))
+	if _, err := ClaimBackfill(ctx, s.f.databaseURL, stale, s.clock, s.runtime); !errors.Is(err, ErrObservationDenied) {
+		t.Fatalf("claim with previous owner's proof: %v", err)
+	}
+	claim, err := ClaimBackfill(ctx, s.f.databaseURL, proof, s.clock, s.runtime)
+	if err != nil || claim.ID == "" || !claim.Start.Equal(start.Add(time.Minute)) || !claim.End.Equal(end) {
+		t.Fatalf("retained suffix = %+v, %v", claim, err)
+	}
+	observed := sli.ExecutionOutcome{State: sli.OutcomeObserved, GoodCount: "99", TotalCount: "100"}
+	result := sli.BackfillChunkResult{ChunkID: claim.ID, Generation: claim.Generation, Outcomes: []sli.ExecutionOutcome{observed, observed}}
+	s.now = s.now.Add(time.Minute)
+	if _, err := s.conn.Exec(ctx, `UPDATE almanac_agent_runtime_status SET last_heartbeat_at=$2
+ WHERE agent_id=(SELECT agent_id FROM almanac_sli_measurements WHERE sli_id=$1)`, s.sliID, s.now); err != nil {
+		t.Fatal(err)
+	}
+	if err := SubmitBackfill(ctx, s.f.databaseURL, stale, s.clock, result, s.runtime); !errors.Is(err, ErrObservationDenied) {
+		t.Fatalf("submission with previous owner's proof: %v", err)
+	}
+	if err := SubmitBackfill(ctx, s.f.databaseURL, proof, s.clock, result, s.runtime); err != nil {
+		t.Fatal(err)
+	}
+	var recovered []time.Time
+	if err := s.conn.QueryRow(ctx, `SELECT array_agg(interval_start) FROM almanac_sli_observations WHERE backfill_chunk_id=$1`, claim.ID).Scan(&recovered); err != nil {
+		t.Fatal(err)
+	}
+	if len(recovered) != 1 || !recovered[0].Equal(end.Add(-time.Minute)) {
+		t.Fatalf("recovered intervals = %v", recovered)
 	}
 }

@@ -19,6 +19,7 @@ type BackfillJob struct {
 	Gaps               int       `json:"gaps"`
 	RequestedIntervals int       `json:"requested_intervals"`
 	RecoveredIntervals int       `json:"recovered_intervals"`
+	CanonicalConflict  bool      `json:"canonical_conflict,omitempty"`
 }
 
 func ListBackfills(ctx context.Context, databaseURL string, proof DatasourceProof, sliID string, clock func() time.Time) ([]BackfillJob, error) {
@@ -30,18 +31,16 @@ func ListBackfills(ctx context.Context, databaseURL string, proof DatasourceProo
 	defer rollbackTransaction(tx)
 	rows, err := tx.Query(ctx, `
 SELECT j.id, j.requested_start, j.requested_end, j.requested_by IS NULL, count(c.id),
-       count(*) FILTER (WHERE c.state='committed'),
-       count(*) FILTER (WHERE c.state IN ('failed','unavailable')),
+       count(*) FILTER (WHERE c.state='committed' AND NOT c.canonical_conflict),
+       count(*) FILTER (WHERE c.state IN ('failed','unavailable') OR (c.state='committed' AND c.canonical_conflict)),
        CASE WHEN j.cancelled_at IS NOT NULL THEN 'cancelled'
             WHEN bool_or(c.state='leased') THEN 'running'
             WHEN bool_or(c.state IN ('queued','retry-wait')) THEN
                 CASE WHEN bool_or(c.attempts>0) THEN 'running' ELSE 'queued' END
-            WHEN bool_or(c.state IN ('failed','unavailable')) THEN 'completed-with-gaps'
+            WHEN bool_or(c.state IN ('failed','unavailable') OR c.canonical_conflict) THEN 'completed-with-gaps'
             ELSE 'completed' END,
        sum(extract(epoch FROM c.range_end-c.range_start)::bigint / c.cadence_seconds),
-       sum(CASE WHEN c.state='committed' THEN (SELECT count(*) FROM public.almanac_sli_observations o
-           WHERE o.backfill_chunk_id=c.id AND o.interval_start>=c.range_start AND o.interval_start<c.range_end)
-           ELSE 0 END)
+       sum((SELECT count(*) FROM public.almanac_sli_observations o WHERE o.backfill_chunk_id=c.id)), bool_or(c.canonical_conflict)
 FROM (SELECT * FROM public.almanac_backfill_jobs WHERE sli_id=$1 ORDER BY created_at DESC, id LIMIT 20) j
 JOIN public.almanac_backfill_chunks c ON c.job_id=j.id
 GROUP BY j.id, j.requested_start, j.requested_end, j.cancelled_at, j.requested_by, j.created_at
@@ -52,7 +51,7 @@ ORDER BY j.created_at DESC, j.id`, sliID)
 	jobs := make([]BackfillJob, 0, 20)
 	for rows.Next() {
 		var job BackfillJob
-		if err := rows.Scan(&job.ID, &job.Start, &job.End, &job.Automatic, &job.Chunks, &job.Committed, &job.Gaps, &job.State, &job.RequestedIntervals, &job.RecoveredIntervals); err != nil {
+		if err := rows.Scan(&job.ID, &job.Start, &job.End, &job.Automatic, &job.Chunks, &job.Committed, &job.Gaps, &job.State, &job.RequestedIntervals, &job.RecoveredIntervals, &job.CanonicalConflict); err != nil {
 			rows.Close()
 			return nil, operationError(ctx, "storage: scan historical jobs", err)
 		}

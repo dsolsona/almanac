@@ -2911,6 +2911,7 @@ components:
         start: {type: string, format: date-time}
         end: {type: string, format: date-time}
         preview: {type: boolean}
+        retry_exhausted: {type: boolean, description: Administrator-only explicit retry of previously failed intervals in the requested range.}
     SliBackfillAdmission:
       type: object
       required: [start, end, chunk_count]
@@ -2934,6 +2935,7 @@ components:
         gaps: {type: integer, minimum: 0}
         requested_intervals: {type: integer, minimum: 0}
         recovered_intervals: {type: integer, minimum: 0}
+        canonical_conflict: {type: boolean, description: Historical counts differed from an existing canonical observation.}
     SliBackfillPlan:
       type: object
       required: [recovery_start, datasource_retention_days, cadence_seconds, covered_intervals, eligible_intervals, automatic_intervals, manual_intervals, outside_retention_intervals, previous_failure_intervals, missing_intervals, gap_count, chunk_count, gaps]

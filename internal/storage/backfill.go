@@ -15,12 +15,13 @@ var (
 )
 
 type BackfillRequest struct {
-	Proof      DatasourceProof
-	SLIID      string
-	Start, End time.Time
-	RequestKey string
-	Preview    bool
-	Now        func() time.Time
+	Proof          DatasourceProof
+	SLIID          string
+	Start, End     time.Time
+	RequestKey     string
+	Preview        bool
+	RetryExhausted bool
+	Now            func() time.Time
 }
 
 type BackfillAdmission struct {
@@ -43,7 +44,7 @@ func RequestBackfill(ctx context.Context, databaseURL string, input BackfillRequ
 	}
 	defer closeInitialOwnerConnection(conn)
 	defer rollbackTransaction(tx)
-	if user.Role == "viewer" && !input.Preview {
+	if (user.Role == "viewer" && !input.Preview) || (input.RetryExhausted && user.Role != "administrator") {
 		return BackfillAdmission{}, ErrAgentForbidden
 	}
 
@@ -51,15 +52,17 @@ func RequestBackfill(ctx context.Context, databaseURL string, input BackfillRequ
 	var validFrom time.Time
 	var cadenceSeconds, delaySeconds, retentionDays int
 	var agentID, provider string
-	err = tx.QueryRow(ctx, `
+	measurementQuery := `
 SELECT m.revision, m.effective_from, d.polling_interval_seconds, d.settling_delay_seconds,
        d.agent_id, d.provider, d.historical_retention_days
 FROM public.almanac_slis s
 JOIN public.almanac_sli_measurements m ON m.sli_id=s.id AND m.revision=s.measurement_revision
 JOIN public.almanac_datasources d ON d.id=m.datasource_id
-WHERE s.id=$1
-FOR NO KEY UPDATE OF m
-FOR UPDATE OF s, d`, sliID).Scan(&revision, &validFrom, &cadenceSeconds, &delaySeconds, &agentID, &provider, &retentionDays)
+WHERE s.id=$1`
+	if !input.Preview {
+		measurementQuery += " FOR NO KEY UPDATE OF m FOR UPDATE OF s, d"
+	}
+	err = tx.QueryRow(ctx, measurementQuery, sliID).Scan(&revision, &validFrom, &cadenceSeconds, &delaySeconds, &agentID, &provider, &retentionDays)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return BackfillAdmission{}, ErrSliNotFound
 	}
@@ -68,13 +71,14 @@ FOR UPDATE OF s, d`, sliID).Scan(&revision, &validFrom, &cadenceSeconds, &delayS
 	}
 
 	var admission BackfillAdmission
+	var retried bool
 	err = tx.QueryRow(ctx, `
-SELECT j.id, j.requested_start, j.requested_end, (SELECT count(*) FROM public.almanac_backfill_chunks c WHERE c.job_id=j.id)
+SELECT j.id, j.requested_start, j.requested_end, j.retry_exhausted, (SELECT count(*) FROM public.almanac_backfill_chunks c WHERE c.job_id=j.id)
 FROM public.almanac_backfill_jobs j
 WHERE j.sli_id=$1 AND j.requested_by=$2 AND j.request_key=$3`, sliID, user.ID, input.RequestKey).
-		Scan(&admission.ID, &admission.Start, &admission.End, &admission.ChunkCount)
+		Scan(&admission.ID, &admission.Start, &admission.End, &retried, &admission.ChunkCount)
 	if err == nil {
-		if !admission.Start.Equal(input.Start) || !admission.End.Equal(input.End) {
+		if !admission.Start.Equal(input.Start) || !admission.End.Equal(input.End) || retried != input.RetryExhausted {
 			return BackfillAdmission{}, ErrSliConflict
 		}
 		admission.Start, admission.End = admission.Start.UTC(), admission.End.UTC()
@@ -100,7 +104,7 @@ WHERE j.sli_id=$1 AND j.requested_by=$2 AND j.request_key=$3`, sliID, user.ID, i
 	}
 	expectedStart := ceilSliBoundary(validFrom, cadence)
 	recoveryStart := ceilSliBoundary(now.Add(-backfillRecoveryLookback(retentionDays)), cadence)
-	plan, eligible, err := planBackfillGaps(ctx, tx, sliID.String(), revision, start, end, expectedStart, recoveryStart, cadenceSeconds, retentionDays)
+	plan, eligible, err := planBackfillGaps(ctx, tx, sliID.String(), revision, start, end, expectedStart, recoveryStart, cadenceSeconds, retentionDays, input.RetryExhausted)
 	if err != nil {
 		return BackfillAdmission{}, operationError(ctx, "storage: plan historical gaps", err)
 	}
@@ -113,7 +117,7 @@ WHERE j.sli_id=$1 AND j.requested_by=$2 AND j.request_key=$3`, sliID, user.ID, i
 	if len(eligible) == 0 {
 		return BackfillAdmission{}, ErrBackfillNoGaps
 	}
-	admission, err = insertBackfillJob(ctx, tx, sliID.String(), revision, agentID, start, end, now, cadenceSeconds, input.RequestKey, user.ID, eligible...)
+	admission, err = insertBackfillJob(ctx, tx, sliID.String(), revision, agentID, start, end, now, cadenceSeconds, input.RequestKey, user.ID, input.RetryExhausted, eligible...)
 	if err != nil {
 		return BackfillAdmission{}, err
 	}
@@ -132,15 +136,15 @@ func backfillRecoveryLookback(configuredDays int) time.Duration {
 }
 
 func historicalChunkSeconds(cadenceSeconds int) int {
-	return min(86400/cadenceSeconds, 256) * cadenceSeconds
+	return min(86400/cadenceSeconds, 64) * cadenceSeconds
 }
 
-func insertBackfillJob(ctx context.Context, tx pgx.Tx, sliID string, revision int64, agentID string, start, end, now time.Time, cadenceSeconds int, key string, actor any, ranges ...backfillGap) (BackfillAdmission, error) {
+func insertBackfillJob(ctx context.Context, tx pgx.Tx, sliID string, revision int64, agentID string, start, end, now time.Time, cadenceSeconds int, key string, actor any, retryExhausted bool, ranges ...backfillGap) (BackfillAdmission, error) {
 	admission := BackfillAdmission{Start: start, End: end}
 	err := tx.QueryRow(ctx, `
-INSERT INTO public.almanac_backfill_jobs (sli_id,requested_start,requested_end,request_key,requested_by,created_at)
-VALUES ($1,$2,$3,$4,$5,$6)
-RETURNING id`, sliID, start, end, key, actor, now).Scan(&admission.ID)
+INSERT INTO public.almanac_backfill_jobs (sli_id,requested_start,requested_end,request_key,requested_by,created_at,retry_exhausted)
+VALUES ($1,$2,$3,$4,$5,$6,$7)
+RETURNING id`, sliID, start, end, key, actor, now, retryExhausted).Scan(&admission.ID)
 	if err != nil {
 		return BackfillAdmission{}, operationError(ctx, "storage: record historical request", err)
 	}
@@ -152,7 +156,7 @@ RETURNING id`, sliID, start, end, key, actor, now).Scan(&admission.ID)
 	tag, err := tx.Exec(ctx, `
 INSERT INTO public.almanac_backfill_chunks
     (job_id,sli_id,measurement_revision,agent_id,range_start,range_end,cadence_seconds,next_attempt_at,source_version)
-SELECT $1,$2,$3,$4,point,LEAST(point + make_interval(secs=>$8),span.end_at),$7,$9,d.version
+SELECT $1,$2,$3,$4,point,LEAST(point + make_interval(secs=>$8),span.end_at),$7,$9,d.historical_configuration_version
 FROM public.almanac_sli_measurements m
 JOIN public.almanac_datasources d ON d.id=m.datasource_id
 CROSS JOIN unnest($5::timestamptz[],$6::timestamptz[]) span(start_at,end_at)

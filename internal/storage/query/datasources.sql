@@ -38,6 +38,14 @@ SET name = sqlc.arg(name), display_name = sqlc.arg(display_name), version = vers
     token_envelope = sqlc.narg(token_envelope), token_revision = sqlc.arg(token_revision),
     polling_interval_seconds = sqlc.arg(polling_interval_seconds),
     settling_delay_seconds = sqlc.arg(settling_delay_seconds), agent_id = sqlc.arg(agent_id),
+    historical_configuration_version = historical_configuration_version + CASE WHEN
+      ROW(provider,configuration_format,endpoint,tls,authentication_mode,authentication_username,
+          password_revision,token_revision,polling_interval_seconds,settling_delay_seconds,agent_id,historical_retention_days)
+        IS DISTINCT FROM
+      ROW(sqlc.arg(provider),sqlc.arg(configuration_format),sqlc.arg(endpoint),sqlc.arg(tls),sqlc.arg(authentication_mode),sqlc.narg(authentication_username),
+          sqlc.arg(password_revision),sqlc.arg(token_revision),sqlc.arg(polling_interval_seconds),
+          sqlc.arg(settling_delay_seconds),sqlc.arg(agent_id),sqlc.arg(historical_retention_days))
+      THEN 1 ELSE 0 END,
     historical_retention_days = sqlc.arg(historical_retention_days), updated_at = sqlc.arg(updated_at)
 WHERE id = sqlc.arg(id) AND version = sqlc.arg(expected_version)
 RETURNING *;

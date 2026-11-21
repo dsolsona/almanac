@@ -56,6 +56,8 @@ type collectionRunner struct {
 	initialPending    map[string]bool
 	active            map[string]activeCollection
 	activeSources     map[string]int
+	historicalSource  string
+	cancelHistorical  context.CancelFunc
 
 	pending          map[string]*pendingLiveResult
 	pendingOrder     []*pendingLiveResult
@@ -421,7 +423,12 @@ func (r *collectionRunner) dispatchDue(ctx context.Context) {
 		}
 		current, assignment, end := item.current, item.assignment, item.end
 		key := collectionKey(current)
-		if r.activeSources[current.DatasourceID] >= maxCollectionPerSource {
+		capacity := maxCollectionPerSource
+		if r.historicalSource == current.DatasourceID {
+			r.cancelHistorical()
+			capacity--
+		}
+		if r.activeSources[current.DatasourceID] >= capacity {
 			continue
 		}
 		lease := r.lease

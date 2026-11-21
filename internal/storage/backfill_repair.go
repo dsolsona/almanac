@@ -116,25 +116,32 @@ FOR UPDATE OF s,d`, cursorID, next, now).Scan(&id, &revision, &validFrom, &agent
 
 func enqueueDiscoveredGaps(ctx context.Context, tx pgx.Tx, id string, revision int64, agentID string, start, end, now time.Time, cadenceSeconds int) error {
 	rows, err := tx.Query(ctx, `
-WITH points AS (
+WITH source AS (
+    SELECT d.historical_configuration_version AS version FROM public.almanac_sli_measurements m
+    JOIN public.almanac_datasources d ON d.id=m.datasource_id WHERE m.sli_id=$1 AND m.revision=$2
+), points AS (
     SELECT point FROM generate_series($3::timestamptz,$4::timestamptz-make_interval(secs=>$5),make_interval(secs=>$5)) point
     WHERE NOT EXISTS (SELECT 1 FROM public.almanac_sli_observations o
                       WHERE o.sli_id=$1 AND o.measurement_revision=$2 AND o.interval_start=point AND o.outcome IN ('observed','complete_empty'))
-      AND NOT EXISTS (SELECT 1 FROM public.almanac_backfill_chunks c JOIN public.almanac_backfill_jobs j ON j.id=c.job_id
+      AND NOT EXISTS (SELECT 1 FROM public.almanac_backfill_chunks c
                       WHERE c.sli_id=$1 AND c.measurement_revision=$2 AND c.range_start<=point AND c.range_end>point
-                        AND (j.requested_by IS NULL OR c.state IN ('queued','leased','retry-wait')))
+                        AND (c.state IN ('queued','leased','retry-wait') OR
+                             (c.source_version=(SELECT version FROM source) AND
+                               (c.state IN ('failed','unavailable') OR (c.state='cancelled' AND EXISTS (
+                                 SELECT 1 FROM public.almanac_backfill_jobs j WHERE j.id=c.job_id AND j.requested_by IS NULL))))))
 ), islands AS (
     SELECT point, point-row_number() OVER (ORDER BY point)*make_interval(secs=>$5) AS key FROM points
 )
-SELECT min(point),max(point)+make_interval(secs=>$5) FROM islands GROUP BY key ORDER BY min(point)`,
+SELECT min(point),max(point)+make_interval(secs=>$5),(SELECT version FROM source) FROM islands GROUP BY key ORDER BY min(point)`,
 		id, revision, start, end, cadenceSeconds)
 	if err != nil {
 		return err
 	}
 	gaps := make([]backfillGap, 0)
+	var version int64
 	for rows.Next() {
 		var gap backfillGap
-		if err := rows.Scan(&gap.start, &gap.end); err != nil {
+		if err := rows.Scan(&gap.start, &gap.end, &version); err != nil {
 			rows.Close()
 			return err
 		}
@@ -144,8 +151,8 @@ SELECT min(point),max(point)+make_interval(secs=>$5) FROM islands GROUP BY key O
 		return err
 	}
 	for _, gap := range gaps {
-		key := strconv.FormatInt(revision, 10) + "/" + gap.start.UTC().Format(time.RFC3339Nano)
-		if _, err := insertBackfillJob(ctx, tx, id, revision, agentID, gap.start, gap.end, now, cadenceSeconds, key, nil, gap); err != nil {
+		key := strconv.FormatInt(revision, 10) + "/" + strconv.FormatInt(version, 10) + "/" + gap.start.UTC().Format(time.RFC3339Nano)
+		if _, err := insertBackfillJob(ctx, tx, id, revision, agentID, gap.start, gap.end, now, cadenceSeconds, key, nil, false, gap); err != nil {
 			return err
 		}
 	}

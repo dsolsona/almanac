@@ -4778,7 +4778,10 @@ type SliBackfillAdmission struct {
 
 // SliBackfillJob defines model for SliBackfillJob.
 type SliBackfillJob struct {
-	Automatic          bool                `json:"automatic"`
+	Automatic bool `json:"automatic"`
+
+	// CanonicalConflict Historical counts differed from an existing canonical observation.
+	CanonicalConflict  *bool               `json:"canonical_conflict,omitempty"`
 	Chunks             int                 `json:"chunks"`
 	Committed          int                 `json:"committed"`
 	End                time.Time           `json:"end"`
@@ -4822,7 +4825,10 @@ type SliBackfillPlanGapsState string
 type SliBackfillRequest struct {
 	End     time.Time `json:"end"`
 	Preview bool      `json:"preview"`
-	Start   time.Time `json:"start"`
+
+	// RetryExhausted Administrator-only explicit retry of previously failed intervals in the requested range.
+	RetryExhausted *bool     `json:"retry_exhausted,omitempty"`
+	Start          time.Time `json:"start"`
 }
 
 // SliCreateRequest defines model for SliCreateRequest.

@@ -30,7 +30,7 @@ type BackfillPlan struct {
 	Gaps             []BackfillGapView `json:"gaps"`
 }
 
-func planBackfillGaps(ctx context.Context, tx pgx.Tx, id string, revision int64, start, end, expectedStart, recoveryStart time.Time, cadenceSeconds, retentionDays int) (BackfillPlan, []backfillGap, error) {
+func planBackfillGaps(ctx context.Context, tx pgx.Tx, id string, revision int64, start, end, expectedStart, recoveryStart time.Time, cadenceSeconds, retentionDays int, retryExhausted bool) (BackfillPlan, []backfillGap, error) {
 	plan := BackfillPlan{RecoveryStart: recoveryStart, RetentionDays: retentionDays, CadenceSeconds: cadenceSeconds, Gaps: make([]BackfillGapView, 0)}
 	if expectedStart.After(plan.RecoveryStart) {
 		plan.RecoveryStart = expectedStart
@@ -51,10 +51,14 @@ WITH missing AS (
 	SELECT point, CASE WHEN point < $6::timestamptz THEN 'outside-retention'
 		ELSE coalesce((SELECT CASE
 			WHEN c.state IN ('queued','leased','retry-wait') THEN CASE WHEN j.requested_by IS NULL THEN 'automatic' ELSE 'manual' END
-			ELSE 'previous-failure' END
+			WHEN $7::boolean THEN 'eligible' ELSE 'previous-failure' END
 		FROM public.almanac_backfill_chunks c JOIN public.almanac_backfill_jobs j ON j.id=c.job_id
 		WHERE c.sli_id=$1 AND c.measurement_revision=$2 AND c.range_start<=point AND point<c.range_end
-		  AND c.state IN ('queued','leased','retry-wait','unavailable','failed')
+		  AND (c.state IN ('queued','leased','retry-wait') OR
+            (c.state IN ('unavailable','failed') AND c.source_version = (
+                SELECT d.historical_configuration_version FROM public.almanac_sli_measurements m
+                JOIN public.almanac_datasources d ON d.id=m.datasource_id
+                WHERE m.sli_id=$1 AND m.revision=$2)))
 		ORDER BY (c.state IN ('queued','leased','retry-wait')) DESC, j.created_at DESC, c.id
 		LIMIT 1), 'eligible') END state
 	FROM missing
@@ -62,7 +66,7 @@ WITH missing AS (
 	SELECT point,state,point-row_number() OVER (PARTITION BY state ORDER BY point)*make_interval(secs=>$5) AS key FROM classified
 )
 SELECT min(point),max(point)+make_interval(secs=>$5),count(*),state
-FROM islands GROUP BY state,key ORDER BY min(point) DESC`, id, revision, start, end, cadenceSeconds, recoveryStart)
+FROM islands GROUP BY state,key ORDER BY min(point) DESC`, id, revision, start, end, cadenceSeconds, recoveryStart, retryExhausted)
 	if err != nil {
 		return BackfillPlan{}, nil, err
 	}

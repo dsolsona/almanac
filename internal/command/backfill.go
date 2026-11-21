@@ -32,11 +32,13 @@ func backfillCommand(parent context.Context, args []string, stdout, stderr io.Wr
 	output := fs.String("output", "text", "text or json")
 	timeout := fs.Duration("timeout", 30*time.Second, "request deadline")
 	var start, end, key, job string
+	var retryExhausted bool
 	switch action {
 	case "list":
 	case "preview", "request":
 		fs.StringVar(&start, "start", "", "inclusive UTC RFC3339 bound")
 		fs.StringVar(&end, "end", "", "exclusive UTC RFC3339 bound")
+		fs.BoolVar(&retryExhausted, "retry-exhausted", false, "include previously failed intervals (administrator only)")
 		fs.StringVar(&key, "idempotency-key", "", "caller-owned request key")
 	case "cancel":
 		fs.StringVar(&job, "job-id", "", "backfill job UUID")
@@ -49,6 +51,7 @@ func backfillCommand(parent context.Context, args []string, stdout, stderr io.Wr
 	}
 	var input api.SliBackfillRequest
 	if action == "preview" || action == "request" {
+		input.RetryExhausted = new(retryExhausted)
 		var startErr, endErr error
 		input.Start, startErr = time.Parse(time.RFC3339, start)
 		input.End, endErr = time.Parse(time.RFC3339, end)

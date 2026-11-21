@@ -217,7 +217,7 @@ CREATE CONSTRAINT TRIGGER almanac_slo_grid_changed
     DEFERRABLE INITIALLY DEFERRED
     FOR EACH ROW WHEN (OLD.definition_revision IS DISTINCT FROM NEW.definition_revision)
     EXECUTE FUNCTION public.almanac_record_maintenance_grid();`
-		case 77:
+		case 77, 80:
 			// The following rewinds remove these constraints. Validation
 			// changed their status but left their definitions intact.
 			continue
@@ -232,7 +232,8 @@ DROP FUNCTION public.almanac_claim_backfill_chunk(uuid,timestamptz,bigint);
 DROP FUNCTION public.almanac_finish_backfill_chunk(uuid,uuid,bigint,timestamptz,text,text,bigint);
 DROP FUNCTION public.almanac_reap_backfill_chunks(timestamptz);
 DROP FUNCTION public.almanac_cancel_backfill_job(uuid,timestamptz);
-DROP TABLE public.almanac_backfill_scan_cursor, public.almanac_backfill_chunks, public.almanac_backfill_jobs;`
+DROP TABLE public.almanac_backfill_scan_cursor, public.almanac_backfill_chunks, public.almanac_backfill_jobs;
+ALTER TABLE public.almanac_datasources DROP COLUMN historical_configuration_version;`
 		default:
 			t.Fatalf("missing service maintenance fixture teardown for migration %04d", version)
 		}

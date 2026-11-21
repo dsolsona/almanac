@@ -1,9 +1,13 @@
+ALTER TABLE public.almanac_datasources
+    ADD COLUMN historical_configuration_version bigint NOT NULL DEFAULT 1;
+
 CREATE TABLE public.almanac_backfill_jobs (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     sli_id uuid NOT NULL REFERENCES public.almanac_slis(id),
     requested_start timestamptz NOT NULL,
     requested_end timestamptz NOT NULL CHECK (requested_end > requested_start),
     request_key text NOT NULL CHECK (octet_length(request_key) BETWEEN 1 AND 128),
+    retry_exhausted boolean NOT NULL DEFAULT false,
     requested_by uuid REFERENCES public.almanac_users(id),
     created_at timestamptz NOT NULL,
     cancelled_at timestamptz,
@@ -17,6 +21,7 @@ CREATE TABLE public.almanac_backfill_chunks (
     sli_id uuid NOT NULL,
     measurement_revision bigint NOT NULL,
     agent_id uuid NOT NULL REFERENCES public.almanac_agents(id),
+    canonical_conflict boolean NOT NULL DEFAULT false,
     source_version bigint NOT NULL DEFAULT 1 CHECK (source_version > 0),
     range_start timestamptz NOT NULL,
     range_end timestamptz NOT NULL,
@@ -29,7 +34,7 @@ CREATE TABLE public.almanac_backfill_chunks (
     lease_until timestamptz,
     lease_session bigint CHECK (lease_session > 0),
     finished_at timestamptz,
-    reason text CHECK (reason IN ('deadline','authentication','unsupported','network','timeout','query','rate_limited','expired','assignment_revoked','incomplete','tls')),
+    reason text CHECK (reason IN ('deadline','authentication','unsupported','network','timeout','query','rate_limited','expired','assignment_revoked','incomplete','tls','canonical_interval_conflict')),
     FOREIGN KEY (job_id, sli_id) REFERENCES public.almanac_backfill_jobs(id,sli_id),
     FOREIGN KEY (sli_id, measurement_revision) REFERENCES public.almanac_sli_measurements(sli_id,revision),
     UNIQUE (job_id, range_start),
@@ -57,7 +62,7 @@ LANGUAGE sql AS $$
         JOIN public.almanac_backfill_jobs j ON j.id = c.job_id
         JOIN public.almanac_sli_measurements m ON m.sli_id = c.sli_id AND m.revision = c.measurement_revision
         JOIN public.almanac_datasources d ON d.id = m.datasource_id
-        WHERE c.agent_id = p_agent AND d.agent_id = p_agent AND d.version = c.source_version
+        WHERE c.agent_id = p_agent AND d.agent_id = p_agent AND d.historical_configuration_version = c.source_version
           AND j.cancelled_at IS NULL AND p_now < j.created_at + interval '24 hours'
           AND c.state IN ('queued','retry-wait')
           AND c.attempts < 3 AND c.next_attempt_at <= p_now
@@ -78,14 +83,14 @@ RETURNS bigint
 LANGUAGE sql AS $$
     WITH expired AS (
         SELECT c.id, c.attempts >= 3 OR j.created_at + interval '24 hours' <= p_now AS exhausted,
-               d.agent_id <> c.agent_id OR d.version <> c.source_version AS assignment_changed
+               d.agent_id <> c.agent_id OR d.historical_configuration_version <> c.source_version AS assignment_changed
         FROM public.almanac_backfill_chunks c
         JOIN public.almanac_backfill_jobs j ON j.id = c.job_id
         JOIN public.almanac_sli_measurements m ON m.sli_id=c.sli_id AND m.revision=c.measurement_revision
         JOIN public.almanac_datasources d ON d.id=m.datasource_id
         WHERE c.state IN ('queued','leased','retry-wait')
           AND (c.lease_until <= p_now OR j.created_at + interval '24 hours' <= p_now
-               OR d.agent_id <> c.agent_id OR d.version <> c.source_version)
+               OR d.agent_id <> c.agent_id OR d.historical_configuration_version <> c.source_version)
         ORDER BY c.lease_until NULLS LAST, c.id
         LIMIT 1000
         FOR UPDATE OF c SKIP LOCKED
@@ -118,7 +123,7 @@ LANGUAGE sql AS $$
           AND c.state = 'leased' AND c.lease_session = p_session AND p_now < c.lease_until
           AND j.id = c.job_id AND j.cancelled_at IS NULL AND p_now < j.created_at + interval '24 hours'
           AND m.sli_id = c.sli_id AND m.revision = c.measurement_revision
-          AND d.id = m.datasource_id AND d.agent_id = p_agent AND d.version = c.source_version
+          AND d.id = m.datasource_id AND d.agent_id = p_agent AND d.historical_configuration_version = c.source_version
           AND p_result IN ('committed','retry-wait','unavailable','failed')
         RETURNING c.id
     )

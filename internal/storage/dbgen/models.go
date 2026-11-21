@@ -251,6 +251,7 @@ type AlmanacBackfillChunk struct {
 	SliID               pgtype.UUID        `json:"sli_id"`
 	MeasurementRevision int64              `json:"measurement_revision"`
 	AgentID             pgtype.UUID        `json:"agent_id"`
+	CanonicalConflict   bool               `json:"canonical_conflict"`
 	SourceVersion       int64              `json:"source_version"`
 	RangeStart          pgtype.Timestamptz `json:"range_start"`
 	RangeEnd            pgtype.Timestamptz `json:"range_end"`
@@ -271,6 +272,7 @@ type AlmanacBackfillJob struct {
 	RequestedStart pgtype.Timestamptz `json:"requested_start"`
 	RequestedEnd   pgtype.Timestamptz `json:"requested_end"`
 	RequestKey     string             `json:"request_key"`
+	RetryExhausted bool               `json:"retry_exhausted"`
 	RequestedBy    pgtype.UUID        `json:"requested_by"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	CancelledAt    pgtype.Timestamptz `json:"cancelled_at"`
@@ -303,6 +305,7 @@ type AlmanacDatasource struct {
 	CreatedAt                       pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt                       pgtype.Timestamptz `json:"updated_at"`
 	AssignmentConfigurationRevision int64              `json:"assignment_configuration_revision"`
+	HistoricalConfigurationVersion  int64              `json:"historical_configuration_version"`
 	HistoricalRetentionDays         int32              `json:"historical_retention_days"`
 }
 

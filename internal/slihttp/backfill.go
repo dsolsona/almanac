@@ -33,9 +33,10 @@ func (h *Handler) backfillJobs(w http.ResponseWriter, r *http.Request, requestID
 			return
 		}
 		var input struct {
-			Start   time.Time `json:"start"`
-			End     time.Time `json:"end"`
-			Preview *bool     `json:"preview"`
+			Start          time.Time `json:"start"`
+			End            time.Time `json:"end"`
+			Preview        *bool     `json:"preview"`
+			RetryExhausted bool      `json:"retry_exhausted"`
 		}
 		if json.Unmarshal(body, &input, json.RejectUnknownMembers(true)) != nil || input.Preview == nil {
 			h.writeProblem(w, http.StatusBadRequest, "invalid_request", requestID)
@@ -43,7 +44,7 @@ func (h *Handler) backfillJobs(w http.ResponseWriter, r *http.Request, requestID
 		}
 		admitted, err := storage.RequestBackfill(r.Context(), h.databaseURL, storage.BackfillRequest{
 			Proof: proof, SLIID: parts[0], Start: input.Start, End: input.End,
-			Preview: *input.Preview, RequestKey: r.Header.Get("Idempotency-Key"), Now: h.now,
+			Preview: *input.Preview, RetryExhausted: input.RetryExhausted, RequestKey: r.Header.Get("Idempotency-Key"), Now: h.now,
 		})
 		switch {
 		case errors.Is(err, storage.ErrBackfillNoGaps):
