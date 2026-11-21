@@ -583,6 +583,30 @@ WHERE slo_id IN (SELECT slo_id FROM public.almanac_slo_definitions WHERE sli_id=
 	if err != nil || len(third.Items) != 1 || len(third.MissingIntervals) != 0 || third.NextCursor != "" || !third.InspectedEnd.Equal(*second.InspectedStart) {
 		t.Fatalf("third history page: %+v, %v", third, err)
 	}
+	attemptID := uuid.NewString()
+	attemptStart := first.InspectedEnd.Add(-15 * time.Second)
+	if tag, err := conn.Exec(t.Context(), `INSERT INTO public.almanac_sli_execution_attempts
+(agent_id,execution_id,observation_id,sli_id,measurement_revision,interval_start,interval_end,outcome,error_code,missing_components,lease_id,recorded_at)
+SELECT agent_id,$2,gen_random_uuid(),sli_id,measurement_revision,$3,$4,'failed','query','{}',lease_id,$5
+FROM public.almanac_sli_execution_attempts WHERE sli_id=$1 LIMIT 1`, record.ID, attemptID, attemptStart, *first.InspectedEnd, now); err != nil || tag.RowsAffected() != 1 {
+		t.Fatalf("seed uncovered chart attempt: %v (rows %d)", err, tag.RowsAffected())
+	}
+	chart, err := ReadSliMeasurementChart(t.Context(), f.databaseURL, nil, proof, record.ID, "30d", clock)
+	if err != nil || chart.BucketSeconds != 10800 || len(chart.Buckets) != 1 {
+		t.Fatalf("bounded 30-day chart: %+v, %v", chart, err)
+	}
+	bucket := chart.Buckets[0]
+	if !bucket.Start.Equal(record.EffectiveFrom) || !bucket.End.Equal(*first.InspectedEnd) ||
+		bucket.Observed != 1 || bucket.ZeroTraffic != 1 || bucket.Failed != 1 || bucket.Incomplete != 0 || bucket.Missing != 2 ||
+		bucket.Good == nil || sli.NormalizeDecimal(*bucket.Good) != "99" ||
+		bucket.Total == nil || sli.NormalizeDecimal(*bucket.Total) != "100" {
+		t.Fatalf("chart must sum exact counts and distinguish outcomes: %+v", bucket)
+	}
+
+	if _, err := conn.Exec(t.Context(), "DELETE FROM public.almanac_sli_execution_attempts WHERE execution_id=$1", attemptID); err != nil {
+		t.Fatal(err)
+	}
+
 	concurrent := item
 	concurrent.DeliveryID, concurrent.ExecutionID = uuid.NewString(), uuid.NewString()
 	concurrent.IntervalStart = item.IntervalEnd

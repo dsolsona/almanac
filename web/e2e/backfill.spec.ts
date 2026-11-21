@@ -44,9 +44,9 @@ test('request historical collection and see the recalculated SLO', async ({ page
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.goto(`/slis/${id}`);
     const panel = page.locator('details').filter({ has: page.locator('summary', { hasText: 'Historical backfill' }) });
-    const disclosure = panel.locator('summary');
-    await disclosure.focus();
-    await page.keyboard.press('Enter');
+    await page.getByRole('radio', { name: '30d', exact: true }).click();
+    await page.getByRole('button', { name: 'Review backfill', exact: true }).click();
+    await expect(panel).toHaveAttribute('open', '');
     await expect(panel).toContainText('Datasource retention is 7 days.');
     await panel.getByRole('button', { name: 'Custom range' }).click();
     const dialog = page.getByRole('dialog', { name: 'Custom backfill range' });

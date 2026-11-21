@@ -1,4 +1,4 @@
-import type { components } from '../api/generated.ts';
+import type { components, operations } from '../api/generated.ts';
 import { traceJSON } from '../telemetry/client.ts';
 import type { AuthContext } from '../auth/client.ts';
 
@@ -11,6 +11,24 @@ export type SliBackfillAdmission = components['schemas']['SliBackfillAdmission']
 export type SliBackfillJob = components['schemas']['SliBackfillJob'];
 export type SliBackfillPlan = components['schemas']['SliBackfillPlan'];
 type SliBackfillRequest = components['schemas']['SliBackfillRequest'];
+
+export type SliMeasurementSeries = operations['getSliMeasurements']['responses'][200]['content']['application/json'];
+export type SliMeasurementPeriod = operations['getSliMeasurements']['parameters']['query']['period'];
+
+const measurementOutcomes = ['observed', 'zero_traffic', 'known_empty', 'failed', 'incomplete', 'missing'] as const;
+function validMeasurementSeries(value: unknown): value is SliMeasurementSeries {
+  if (!object(value) || typeof value.bucket_seconds !== 'number' || !Number.isInteger(value.bucket_seconds)
+    || value.bucket_seconds < 1 || !Array.isArray(value.buckets) || value.buckets.length > 240) return false;
+  return value.buckets.every((bucket: unknown, i: number, buckets: unknown[]) => {
+    if (!object(bucket) || !timestamp(bucket.start) || !timestamp(bucket.end) || Date.parse(bucket.start) >= Date.parse(bucket.end)) return false;
+    const previous = buckets[i - 1];
+    if (object(previous) && previous.end !== bucket.start) return false;
+    const count = (v: unknown): v is string => typeof v === 'string' && /^\d{1,32}(?:\.\d{1,12})?$/.test(v);
+    return measurementOutcomes.every(key => Number.isSafeInteger(bucket[key]) && Number(bucket[key]) >= 0) &&
+      (bucket.good === null && bucket.total === null ||
+        count(bucket.good) && count(bucket.total) && scaledCount(bucket.good) <= scaledCount(bucket.total));
+  });
+}
 
 export class SliFailure extends Error {
   constructor(readonly code: string, message: string, readonly status = 0, readonly uncertain = false) {
@@ -285,6 +303,10 @@ export function createSliClient() {
       const path = `/api/v1/slis/${safeID(id)}/backfills/${safeID(jobID)}`;
       const response = await fetch(path, { method: 'DELETE', credentials: 'same-origin', mode: 'same-origin', redirect: 'error', headers: { 'X-CSRF-Token': context.csrf_token } });
       if (response.status !== 204) throw new SliFailure('sli_unavailable', 'Could not confirm cancellation. Refresh the jobs and try again.', response.status);
+    },
+    async measurements(id: string, period: SliMeasurementPeriod, signal: AbortSignal): Promise<SliMeasurementSeries> {
+      const query = new URLSearchParams({ period });
+      return (await request(`/api/v1/slis/${safeID(id)}/measurements?${query}`, { method: 'GET', signal }, 200, validMeasurementSeries, 256 * 1024)).value;
     },
     async observations(id: string, limit = 50, cursor = '', signal?: AbortSignal): Promise<SliObservationPage> {
       safeID(id);

@@ -344,7 +344,10 @@ measurements under [ADR-0043](../adr/0043-slo-status-from-due-eligible-measureme
 and [plan 0031](../plans/0031-slo-eligible-status.md), stacked above the lean-SLO work.
 
 [F3-T13](F3-T13.md) adds focused browser verification against a small seeded database.
+
 [F3-T14](F3-T14.md) caches Docker compilation work and adds hosted smoke verification.
+
+[F3-T15](F3-T15.md) adds bounded SLI Measurements ranges from one hour to 30 days.
 
 [F6-T10](F6-T10.md) implements the approved E SLI detail with an integrated
 measurement summary, exact point inspection and aligned collection-state squares

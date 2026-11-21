@@ -1,4 +1,6 @@
 import { SliBackfills } from './SliBackfills.tsx';
+import { SliMeasurementHistory } from './SliMeasurementHistory.tsx';
+import type { SliMeasurementPeriod } from './client.ts';
 import {useResourceTable, ResourceTableHead, ResourceTableMobileSort, resourceRowClick, type ResourceColumn} from '../components/ui/ResourceTable.tsx';
 import { providerInfo } from '../datasources/providers.ts';
 import { SliMeasurementsChart, intervalTime } from '../components/charts/SliMeasurementsChart.tsx';
@@ -137,6 +139,8 @@ function makeIdempotencyKey(): string {
   return `sli-${Date.now()}-${random}`;
 }
 
+const measurementPeriods = (['1h', '3h', '6h', '24h', '7d', '30d'] as const).map(value => ({value, label: value}));
+
 type HistoryFilter = 'all' | 'problems';
 /** Manage event-count definitions and display observed intervals while preserving source-specific query semantics. */
 export function SlisPage({ context }: { context: AuthContext }) {
@@ -155,6 +159,9 @@ export function SlisPage({ context }: { context: AuthContext }) {
   const [agent, setAgent] = useState<Agent | null>(null);
   const [agentError, setAgentError] = useState(false);
   const [etag, setETag] = useState('');
+  const [measurementSelection, setMeasurementSelection] = useState<{id: string; period: '1h' | SliMeasurementPeriod} | null>(null);
+  const measurementPeriod = measurementSelection && measurementSelection.id === route.id ? measurementSelection.period : '1h';
+  const [measurementRefresh, setMeasurementRefresh] = useState(0);
   const [history, setHistory] = useState<SliObservation[]>([]);
   const [missing, setMissing] = useState<SliObservationPage['missing_intervals']>([]);
   const [earliest, setEarliest] = useState('');
@@ -416,6 +423,7 @@ export function SlisPage({ context }: { context: AuthContext }) {
       setSli(resource.sli);
       setDisplayName((current) => current === sli?.display_name ? resource.sli.display_name : current);
       setETag(resource.etag);
+      setMeasurementRefresh(value => value + 1);
       setUpdatedAt(clockFormat.format(new Date()));
       void loadSources().then((value) => { if (generation === routeGeneration.current) { setSources(value); setSourceError(''); } }).catch(() => { if (generation === routeGeneration.current) setSourceError('Datasource names could not be loaded. Refresh to try again.'); });
       if (context.session?.role === 'administrator' && !context.session.restricted) {
@@ -572,26 +580,36 @@ export function SlisPage({ context }: { context: AuthContext }) {
     const openDetails=(id:string)=>{const details=document.getElementById(id) as HTMLDetailsElement|null;if(details){details.open=true;details.scrollIntoView?.({block:'start'});details.querySelector('summary')?.focus();}};
     const openEdit=()=>{editTrigger.current=document.activeElement instanceof HTMLElement?document.activeElement:null;setFormError('');setEditOpen(true);};
     const date=historyWindow.start?new Date(historyWindow.start).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric',timeZone:'UTC'}):null;
+    const latestMeasurement = <div><dt>{sli.polling_interval_seconds===60?'Latest minute':'Latest interval'}</dt><dd>{latestInterval?.ratio!==null&&latestInterval?.ratio!==undefined?`${latestInterval.ratio}%`:latestInterval?measurementLabels[latestInterval.state]:'Waiting for data'}</dd><p>{latestInterval?.good!==null&&latestInterval?.good!==undefined&&latestInterval.total!==null?`${countText(latestInterval.good)} / ${countText(latestInterval.total)} good · ${intervalTime(latestInterval)}`:latestInterval?latestInterval.detail:'No observation has been recorded yet; this does not mean the counts are zero. The first saved interval can precede creation.'}</p></div>;
     return <article className="sli-detail" key={sli.id}>
       <Breadcrumb current={sli.display_name} parentHref={listHref}/>
       <div className="sli-detail-head"><div className="sli-detail-head__copy"><h1 ref={titleRef} tabIndex={-1} className="app-page-heading sli-detail-head__title">{sli.display_name}</h1><div className="sli-detail-head__status"><StatusMark tone={words.tone} label={words.label}/><span>{latest?`Latest interval ended ${clockTime(latest.interval_end)} · ${relativeAge(latest.interval_end)}`:words.reason}</span></div></div><div className="sli-detail-head__actions"><RefreshButton label="Refresh SLI" busy={pending} lastRefreshed={updatedAt} onClick={()=>void refreshDetail()}/><Button variant="ghost" onClick={()=>openDetails('sli-definition')}>View queries</Button>{canWrite&&<Button variant="outline" onClick={openEdit}>Edit SLI</Button>}{canWrite&&<Button variant="outline" onClick={()=>navigate(`/slos/new?sli=${sli.id}`)}>New SLO</Button>}</div></div>
       <p className="sli-definition-line"><strong>Good events ÷ total events.</strong> Each query defines which events count. Measured every {sli.polling_interval_seconds===60?'minute':`${sli.polling_interval_seconds} seconds`}.</p>
       {error&&<p className="sli-error" role="alert">{error}</p>}{sourceError&&<p className="sli-error" role="alert">{sourceError}</p>}{agentError&&<p className="sli-error" role="alert">Agent name could not be refreshed. Refresh to try again.</p>}
+      <div className="sli-measurement-ranges">
+        <SegmentedControl size="sm" label="Measurement history range" options={measurementPeriods} value={measurementPeriod}
+          onChange={period => setMeasurementSelection({id: sli.id, period})}/>
+      </div>
       <section className="sli-detail-card sli-measurements-panel" aria-labelledby="sli-measurements-title" aria-busy={historyBusy}>
-        <header><h2 id="sli-measurements-title">Measurements</h2><span className="hint">{date&&measurements.intervals.length?`${date} · ${intervalTime({start:historyWindow.start!,end:historyWindow.end!})}`:'No inspected intervals yet'}</span><div className="tools"><Button variant="ghost" onClick={()=>openDetails('sli-intervals')}>Exact values ↓</Button></div></header>
+        <header><h2 id="sli-measurements-title">Measurements</h2><span className="hint">{measurementPeriod!=='1h'?null:date&&measurements.intervals.length?`${date} · ${intervalTime({start:historyWindow.start!,end:historyWindow.end!})}`:'No inspected intervals yet'}</span><div className="tools"><Button variant="ghost" onClick={()=>openDetails('sli-intervals')}>{measurementPeriod==='1h'?'Exact values ↓':'Recent intervals ↓'}</Button>{datasource?.provider==='prometheus'&&<Button variant="ghost" onClick={()=>openDetails('sli-backfills')}>Review backfill</Button>}</div></header>
+        {measurementPeriod !== '1h'
+          ? <div className="sli-measurements-body"><SliMeasurementHistory key={`${sli.id}:${measurementPeriod}`} id={sli.id} period={measurementPeriod} refresh={measurementRefresh} latest={latestMeasurement}/></div>
+          : <>
         <div className="sli-measurements-body">
-          <dl className="sli-measurement-summary"><div><dt>{sli.polling_interval_seconds===60?'Latest minute':'Latest interval'}</dt><dd>{latestInterval?.ratio!==null&&latestInterval?.ratio!==undefined?`${latestInterval.ratio}%`:latestInterval?measurementLabels[latestInterval.state]:'Waiting for data'}</dd><p>{latestInterval?.good!==null&&latestInterval?.good!==undefined&&latestInterval.total!==null?`${countText(latestInterval.good)} / ${countText(latestInterval.total)} good · ${intervalTime(latestInterval)}`:latestInterval?latestInterval.detail:'No observation has been recorded yet; this does not mean the counts are zero. The first saved interval can precede creation.'}</p></div><div><dt>{`Observed requests · ${wholeHour?'this hour':'shown period'}`}</dt><dd>{measurements.ratio!==null?`${measurements.ratio}%`:'—'}</dd><p>{measurements.total!=='0'?`${countText(measurements.bad)} unsuccessful / ${countText(measurements.total)} total`:'No observed traffic in this period.'}</p></div><div><dt>{`Data coverage · ${wholeHour?'this hour':'shown period'}`}</dt><dd className={measurements.counts.failed+measurements.counts.missing+measurements.counts.partial?'is-warning':''}>{measurements.counts.observed+measurements.counts.zero+measurements.counts.empty} <small>/ {measurements.intervals.length} {sli.polling_interval_seconds===60?'min':'intervals'}</small></dd><p>{measurements.counts.failed} query errors · {measurements.counts.missing} missing{measurements.counts.partial?` · ${measurements.counts.partial} partial`:''}{measurements.counts.empty?` · ${measurements.counts.empty} known empty`:''}{measurements.counts.zero?` · ${measurements.counts.zero} zero traffic`:''}</p></div></dl>
+          <dl className="sli-measurement-summary">{latestMeasurement}<div><dt>{`Observed requests · ${wholeHour?'this hour':'shown period'}`}</dt><dd>{measurements.ratio!==null?`${measurements.ratio}%`:'—'}</dd><p>{measurements.total!=='0'?`${countText(measurements.bad)} unsuccessful / ${countText(measurements.total)} total`:'No observed traffic in this period.'}</p></div><div><dt>{`Data coverage · ${wholeHour?'this hour':'shown period'}`}</dt><dd className={measurements.counts.failed+measurements.counts.missing+measurements.counts.partial?'is-warning':''}>{measurements.counts.observed+measurements.counts.zero+measurements.counts.empty} <small>/ {measurements.intervals.length} {sli.polling_interval_seconds===60?'min':'intervals'}</small></dd><p>{measurements.counts.failed} query errors · {measurements.counts.missing} missing{measurements.counts.partial?` · ${measurements.counts.partial} partial`:''}{measurements.counts.empty?` · ${measurements.counts.empty} known empty`:''}{measurements.counts.zero?` · ${measurements.counts.zero} zero traffic`:''}</p></div></dl>
           {!latest&&<p className="sli-first-result">Almanac saves the most recent complete interval, allowing {sli.settling_delay_seconds} seconds for source data to settle. {sli.agent_reachability==='unreachable'||sli.agent_reachability==='disabled'?'The assigned agent is unavailable.':sli.activation_state==='blocked'||sli.collection_progress==='blocked'?'Collection is blocked. Check the agent and datasource.':'The first query runs after the assigned agent receives its configuration and is ready.'}</p>}
           {historyBusy&&<span className="sr-only" role="status">Refreshing observation history</span>}
           {historyError&&<p className="sli-error" role="alert">{historyError}</p>}
           {measurements.intervals.length>0?<SliMeasurementsChart intervals={measurements.intervals}/>:historyLoaded&&!historyError?<p className="sli-muted">No observations have been recorded in this range.</p>:null}
         </div>
         <div className="sli-measurements-legend">{(Object.keys(measurements.counts) as (keyof typeof measurements.counts)[]).filter(state=>measurements.counts[state]>0||['observed','failed','missing'].includes(state)).map(state=><span key={state}><i className={`state-key ${state}`}/>{`${measurements.counts[state]} ${state==='failed'?'query errors':measurementLabels[state].toLowerCase()}`}</span>)}<span>Observed means counts received, not an SLO verdict.</span></div>
-        <div className="sli-detail-inline-note"><span>{measurements.minimum?<>{sli.polling_interval_seconds===60?'Lowest minute':'Lowest interval'} <strong className="mono">{measurements.minimum.ratio}%</strong>{` · ${intervalTime(measurements.minimum)}. Ratios use observed requests only.`}</>:'Ratios use observed requests only.'}</span><Button variant="ghost" onClick={()=>{if(datasource?.provider==='prometheus'){openDetails('sli-backfills');}else{setHistoryFilter('problems');openDetails('sli-intervals');}}}>Inspect gaps ↓</Button></div>
+        <div className="sli-detail-inline-note"><span>{measurements.minimum?<>{sli.polling_interval_seconds===60?'Lowest minute':'Lowest interval'} <strong className="mono">{measurements.minimum.ratio}%</strong>{` · ${intervalTime(measurements.minimum)}. Ratios use observed requests only.`}</>:'Ratios use observed requests only.'}</span><Button variant="ghost" onClick={()=>{setHistoryFilter('problems');openDetails('sli-intervals');}}>Inspect gaps ↓</Button></div>
+          </>}
       </section>
       {datasource?.provider === 'prometheus' && <SliBackfills sli={sli} context={context} canWrite={canWrite} />}
       <SliObjectives projection={projection} unavailable={projectionMissing}/>
       <details className="sli-detail-disclosure" id="sli-intervals"><summary>Recent intervals<span>{exactRows.length} inspected · {withoutRatio} without a ratio · exact values</span></summary>
+        {measurementPeriod !== '1h' && historyError && <p className="sli-error" role="alert">{historyError}</p>}
         <div className="sli-interval-filter"><SegmentedControl size="sm" label="Show intervals" value={historyFilter} onChange={setHistoryFilter} options={[{value:'all',label:'All loaded',count:exactRows.length},{value:'problems',label:'Failed & missing',count:problems}]}/><span>Newest first · event counts per interval</span></div>
         {earliest&&<p className="sli-detail-note sli-muted">History before {formatTime(earliest)} is unavailable.</p>}
         {missing.length>0&&<p className="sr-only">Missing intervals: {missing.map(range=>`${formatTime(range.interval_start)} – ${formatTime(range.interval_end)}`).join('; ')}</p>}

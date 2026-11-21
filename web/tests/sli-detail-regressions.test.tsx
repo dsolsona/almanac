@@ -2,6 +2,7 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
 import { SlisPage } from '../src/slis/SlisPage.tsx';
+import { SliMeasurementHistory } from '../src/slis/SliMeasurementHistory.tsx';
 import { SliObjectives } from '../src/slis/SliObjectives.tsx';
 import { clearQueryCache } from '../src/queryCache.ts';
 import { sli, sliID, datasource, history as fixtureHistory, linkedStatus } from '../browser/support/sli-detail-fixture.ts';
@@ -15,6 +16,14 @@ function setup(items:SliObservation[],options:{older?:boolean;cadence?:number}={
   history.replaceState({},'',`/slis/${sliID}`);
   vi.stubGlobal('fetch',vi.fn(async(input:RequestInfo|URL)=>{
     const url=String(input);
+    if (url.endsWith('/measurements?period=30d')) return json({
+      bucket_seconds: 10800,
+      buckets: [
+        {start:'2026-11-11T01:00:00Z', end:'2026-11-11T04:00:00Z', good:'90', total:'100', observed:179, missing:1, zero_traffic:0, known_empty:0, failed:0, incomplete:0},
+        {start:'2026-11-11T04:00:00Z', end:'2026-11-11T07:00:00Z', good:null, total:null, observed:0, missing:180, zero_traffic:0, known_empty:0, failed:0, incomplete:0},
+        {start:'2026-11-11T07:00:00Z', end:'2026-11-11T10:00:00Z', good:'990', total:'1000', observed:180, missing:0, zero_traffic:0, known_empty:0, failed:0, incomplete:0},
+      ],
+    });
     if(url.includes('/observations'))return json(url.includes('cursor=older')?{...fixtureHistory,items:[],inspected_start:'2026-11-11T08:10:00Z',inspected_end:'2026-11-11T09:00:00Z',missing_intervals:[{interval_start:'2026-11-11T08:10:00Z',interval_end:'2026-11-11T09:00:00Z'}]}:{...fixtureHistory,items,next_cursor:options.older?'older':'',inspected_start:options.cadence===15?'2026-11-11T09:59:45Z':fixtureHistory.inspected_start});
     if(url.startsWith('/api/v1/datasources'))return json({items:[datasource],next_cursor:''});
     const resource={...sli,polling_interval_seconds:options.cadence??60,linked_slos:{items:[],total_count:0}};
@@ -27,7 +36,7 @@ it('includes known-empty outcomes in collection coverage without inventing a rat
   setup(complete.map((row,i)=>i===0?{...row,outcome:'complete_empty',good_count:null,total_count:null}:row));
   await waitFor(()=>expect(document.querySelectorAll('.interval-state')).toHaveLength(60));
   expect(document.querySelector('.sli-measurement-summary')).toHaveTextContent('60 / 60 min');
-  expect(document.querySelectorAll('.chart-point')).toHaveLength(59);
+  expect(document.querySelectorAll('.chart-point')).toHaveLength(0);
 });
 it('reconstructs older missing intervals in exact values while retaining the original graph',async()=>{
   setup(fixtureHistory.items,{older:true});
@@ -64,4 +73,52 @@ it('calls the minimum a lowest interval when cadence is not one minute',async()=
   setup([{...complete[0]!,interval_start:'2026-11-11T09:59:45Z',interval_end:'2026-11-11T10:00:00Z'}],{cadence:15});
   await waitFor(()=>expect(document.querySelectorAll('.interval-state')).toHaveLength(1));
   expect(document.querySelector('.sli-detail-inline-note')).toHaveTextContent('Lowest interval');
+});
+
+it('loads a bounded 30-day measurements series independently of exact intervals', async () => {
+  setup(complete);
+  await screen.findByRole('heading', {name: 'Measurements'});
+  await userEvent.click(screen.getByRole('radio', {name: '30d'}));
+  await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url]) =>
+    String(url).endsWith('/measurements?period=30d'))).toBe(true));
+  await screen.findByText('98.18%');
+  expect(document.querySelectorAll('.interval-state')).toHaveLength(3);
+  expect(document.querySelectorAll('.interval-state.partial')).toHaveLength(1);
+  expect(document.querySelectorAll('.gap')).toHaveLength(1);
+  await userEvent.click(screen.getByRole('radio', {name: '1h'}));
+  expect(document.querySelectorAll('.interval-state')).toHaveLength(60);
+});
+
+it('keeps a loaded chart through a pending and failed same-range refresh', async () => {
+  const bucket = {start:'2026-11-11T07:00:00Z', end:'2026-11-11T10:00:00Z', good:'99', total:'100', observed:179, missing:1, zero_traffic:0, known_empty:0, failed:0, incomplete:0};
+  const fetchMock = vi.fn().mockResolvedValueOnce(json({bucket_seconds:10800,buckets:[bucket]}));
+  let finish!: (response: Response) => void;
+  fetchMock.mockImplementationOnce(() => new Promise<Response>(resolve => {finish = resolve;}));
+  vi.stubGlobal('fetch',fetchMock);
+  const view=render(<SliMeasurementHistory id={sliID} period="30d" refresh={0} latest={null}/>);
+  await screen.findByText('99.00%');
+  expect(view.container.querySelector('.chart-point.partial')).toBeInTheDocument();
+  view.rerender(<SliMeasurementHistory id={sliID} period="30d" refresh={1} latest={null}/>);
+  expect(screen.getByRole('status')).toHaveTextContent('Loading measurements');
+  expect(screen.getByText('99.00%')).toBeInTheDocument();
+  finish(new Response('{}',{status:503}));
+  await screen.findByRole('alert');
+  expect(screen.getByText('99.00%')).toBeInTheDocument();
+});
+
+it('shows an exact pagination error beside recent intervals on a longer range', async () => {
+  setup(complete,{older:true});
+  const fetchMock=vi.mocked(fetch);
+  const fetchFixture=fetchMock.getMockImplementation()!;
+  fetchMock.mockImplementation((input,init) => String(input).includes('cursor=older')
+    ? Promise.resolve(new Response('{}',{status:503}))
+    : fetchFixture(input,init));
+  await screen.findByRole('radio',{name:'30d'});
+  await userEvent.click(screen.getByRole('radio',{name:'30d'}));
+  await screen.findByText('98.18%');
+  await userEvent.click(screen.getByRole('button',{name:'Recent intervals ↓'}));
+  await userEvent.click(await screen.findByRole('button',{name:'Load more intervals'}));
+  expect(await screen.findByRole('alert')).toHaveTextContent(/temporarily unavailable/);
+  expect(document.querySelector('#sli-intervals [role="alert"]')).toBeInTheDocument();
+  expect(screen.getByText('98.18%')).toBeInTheDocument();
 });

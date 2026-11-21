@@ -1016,6 +1016,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/slis/{sli_id}/measurements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read a bounded series for the SLI Measurements chart
+         * @description Returns up to 240 consecutive buckets for the current measurement revision, aligned to the latest due interval. History before eligibility is clipped. Counts are exact decimal sums. Outcome counts describe canonical intervals, including missing intervals. An empty series means no intervals are due.
+         */
+        get: operations["getSliMeasurements"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/maintenance": {
         parameters: {
             query?: never;
@@ -2756,6 +2776,26 @@ export interface components {
                 /** @enum {string} */
                 state: "eligible" | "automatic" | "manual" | "outside-retention" | "previous-failure";
             }[];
+        };
+        SliMeasurementBucket: {
+            /** Format: date-time */
+            start: string;
+            /** Format: date-time */
+            end: string;
+            good: string | null;
+            total: string | null;
+            /** Format: int64 */
+            observed: number;
+            /** Format: int64 */
+            zero_traffic: number;
+            /** Format: int64 */
+            known_empty: number;
+            /** Format: int64 */
+            failed: number;
+            /** Format: int64 */
+            incomplete: number;
+            /** Format: int64 */
+            missing: number;
         };
         SliObservationPage: {
             items: components["schemas"]["SliObservation"][];
@@ -5966,6 +6006,42 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Request rejected */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getSliMeasurements: {
+        parameters: {
+            query: {
+                period: "3h" | "6h" | "24h" | "7d" | "30d";
+            };
+            header?: never;
+            path: {
+                sli_id: components["parameters"]["SliId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bucketed chart data */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        bucket_seconds: number;
+                        buckets: components["schemas"]["SliMeasurementBucket"][];
+                    };
                 };
             };
             /** @description Request rejected */

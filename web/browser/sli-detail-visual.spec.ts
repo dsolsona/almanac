@@ -1,8 +1,20 @@
 import { createServer } from 'node:http';
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { resolve, dirname } from 'node:path';
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { sli, sliID, history, installSliDetailFixture } from './support/sli-detail-fixture.ts';
+
+async function samplePosition(page: Page, index: number) {
+  const plot = page.locator('.sli-measurement-svg');
+  await plot.scrollIntoViewIfNeeded();
+  return plot.evaluate((node, index) => {
+    const svg = node as unknown as SVGSVGElement;
+    const markers = svg.querySelectorAll('.interval-state');
+    const x = Number(markers[index]!.getAttribute('x')) + Number(markers[index]!.getAttribute('width')) / 2;
+    const position = new DOMPoint(x, 100).matrixTransform(svg.getScreenCTM()!);
+    return {x: position.x, y: position.y};
+  }, index);
+}
 
 test('SLI measurements match approved E and expose exact interval values', {tag:'@matrix'}, async ({browser},testInfo)=>{
   const width=testInfo.project.use.viewport!.width,theme=testInfo.project.name.endsWith('dark')?'dark':'light';
@@ -19,7 +31,7 @@ test('SLI measurements match approved E and expose exact interval values', {tag:
   actual.on('pageerror',error=>errors.push(error.message));
   await installSliDetailFixture(actual);
   try {
-    await actual.goto(`/slis/${sliID}`);await actual.locator('.chart-point').last().waitFor();
+    await actual.goto(`/slis/${sliID}`);await actual.locator('.sli-measurement-svg .line').last().waitFor();
     await reference.goto(`http://127.0.0.1:${address.port}/docs/design/mocks/sli-detail-options/refined.html?theme=${theme}`);
     for(const target of [actual,reference]){await target.evaluate(()=>document.fonts.ready);await target.evaluate(()=>document.documentElement.style.setProperty('--mono','"Liberation Mono", monospace'));}
     await expect(actual.locator('.sli-measurement-summary')).toContainText('99.90%');
@@ -47,7 +59,8 @@ test('SLI measurements match approved E and expose exact interval values', {tag:
     expect.soft(received).toMatchSnapshot(snapshot,{maxDiffPixels:0});
     // Return to ordinary page positions before interaction checks.
     await actualPanel.evaluate(el=>el.parentElement!.replaceWith(el));
-    await actual.locator('[data-point="29"]').hover();
+    const hover = await samplePosition(actual, 29);
+    await actual.mouse.move(hover.x, hover.y);
     await expect(actual.getByRole('tooltip')).toContainText('92.50%');await expect(actual.getByRole('tooltip')).toContainText('1,850');
     await actual.keyboard.press('Escape');await expect(actual.getByRole('tooltip')).not.toBeVisible();
     await actual.locator('.interval-state.failed').first().hover();await expect(actual.getByRole('tooltip')).toContainText('Query timed out');
@@ -74,7 +87,8 @@ test('SLI point inspection supports touch and keeps long exact counts inside its
     const page=await context.newPage();
     await installSliDetailFixture(page);
     await page.goto(`/slis/${sliID}`);
-    await page.locator('[data-point="29"]').tap();
+    const touch = await samplePosition(page, 29);
+    await page.touchscreen.tap(touch.x, touch.y);
     await expect(page.getByRole('tooltip')).toContainText('92.50%');
     await page.locator('.interval-state.missing').tap();
     await expect(page.getByRole('tooltip')).toContainText('No observation received');

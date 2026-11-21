@@ -922,6 +922,34 @@ paths:
         '200': {description: Exact persisted interval outcomes, content: {application/json: {schema: {$ref: '#/components/schemas/SliObservationPage'}}}}
         '404': {description: SLI not found, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
         'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/slis/{sli_id}/measurements:
+    get:
+      operationId: getSliMeasurements
+      summary: Read a bounded series for the SLI Measurements chart
+      description: >-
+        Returns up to 240 consecutive buckets for the current measurement revision,
+        aligned to the latest due interval. History before eligibility is clipped.
+        Counts are exact decimal sums. Outcome counts describe canonical intervals,
+        including missing intervals. An empty series means no intervals are due.
+      security: [{SessionCookie: []}]
+      parameters:
+        - {$ref: '#/components/parameters/SliId'}
+        - {name: period, in: query, required: true, schema: {type: string, enum: [3h, 6h, 24h, 7d, 30d]}}
+      responses:
+        '200':
+          description: Bucketed chart data
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [bucket_seconds, buckets]
+                properties:
+                  bucket_seconds: {type: integer, minimum: 1}
+                  buckets:
+                    type: array
+                    maxItems: 240
+                    items: {$ref: '#/components/schemas/SliMeasurementBucket'}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
   /api/v1/maintenance:
     get:
       operationId: listMaintenance
@@ -2933,6 +2961,20 @@ components:
               end: {type: string, format: date-time}
               intervals: {type: integer, minimum: 1}
               state: {type: string, enum: [eligible, automatic, manual, outside-retention, previous-failure]}
+    SliMeasurementBucket:
+      type: object
+      required: [start, end, good, total, observed, zero_traffic, known_empty, failed, incomplete, missing]
+      properties:
+        start: {type: string, format: date-time}
+        end: {type: string, format: date-time}
+        good: {type: string, nullable: true}
+        total: {type: string, nullable: true}
+        observed: {type: integer, format: int64, minimum: 0}
+        zero_traffic: {type: integer, format: int64, minimum: 0}
+        known_empty: {type: integer, format: int64, minimum: 0}
+        failed: {type: integer, format: int64, minimum: 0}
+        incomplete: {type: integer, format: int64, minimum: 0}
+        missing: {type: integer, format: int64, minimum: 0}
     SliObservationPage:
       type: object
       required: [items, next_cursor, earliest_queryable_interval_start, inspected_start, inspected_end, missing_intervals]

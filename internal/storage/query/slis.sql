@@ -423,3 +423,39 @@ LIMIT $3;
 -- name: LatestSliAcceptedAt :one
 SELECT max(recorded_at)::timestamptz FROM public.almanac_sli_observations
 WHERE sli_id = $1 AND interval_start >= $2 AND outcome IN ('observed', 'complete_empty');
+
+-- name: BucketSliMeasurements :many
+WITH outcomes AS (
+    SELECT c.interval_start, c.outcome, c.good_count, c.total_count
+    FROM public.almanac_sli_observations c
+    WHERE c.sli_id = sqlc.arg(sli_id) AND c.measurement_revision = sqlc.arg(measurement_revision)
+      AND c.interval_start >= sqlc.arg(range_start)::timestamptz
+      AND c.interval_start < sqlc.arg(range_end)::timestamptz
+    UNION ALL
+    SELECT latest.interval_start, latest.outcome, NULL::numeric, NULL::numeric
+    FROM (
+        SELECT DISTINCT ON (a.interval_start) a.interval_start, a.outcome
+        FROM public.almanac_sli_execution_attempts a
+        WHERE a.sli_id = sqlc.arg(sli_id) AND a.measurement_revision = sqlc.arg(measurement_revision)
+          AND a.interval_start >= sqlc.arg(range_start)::timestamptz
+          AND a.interval_start < sqlc.arg(range_end)::timestamptz
+          AND NOT EXISTS (
+              SELECT 1 FROM public.almanac_sli_observations c
+              WHERE c.sli_id = a.sli_id AND c.measurement_revision = a.measurement_revision
+                AND c.interval_start = a.interval_start
+          )
+        ORDER BY a.interval_start DESC, a.recorded_at DESC, a.execution_id DESC
+    ) latest
+)
+SELECT date_bin(make_interval(secs => sqlc.arg(bucket_seconds)::double precision),
+                interval_start, sqlc.arg(range_end)::timestamptz)::timestamptz AS bucket_start,
+       coalesce(sum(good_count)::text, '')::text AS good,
+       coalesce(sum(total_count)::text, '')::text AS total,
+       count(*) FILTER (WHERE outcome = 'observed' AND total_count > 0) AS observed,
+       count(*) FILTER (WHERE outcome = 'observed' AND total_count = 0) AS zero_traffic,
+       count(*) FILTER (WHERE outcome = 'complete_empty') AS known_empty,
+       count(*) FILTER (WHERE outcome = 'failed') AS failed,
+       count(*) FILTER (WHERE outcome = 'incomplete') AS incomplete
+FROM outcomes
+GROUP BY 1
+ORDER BY 1;

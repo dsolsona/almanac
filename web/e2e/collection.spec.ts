@@ -138,22 +138,23 @@ test('define an SLI and see its first collected interval', async ({ page }) => {
 
 test('inspect exact SLI measurements in both themes and at mobile width',async({page},testInfo)=>{
   await page.goto(`/slis/${sliID}`);
-  await expect(page.locator('.chart-point').first()).toBeVisible();
+  await expect(page.locator('.sli-measurement-svg .line, .sli-measurement-svg .chart-point').first()).toBeVisible();
   await expect(page.locator('#sli-intervals')).not.toHaveAttribute('open','');
   const resource=await expectOk(api(page,'GET',`/api/v1/slis/${sliID}`));
   expect(resource.body.latest_observation.good_count).toBe('99');
   expect(resource.body.latest_observation.total_count).toBe('100');
+  const rangeTimings: number[] = [];
   for(const width of [1440,360])for(const theme of ['light','dark']){
     await page.setViewportSize({width,height:1000});
     await page.evaluate(theme=>localStorage.setItem('almanac-theme',theme),theme);
     await page.reload();
     await expect(page.locator('.sli-measurement-summary > div:first-child dd')).toHaveText('99.00%');
-    await expect(page.locator('.chart-point').first()).toBeVisible();
+    await expect(page.locator('.sli-measurement-svg .line, .sli-measurement-svg .chart-point').first()).toBeVisible();
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
     const chart=page.getByRole('group',{name:/Interactive measurements/});
     await chart.focus();await page.keyboard.press('End');
     // Settling leaves recent slots uncollected; navigate to an actual collected point.
-    const observedIndex=Number(await page.locator('.chart-point').last().getAttribute('data-interval'));
+    const observedIndex=Number(await page.locator('.interval-state.observed').last().getAttribute('data-interval'));
     const intervalCount=await page.locator('.interval-state').count();
     for(let i=intervalCount-1;i>observedIndex;i--)await page.keyboard.press('ArrowLeft');
     await expect(page.getByRole('tooltip')).toContainText('99.00%');
@@ -162,7 +163,27 @@ test('inspect exact SLI measurements in both themes and at mobile width',async({
     await chart.evaluate(el=>(el as HTMLElement).blur());
     await page.evaluate(()=>window.scrollTo({top:0,behavior:'instant'}));
     await page.screenshot({path:testInfo.outputPath(`sli-real-${width}-${theme}.png`),fullPage:true});
+    const ranges = page.getByRole('radiogroup', {name: 'Measurement history range'});
+    for (const period of ['3h', '6h', '24h', '7d', '30d']) {
+      const started = performance.now();
+      const response = page.waitForResponse(result => result.url().endsWith(`/measurements?period=${period}`));
+      await ranges.getByRole('radio', {name: period, exact: true}).click();
+      expect((await response).ok()).toBe(true);
+      await expect(page.locator('.sli-measurement-summary > div:nth-child(2) dd')).toHaveText('99.00%');
+      await expect(page.locator('.sli-measurement-svg .line, .sli-measurement-svg .chart-point').first()).toBeVisible();
+      expect(await page.locator('.interval-state').count()).toBeLessThanOrEqual(240);
+      rangeTimings.push(performance.now() - started);
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await chart.focus();
+    await page.keyboard.press('End');
+    await expect(page.getByRole('tooltip')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('tooltip')).not.toBeVisible();
+    await page.screenshot({path:testInfo.outputPath(`sli-30d-${width}-${theme}.png`),fullPage:true});
+    await ranges.getByRole('radio', {name: '1h', exact: true}).click();
   }
+  console.log(`SLI range switches through chart render: ${Math.min(...rangeTimings).toFixed(0)}–${Math.max(...rangeTimings).toFixed(0)} ms (${rangeTimings.length} switches)`);
   await page.getByRole('button',{name:'Exact values ↓'}).click();
   const table=page.locator('.sli-intervals-table');
   await expect(table.getByRole('cell',{name:'99',exact:true}).first()).toBeVisible();
