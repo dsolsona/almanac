@@ -1766,6 +1766,33 @@ func (e SliBackfillJobState) Valid() bool {
 	}
 }
 
+// Defines values for SliBackfillPlanGapsState.
+const (
+	Automatic        SliBackfillPlanGapsState = "automatic"
+	Eligible         SliBackfillPlanGapsState = "eligible"
+	Manual           SliBackfillPlanGapsState = "manual"
+	OutsideRetention SliBackfillPlanGapsState = "outside-retention"
+	PreviousFailure  SliBackfillPlanGapsState = "previous-failure"
+)
+
+// Valid indicates whether the value is a known member of the SliBackfillPlanGapsState enum.
+func (e SliBackfillPlanGapsState) Valid() bool {
+	switch e {
+	case Automatic:
+		return true
+	case Eligible:
+		return true
+	case Manual:
+		return true
+	case OutsideRetention:
+		return true
+	case PreviousFailure:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SliObservationErrorCode.
 const (
 	SliObservationErrorCodeAssignmentRevoked SliObservationErrorCode = "assignment_revoked"
@@ -3892,21 +3919,24 @@ type CredentialPage struct {
 
 // Datasource defines model for Datasource.
 type Datasource struct {
-	AgentId                openapi_types.UUID             `json:"agent_id"`
-	Authentication         DatasourceAuthentication       `json:"authentication"`
-	ConfigurationFormat    DatasourceConfigurationFormat  `json:"configuration_format"`
-	CreatedAt              time.Time                      `json:"created_at"`
-	DisplayName            string                         `json:"display_name"`
-	Endpoint               string                         `json:"endpoint"`
-	Id                     openapi_types.UUID             `json:"id"`
-	Name                   string                         `json:"name"`
-	PollingIntervalSeconds int                            `json:"polling_interval_seconds"`
-	Provider               DatasourceProvider             `json:"provider"`
-	Reassignment           *DatasourceReassignment        `json:"reassignment,omitempty"`
-	SettlingDelaySeconds   DatasourceSettlingDelaySeconds `json:"settling_delay_seconds"`
-	Tls                    DatasourceTLS                  `json:"tls"`
-	UpdatedAt              time.Time                      `json:"updated_at"`
-	Version                string                         `json:"version"`
+	AgentId             openapi_types.UUID            `json:"agent_id"`
+	Authentication      DatasourceAuthentication      `json:"authentication"`
+	ConfigurationFormat DatasourceConfigurationFormat `json:"configuration_format"`
+	CreatedAt           time.Time                     `json:"created_at"`
+	DisplayName         string                        `json:"display_name"`
+	Endpoint            string                        `json:"endpoint"`
+
+	// HistoricalRetentionDays Source lookback in whole days. Zero clears the configured value.
+	HistoricalRetentionDays *int                           `json:"historical_retention_days,omitempty"`
+	Id                      openapi_types.UUID             `json:"id"`
+	Name                    string                         `json:"name"`
+	PollingIntervalSeconds  int                            `json:"polling_interval_seconds"`
+	Provider                DatasourceProvider             `json:"provider"`
+	Reassignment            *DatasourceReassignment        `json:"reassignment,omitempty"`
+	SettlingDelaySeconds    DatasourceSettlingDelaySeconds `json:"settling_delay_seconds"`
+	Tls                     DatasourceTLS                  `json:"tls"`
+	UpdatedAt               time.Time                      `json:"updated_at"`
+	Version                 string                         `json:"version"`
 }
 
 // DatasourceConfigurationFormat defines model for Datasource.ConfigurationFormat.
@@ -3964,14 +3994,17 @@ type DatasourceWrite struct {
 	} `json:"authentication"`
 
 	// CancelReassignment Update-only cancellation intent. Requires a matching pending reassignment to the requested source agent; returns 409 if it already completed.
-	CancelReassignment     *bool                              `json:"cancel_reassignment,omitempty"`
-	ConfigurationFormat    DatasourceWriteConfigurationFormat `json:"configuration_format"`
-	DisplayName            string                             `json:"display_name"`
-	Endpoint               string                             `json:"endpoint"`
-	Name                   string                             `json:"name"`
-	PollingIntervalSeconds int                                `json:"polling_interval_seconds"`
-	Provider               DatasourceWriteProvider            `json:"provider"`
-	Tls                    DatasourceTLS                      `json:"tls"`
+	CancelReassignment  *bool                              `json:"cancel_reassignment,omitempty"`
+	ConfigurationFormat DatasourceWriteConfigurationFormat `json:"configuration_format"`
+	DisplayName         string                             `json:"display_name"`
+	Endpoint            string                             `json:"endpoint"`
+
+	// HistoricalRetentionDays Source lookback in whole days. Zero clears the configured value.
+	HistoricalRetentionDays *int                    `json:"historical_retention_days,omitempty"`
+	Name                    string                  `json:"name"`
+	PollingIntervalSeconds  int                     `json:"polling_interval_seconds"`
+	Provider                DatasourceWriteProvider `json:"provider"`
+	Tls                     DatasourceTLS           `json:"tls"`
 }
 
 // DatasourceWriteAuthenticationMode defines model for DatasourceWrite.Authentication.Mode.
@@ -4712,23 +4745,51 @@ type SliBackfillAdmission struct {
 	ChunkCount int                 `json:"chunk_count"`
 	End        time.Time           `json:"end"`
 	Id         *openapi_types.UUID `json:"id,omitempty"`
+	Plan       *SliBackfillPlan    `json:"plan,omitempty"`
 	Start      time.Time           `json:"start"`
 }
 
 // SliBackfillJob defines model for SliBackfillJob.
 type SliBackfillJob struct {
-	Automatic bool                `json:"automatic"`
-	Chunks    int                 `json:"chunks"`
-	Committed int                 `json:"committed"`
-	End       time.Time           `json:"end"`
-	Gaps      int                 `json:"gaps"`
-	Id        openapi_types.UUID  `json:"id"`
-	Start     time.Time           `json:"start"`
-	State     SliBackfillJobState `json:"state"`
+	Automatic          bool                `json:"automatic"`
+	Chunks             int                 `json:"chunks"`
+	Committed          int                 `json:"committed"`
+	End                time.Time           `json:"end"`
+	Gaps               int                 `json:"gaps"`
+	Id                 openapi_types.UUID  `json:"id"`
+	RecoveredIntervals *int                `json:"recovered_intervals,omitempty"`
+	RequestedIntervals *int                `json:"requested_intervals,omitempty"`
+	Start              time.Time           `json:"start"`
+	State              SliBackfillJobState `json:"state"`
 }
 
 // SliBackfillJobState defines model for SliBackfillJob.State.
 type SliBackfillJobState string
+
+// SliBackfillPlan defines model for SliBackfillPlan.
+type SliBackfillPlan struct {
+	AutomaticIntervals      int `json:"automatic_intervals"`
+	CadenceSeconds          int `json:"cadence_seconds"`
+	ChunkCount              int `json:"chunk_count"`
+	CoveredIntervals        int `json:"covered_intervals"`
+	DatasourceRetentionDays int `json:"datasource_retention_days"`
+	EligibleIntervals       int `json:"eligible_intervals"`
+	GapCount                int `json:"gap_count"`
+	Gaps                    []struct {
+		End       time.Time                `json:"end"`
+		Intervals int                      `json:"intervals"`
+		Start     time.Time                `json:"start"`
+		State     SliBackfillPlanGapsState `json:"state"`
+	} `json:"gaps"`
+	ManualIntervals           int       `json:"manual_intervals"`
+	MissingIntervals          int       `json:"missing_intervals"`
+	OutsideRetentionIntervals int       `json:"outside_retention_intervals"`
+	PreviousFailureIntervals  int       `json:"previous_failure_intervals"`
+	RecoveryStart             time.Time `json:"recovery_start"`
+}
+
+// SliBackfillPlanGapsState defines model for SliBackfillPlan.Gaps.State.
+type SliBackfillPlanGapsState string
 
 // SliBackfillRequest defines model for SliBackfillRequest.
 type SliBackfillRequest struct {

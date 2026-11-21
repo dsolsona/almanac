@@ -2877,6 +2877,7 @@ components:
         display_name: {type: string, minLength: 1, maxLength: 128}
     SliBackfillRequest:
       type: object
+      additionalProperties: false
       required: [start, end, preview]
       properties:
         start: {type: string, format: date-time}
@@ -2889,7 +2890,8 @@ components:
         id: {type: string, format: uuid}
         start: {type: string, format: date-time}
         end: {type: string, format: date-time}
-        chunk_count: {type: integer, minimum: 1}
+        chunk_count: {type: integer, minimum: 0}
+        plan: {$ref: '#/components/schemas/SliBackfillPlan'}
     SliBackfillJob:
       type: object
       required: [id, start, end, state, automatic, chunks, committed, gaps]
@@ -2902,6 +2904,35 @@ components:
         chunks: {type: integer, minimum: 1}
         committed: {type: integer, minimum: 0}
         gaps: {type: integer, minimum: 0}
+        requested_intervals: {type: integer, minimum: 0}
+        recovered_intervals: {type: integer, minimum: 0}
+    SliBackfillPlan:
+      type: object
+      required: [recovery_start, datasource_retention_days, cadence_seconds, covered_intervals, eligible_intervals, automatic_intervals, manual_intervals, outside_retention_intervals, previous_failure_intervals, missing_intervals, gap_count, chunk_count, gaps]
+      properties:
+        recovery_start: {type: string, format: date-time}
+        datasource_retention_days: {type: integer, minimum: 0}
+        cadence_seconds: {type: integer, minimum: 15}
+        covered_intervals: {type: integer, minimum: 0}
+        eligible_intervals: {type: integer, minimum: 0}
+        automatic_intervals: {type: integer, minimum: 0}
+        manual_intervals: {type: integer, minimum: 0}
+        outside_retention_intervals: {type: integer, minimum: 0}
+        previous_failure_intervals: {type: integer, minimum: 0}
+        missing_intervals: {type: integer, minimum: 0}
+        gap_count: {type: integer, minimum: 0}
+        chunk_count: {type: integer, minimum: 0}
+        gaps:
+          type: array
+          maxItems: 200
+          items:
+            type: object
+            required: [start, end, intervals, state]
+            properties:
+              start: {type: string, format: date-time}
+              end: {type: string, format: date-time}
+              intervals: {type: integer, minimum: 1}
+              state: {type: string, enum: [eligible, automatic, manual, outside-retention, previous-failure]}
     SliObservationPage:
       type: object
       required: [items, next_cursor, earliest_queryable_interval_start, inspected_start, inspected_end, missing_intervals]
@@ -3047,6 +3078,7 @@ components:
         endpoint: {type: string, format: uri}
         tls: {$ref: '#/components/schemas/DatasourceTLS'}
         authentication: {$ref: '#/components/schemas/DatasourceAuthentication'}
+        historical_retention_days: {type: integer, minimum: 0, maximum: 36500, description: Source lookback in whole days. Zero clears the configured value.}
         polling_interval_seconds: {type: integer, minimum: 15, maximum: 86400}
         settling_delay_seconds: {type: integer, enum: [60]}
         agent_id: {type: string, format: uuid}
@@ -3098,6 +3130,7 @@ components:
             username: {type: string, nullable: true}
             password_secret: {$ref: '#/components/schemas/SecretAction'}
             token_secret: {$ref: '#/components/schemas/SecretAction'}
+        historical_retention_days: {type: integer, minimum: 0, maximum: 36500, description: Source lookback in whole days. Zero clears the configured value.}
         polling_interval_seconds: {type: integer, minimum: 15, maximum: 86400}
         agent_id: {type: string, format: uuid}
         cancel_reassignment: {type: boolean, description: Update-only cancellation intent. Requires a matching pending reassignment to the requested source agent; returns 409 if it already completed.}

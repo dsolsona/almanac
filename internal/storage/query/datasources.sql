@@ -3,14 +3,14 @@ INSERT INTO public.almanac_datasources (
     id, name, display_name, version, provider, configuration_format, endpoint, tls,
     authentication_mode, authentication_username, password_envelope, password_revision,
     token_envelope, token_revision, polling_interval_seconds, settling_delay_seconds,
-    agent_id, created_at, updated_at
+    historical_retention_days, agent_id, created_at, updated_at
 ) VALUES (
     sqlc.arg(id), sqlc.arg(name), sqlc.arg(display_name), 1, sqlc.arg(provider),
     sqlc.arg(configuration_format), sqlc.arg(endpoint), sqlc.arg(tls),
     sqlc.arg(authentication_mode), sqlc.narg(authentication_username),
     sqlc.narg(password_envelope), sqlc.arg(password_revision), sqlc.narg(token_envelope),
     sqlc.arg(token_revision), sqlc.arg(polling_interval_seconds), sqlc.arg(settling_delay_seconds),
-    sqlc.arg(agent_id), sqlc.arg(created_at), sqlc.arg(updated_at)
+    sqlc.arg(historical_retention_days), sqlc.arg(agent_id), sqlc.arg(created_at), sqlc.arg(updated_at)
 )
 RETURNING *;
 
@@ -38,7 +38,7 @@ SET name = sqlc.arg(name), display_name = sqlc.arg(display_name), version = vers
     token_envelope = sqlc.narg(token_envelope), token_revision = sqlc.arg(token_revision),
     polling_interval_seconds = sqlc.arg(polling_interval_seconds),
     settling_delay_seconds = sqlc.arg(settling_delay_seconds), agent_id = sqlc.arg(agent_id),
-    updated_at = sqlc.arg(updated_at)
+    historical_retention_days = sqlc.arg(historical_retention_days), updated_at = sqlc.arg(updated_at)
 WHERE id = sqlc.arg(id) AND version = sqlc.arg(expected_version)
 RETURNING *;
 

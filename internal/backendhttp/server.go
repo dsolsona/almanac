@@ -258,7 +258,10 @@ func (s *Server) startReassignmentWorker() {
 			if s.storageRuntime != nil && s.ready.Load() && !time.Now().Before(nextHistoricalSweep) {
 				now := time.Now().UTC()
 				nextHistoricalSweep = now.Add(time.Minute)
-				if err := s.storageRuntime.SweepBackfill(bounded, now); err != nil && ctx.Err() == nil {
+				historyCtx, finishHistory := context.WithTimeout(ctx, 10*time.Second)
+				err := s.storageRuntime.SweepBackfill(historyCtx, now)
+				finishHistory()
+				if err != nil && ctx.Err() == nil {
 					slog.Warn("historical work reconciliation failed", "error", err)
 				}
 			}

@@ -2715,6 +2715,7 @@ export interface components {
             /** Format: date-time */
             end: string;
             chunk_count: number;
+            plan?: components["schemas"]["SliBackfillPlan"];
         };
         SliBackfillJob: {
             /** Format: uuid */
@@ -2729,6 +2730,32 @@ export interface components {
             chunks: number;
             committed: number;
             gaps: number;
+            requested_intervals?: number;
+            recovered_intervals?: number;
+        };
+        SliBackfillPlan: {
+            /** Format: date-time */
+            recovery_start: string;
+            datasource_retention_days: number;
+            cadence_seconds: number;
+            covered_intervals: number;
+            eligible_intervals: number;
+            automatic_intervals: number;
+            manual_intervals: number;
+            outside_retention_intervals: number;
+            previous_failure_intervals: number;
+            missing_intervals: number;
+            gap_count: number;
+            chunk_count: number;
+            gaps: {
+                /** Format: date-time */
+                start: string;
+                /** Format: date-time */
+                end: string;
+                intervals: number;
+                /** @enum {string} */
+                state: "eligible" | "automatic" | "manual" | "outside-retention" | "previous-failure";
+            }[];
         };
         SliObservationPage: {
             items: components["schemas"]["SliObservation"][];
@@ -2869,6 +2896,8 @@ export interface components {
             endpoint: string;
             tls: components["schemas"]["DatasourceTLS"];
             authentication: components["schemas"]["DatasourceAuthentication"];
+            /** @description Source lookback in whole days. Zero clears the configured value. */
+            historical_retention_days?: number;
             polling_interval_seconds: number;
             /** @enum {integer} */
             settling_delay_seconds: 60;
@@ -2920,6 +2949,8 @@ export interface components {
                 password_secret: components["schemas"]["SecretAction"];
                 token_secret: components["schemas"]["SecretAction"];
             };
+            /** @description Source lookback in whole days. Zero clears the configured value. */
+            historical_retention_days?: number;
             polling_interval_seconds: number;
             /** Format: uuid */
             agent_id: string;

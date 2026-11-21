@@ -9,18 +9,20 @@ import (
 )
 
 type BackfillJob struct {
-	ID        string    `json:"id"`
-	Start     time.Time `json:"start"`
-	End       time.Time `json:"end"`
-	State     string    `json:"state"`
-	Automatic bool      `json:"automatic"`
-	Chunks    int       `json:"chunks"`
-	Committed int       `json:"committed"`
-	Gaps      int       `json:"gaps"`
+	ID                 string    `json:"id"`
+	Start              time.Time `json:"start"`
+	End                time.Time `json:"end"`
+	State              string    `json:"state"`
+	Automatic          bool      `json:"automatic"`
+	Chunks             int       `json:"chunks"`
+	Committed          int       `json:"committed"`
+	Gaps               int       `json:"gaps"`
+	RequestedIntervals int       `json:"requested_intervals"`
+	RecoveredIntervals int       `json:"recovered_intervals"`
 }
 
 func ListBackfills(ctx context.Context, databaseURL string, proof DatasourceProof, sliID string, clock func() time.Time) ([]BackfillJob, error) {
-	conn, _, tx, user, installation, session, started, err := beginAgentRead(ctx, databaseURL, proof.SessionVerifier, clock)
+	conn, _, tx, user, installation, session, started, err := beginAgentReadWithRoles(ctx, databaseURL, proof.SessionVerifier, clock, "administrator", "editor", "viewer")
 	if err != nil {
 		return nil, err
 	}
@@ -35,7 +37,11 @@ SELECT j.id, j.requested_start, j.requested_end, j.requested_by IS NULL, count(c
             WHEN bool_or(c.state IN ('queued','retry-wait')) THEN
                 CASE WHEN bool_or(c.attempts>0) THEN 'running' ELSE 'queued' END
             WHEN bool_or(c.state IN ('failed','unavailable')) THEN 'completed-with-gaps'
-            ELSE 'completed' END
+            ELSE 'completed' END,
+       sum(extract(epoch FROM c.range_end-c.range_start)::bigint / c.cadence_seconds),
+       sum(CASE WHEN c.state='committed' THEN (SELECT count(*) FROM public.almanac_sli_observations o
+           WHERE o.backfill_chunk_id=c.id AND o.interval_start>=c.range_start AND o.interval_start<c.range_end)
+           ELSE 0 END)
 FROM (SELECT * FROM public.almanac_backfill_jobs WHERE sli_id=$1 ORDER BY created_at DESC, id LIMIT 20) j
 JOIN public.almanac_backfill_chunks c ON c.job_id=j.id
 GROUP BY j.id, j.requested_start, j.requested_end, j.cancelled_at, j.requested_by, j.created_at
@@ -46,7 +52,7 @@ ORDER BY j.created_at DESC, j.id`, sliID)
 	jobs := make([]BackfillJob, 0, 20)
 	for rows.Next() {
 		var job BackfillJob
-		if err := rows.Scan(&job.ID, &job.Start, &job.End, &job.Automatic, &job.Chunks, &job.Committed, &job.Gaps, &job.State); err != nil {
+		if err := rows.Scan(&job.ID, &job.Start, &job.End, &job.Automatic, &job.Chunks, &job.Committed, &job.Gaps, &job.State, &job.RequestedIntervals, &job.RecoveredIntervals); err != nil {
 			rows.Close()
 			return nil, operationError(ctx, "storage: scan historical jobs", err)
 		}

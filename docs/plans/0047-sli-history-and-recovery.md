@@ -44,6 +44,13 @@ unexcluded 99/100 population with a 99.5% objective consumes 200% of its budget.
   Capture authenticated desktop light/dark and mobile evidence alongside the
   Playwright results. Preserve the retained SLI detail layout.
 
+## Gap-aware operator workflow
+
+[F4-T65](../tasks/F4-T65.md) tracks the approved gap explorer and datasource
+retention policy. Passes use the canonical measurements and durable job state.
+The operator inspects gaps, previews eligible work, then confirms a queued job.
+No separate start action is required.
+
 ## Automatic recovery
 
 - [ ] Admit overdue gaps through the same historical job path, with the delivery

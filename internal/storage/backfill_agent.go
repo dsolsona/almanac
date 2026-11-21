@@ -22,17 +22,30 @@ func ClaimBackfill(ctx context.Context, databaseURL string, proof BackfillAgentP
 	}
 	defer closeAgentOwnershipTransaction(state)
 	var claim sli.BackfillClaim
+	var retentionDays int
 	err = state.tx.QueryRow(ctx, `
 SELECT c.id, c.sli_id, m.datasource_id, c.generation, c.measurement_revision, c.range_start, c.range_end,
-       c.cadence_seconds, c.lease_until
+       c.cadence_seconds, c.lease_until,d.historical_retention_days,
+       ARRAY(SELECT o.interval_start FROM public.almanac_sli_observations o
+         WHERE o.sli_id=c.sli_id AND o.measurement_revision=c.measurement_revision
+           AND o.interval_start>=c.range_start AND o.interval_start<c.range_end
+           AND o.outcome IN ('observed','complete_empty') ORDER BY o.interval_start)
 FROM public.almanac_claim_backfill_chunk($1,$2,$3) c
-JOIN public.almanac_sli_measurements m ON m.sli_id=c.sli_id AND m.revision=c.measurement_revision`, state.agentID, now, proof.Generation).
-		Scan(&claim.ID, &claim.SLIID, &claim.DatasourceID, &claim.Generation, &claim.Revision, &claim.Start, &claim.End, &claim.Cadence, &claim.LeaseUntil)
+JOIN public.almanac_sli_measurements m ON m.sli_id=c.sli_id AND m.revision=c.measurement_revision
+JOIN public.almanac_datasources d ON d.id=m.datasource_id`, state.agentID, now, proof.Generation).
+		Scan(&claim.ID, &claim.SLIID, &claim.DatasourceID, &claim.Generation, &claim.Revision, &claim.Start, &claim.End, &claim.Cadence, &claim.LeaseUntil, &retentionDays, &claim.CoveredStarts)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return sli.BackfillClaim{}, nil
 	}
 	if err != nil {
 		return sli.BackfillClaim{}, operationError(ctx, "storage: claim historical chunk", err)
+	}
+	if claim.Start.Before(now.Add(-backfillRecoveryLookback(retentionDays))) {
+		if _, err := state.tx.Exec(ctx, `SELECT public.almanac_finish_backfill_chunk($1,$2,$3,$4,'unavailable','expired',$5)`,
+			claim.ID, state.agentID, claim.Generation, now, proof.Generation); err != nil {
+			return sli.BackfillClaim{}, operationError(ctx, "storage: expire historical claim", err)
+		}
+		claim = sli.BackfillClaim{}
 	}
 	if err := state.tx.Commit(ctx); err != nil {
 		return sli.BackfillClaim{}, operationError(ctx, "storage: commit historical claim", err)

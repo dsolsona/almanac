@@ -46,6 +46,8 @@ func (h *Handler) backfillJobs(w http.ResponseWriter, r *http.Request, requestID
 			Preview: *input.Preview, RequestKey: r.Header.Get("Idempotency-Key"), Now: h.now,
 		})
 		switch {
+		case errors.Is(err, storage.ErrBackfillNoGaps):
+			h.writeProblem(w, http.StatusConflict, "backfill_no_gaps", requestID)
 		case errors.Is(err, storage.ErrBackfillRange):
 			h.writeProblem(w, http.StatusUnprocessableEntity, "backfill_range", requestID)
 		case errors.Is(err, storage.ErrBackfillOverlap):

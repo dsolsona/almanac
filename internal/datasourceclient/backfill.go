@@ -3,6 +3,7 @@ package datasourceclient
 import (
 	"context"
 	"encoding/json/v2"
+	"errors"
 	"net/http"
 
 	"github.com/dsolsona/almanac/internal/api"
@@ -50,11 +51,17 @@ func (c *Client) Backfill(ctx context.Context, action, sliID, jobID, key string,
 			status = http.StatusOK
 		}
 		response, err := ops.RequestSliBackfill(ctx, id, &api.RequestSliBackfillParams{IdempotencyKey: key}, input, c.mutationEditor(key, ""))
-		return c.read(response, err, status, func(body []byte) bool {
+		body, err := c.read(response, err, status, func(body []byte) bool {
 			var result api.SliBackfillAdmission
 			return json.Unmarshal(body, &result) == nil && result.Start.Equal(input.Start) && result.End.Equal(input.End) &&
-				result.ChunkCount > 0 && (input.Preview || result.Id != nil && uuidPattern.MatchString(uuidText(*result.Id)))
+				(input.Preview && result.Plan != nil || result.ChunkCount > 0 && result.Id != nil && uuidPattern.MatchString(uuidText(*result.Id)))
 		})
+		if failure, ok := errors.AsType[*Failure](err); !input.Preview && ok && (failure.Status == 0 || failure.Status >= 500) {
+			failure.Unknown = true
+			failure.Code = "outcome_unknown"
+			failure.Message = "Backfill request outcome is unknown; retry the same range with the same idempotency key"
+		}
+		return body, err
 	case "cancel":
 		job, err := parseID(jobID)
 		if err != nil {

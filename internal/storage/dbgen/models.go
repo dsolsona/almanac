@@ -303,6 +303,7 @@ type AlmanacDatasource struct {
 	CreatedAt                       pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt                       pgtype.Timestamptz `json:"updated_at"`
 	AssignmentConfigurationRevision int64              `json:"assignment_configuration_revision"`
+	HistoricalRetentionDays         int32              `json:"historical_retention_days"`
 }
 
 type AlmanacDatasourceReassignment struct {

@@ -173,3 +173,15 @@
 .sli-backfill-body p { margin: 0; }
 .sli-backfill-jobs { display: grid; list-style: none; margin: 0; padding: 0; }
 .sli-backfill-jobs li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-3) 0; border-top: 1px solid var(--border); }
+
+.sli-backfill-toolbar { display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between; gap:var(--space-3); }
+.sli-backfill-toolbar .sli-actions { margin-top:0; }
+
+.sli-backfill-preview-facts { margin:var(--space-3) 0; }
+.sli-backfill-preview-facts > div { display:flex; justify-content:space-between; gap:var(--space-3); padding:var(--space-2) 0; border-bottom:1px solid var(--border); }
+.sli-backfill-preview-facts dd { margin:0; text-align:right; font-variant-numeric:tabular-nums; }
+.sli-backfill-preview-facts dt { color:var(--text-2); }
+@media (max-width:600px) {
+  .sli-backfill-toolbar > .ui-field { flex:1 1 100%; }
+  .sli-backfill-toolbar .sli-actions { justify-content:flex-start; }
+}

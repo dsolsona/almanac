@@ -90,6 +90,15 @@ func TestIntegrationBackfillAdmissionIsAlignedAndIdempotent(t *testing.T) {
 		SLIID: s.sliID, Start: s.historyStart, End: s.at.Add(-5 * time.Minute),
 		RequestKey: "manual-backfill", Now: s.clock,
 	}
+	if _, err := s.conn.Exec(t.Context(), `DELETE FROM public.almanac_sli_observations WHERE sli_id=$1 AND interval_start=$2`, s.sliID, input.Start); err != nil {
+		t.Fatal(err)
+	}
+	preview := input
+	preview.Preview = true
+	planned, err := RequestBackfill(t.Context(), s.f.databaseURL, preview)
+	if err != nil || planned.Plan == nil || planned.Plan.Eligible != 1 || planned.Plan.Covered != 174 || planned.ChunkCount != 1 {
+		t.Fatalf("preview = %+v, plan %+v, err %v", planned, planned.Plan, err)
+	}
 	first, err := RequestBackfill(t.Context(), s.f.databaseURL, input)
 	if err != nil || first.ID == "" || first.ChunkCount != 1 {
 		t.Fatalf("admission = %+v, %v", first, err)
@@ -99,7 +108,7 @@ func TestIntegrationBackfillAdmissionIsAlignedAndIdempotent(t *testing.T) {
 		t.Fatalf("replay = %+v, %v; want %+v", replay, err, first)
 	}
 	input.RequestKey = "overlap"
-	if _, err := RequestBackfill(t.Context(), s.f.databaseURL, input); !errors.Is(err, ErrBackfillOverlap) {
+	if _, err := RequestBackfill(t.Context(), s.f.databaseURL, input); !errors.Is(err, ErrBackfillNoGaps) {
 		t.Fatalf("overlap = %v", err)
 	}
 	input.Start = input.Start.Add(time.Second)
@@ -201,5 +210,36 @@ WHERE sli_id=$1 AND requested_by IS NULL`, s.sliID).Scan(&jobs, &start, &end); e
 	}
 	if jobs != 1 || !start.Equal(first) || !end.Equal(knownEmpty) {
 		t.Fatalf("automatic jobs=%d range=[%s, %s), want one gap [%s, %s)", jobs, start, end, first, knownEmpty)
+	}
+}
+
+func TestIntegrationBackfillPreviewUsesDatasourceRetention(t *testing.T) {
+	t.Parallel()
+	s := newSelfHealFixture(t, "backfill-retention", true)
+	ctx := t.Context()
+	start := s.at.Add(-8 * 24 * time.Hour)
+	if _, err := s.conn.Exec(ctx,
+		`UPDATE public.almanac_sli_measurements SET effective_from=$2 WHERE sli_id=$1`, s.sliID, start); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.conn.Exec(ctx, `
+UPDATE public.almanac_datasources SET historical_retention_days=7
+WHERE id=(SELECT datasource_id FROM public.almanac_sli_measurements WHERE sli_id=$1)`, s.sliID); err != nil {
+		t.Fatal(err)
+	}
+	preview, err := RequestBackfill(ctx, s.f.databaseURL, BackfillRequest{
+		Proof: DatasourceProof{SessionVerifier: s.f.verifier}, SLIID: s.sliID,
+		Start: start, End: s.at.Add(-5 * time.Minute), RequestKey: "preview-retention", Preview: true, Now: s.clock,
+	})
+	if err != nil || preview.Plan == nil {
+		t.Fatalf("preview: %+v, %v", preview, err)
+	}
+	plan := preview.Plan
+	if plan.RetentionDays != 7 || plan.OutsideRetention != 1440 || plan.Automatic != 0 ||
+		!plan.RecoveryStart.Equal(s.at.Add(-7*24*time.Hour)) || plan.Covered != 175 {
+		t.Fatalf("retention plan: %+v", plan)
+	}
+	if plan.Eligible != 9900 || plan.Chunks != 39 {
+		t.Fatalf("eligible 9900 intervals in 39 chunks, got %+v", plan)
 	}
 }

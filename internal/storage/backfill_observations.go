@@ -19,11 +19,14 @@ func commitBackfillChunk(ctx context.Context, tx pgx.Tx, agentID string, session
 	var sliID pgtype.UUID
 	var revision int64
 	var start, end time.Time
-	var cadenceSeconds int
+	var cadenceSeconds, retentionDays int
 	err := tx.QueryRow(ctx, `
-SELECT sli_id, measurement_revision, range_start, range_end, cadence_seconds
-FROM public.almanac_backfill_chunks WHERE id=$1 AND agent_id=$2 AND generation=$3 AND state='leased'`,
-		result.ChunkID, agentID, result.Generation).Scan(&sliID, &revision, &start, &end, &cadenceSeconds)
+SELECT c.sli_id, c.measurement_revision, c.range_start, c.range_end, c.cadence_seconds,d.historical_retention_days
+FROM public.almanac_backfill_chunks c
+JOIN public.almanac_sli_measurements m ON m.sli_id=c.sli_id AND m.revision=c.measurement_revision
+JOIN public.almanac_datasources d ON d.id=m.datasource_id
+WHERE c.id=$1 AND c.agent_id=$2 AND c.generation=$3 AND c.state='leased' `,
+		result.ChunkID, agentID, result.Generation).Scan(&sliID, &revision, &start, &end, &cadenceSeconds, &retentionDays)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ErrObservationDenied
 	}
@@ -35,6 +38,9 @@ FROM public.almanac_backfill_chunks WHERE id=$1 AND agent_id=$2 AND generation=$
 		return ErrObservationInvalid
 	}
 	for _, outcome := range result.Outcomes {
+		if outcome.State == "" {
+			continue
+		}
 		if (outcome.State != sli.OutcomeObserved && outcome.State != sli.OutcomeCompleteEmpty) || outcome.Validate() != nil {
 			return ErrObservationInvalid
 		}
@@ -53,7 +59,7 @@ FROM public.almanac_backfill_chunks WHERE id=$1 AND agent_id=$2 AND generation=$
 	if err != nil {
 		return operationError(ctx, "storage: historical measurement lock failed", err)
 	}
-	if measurement.CurrentAgentID.String() != agentID || start.Before(measurement.EffectiveFrom.Time) || start.Before(now.Add(-sli.ObservationRetention)) ||
+	if measurement.CurrentAgentID.String() != agentID || start.Before(measurement.EffectiveFrom.Time) || start.Before(now.Add(-backfillRecoveryLookback(retentionDays))) ||
 		int(measurement.PollingIntervalSeconds) != cadenceSeconds {
 		return ErrObservationDenied
 	}
@@ -80,15 +86,21 @@ FROM public.almanac_backfill_chunks WHERE id=$1 AND agent_id=$2 AND generation=$
 }
 
 func acceptBackfillObservation(ctx context.Context, tx pgx.Tx, queries *dbgen.Queries, sliID pgtype.UUID, revision int64, agentID string, sessionGeneration, configurationRevision int64, now time.Time, chunkID string, item sli.ObservationItem) error {
-	_, err := queries.GetSliCoverageByCanonicalInterval(ctx, dbgen.GetSliCoverageByCanonicalIntervalParams{
+	coverage, err := queries.GetSliCoverageByCanonicalInterval(ctx, dbgen.GetSliCoverageByCanonicalIntervalParams{
 		SliID: sliID, MeasurementRevision: revision, IntervalStart: timestamp(item.IntervalStart),
 	})
 	if err == nil {
+		if coverage.Outcome != "observed" && coverage.Outcome != "complete_empty" {
+			return ErrObservationInvalid
+		}
 		// A live or earlier historical result already owns this canonical interval.
 		return nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return operationError(ctx, "storage: historical observation coverage read failed", err)
+	}
+	if item.Outcome.State == "" {
+		return ErrObservationInvalid
 	}
 	digest, err := canonicalSliResultDigest(item)
 	if err != nil {

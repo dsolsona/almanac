@@ -9,6 +9,7 @@ export type SliCreateRequest = components['schemas']['SliCreateRequest'];
 
 export type SliBackfillAdmission = components['schemas']['SliBackfillAdmission'];
 export type SliBackfillJob = components['schemas']['SliBackfillJob'];
+export type SliBackfillPlan = components['schemas']['SliBackfillPlan'];
 type SliBackfillRequest = components['schemas']['SliBackfillRequest'];
 
 export class SliFailure extends Error {
@@ -35,6 +36,7 @@ const messages: Record<string, string> = {
   agent_unavailable: 'The assigned agent cannot currently accept this SLI configuration.',
   source_secret_unavailable: 'The datasource credential is unavailable. Update its credentials before collecting.',
   backfill_range: 'Choose a settled range within the SLI’s measurement history. Both dates must align to its collection cadence.',
+  backfill_no_gaps: 'There are no recoverable gaps left in that range. Refresh the gap history.',
   backfill_overlap: 'A job already covers part of this range. Check its progress before requesting overlapping dates.',
   sli_unavailable: 'SLI management is temporarily unavailable.',
 };
@@ -225,7 +227,7 @@ function validBackfillJob(value: unknown): value is SliBackfillJob {
 function validBackfillAdmission(value: unknown): value is SliBackfillAdmission {
   return object(value) && typeof value.start === 'string' && typeof value.end === 'string'
     && Date.parse(value.start) < Date.parse(value.end) && typeof value.chunk_count === 'number'
-    && Number.isSafeInteger(value.chunk_count) && value.chunk_count > 0
+    && Number.isSafeInteger(value.chunk_count) && value.chunk_count >= 0
     && (value.id === undefined || typeof value.id === 'string' && UUID.test(value.id));
 }
 
@@ -275,9 +277,9 @@ export function createSliClient() {
       return (await request(`/api/v1/slis/${safeID(id)}/backfills`, { method: 'GET', signal }, 200,
         (value): value is SliBackfillJob[] => Array.isArray(value) && value.length <= 20 && value.every(validBackfillJob))).value;
     },
-    async requestBackfill(id: string, input: SliBackfillRequest, context: AuthContext, key: string): Promise<SliBackfillAdmission> {
+    async requestBackfill(id: string, input: SliBackfillRequest, context: AuthContext, key: string, signal?: AbortSignal): Promise<SliBackfillAdmission> {
       const headers = { 'Content-Type': 'application/json', 'X-CSRF-Token': context.csrf_token, 'Idempotency-Key': key };
-      return (await request(`/api/v1/slis/${safeID(id)}/backfills`, { method: 'POST', headers, body: JSON.stringify(input) }, input.preview ? 200 : 202, validBackfillAdmission)).value;
+      return (await request(`/api/v1/slis/${safeID(id)}/backfills`, { method: 'POST', headers, body: JSON.stringify(input), signal }, input.preview ? 200 : 202, validBackfillAdmission)).value;
     },
     async cancelBackfill(id: string, jobID: string, context: AuthContext): Promise<void> {
       const path = `/api/v1/slis/${safeID(id)}/backfills/${safeID(jobID)}`;

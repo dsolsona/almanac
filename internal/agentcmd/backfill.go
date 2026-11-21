@@ -112,7 +112,16 @@ func (c *client) executeBackfill(parent context.Context, claim sli.BackfillClaim
 	}
 	defer source.CloseIdleConnections()
 	outcomes := make([]sli.ExecutionOutcome, 0, count)
+	covered := make(map[int64]struct{}, len(claim.CoveredStarts))
+	for _, start := range claim.CoveredStarts {
+		covered[start.UnixMicro()] = struct{}{}
+	}
 	for end := claim.Start.Add(cadence); !end.After(claim.End); end = end.Add(cadence) {
+		if _, exists := covered[end.Add(-cadence).UnixMicro()]; exists {
+			// A zero outcome requests a server-side coverage check without a provider call.
+			outcomes = append(outcomes, sli.ExecutionOutcome{})
+			continue
+		}
 		if !c.collections.waitForLiveCapacity(ctx, definition) {
 			result.Failure = "deadline"
 			return result, parent.Err() == nil

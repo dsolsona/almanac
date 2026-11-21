@@ -221,6 +221,8 @@ CREATE CONSTRAINT TRIGGER almanac_slo_grid_changed
 			// The following rewinds remove these constraints. Validation
 			// changed their status but left their definitions intact.
 			continue
+		case 79:
+			statement = `ALTER TABLE public.almanac_datasources DROP COLUMN historical_retention_days;`
 		case 78:
 			statement = `ALTER TABLE public.almanac_sli_observations
     DROP CONSTRAINT almanac_observation_execution_provenance,

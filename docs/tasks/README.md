@@ -1,3 +1,5 @@
+[F4-T65](F4-T65.md) makes single-SLI backfill gap-aware and applies datasource retention.
+
 [F4-T64](F4-T64.md) connects single-SLI historical collection and restart repair to canonical ingestion.
 
 [F4-T63](F4-T63.md) adds a single-SLI local history fixture and verifies linked SLO recalculation.

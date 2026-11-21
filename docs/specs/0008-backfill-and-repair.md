@@ -130,6 +130,20 @@ also marks affected source ranges for the normal SLO workers. Existing
 observations and SLO validity dates retain their meaning. Historical empty
 responses without evidence of source availability remain gaps.
 
+The datasource definition can declare historical retention in whole days. An
+unset value means unknown source retention and best-effort recovery. The
+effective recovery limit for both manual and automatic work is the lesser of
+30 days and known datasource retention, further constrained by measurement
+validity. Gap inspection can include older intervals in its selected period
+and identifies them as outside the recovery window. Queue confirmation creates
+the job and the assigned agent starts it when capacity is available.
+
+Preview counts covered, eligible, automatic repair, manual work, outside
+retention and previous failures. Admission rechecks canonical coverage and
+active work under the SLI lock. Covered intervals and intervals already owned
+by another job are skipped. Progress includes the number of recovered
+observations and the number of committed batches.
+
 The Prometheus implementation replays up to 256 settled intervals per chunk.
 The recent and retained repair cursors share a 1,000-interval sweep budget.
 Other providers, historical configuration replay, and multi-SLI admission

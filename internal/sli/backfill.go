@@ -4,15 +4,16 @@ import "time"
 
 // BackfillClaim identifies one bounded historical query range for an assigned agent.
 type BackfillClaim struct {
-	ID           string    `json:"id"`
-	SLIID        string    `json:"sli_id"`
-	DatasourceID string    `json:"datasource_id"`
-	Generation   int64     `json:"generation"`
-	Revision     int64     `json:"measurement_revision"`
-	Start        time.Time `json:"start"`
-	End          time.Time `json:"end"`
-	Cadence      int       `json:"cadence_seconds"`
-	LeaseUntil   time.Time `json:"lease_until"`
+	ID            string      `json:"id"`
+	SLIID         string      `json:"sli_id"`
+	DatasourceID  string      `json:"datasource_id"`
+	Generation    int64       `json:"generation"`
+	Revision      int64       `json:"measurement_revision"`
+	Start         time.Time   `json:"start"`
+	End           time.Time   `json:"end"`
+	Cadence       int         `json:"cadence_seconds"`
+	LeaseUntil    time.Time   `json:"lease_until"`
+	CoveredStarts []time.Time `json:"covered_starts,omitempty"`
 }
 
 // BackfillChunkResult uses the claim's cadence and order for complete outcomes.

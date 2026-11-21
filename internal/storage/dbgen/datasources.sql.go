@@ -100,7 +100,7 @@ func (q *Queries) FindDatasourceReceipt(ctx context.Context, arg FindDatasourceR
 }
 
 const getDatasource = `-- name: GetDatasource :one
-SELECT id, name, display_name, version, provider, configuration_format, endpoint, tls, authentication_mode, authentication_username, password_envelope, password_revision, token_envelope, token_revision, polling_interval_seconds, settling_delay_seconds, agent_id, created_at, updated_at, assignment_configuration_revision FROM public.almanac_datasources WHERE id = $1
+SELECT id, name, display_name, version, provider, configuration_format, endpoint, tls, authentication_mode, authentication_username, password_envelope, password_revision, token_envelope, token_revision, polling_interval_seconds, settling_delay_seconds, agent_id, created_at, updated_at, assignment_configuration_revision, historical_retention_days FROM public.almanac_datasources WHERE id = $1
 `
 
 func (q *Queries) GetDatasource(ctx context.Context, id pgtype.UUID) (AlmanacDatasource, error) {
@@ -127,6 +127,7 @@ func (q *Queries) GetDatasource(ctx context.Context, id pgtype.UUID) (AlmanacDat
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.AssignmentConfigurationRevision,
+		&i.HistoricalRetentionDays,
 	)
 	return i, err
 }
@@ -190,37 +191,38 @@ INSERT INTO public.almanac_datasources (
     id, name, display_name, version, provider, configuration_format, endpoint, tls,
     authentication_mode, authentication_username, password_envelope, password_revision,
     token_envelope, token_revision, polling_interval_seconds, settling_delay_seconds,
-    agent_id, created_at, updated_at
+    historical_retention_days, agent_id, created_at, updated_at
 ) VALUES (
     $1, $2, $3, 1, $4,
     $5, $6, $7,
     $8, $9,
     $10, $11, $12,
     $13, $14, $15,
-    $16, $17, $18
+    $16, $17, $18, $19
 )
-RETURNING id, name, display_name, version, provider, configuration_format, endpoint, tls, authentication_mode, authentication_username, password_envelope, password_revision, token_envelope, token_revision, polling_interval_seconds, settling_delay_seconds, agent_id, created_at, updated_at, assignment_configuration_revision
+RETURNING id, name, display_name, version, provider, configuration_format, endpoint, tls, authentication_mode, authentication_username, password_envelope, password_revision, token_envelope, token_revision, polling_interval_seconds, settling_delay_seconds, agent_id, created_at, updated_at, assignment_configuration_revision, historical_retention_days
 `
 
 type InsertDatasourceParams struct {
-	ID                     pgtype.UUID        `json:"id"`
-	Name                   string             `json:"name"`
-	DisplayName            string             `json:"display_name"`
-	Provider               string             `json:"provider"`
-	ConfigurationFormat    string             `json:"configuration_format"`
-	Endpoint               string             `json:"endpoint"`
-	Tls                    []byte             `json:"tls"`
-	AuthenticationMode     string             `json:"authentication_mode"`
-	AuthenticationUsername pgtype.Text        `json:"authentication_username"`
-	PasswordEnvelope       []byte             `json:"password_envelope"`
-	PasswordRevision       int64              `json:"password_revision"`
-	TokenEnvelope          []byte             `json:"token_envelope"`
-	TokenRevision          int64              `json:"token_revision"`
-	PollingIntervalSeconds int32              `json:"polling_interval_seconds"`
-	SettlingDelaySeconds   int32              `json:"settling_delay_seconds"`
-	AgentID                pgtype.UUID        `json:"agent_id"`
-	CreatedAt              pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+	ID                      pgtype.UUID        `json:"id"`
+	Name                    string             `json:"name"`
+	DisplayName             string             `json:"display_name"`
+	Provider                string             `json:"provider"`
+	ConfigurationFormat     string             `json:"configuration_format"`
+	Endpoint                string             `json:"endpoint"`
+	Tls                     []byte             `json:"tls"`
+	AuthenticationMode      string             `json:"authentication_mode"`
+	AuthenticationUsername  pgtype.Text        `json:"authentication_username"`
+	PasswordEnvelope        []byte             `json:"password_envelope"`
+	PasswordRevision        int64              `json:"password_revision"`
+	TokenEnvelope           []byte             `json:"token_envelope"`
+	TokenRevision           int64              `json:"token_revision"`
+	PollingIntervalSeconds  int32              `json:"polling_interval_seconds"`
+	SettlingDelaySeconds    int32              `json:"settling_delay_seconds"`
+	HistoricalRetentionDays int32              `json:"historical_retention_days"`
+	AgentID                 pgtype.UUID        `json:"agent_id"`
+	CreatedAt               pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
 }
 
 func (q *Queries) InsertDatasource(ctx context.Context, arg InsertDatasourceParams) (AlmanacDatasource, error) {
@@ -240,6 +242,7 @@ func (q *Queries) InsertDatasource(ctx context.Context, arg InsertDatasourcePara
 		arg.TokenRevision,
 		arg.PollingIntervalSeconds,
 		arg.SettlingDelaySeconds,
+		arg.HistoricalRetentionDays,
 		arg.AgentID,
 		arg.CreatedAt,
 		arg.UpdatedAt,
@@ -266,6 +269,7 @@ func (q *Queries) InsertDatasource(ctx context.Context, arg InsertDatasourcePara
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.AssignmentConfigurationRevision,
+		&i.HistoricalRetentionDays,
 	)
 	return i, err
 }
@@ -325,7 +329,7 @@ func (q *Queries) InsertDatasourceReceipt(ctx context.Context, arg InsertDatasou
 }
 
 const listDatasources = `-- name: ListDatasources :many
-SELECT id, name, display_name, version, provider, configuration_format, endpoint, tls, authentication_mode, authentication_username, password_envelope, password_revision, token_envelope, token_revision, polling_interval_seconds, settling_delay_seconds, agent_id, created_at, updated_at, assignment_configuration_revision FROM public.almanac_datasources
+SELECT id, name, display_name, version, provider, configuration_format, endpoint, tls, authentication_mode, authentication_username, password_envelope, password_revision, token_envelope, token_revision, polling_interval_seconds, settling_delay_seconds, agent_id, created_at, updated_at, assignment_configuration_revision, historical_retention_days FROM public.almanac_datasources
 WHERE ($1::uuid IS NULL OR agent_id = $1)
   AND (created_at, id) > ($2::timestamptz, $3::uuid)
 ORDER BY created_at, id
@@ -374,6 +378,7 @@ func (q *Queries) ListDatasources(ctx context.Context, arg ListDatasourcesParams
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.AssignmentConfigurationRevision,
+			&i.HistoricalRetentionDays,
 		); err != nil {
 			return nil, err
 		}
@@ -386,7 +391,7 @@ func (q *Queries) ListDatasources(ctx context.Context, arg ListDatasourcesParams
 }
 
 const lockDatasource = `-- name: LockDatasource :one
-SELECT id, name, display_name, version, provider, configuration_format, endpoint, tls, authentication_mode, authentication_username, password_envelope, password_revision, token_envelope, token_revision, polling_interval_seconds, settling_delay_seconds, agent_id, created_at, updated_at, assignment_configuration_revision FROM public.almanac_datasources WHERE id = $1 FOR UPDATE
+SELECT id, name, display_name, version, provider, configuration_format, endpoint, tls, authentication_mode, authentication_username, password_envelope, password_revision, token_envelope, token_revision, polling_interval_seconds, settling_delay_seconds, agent_id, created_at, updated_at, assignment_configuration_revision, historical_retention_days FROM public.almanac_datasources WHERE id = $1 FOR UPDATE
 `
 
 func (q *Queries) LockDatasource(ctx context.Context, id pgtype.UUID) (AlmanacDatasource, error) {
@@ -413,6 +418,7 @@ func (q *Queries) LockDatasource(ctx context.Context, id pgtype.UUID) (AlmanacDa
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.AssignmentConfigurationRevision,
+		&i.HistoricalRetentionDays,
 	)
 	return i, err
 }
@@ -448,30 +454,31 @@ SET name = $1, display_name = $2, version = version + 1,
     token_envelope = $11, token_revision = $12,
     polling_interval_seconds = $13,
     settling_delay_seconds = $14, agent_id = $15,
-    updated_at = $16
-WHERE id = $17 AND version = $18
-RETURNING id, name, display_name, version, provider, configuration_format, endpoint, tls, authentication_mode, authentication_username, password_envelope, password_revision, token_envelope, token_revision, polling_interval_seconds, settling_delay_seconds, agent_id, created_at, updated_at, assignment_configuration_revision
+    historical_retention_days = $16, updated_at = $17
+WHERE id = $18 AND version = $19
+RETURNING id, name, display_name, version, provider, configuration_format, endpoint, tls, authentication_mode, authentication_username, password_envelope, password_revision, token_envelope, token_revision, polling_interval_seconds, settling_delay_seconds, agent_id, created_at, updated_at, assignment_configuration_revision, historical_retention_days
 `
 
 type UpdateDatasourceParams struct {
-	Name                   string             `json:"name"`
-	DisplayName            string             `json:"display_name"`
-	Provider               string             `json:"provider"`
-	ConfigurationFormat    string             `json:"configuration_format"`
-	Endpoint               string             `json:"endpoint"`
-	Tls                    []byte             `json:"tls"`
-	AuthenticationMode     string             `json:"authentication_mode"`
-	AuthenticationUsername pgtype.Text        `json:"authentication_username"`
-	PasswordEnvelope       []byte             `json:"password_envelope"`
-	PasswordRevision       int64              `json:"password_revision"`
-	TokenEnvelope          []byte             `json:"token_envelope"`
-	TokenRevision          int64              `json:"token_revision"`
-	PollingIntervalSeconds int32              `json:"polling_interval_seconds"`
-	SettlingDelaySeconds   int32              `json:"settling_delay_seconds"`
-	AgentID                pgtype.UUID        `json:"agent_id"`
-	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
-	ID                     pgtype.UUID        `json:"id"`
-	ExpectedVersion        int64              `json:"expected_version"`
+	Name                    string             `json:"name"`
+	DisplayName             string             `json:"display_name"`
+	Provider                string             `json:"provider"`
+	ConfigurationFormat     string             `json:"configuration_format"`
+	Endpoint                string             `json:"endpoint"`
+	Tls                     []byte             `json:"tls"`
+	AuthenticationMode      string             `json:"authentication_mode"`
+	AuthenticationUsername  pgtype.Text        `json:"authentication_username"`
+	PasswordEnvelope        []byte             `json:"password_envelope"`
+	PasswordRevision        int64              `json:"password_revision"`
+	TokenEnvelope           []byte             `json:"token_envelope"`
+	TokenRevision           int64              `json:"token_revision"`
+	PollingIntervalSeconds  int32              `json:"polling_interval_seconds"`
+	SettlingDelaySeconds    int32              `json:"settling_delay_seconds"`
+	AgentID                 pgtype.UUID        `json:"agent_id"`
+	HistoricalRetentionDays int32              `json:"historical_retention_days"`
+	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
+	ID                      pgtype.UUID        `json:"id"`
+	ExpectedVersion         int64              `json:"expected_version"`
 }
 
 func (q *Queries) UpdateDatasource(ctx context.Context, arg UpdateDatasourceParams) (AlmanacDatasource, error) {
@@ -491,6 +498,7 @@ func (q *Queries) UpdateDatasource(ctx context.Context, arg UpdateDatasourcePara
 		arg.PollingIntervalSeconds,
 		arg.SettlingDelaySeconds,
 		arg.AgentID,
+		arg.HistoricalRetentionDays,
 		arg.UpdatedAt,
 		arg.ID,
 		arg.ExpectedVersion,
@@ -517,6 +525,7 @@ func (q *Queries) UpdateDatasource(ctx context.Context, arg UpdateDatasourcePara
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.AssignmentConfigurationRevision,
+		&i.HistoricalRetentionDays,
 	)
 	return i, err
 }

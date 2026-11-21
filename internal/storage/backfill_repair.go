@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/dsolsona/almanac/internal/sli"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -55,9 +54,9 @@ WHERE sweep=$1 FOR UPDATE`, sweep).Scan(&cursorID, &next); err != nil {
 	var id, agentID string
 	var revision int64
 	var validFrom time.Time
-	var cadenceSeconds, delaySeconds int
+	var cadenceSeconds, delaySeconds, retentionDays int
 	err := tx.QueryRow(ctx, `
-SELECT s.id,m.revision,m.effective_from,d.agent_id,d.polling_interval_seconds,d.settling_delay_seconds
+SELECT s.id,m.revision,m.effective_from,d.agent_id,d.polling_interval_seconds,d.settling_delay_seconds,d.historical_retention_days
 FROM public.almanac_slis s
 JOIN public.almanac_sli_measurements m ON m.sli_id=s.id AND m.revision=s.measurement_revision
 JOIN public.almanac_datasources d ON d.id=m.datasource_id
@@ -71,7 +70,7 @@ WHERE d.provider='prometheus' AND a.enabled AND m.activated_at IS NOT NULL
   AND ($1::uuid IS NULL OR s.id>$1 OR (s.id=$1 AND $2::timestamptz IS NOT NULL))
 ORDER BY s.id LIMIT 1
 FOR NO KEY UPDATE OF m
-FOR UPDATE OF s,d`, cursorID, next, now).Scan(&id, &revision, &validFrom, &agentID, &cadenceSeconds, &delaySeconds)
+FOR UPDATE OF s,d`, cursorID, next, now).Scan(&id, &revision, &validFrom, &agentID, &cadenceSeconds, &delaySeconds, &retentionDays)
 	if errors.Is(err, pgx.ErrNoRows) {
 		_, err = tx.Exec(ctx, `UPDATE public.almanac_backfill_scan_cursor SET sli_id=NULL,next_interval=NULL WHERE sweep=$1`, sweep)
 		return err
@@ -84,9 +83,12 @@ FOR UPDATE OF s,d`, cursorID, next, now).Scan(&id, &revision, &validFrom, &agent
 	until := now.Add(-5 * time.Minute).Add(-time.Duration(delaySeconds) * time.Second)
 	if sweep == "retained" {
 		until = since
-		since = now.Add(-sli.ObservationRetention)
+		since = now.Add(-backfillRecoveryLookback(retentionDays))
 	}
 	lower := ceilSliBoundary(since, cadence)
+	if cutoff := ceilSliBoundary(now.Add(-backfillRecoveryLookback(retentionDays)), cadence); cutoff.After(lower) {
+		lower = cutoff
+	}
 	if validFrom.After(lower) {
 		lower = ceilSliBoundary(validFrom, cadence)
 	}
@@ -143,7 +145,7 @@ SELECT min(point),max(point)+make_interval(secs=>$5) FROM islands GROUP BY key O
 	}
 	for _, gap := range gaps {
 		key := strconv.FormatInt(revision, 10) + "/" + gap.start.UTC().Format(time.RFC3339Nano)
-		if _, err := insertBackfillJob(ctx, tx, id, revision, agentID, gap.start, gap.end, now, cadenceSeconds, key, nil); err != nil {
+		if _, err := insertBackfillJob(ctx, tx, id, revision, agentID, gap.start, gap.end, now, cadenceSeconds, key, nil, gap); err != nil {
 			return err
 		}
 	}

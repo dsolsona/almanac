@@ -436,6 +436,13 @@ func validDatasource(data []byte) bool {
 		}
 		delete(fields, "reassignment")
 	}
+	if raw, exists := fields["historical_retention_days"]; exists {
+		var retention int
+		if json.Unmarshal(raw, &retention) != nil || retention < 1 || retention > 36500 {
+			return false
+		}
+		delete(fields, "historical_retention_days")
+	}
 	if !exactFields(fields, "id", "name", "display_name", "version", "provider", "configuration_format", "endpoint", "tls", "authentication", "polling_interval_seconds", "settling_delay_seconds", "agent_id", "created_at", "updated_at") {
 		return false
 	}

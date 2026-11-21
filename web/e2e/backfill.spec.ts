@@ -16,6 +16,11 @@ test('request historical collection and see the recalculated SLO', async ({ page
       authentication: { mode: 'none', username: null, password_secret: { action: 'clear' }, token_secret: { action: 'clear' } },
       polling_interval_seconds: 60, agent_id: registration.body.agent.id,
     }));
+    await page.goto(`/datasources/${source.body.id}`);
+    const retention = page.getByLabel('Historical retention (days)', { exact: true });
+    await retention.fill('7');
+    await page.getByRole('button', { name: 'Save settings' }).click();
+    await expect.poll(async () => (await api(page, 'GET', `/api/v1/datasources/${source.body.id}`)).body.historical_retention_days).toBe(7);
     const sli = await expectOk(api(page, 'POST', '/api/v1/slis', {
       name, display_name: 'Successful checkout requests', datasource_id: source.body.id, measurement_kind: 'event_counts',
       component_mode: 'interval_count', good_query: 'vector(99)', total_query: 'vector(100)',
@@ -42,15 +47,18 @@ test('request historical collection and see the recalculated SLO', async ({ page
     const disclosure = panel.locator('summary');
     await disclosure.focus();
     await page.keyboard.press('Enter');
-    await panel.getByLabel('Range', { exact: true }).selectOption('custom');
-    await panel.getByLabel('Start (UTC)').fill(from.slice(0, 16));
-    await panel.getByLabel('End (UTC)').fill(to.slice(0, 16));
-    await panel.getByRole('button', { name: 'Preview range' }).click();
-    await expect(panel.getByRole('status')).toContainText('1 chunk');
+    await expect(panel).toContainText('Datasource retention is 7 days.');
+    await panel.getByRole('button', { name: 'Custom range' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Custom backfill range' });
+    await dialog.getByLabel('Start (UTC)').fill(from.slice(0, 16));
+    await dialog.getByLabel('End (UTC)').fill(to.slice(0, 16));
+    await dialog.getByRole('button', { name: 'Preview range' }).click();
+    await expect(dialog.getByRole('status')).toContainText('1 chunk');
+    await expect(dialog.getByRole('status')).toContainText('Intervals to recover');
     const light = info.outputPath('backfill-preview-desktop-light.png');
-    await panel.screenshot({ path: light });
+    await dialog.screenshot({ path: light });
     await info.attach('Backfill range preview, desktop light', { path: light, contentType: 'image/png' });
-    await panel.getByRole('button', { name: 'Request backfill' }).click();
+    await dialog.getByRole('button', { name: 'Queue backfill' }).click();
     await expect(panel.getByRole('list', { name: 'Backfill jobs' })).toContainText('1 / 1 chunks committed', { timeout: 60_000 });
 
     const row = psql(`SELECT good_count::int,total_count::int FROM public.almanac_sli_observations
