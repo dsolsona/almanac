@@ -589,9 +589,10 @@ export function SlisPage({ context }: { context: AuthContext }) {
       <div className="sli-measurement-ranges">
         <SegmentedControl size="sm" label="Measurement history range" options={measurementPeriods} value={measurementPeriod}
           onChange={period => setMeasurementSelection({id: sli.id, period})}/>
+        {datasource?.provider==='prometheus'&&<Button variant="ghost" onClick={()=>openDetails('sli-backfills')}>Review backfill</Button>}
       </div>
       <section className="sli-detail-card sli-measurements-panel" aria-labelledby="sli-measurements-title" aria-busy={historyBusy}>
-        <header><h2 id="sli-measurements-title">Measurements</h2><span className="hint">{measurementPeriod!=='1h'?null:date&&measurements.intervals.length?`${date} · ${intervalTime({start:historyWindow.start!,end:historyWindow.end!})}`:'No inspected intervals yet'}</span><div className="tools"><Button variant="ghost" onClick={()=>openDetails('sli-intervals')}>{measurementPeriod==='1h'?'Exact values ↓':'Recent intervals ↓'}</Button>{datasource?.provider==='prometheus'&&<Button variant="ghost" onClick={()=>openDetails('sli-backfills')}>Review backfill</Button>}</div></header>
+        <header><h2 id="sli-measurements-title">Measurements</h2><span className="hint">{measurementPeriod!=='1h'?null:date&&measurements.intervals.length?`${date} · ${intervalTime({start:historyWindow.start!,end:historyWindow.end!})}`:'No inspected intervals yet'}</span><div className="tools"><Button variant="ghost" onClick={()=>openDetails('sli-intervals')}>{measurementPeriod==='1h'?'Exact values ↓':'Recent intervals ↓'}</Button></div></header>
         {measurementPeriod !== '1h'
           ? <div className="sli-measurements-body"><SliMeasurementHistory key={`${sli.id}:${measurementPeriod}`} id={sli.id} period={measurementPeriod} refresh={measurementRefresh} latest={latestMeasurement}/></div>
           : <>

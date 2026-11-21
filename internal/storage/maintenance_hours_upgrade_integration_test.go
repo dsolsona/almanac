@@ -15,7 +15,7 @@ func TestIntegrationMaintenanceHourPopulatedUpgrade(t *testing.T) {
 		var result string
 		err := f.conn.QueryRow(t.Context(), `SELECT jsonb_build_object(
  'hours',(SELECT jsonb_agg(to_jsonb(h) ORDER BY hour_start) FROM almanac_sli_hourly_aggregates h),
- 'raw',(SELECT jsonb_agg(to_jsonb(o) ORDER BY interval_start) FROM almanac_sli_observations o),
+ 'raw',(SELECT jsonb_agg(to_jsonb(o)-'backfill_chunk_id' ORDER BY interval_start) FROM almanac_sli_observations o),
  'builds',(SELECT jsonb_agg(to_jsonb(b) ORDER BY id) FROM almanac_maintenance_builds b),
  'coverage',(SELECT jsonb_agg(to_jsonb(c) ORDER BY build_id,starts_at) FROM almanac_maintenance_coverage c),
  'generations',(SELECT jsonb_agg(to_jsonb(g) ORDER BY sli_id,measurement_revision) FROM almanac_sli_source_generations g))::text`).Scan(&result)
@@ -29,6 +29,10 @@ func TestIntegrationMaintenanceHourPopulatedUpgrade(t *testing.T) {
 	result, err := Upgrade(t.Context(), f.f.databaseURL)
 	if err != nil || result.Applied != latest-62 || result.DatabaseSchemaVersion != latest {
 		t.Fatalf("upgrade %+v %v", result, err)
+	}
+	var historical int
+	if err := f.conn.QueryRow(t.Context(), `SELECT count(*) FROM almanac_sli_observations WHERE backfill_chunk_id IS NOT NULL`).Scan(&historical); err != nil || historical != 0 {
+		t.Fatalf("legacy observations acquired historical provenance: count %d, error %v", historical, err)
 	}
 	if snapshot() != before {
 		t.Fatal("scoped-hour migration changed source facts or immutable mask")

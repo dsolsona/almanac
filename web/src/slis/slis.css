@@ -188,6 +188,9 @@
 
 .sli-measurement-ranges {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
   justify-content: flex-end;
   margin-bottom: 8px;
 }
