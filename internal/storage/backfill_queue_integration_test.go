@@ -4,11 +4,15 @@ package storage
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
+	"strconv"
 	"testing"
 	"time"
 
+	"github.com/dsolsona/almanac/internal/agentprotocol"
 	"github.com/dsolsona/almanac/internal/sli"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -396,5 +400,93 @@ JOIN almanac_sli_measurements m ON m.agent_id=c.agent_id WHERE m.sli_id=$1`, s.s
 	}
 	if len(recovered) != 1 || !recovered[0].Equal(end.Add(-time.Minute)) {
 		t.Fatalf("recovered intervals = %v", recovered)
+	}
+}
+
+func TestIntegrationBackfillFullChunkAlongsideLiveIngestion(t *testing.T) {
+	t.Parallel()
+	s := newSelfHealFixture(t, "backfill-live", true)
+	ctx := t.Context()
+	start := s.historyStart
+	end := start.Add(64 * time.Minute)
+	liveStart := s.at.Add(-3 * time.Minute)
+	if _, err := s.conn.Exec(ctx, `DELETE FROM almanac_sli_observations WHERE sli_id=$1
+AND ((interval_start >= $2 AND interval_start < $3) OR interval_start=$4)`, s.sliID, start, end, liveStart); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := RequestBackfill(ctx, s.f.databaseURL, BackfillRequest{
+		Proof: DatasourceProof{SessionVerifier: s.f.verifier}, SLIID: s.sliID,
+		Start: start, End: end, RequestKey: "full-chunk", Now: s.clock,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var proof BackfillAgentProof
+	var credentialVerifier []byte
+	if err := s.conn.QueryRow(ctx, `SELECT c.id,c.verifier FROM almanac_agent_credentials c
+JOIN almanac_sli_measurements m ON m.agent_id=c.agent_id WHERE m.sli_id=$1`, s.sliID).Scan(&proof.CredentialID, &credentialVerifier); err != nil {
+		t.Fatal(err)
+	}
+	copy(proof.Verifier[:], credentialVerifier)
+	proof.ResumeVerifier = ownershipVerifier(ownershipBytes(32, 82))
+	owner, err := AcquireAgentOwnership(ctx, s.f.databaseURL, proof.CredentialID, proof.Verifier, proof.ResumeVerifier, s.clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	proof.Generation = owner.Generation
+	if _, err := s.conn.Exec(ctx, `UPDATE almanac_agent_runtime_status SET generation=$2,
+ last_heartbeat_at=$3, scheduler_health='ready', applied_configuration_revision=desired_configuration_revision
+ WHERE agent_id=$1`, owner.AgentID, proof.Generation, s.now); err != nil {
+		t.Fatal(err)
+	}
+	allowed, err := json.Marshal([]agentprotocol.MeasurementGrant{{SLIID: s.sliID, MeasurementRevision: "1"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.conn.Exec(ctx, `UPDATE almanac_agent_execution_grants SET allowed_measurements=$1 WHERE lease_id=$2`, allowed, owner.LeaseID); err != nil {
+		t.Fatal(err)
+	}
+	claim, err := ClaimBackfill(ctx, s.f.databaseURL, proof, s.clock, s.runtime)
+	if err != nil || claim.ID == "" || claim.End.Sub(claim.Start) != 64*time.Minute {
+		t.Fatalf("full claim = %+v, %v", claim, err)
+	}
+	observed := sli.ExecutionOutcome{State: sli.OutcomeObserved, GoodCount: "99", TotalCount: "100"}
+	result := sli.BackfillChunkResult{ChunkID: claim.ID, Generation: claim.Generation, Outcomes: make([]sli.ExecutionOutcome, 64)}
+	for index := range result.Outcomes {
+		result.Outcomes[index] = observed
+	}
+	item := sli.ObservationItem{DeliveryID: uuid.NewString(), ExecutionID: uuid.NewString(), CreatedAt: s.now, LeaseID: owner.LeaseID,
+		ConfigurationRevision: strconv.FormatInt(owner.ConfigurationRevision, 10), SessionGeneration: strconv.FormatInt(owner.Generation, 10),
+		SLIID: s.sliID, MeasurementRevision: "1", IntervalStart: liveStart, IntervalEnd: liveStart.Add(time.Minute), Outcome: observed}
+	state, now, revision, err := beginBackfillAgent(ctx, s.f.databaseURL, proof, s.clock, s.runtime)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closeAgentOwnershipTransaction(state)
+	live := make(chan error, 1)
+	started := time.Now()
+	go func() {
+		accepted, err := IngestAgentObservation(ctx, s.f.databaseURL, proof.CredentialID, proof.Verifier, item, s.clock, s.runtime)
+		if err == nil && accepted.Status != "accepted" {
+			err = errors.New("live observation status: " + accepted.Status + " " + accepted.ErrorCode)
+		}
+		live <- err
+	}()
+	waitForAgentQueryWait(t, s.conn, "%FROM public.almanac_agents%")
+	fenced := time.Now()
+	if err := commitBackfillChunk(ctx, state.tx, owner.AgentID, proof.Generation, revision, now, result); err != nil {
+		t.Fatal(err)
+	}
+	if err := state.tx.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	committed := time.Now()
+	if err := <-live; err != nil {
+		t.Fatalf("concurrent live observation: %v", err)
+	}
+	t.Logf("64 intervals committed in %s. Concurrent live acceptance took %s including the observed agent-lock wait.", committed.Sub(fenced), time.Since(started))
+	var rows int
+	if err := s.conn.QueryRow(ctx, `SELECT count(*) FROM almanac_sli_observations
+ WHERE backfill_chunk_id=$1 OR delivery_id=$2`, claim.ID, item.DeliveryID).Scan(&rows); err != nil || rows != 65 {
+		t.Fatalf("committed rows = %d, %v", rows, err)
 	}
 }
