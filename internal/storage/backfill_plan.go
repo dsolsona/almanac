@@ -42,31 +42,46 @@ func planBackfillGaps(ctx context.Context, tx pgx.Tx, id string, revision int64,
 		return plan, nil, nil
 	}
 	rows, err := tx.Query(ctx, `
-WITH missing AS (
-	SELECT point FROM generate_series($3::timestamptz,$4::timestamptz-make_interval(secs=>$5),make_interval(secs=>$5)) point
-	LEFT JOIN public.almanac_sli_observations o
-	  ON o.sli_id=$1 AND o.measurement_revision=$2 AND o.interval_start=point AND o.outcome IN ('observed','complete_empty')
-	WHERE o.sli_id IS NULL
-), classified AS (
-	SELECT point, CASE WHEN point < $6::timestamptz THEN 'outside-retention'
-		ELSE coalesce((SELECT CASE
-			WHEN c.state IN ('queued','leased','retry-wait') THEN CASE WHEN j.requested_by IS NULL THEN 'automatic' ELSE 'manual' END
-			WHEN $7::boolean THEN 'eligible' ELSE 'previous-failure' END
-		FROM public.almanac_backfill_chunks c JOIN public.almanac_backfill_jobs j ON j.id=c.job_id
-		WHERE c.sli_id=$1 AND c.measurement_revision=$2 AND c.range_start<=point AND point<c.range_end
-		  AND (c.state IN ('queued','leased','retry-wait') OR
-            (c.state IN ('unavailable','failed') AND c.source_version = (
-                SELECT d.historical_configuration_version FROM public.almanac_sli_measurements m
-                JOIN public.almanac_datasources d ON d.id=m.datasource_id
-                WHERE m.sli_id=$1 AND m.revision=$2)))
-		ORDER BY (c.state IN ('queued','leased','retry-wait')) DESC, j.created_at DESC, c.id
-		LIMIT 1), 'eligible') END state
+WITH source AS (
+	SELECT d.historical_configuration_version AS version
+	FROM public.almanac_sli_measurements m
+	JOIN public.almanac_datasources d ON d.id=m.datasource_id
+	WHERE m.sli_id=$1 AND m.revision=$2
+), covered AS (
+	SELECT coalesce(range_agg(tstzrange(o.interval_start,o.interval_start+make_interval(secs=>$5))), '{}'::tstzmultirange) AS spans
+	FROM public.almanac_sli_observations o
+	WHERE o.sli_id=$1 AND o.measurement_revision=$2 AND o.interval_start >= $3 AND o.interval_start < $4
+	  AND o.outcome IN ('observed','complete_empty')
+), chunk_ranges AS (
+	SELECT tstzrange(greatest(c.range_start,$3),least(c.range_end,$4)) AS span,
+	       c.state, j.requested_by, c.source_version
+	FROM public.almanac_backfill_chunks c
+	JOIN public.almanac_backfill_jobs j ON j.id=c.job_id
+	WHERE c.sli_id=$1 AND c.measurement_revision=$2 AND c.range_start < $4 AND c.range_end > $3
+), queued AS (
+	SELECT coalesce(range_agg(span) FILTER (WHERE state IN ('queued','leased','retry-wait') AND requested_by IS NULL), '{}'::tstzmultirange) AS automatic,
+	       coalesce(range_agg(span) FILTER (WHERE state IN ('queued','leased','retry-wait') AND requested_by IS NOT NULL), '{}'::tstzmultirange) AS manual,
+	       coalesce(range_agg(span) FILTER (WHERE NOT $7::boolean AND state IN ('unavailable','failed') AND source_version=(SELECT version FROM source)), '{}'::tstzmultirange) AS exhausted
+	FROM chunk_ranges
+), missing AS (
+	SELECT tstzmultirange(tstzrange($3,$4))-covered.spans AS all_gaps,
+	       tstzmultirange(tstzrange($3,least($4,greatest($3,$6)))) AS expired
+	FROM covered
+), recoverable AS (
+	SELECT all_gaps-expired AS spans, all_gaps*expired AS outside_retention
 	FROM missing
-), islands AS (
-	SELECT point,state,point-row_number() OVER (PARTITION BY state ORDER BY point)*make_interval(secs=>$5) AS key FROM classified
 )
-SELECT min(point),max(point)+make_interval(secs=>$5),count(*),state
-FROM islands GROUP BY state,key ORDER BY min(point) DESC`, id, revision, start, end, cadenceSeconds, recoveryStart, retryExhausted)
+SELECT lower(gap),upper(gap),(extract(epoch FROM upper(gap)-lower(gap))/$5)::bigint,state
+FROM recoverable r CROSS JOIN queued q
+CROSS JOIN LATERAL (VALUES
+	('outside-retention',r.outside_retention),
+	('automatic',r.spans*q.automatic),
+	('manual',(r.spans-q.automatic)*q.manual),
+	('previous-failure',(r.spans-q.automatic-q.manual)*q.exhausted),
+	('eligible',r.spans-q.automatic-q.manual-q.exhausted)
+) AS classified(state,spans)
+CROSS JOIN LATERAL unnest(classified.spans) AS gap
+ORDER BY lower(gap) DESC`, id, revision, start, end, cadenceSeconds, recoveryStart, retryExhausted)
 	if err != nil {
 		return BackfillPlan{}, nil, err
 	}

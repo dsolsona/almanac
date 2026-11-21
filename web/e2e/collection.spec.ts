@@ -136,9 +136,22 @@ test('define an SLI and see its first collected interval', async ({ page }) => {
   await expect(row.getByRole('link', { name: 'Create SLO' })).toBeVisible();
 });
 
+async function expectPaintedMeasurement(page: Page) {
+  const chart = page.locator('.sli-measurement-svg');
+  await expect(chart).toBeVisible();
+  // A horizontal SVG path has a zero-height geometry box even when its stroke is painted.
+  await expect.poll(() => chart.locator('.line, .chart-point').evaluateAll(marks => marks.some(mark => {
+    if (!(mark instanceof SVGGeometryElement) || mark.getTotalLength() <= 0) return false;
+    const style = getComputedStyle(mark);
+    if (style.visibility !== 'visible' || style.display === 'none' || Number(style.opacity) <= 0) return false;
+    return (style.stroke !== 'none' && Number(style.strokeOpacity) > 0 && parseFloat(style.strokeWidth) > 0) ||
+      (style.fill !== 'none' && Number(style.fillOpacity) > 0);
+  }))).toBe(true);
+}
+
 test('inspect exact SLI measurements in both themes and at mobile width',async({page},testInfo)=>{
   await page.goto(`/slis/${sliID}`);
-  await expect(page.locator('.sli-measurement-svg .line, .sli-measurement-svg .chart-point').first()).toBeVisible();
+  await expectPaintedMeasurement(page);
   await expect(page.locator('#sli-intervals')).not.toHaveAttribute('open','');
   const resource=await expectOk(api(page,'GET',`/api/v1/slis/${sliID}`));
   expect(resource.body.latest_observation.good_count).toBe('99');
@@ -149,7 +162,7 @@ test('inspect exact SLI measurements in both themes and at mobile width',async({
     await page.evaluate(theme=>localStorage.setItem('almanac-theme',theme),theme);
     await page.reload();
     await expect(page.locator('.sli-measurement-summary > div:first-child dd')).toHaveText('99.00%');
-    await expect(page.locator('.sli-measurement-svg .line, .sli-measurement-svg .chart-point').first()).toBeVisible();
+    await expectPaintedMeasurement(page);
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
     const chart=page.getByRole('group',{name:/Interactive measurements/});
     await chart.focus();await page.keyboard.press('End');
@@ -170,7 +183,7 @@ test('inspect exact SLI measurements in both themes and at mobile width',async({
       await ranges.getByRole('radio', {name: period, exact: true}).click();
       expect((await response).ok()).toBe(true);
       await expect(page.locator('.sli-measurement-summary > div:nth-child(2) dd')).toHaveText('99.00%');
-      await expect(page.locator('.sli-measurement-svg .line, .sli-measurement-svg .chart-point').first()).toBeVisible();
+      await expectPaintedMeasurement(page);
       expect(await page.locator('.interval-state').count()).toBeLessThanOrEqual(240);
       rangeTimings.push(performance.now() - started);
     }
