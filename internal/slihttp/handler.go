@@ -116,6 +116,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.history(w, r, id, proof, parts[0], query)
 		return
 	}
+	if len(parts) == 2 && canonicalID(parts[0]) && parts[1] == "measurements" {
+		h.measurements(w, r, id, proof, parts[0], query)
+		return
+	}
 	h.writeProblem(w, http.StatusNotFound, "not_found", id)
 }
 
@@ -327,6 +331,24 @@ func (h *Handler) history(w http.ResponseWriter, r *http.Request, requestID stri
 	}
 	h.writeJSON(w, http.StatusOK, api.SliObservationPage{Items: items, NextCursor: page.NextCursor,
 		EarliestQueryableIntervalStart: page.EarliestQueryableIntervalStart, InspectedStart: page.InspectedStart, InspectedEnd: page.InspectedEnd, MissingIntervals: missing})
+}
+
+func (h *Handler) measurements(w http.ResponseWriter, r *http.Request, requestID string, proof storage.DatasourceProof, sliID string, query url.Values) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", http.MethodGet)
+		h.writeProblem(w, http.StatusMethodNotAllowed, "method_not_allowed", requestID)
+		return
+	}
+	if len(query) != 1 || len(query["period"]) != 1 || hasBody(r) || hasConditionalHeaders(r) {
+		h.writeProblem(w, http.StatusBadRequest, "invalid_request", requestID)
+		return
+	}
+	chart, err := storage.ReadSliMeasurementChart(r.Context(), h.databaseURL, h.runtime, proof, sliID, query.Get("period"), h.now)
+	if err != nil {
+		h.writeStorageError(w, err, requestID)
+		return
+	}
+	h.writeJSON(w, http.StatusOK, chart)
 }
 
 func (h *Handler) ingest(w http.ResponseWriter, r *http.Request, requestID string) {

@@ -62,6 +62,18 @@ describe('SLI measurement inspection', () => {
       unmount();
     }
   });
+  it('draws a clean line while keeping an isolated sample and the active dot visible', () => {
+    const model=buildMeasurements([observation(0),observation(1),observation(3)],start,'2026-11-11T09:04:00Z',60);
+    const {container}=render(<SliMeasurementsChart intervals={model.intervals}/>);
+    expect(container.querySelectorAll('.chart-point')).toHaveLength(1);
+    expect(container.querySelectorAll('.gap')).toHaveLength(1);
+    expect(container.querySelector('.line')?.getAttribute('d')).toMatch(/^M.* L/);
+    const svg=container.querySelector('svg')!;
+    svg.getBoundingClientRect=()=>new DOMRect(0,0,980,312);
+    fireEvent.pointerMove(svg,{clientX:349,clientY:100});
+    expect(screen.getByRole('tooltip')).toHaveTextContent('09:01–09:02 UTC');
+    expect(container.querySelectorAll('.active-dot')).toHaveLength(1);
+  });
   it('inspects exact observations and gaps with keyboard boundaries, pointer selection and dismissal', () => {
     const model=buildMeasurements([observation(0,{good_count:'1850'}),observation(2,{outcome:'failed',good_count:null,total_count:null,error_code:'timeout'})],start,'2026-11-11T09:03:00Z',60);
     const {container}=render(<SliMeasurementsChart intervals={model.intervals}/>);

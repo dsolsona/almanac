@@ -55,6 +55,97 @@ func (q *Queries) AdvanceSliLastAttemptedInterval(ctx context.Context, arg Advan
 	return err
 }
 
+const bucketSliMeasurements = `-- name: BucketSliMeasurements :many
+WITH outcomes AS (
+    SELECT c.interval_start, c.outcome, c.good_count, c.total_count
+    FROM public.almanac_sli_observations c
+    WHERE c.sli_id = $3 AND c.measurement_revision = $4
+      AND c.interval_start >= $5::timestamptz
+      AND c.interval_start < $2::timestamptz
+    UNION ALL
+    SELECT latest.interval_start, latest.outcome, NULL::numeric, NULL::numeric
+    FROM (
+        SELECT DISTINCT ON (a.interval_start) a.interval_start, a.outcome
+        FROM public.almanac_sli_execution_attempts a
+        WHERE a.sli_id = $3 AND a.measurement_revision = $4
+          AND a.interval_start >= $5::timestamptz
+          AND a.interval_start < $2::timestamptz
+          AND NOT EXISTS (
+              SELECT 1 FROM public.almanac_sli_observations c
+              WHERE c.sli_id = a.sli_id AND c.measurement_revision = a.measurement_revision
+                AND c.interval_start = a.interval_start
+          )
+        ORDER BY a.interval_start DESC, a.recorded_at DESC, a.execution_id DESC
+    ) latest
+)
+SELECT date_bin(make_interval(secs => $1::double precision),
+                interval_start, $2::timestamptz)::timestamptz AS bucket_start,
+       coalesce(sum(good_count)::text, '')::text AS good,
+       coalesce(sum(total_count)::text, '')::text AS total,
+       count(*) FILTER (WHERE outcome = 'observed' AND total_count > 0) AS observed,
+       count(*) FILTER (WHERE outcome = 'observed' AND total_count = 0) AS zero_traffic,
+       count(*) FILTER (WHERE outcome = 'complete_empty') AS known_empty,
+       count(*) FILTER (WHERE outcome = 'failed') AS failed,
+       count(*) FILTER (WHERE outcome = 'incomplete') AS incomplete
+FROM outcomes
+GROUP BY 1
+ORDER BY 1
+`
+
+type BucketSliMeasurementsParams struct {
+	BucketSeconds       float64            `json:"bucket_seconds"`
+	RangeEnd            pgtype.Timestamptz `json:"range_end"`
+	SliID               pgtype.UUID        `json:"sli_id"`
+	MeasurementRevision int64              `json:"measurement_revision"`
+	RangeStart          pgtype.Timestamptz `json:"range_start"`
+}
+
+type BucketSliMeasurementsRow struct {
+	BucketStart pgtype.Timestamptz `json:"bucket_start"`
+	Good        string             `json:"good"`
+	Total       string             `json:"total"`
+	Observed    int64              `json:"observed"`
+	ZeroTraffic int64              `json:"zero_traffic"`
+	KnownEmpty  int64              `json:"known_empty"`
+	Failed      int64              `json:"failed"`
+	Incomplete  int64              `json:"incomplete"`
+}
+
+func (q *Queries) BucketSliMeasurements(ctx context.Context, arg BucketSliMeasurementsParams) ([]BucketSliMeasurementsRow, error) {
+	rows, err := q.db.Query(ctx, bucketSliMeasurements,
+		arg.BucketSeconds,
+		arg.RangeEnd,
+		arg.SliID,
+		arg.MeasurementRevision,
+		arg.RangeStart,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []BucketSliMeasurementsRow{}
+	for rows.Next() {
+		var i BucketSliMeasurementsRow
+		if err := rows.Scan(
+			&i.BucketStart,
+			&i.Good,
+			&i.Total,
+			&i.Observed,
+			&i.ZeroTraffic,
+			&i.KnownEmpty,
+			&i.Failed,
+			&i.Incomplete,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const deleteExpiredSliCreateReceipt = `-- name: DeleteExpiredSliCreateReceipt :exec
 DELETE FROM public.almanac_sli_create_receipts
 WHERE actor_id = $1 AND idempotency_key = $2 AND expires_at <= $3

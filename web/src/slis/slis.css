@@ -168,3 +168,13 @@
   .sli-list-table > tbody > tr > td.sli-list-name, .sli-list-table > tbody > tr > td.sli-col-health, .sli-list-table > tbody > tr > td.sli-col-slos { grid-column: 1 / -1; }
   .sli-list-table > tbody > tr > td.sli-col-recent .sli-recent-strip__plot { width: 7rem; }
 }
+
+.sli-measurement-ranges {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+
+.sli-measurement-ranges .ui-segmented {
+  flex-wrap: wrap;
+}

@@ -34,3 +34,30 @@ export function buildMeasurements(rows:SliObservation[],start:string|null,end:st
   }
   return { intervals, counts, good:decimal(good), total:decimal(total), bad:decimal(total-good), ratio:measurementRatio(decimal(good),decimal(total)), minimum };
 }
+
+export function summarizeMeasurementBuckets(buckets: import('./client.ts').SliMeasurementSeries['buckets']) {
+  let good = 0n, total = 0n;
+  let covered = 0, failed = 0, missing = 0, incomplete = 0;
+  const intervals = buckets.map((bucket): MeasurementInterval => {
+    covered += bucket.observed + bucket.zero_traffic + bucket.known_empty;
+    failed += bucket.failed;
+    missing += bucket.missing;
+    incomplete += bucket.incomplete;
+    if (bucket.good !== null && bucket.total !== null) {
+      good += scaled(bucket.good);
+      total += scaled(bucket.total);
+    }
+    const problems = bucket.failed + bucket.incomplete + bucket.missing;
+    const complete = bucket.observed + bucket.zero_traffic + bucket.known_empty;
+    const state = problems ? (complete || bucket.incomplete ? 'partial' : bucket.failed ? 'failed' : 'missing')
+      : bucket.observed ? 'observed' : bucket.zero_traffic ? 'zero' : 'empty';
+    const detail = [
+      [bucket.observed, 'observed'], [bucket.zero_traffic, 'zero traffic'], [bucket.known_empty, 'known empty'],
+      [bucket.failed, 'query errors'], [bucket.incomplete, 'partial'], [bucket.missing, 'missing'],
+    ].filter(([count]) => count).map(([count, label]) => `${count} ${label}`).join(' · ');
+    return { start: bucket.start, end: bucket.end, good: bucket.good, total: bucket.total, state,
+      ratio: measurementRatio(bucket.good, bucket.total), detail };
+  });
+  return { intervals, ratio: measurementRatio(decimal(good), decimal(total)), covered, failed, missing, incomplete,
+    expected: covered + failed + missing + incomplete };
+}

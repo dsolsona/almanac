@@ -2942,6 +2942,33 @@ func (e ListServicesParamsOrder) Valid() bool {
 	}
 }
 
+// Defines values for GetSliMeasurementsParamsPeriod.
+const (
+	GetSliMeasurementsParamsPeriodN24h GetSliMeasurementsParamsPeriod = "24h"
+	GetSliMeasurementsParamsPeriodN30d GetSliMeasurementsParamsPeriod = "30d"
+	GetSliMeasurementsParamsPeriodN3h  GetSliMeasurementsParamsPeriod = "3h"
+	GetSliMeasurementsParamsPeriodN6h  GetSliMeasurementsParamsPeriod = "6h"
+	GetSliMeasurementsParamsPeriodN7d  GetSliMeasurementsParamsPeriod = "7d"
+)
+
+// Valid indicates whether the value is a known member of the GetSliMeasurementsParamsPeriod enum.
+func (e GetSliMeasurementsParamsPeriod) Valid() bool {
+	switch e {
+	case GetSliMeasurementsParamsPeriodN24h:
+		return true
+	case GetSliMeasurementsParamsPeriodN30d:
+		return true
+	case GetSliMeasurementsParamsPeriodN3h:
+		return true
+	case GetSliMeasurementsParamsPeriodN6h:
+		return true
+	case GetSliMeasurementsParamsPeriodN7d:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for GetSloOperationalOverviewParamsUrgency.
 const (
 	GetSloOperationalOverviewParamsUrgencyHealthy        GetSloOperationalOverviewParamsUrgency = "healthy"
@@ -3007,22 +3034,22 @@ func (e GetSloOperationalDetailParamsBurnWindowSeconds) Valid() bool {
 
 // Defines values for GetSloOperationalDetailParamsPeriod.
 const (
-	N1y    GetSloOperationalDetailParamsPeriod = "1y"
-	N7d    GetSloOperationalDetailParamsPeriod = "7d"
-	N90d   GetSloOperationalDetailParamsPeriod = "90d"
-	Window GetSloOperationalDetailParamsPeriod = "window"
+	GetSloOperationalDetailParamsPeriodN1y    GetSloOperationalDetailParamsPeriod = "1y"
+	GetSloOperationalDetailParamsPeriodN7d    GetSloOperationalDetailParamsPeriod = "7d"
+	GetSloOperationalDetailParamsPeriodN90d   GetSloOperationalDetailParamsPeriod = "90d"
+	GetSloOperationalDetailParamsPeriodWindow GetSloOperationalDetailParamsPeriod = "window"
 )
 
 // Valid indicates whether the value is a known member of the GetSloOperationalDetailParamsPeriod enum.
 func (e GetSloOperationalDetailParamsPeriod) Valid() bool {
 	switch e {
-	case N1y:
+	case GetSloOperationalDetailParamsPeriodN1y:
 		return true
-	case N7d:
+	case GetSloOperationalDetailParamsPeriodN7d:
 		return true
-	case N90d:
+	case GetSloOperationalDetailParamsPeriodN90d:
 		return true
-	case Window:
+	case GetSloOperationalDetailParamsPeriodWindow:
 		return true
 	default:
 		return false
@@ -4707,6 +4734,20 @@ type SliLinkedSlos struct {
 	TotalCount int            `json:"total_count"`
 }
 
+// SliMeasurementBucket defines model for SliMeasurementBucket.
+type SliMeasurementBucket struct {
+	End         time.Time `json:"end"`
+	Failed      int64     `json:"failed"`
+	Good        *string   `json:"good"`
+	Incomplete  int64     `json:"incomplete"`
+	KnownEmpty  int64     `json:"known_empty"`
+	Missing     int64     `json:"missing"`
+	Observed    int64     `json:"observed"`
+	Start       time.Time `json:"start"`
+	Total       *string   `json:"total"`
+	ZeroTraffic int64     `json:"zero_traffic"`
+}
+
 // SliMetadataWrite defines model for SliMetadataWrite.
 type SliMetadataWrite struct {
 	DisplayName string `json:"display_name"`
@@ -5959,6 +6000,14 @@ type PatchSliMetadataParams struct {
 	// IfMatch Strong tag exactly formatted as "sli:<canonical-uuid>:<positive-decimal-version>".
 	IfMatch SliIfMatch `json:"If-Match"`
 }
+
+// GetSliMeasurementsParams defines parameters for GetSliMeasurements.
+type GetSliMeasurementsParams struct {
+	Period GetSliMeasurementsParamsPeriod `form:"period" json:"period"`
+}
+
+// GetSliMeasurementsParamsPeriod defines parameters for GetSliMeasurements.
+type GetSliMeasurementsParamsPeriod string
 
 // ListSliObservationsParams defines parameters for ListSliObservations.
 type ListSliObservationsParams struct {
@@ -7437,6 +7486,13 @@ type ClientInterface interface {
 	//
 	// Corresponds with PATCH /api/v1/slis/{sli_id} (the `PatchSliMetadata` operationId).
 	PatchSliMetadata(ctx context.Context, sliId SliId, params *PatchSliMetadataParams, body PatchSliMetadataJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetSliMeasurements Read a bounded series for the SLI Measurements chart
+	//
+	// Returns up to 240 consecutive buckets for the current measurement revision, aligned to the latest due interval. History before eligibility is clipped. Counts are exact decimal sums. Outcome counts describe canonical intervals, including missing intervals. An empty series means no intervals are due.
+	//
+	// Corresponds with GET /api/v1/slis/{sli_id}/measurements (the `GetSliMeasurements` operationId).
+	GetSliMeasurements(ctx context.Context, sliId SliId, params *GetSliMeasurementsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListSliObservations Read bounded SLI interval history
 	//
@@ -9663,6 +9719,23 @@ func (c *Client) PatchSliMetadataWithBody(ctx context.Context, sliId SliId, para
 // Corresponds with PATCH /api/v1/slis/{sli_id} (the `PatchSliMetadata` operationId).
 func (c *Client) PatchSliMetadata(ctx context.Context, sliId SliId, params *PatchSliMetadataParams, body PatchSliMetadataJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewPatchSliMetadataRequest(c.Server, sliId, params, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// GetSliMeasurements Read a bounded series for the SLI Measurements chart
+//
+// Returns up to 240 consecutive buckets for the current measurement revision, aligned to the latest due interval. History before eligibility is clipped. Counts are exact decimal sums. Outcome counts describe canonical intervals, including missing intervals. An empty series means no intervals are due.
+//
+// Corresponds with GET /api/v1/slis/{sli_id}/measurements (the `GetSliMeasurements` operationId).
+func (c *Client) GetSliMeasurements(ctx context.Context, sliId SliId, params *GetSliMeasurementsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetSliMeasurementsRequest(c.Server, sliId, params)
 	if err != nil {
 		return nil, err
 	}
@@ -14781,6 +14854,63 @@ func NewPatchSliMetadataRequestWithBody(server string, sliId SliId, params *Patc
 	return req, nil
 }
 
+// NewGetSliMeasurementsRequest constructs an http.Request for the GetSliMeasurements method
+func NewGetSliMeasurementsRequest(server string, sliId SliId, params *GetSliMeasurementsParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "sli_id", sliId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/slis/%s/measurements", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "period", params.Period, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewListSliObservationsRequest constructs an http.Request for the ListSliObservations method
 func NewListSliObservationsRequest(server string, sliId SliId, params *ListSliObservationsParams) (*http.Request, error) {
 	var err error
@@ -17200,6 +17330,15 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with PATCH /api/v1/slis/{sli_id} (the `PatchSliMetadata` operationId).
 	PatchSliMetadataWithResponse(ctx context.Context, sliId SliId, params *PatchSliMetadataParams, body PatchSliMetadataJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchSliMetadataResponse, error)
+
+	// GetSliMeasurementsWithResponse Read a bounded series for the SLI Measurements chart
+	//
+	// Returns up to 240 consecutive buckets for the current measurement revision, aligned to the latest due interval. History before eligibility is clipped. Counts are exact decimal sums. Outcome counts describe canonical intervals, including missing intervals. An empty series means no intervals are due.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with GET /api/v1/slis/{sli_id}/measurements (the `GetSliMeasurements` operationId).
+	GetSliMeasurementsWithResponse(ctx context.Context, sliId SliId, params *GetSliMeasurementsParams, reqEditors ...RequestEditorFn) (*GetSliMeasurementsResponse, error)
 
 	// ListSliObservationsWithResponse Read bounded SLI interval history
 	//
@@ -21663,6 +21802,60 @@ func (r PatchSliMetadataResponse) ContentType() string {
 	return ""
 }
 
+type GetSliMeasurementsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *struct {
+		BucketSeconds int                    `json:"bucket_seconds"`
+		Buckets       []SliMeasurementBucket `json:"buckets"`
+	}
+	// ApplicationproblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationproblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r GetSliMeasurementsResponse) GetJSON200() *struct {
+	BucketSeconds int                    `json:"bucket_seconds"`
+	Buckets       []SliMeasurementBucket `json:"buckets"`
+} {
+	return r.JSON200
+}
+
+// GetApplicationproblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r GetSliMeasurementsResponse) GetApplicationproblemJSONDefault() *Problem {
+	return r.ApplicationproblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r GetSliMeasurementsResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r GetSliMeasurementsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetSliMeasurementsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetSliMeasurementsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type ListSliObservationsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -24565,6 +24758,21 @@ func (c *ClientWithResponses) PatchSliMetadataWithResponse(ctx context.Context, 
 		return nil, err
 	}
 	return ParsePatchSliMetadataResponse(rsp)
+}
+
+// GetSliMeasurementsWithResponse Read a bounded series for the SLI Measurements chart
+//
+// Returns up to 240 consecutive buckets for the current measurement revision, aligned to the latest due interval. History before eligibility is clipped. Counts are exact decimal sums. Outcome counts describe canonical intervals, including missing intervals. An empty series means no intervals are due.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with GET /api/v1/slis/{sli_id}/measurements (the `GetSliMeasurements` operationId).
+func (c *ClientWithResponses) GetSliMeasurementsWithResponse(ctx context.Context, sliId SliId, params *GetSliMeasurementsParams, reqEditors ...RequestEditorFn) (*GetSliMeasurementsResponse, error) {
+	rsp, err := c.GetSliMeasurements(ctx, sliId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetSliMeasurementsResponse(rsp)
 }
 
 // ListSliObservationsWithResponse Read bounded SLI interval history
@@ -28356,6 +28564,42 @@ func ParsePatchSliMetadataResponse(rsp *http.Response) (*PatchSliMetadataRespons
 	return response, nil
 }
 
+// ParseGetSliMeasurementsResponse parses an HTTP response from a GetSliMeasurementsWithResponse call
+func ParseGetSliMeasurementsResponse(rsp *http.Response) (*GetSliMeasurementsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetSliMeasurementsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest struct {
+			BucketSeconds int                    `json:"bucket_seconds"`
+			Buckets       []SliMeasurementBucket `json:"buckets"`
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseListSliObservationsResponse parses an HTTP response from a ListSliObservationsWithResponse call
 func ParseListSliObservationsResponse(rsp *http.Response) (*ListSliObservationsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -29576,6 +29820,9 @@ type ServerInterface interface {
 	// PatchSliMetadata Update SLI display metadata
 	// (PATCH /api/v1/slis/{sli_id})
 	PatchSliMetadata(w http.ResponseWriter, r *http.Request, sliId SliId, params PatchSliMetadataParams)
+	// GetSliMeasurements Read a bounded series for the SLI Measurements chart
+	// (GET /api/v1/slis/{sli_id}/measurements)
+	GetSliMeasurements(w http.ResponseWriter, r *http.Request, sliId SliId, params GetSliMeasurementsParams)
 	// ListSliObservations Read bounded SLI interval history
 	// (GET /api/v1/slis/{sli_id}/observations)
 	ListSliObservations(w http.ResponseWriter, r *http.Request, sliId SliId, params ListSliObservationsParams)
@@ -33783,6 +34030,48 @@ func (siw *ServerInterfaceWrapper) PatchSliMetadata(w http.ResponseWriter, r *ht
 	handler.ServeHTTP(w, r)
 }
 
+// GetSliMeasurements operation middleware
+func (siw *ServerInterfaceWrapper) GetSliMeasurements(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "sli_id" -------------
+	var sliId SliId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "sli_id", r.PathValue("sli_id"), &sliId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sli_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetSliMeasurementsParams
+
+	// ------------- Required query parameter "period" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "period", r.URL.Query(), &params.Period, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "period"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "period", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSliMeasurements(w, r, sliId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListSliObservations operation middleware
 func (siw *ServerInterfaceWrapper) ListSliObservations(w http.ResponseWriter, r *http.Request) {
 
@@ -35193,6 +35482,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/slis/{sli_id}", wrapper.GetSli)
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/api/v1/slis/{sli_id}", wrapper.PatchSliMetadata)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/slis/{sli_id}/observations", wrapper.ListSliObservations)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/slis/{sli_id}/measurements", wrapper.GetSliMeasurements)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/maintenance", wrapper.ListMaintenance)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/v1/maintenance", wrapper.CreateMaintenance)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/v1/maintenance/{maintenance_id}", wrapper.GetMaintenance)

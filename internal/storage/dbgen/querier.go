@@ -50,6 +50,7 @@ type Querier interface {
 	ApplyServiceMaintenanceProjectionMember(ctx context.Context, arg ApplyServiceMaintenanceProjectionMemberParams) (bool, error)
 	ArchiveAgent(ctx context.Context, arg ArchiveAgentParams) (AlmanacAgent, error)
 	ArchiveService(ctx context.Context, arg ArchiveServiceParams) (int64, error)
+	BucketSliMeasurements(ctx context.Context, arg BucketSliMeasurementsParams) ([]BucketSliMeasurementsRow, error)
 	CancelAlertCursor(ctx context.Context, arg CancelAlertCursorParams) (int64, error)
 	CaptureMaintenanceBuild(ctx context.Context, arg CaptureMaintenanceBuildParams) (AlmanacMaintenanceBuild, error)
 	CatalogFilteredServiceCount(ctx context.Context, arg CatalogFilteredServiceCountParams) (int64, error)
