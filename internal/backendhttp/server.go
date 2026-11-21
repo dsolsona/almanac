@@ -192,6 +192,8 @@ func New(ctx context.Context, cfg config.Config, service *authentication.Service
 	mux.Handle("/api/v1/", agents)
 	mux.Handle("/api/agent/v1/configuration", configuration)
 	mux.Handle("/api/agent/v1/observations", slis)
+	mux.Handle("/api/agent/v1/backfills/claim", slis)
+	mux.Handle("/api/agent/v1/backfills/result", slis)
 	mux.Handle("POST /api/agent/v1/diagnostics/{diagnostic_id}/result", diagnosticResults)
 	mux.Handle("/api/agent/v1/connect", connections)
 	if cfg.BackendUI() {
@@ -236,6 +238,7 @@ func (s *Server) startReassignmentWorker() {
 		defer close(s.workerDone)
 		ticker := time.NewTicker(time.Second)
 		defer ticker.Stop()
+		var nextHistoricalSweep time.Time
 		for {
 			select {
 			case <-ctx.Done():
@@ -250,6 +253,13 @@ func (s *Server) startReassignmentWorker() {
 			for _, notice := range notices {
 				if err := s.agentSessions.NotifyConfigurationChanged(bounded, notice.AgentID, notice.Revision); err != nil && ctx.Err() == nil {
 					slog.Warn("datasource reassignment configuration notification failed")
+				}
+			}
+			if s.storageRuntime != nil && s.ready.Load() && !time.Now().Before(nextHistoricalSweep) {
+				now := time.Now().UTC()
+				nextHistoricalSweep = now.Add(time.Minute)
+				if err := s.storageRuntime.SweepBackfill(bounded, now); err != nil && ctx.Err() == nil {
+					slog.Warn("historical work reconciliation failed", "error", err)
 				}
 			}
 			stop()

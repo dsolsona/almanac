@@ -1,0 +1,151 @@
+package storage
+
+import (
+	"context"
+	"errors"
+	"strconv"
+	"time"
+
+	"github.com/dsolsona/almanac/internal/sli"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
+)
+
+type backfillGap struct {
+	start time.Time
+	end   time.Time
+}
+
+// SweepBackfill puts overdue canonical gaps on the same queue as manual work.
+// A persisted cursor bounds each pass and continues from the last committed point.
+func (r *Runtime) SweepBackfill(ctx context.Context, now time.Time) error {
+	conn, err := r.Acquire(ctx, HistoricalTraffic)
+	if err != nil {
+		return err
+	}
+	defer conn.Release()
+	if _, err := conn.Exec(ctx, `SELECT public.almanac_reap_backfill_chunks($1)`, now); err != nil {
+		return operationError(ctx, "storage: reap historical leases", err)
+	}
+	for _, sweep := range []string{"recent", "retained"} {
+		tx, err := conn.Begin(ctx)
+		if err != nil {
+			return err
+		}
+		err = sweepBackfillPage(ctx, tx, now.UTC(), sweep)
+		if err == nil {
+			err = tx.Commit(ctx)
+		}
+		rollbackTransaction(tx)
+		if err != nil {
+			return operationError(ctx, "storage: discover historical gaps", err)
+		}
+	}
+	return nil
+}
+
+func sweepBackfillPage(ctx context.Context, tx pgx.Tx, now time.Time, sweep string) error {
+	var cursorID pgtype.UUID
+	var next pgtype.Timestamptz
+	if err := tx.QueryRow(ctx, `
+SELECT sli_id,next_interval FROM public.almanac_backfill_scan_cursor
+WHERE sweep=$1 FOR UPDATE`, sweep).Scan(&cursorID, &next); err != nil {
+		return err
+	}
+	var id, agentID string
+	var revision int64
+	var validFrom time.Time
+	var cadenceSeconds, delaySeconds int
+	err := tx.QueryRow(ctx, `
+SELECT s.id,m.revision,m.effective_from,d.agent_id,d.polling_interval_seconds,d.settling_delay_seconds
+FROM public.almanac_slis s
+JOIN public.almanac_sli_measurements m ON m.sli_id=s.id AND m.revision=s.measurement_revision
+JOIN public.almanac_datasources d ON d.id=m.datasource_id
+JOIN public.almanac_agents a ON a.id=d.agent_id
+JOIN public.almanac_agent_runtime_status runtime ON runtime.agent_id=a.id
+WHERE d.provider='prometheus' AND a.enabled AND m.activated_at IS NOT NULL
+  AND runtime.last_heartbeat_at > $3::timestamptz - interval '1 minute'
+  AND runtime.applied_configuration_revision=runtime.desired_configuration_revision
+  AND EXISTS (SELECT 1 FROM jsonb_array_elements(runtime.capabilities) item
+              WHERE item->>'provider'=d.provider AND item->'operations' ? 'backfill')
+  AND ($1::uuid IS NULL OR s.id>$1 OR (s.id=$1 AND $2::timestamptz IS NOT NULL))
+ORDER BY s.id LIMIT 1
+FOR NO KEY UPDATE OF m
+FOR UPDATE OF s,d`, cursorID, next, now).Scan(&id, &revision, &validFrom, &agentID, &cadenceSeconds, &delaySeconds)
+	if errors.Is(err, pgx.ErrNoRows) {
+		_, err = tx.Exec(ctx, `UPDATE public.almanac_backfill_scan_cursor SET sli_id=NULL,next_interval=NULL WHERE sweep=$1`, sweep)
+		return err
+	}
+	if err != nil {
+		return err
+	}
+	cadence := time.Duration(cadenceSeconds) * time.Second
+	since := now.Add(-24 * time.Hour)
+	until := now.Add(-5 * time.Minute).Add(-time.Duration(delaySeconds) * time.Second)
+	if sweep == "retained" {
+		until = since
+		since = now.Add(-sli.ObservationRetention)
+	}
+	lower := ceilSliBoundary(since, cadence)
+	if validFrom.After(lower) {
+		lower = ceilSliBoundary(validFrom, cadence)
+	}
+	end := floorSliBoundary(until, cadence)
+	if cursorID.String() == id && next.Valid && next.Time.Before(end) {
+		end = next.Time
+	}
+	// Scan newest gaps first. The two sweeps share a combined 1,000-interval budget.
+	start := end.Add(-500 * cadence)
+	if start.Before(lower) {
+		start = lower
+	}
+	if start.Before(end) {
+		if err := enqueueDiscoveredGaps(ctx, tx, id, revision, agentID, start, end, now, cadenceSeconds); err != nil {
+			return err
+		}
+	}
+	var continuation *time.Time
+	if start.After(lower) {
+		continuation = &start
+	}
+	_, err = tx.Exec(ctx, `UPDATE public.almanac_backfill_scan_cursor SET sli_id=$2,next_interval=$3 WHERE sweep=$1`, sweep, id, continuation)
+	return err
+}
+
+func enqueueDiscoveredGaps(ctx context.Context, tx pgx.Tx, id string, revision int64, agentID string, start, end, now time.Time, cadenceSeconds int) error {
+	rows, err := tx.Query(ctx, `
+WITH points AS (
+    SELECT point FROM generate_series($3::timestamptz,$4::timestamptz-make_interval(secs=>$5),make_interval(secs=>$5)) point
+    WHERE NOT EXISTS (SELECT 1 FROM public.almanac_sli_observations o
+                      WHERE o.sli_id=$1 AND o.measurement_revision=$2 AND o.interval_start=point AND o.outcome IN ('observed','complete_empty'))
+      AND NOT EXISTS (SELECT 1 FROM public.almanac_backfill_chunks c JOIN public.almanac_backfill_jobs j ON j.id=c.job_id
+                      WHERE c.sli_id=$1 AND c.measurement_revision=$2 AND c.range_start<=point AND c.range_end>point
+                        AND (j.requested_by IS NULL OR c.state IN ('queued','leased','retry-wait')))
+), islands AS (
+    SELECT point, point-row_number() OVER (ORDER BY point)*make_interval(secs=>$5) AS key FROM points
+)
+SELECT min(point),max(point)+make_interval(secs=>$5) FROM islands GROUP BY key ORDER BY min(point)`,
+		id, revision, start, end, cadenceSeconds)
+	if err != nil {
+		return err
+	}
+	gaps := make([]backfillGap, 0)
+	for rows.Next() {
+		var gap backfillGap
+		if err := rows.Scan(&gap.start, &gap.end); err != nil {
+			rows.Close()
+			return err
+		}
+		gaps = append(gaps, gap)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, gap := range gaps {
+		key := strconv.FormatInt(revision, 10) + "/" + gap.start.UTC().Format(time.RFC3339Nano)
+		if _, err := insertBackfillJob(ctx, tx, id, revision, agentID, gap.start, gap.end, now, cadenceSeconds, key, nil); err != nil {
+			return err
+		}
+	}
+	return nil
+}

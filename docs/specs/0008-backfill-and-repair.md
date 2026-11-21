@@ -4,7 +4,7 @@
 - Created: 2026-10-24
 - Accepted: 2026-10-24
 - Approval: Crit review `7fd22977b6c0`; approved 2026-10-24 after all comments resolved
-- Implementation: not started
+- Implementation: single-SLI Prometheus collection and repair in review in [F4-T64](../tasks/F4-T64.md).
 - Related: [SPEC-0003](0003-ingestion-and-recovery.md), [SPEC-0009](0009-agent-protocol-and-ownership.md), [ADR-0003](../adr/0003-bounded-buffering-and-historical-isolation.md)
 
 ## Purpose and responsibilities
@@ -115,11 +115,30 @@ independently of agent limits.
 - AC-06: Requested/committed/unavailable/failed intervals are distinguishable; a
   partially recovered job never reports full completion.
 
+## Single-SLI Prometheus workflow
+
+An Editor or Administrator opens Historical backfill on the SLI detail page.
+The operator can choose one, seven, fourteen or thirty days, or supply a UTC
+range. Preview shows the aligned, eligible bounds and chunk count before the
+operator confirms a request. Viewers can read the job list. The
+`almanac backfills` CLI has preview, request, list and cancel commands.
+
+The assigned agent claims separately leased work over the agent HTTPS API.
+Historical observation provenance references the durable chunk. The backend
+accepts observations and commits chunk progress in a single transaction that
+also marks affected source ranges for the normal SLO workers. Existing
+observations and SLO validity dates retain their meaning. Historical empty
+responses without evidence of source availability remain gaps.
+
+The Prometheus implementation replays up to 256 settled intervals per chunk.
+The recent and retained repair cursors share a 1,000-interval sweep budget.
+Other providers, historical configuration replay, and multi-SLI admission
+remain outside this increment.
+
 ## Review notes and evidence
 
 - **REVIEW-B01:** Backend chunk planning, scan timing, retry counts and concurrency
   are proposed defaults. They keep state inspectable and survive agent restarts.
 - **REVIEW-B02:** Historical work pauses on disconnect; only live work continues.
   This avoids spending source capacity on history that cannot be delivered.
-- Not implemented. Validate with controllable clocks, crash injection, overlap,
-  cancellation, partial provider history, and simultaneous live/historical load.
+- [F4-T64](../tasks/F4-T64.md) records tested behavior, screenshots and remaining verification.

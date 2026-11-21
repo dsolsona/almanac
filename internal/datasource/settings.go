@@ -163,7 +163,11 @@ func validCABundle(value string) bool {
 func Capabilities() []agentprotocol.Capability {
 	result := make([]agentprotocol.Capability, 0, 4)
 	for _, provider := range []string{"prometheus", "victoriatraces", "tempo", "loki"} {
-		result = append(result, agentprotocol.Capability{Provider: provider, ConfigurationFormats: []string{provider + "-http-v1"}, Operations: []string{"collect", "connection_test", "query_preview"}})
+		operations := []string{"collect", "connection_test", "query_preview"}
+		if provider == "prometheus" {
+			operations = append(operations, "backfill")
+		}
+		result = append(result, agentprotocol.Capability{Provider: provider, ConfigurationFormats: []string{provider + "-http-v1"}, Operations: operations})
 	}
 	return result
 }

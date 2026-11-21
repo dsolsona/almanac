@@ -104,20 +104,10 @@ func IngestAgentObservation(ctx context.Context, databaseURL, credentialID strin
 	if err != nil {
 		return result, ErrObservationInvalid
 	}
-	canonical := struct {
-		Version             int                  `json:"version"`
-		SLIID               string               `json:"sli_id"`
-		MeasurementRevision string               `json:"measurement_revision"`
-		IntervalStart       time.Time            `json:"interval_start"`
-		IntervalEnd         time.Time            `json:"interval_end"`
-		Outcome             sli.ExecutionOutcome `json:"outcome"`
-	}{1, item.SLIID, item.MeasurementRevision, item.IntervalStart.UTC(), item.IntervalEnd.UTC(), sli.CanonicalOutcome(item.Outcome)}
-	canonicalBytes, err := json.Marshal(canonical)
+	resultDigest, err := canonicalSliResultDigest(item)
 	if err != nil {
 		return result, ErrObservationInvalid
 	}
-	resultDigest := sha256.Sum256(canonicalBytes)
-	clear(canonicalBytes)
 	deliveryID, _ := canonicalUUID(item.DeliveryID)
 	existingReceipt, err := state.queries.FindSliDeliveryReceipt(ctx, dbgen.FindSliDeliveryReceiptParams{AgentID: state.agentID, DeliveryID: deliveryID})
 	if err == nil {
@@ -210,7 +200,7 @@ func IngestAgentObservation(ctx context.Context, databaseURL, credentialID strin
 			ErrorCode: nullableString(item.Outcome.ErrorCode), MissingComponents: missingComponents,
 			ExecutionID: mustPGUUID(item.ExecutionID), DeliveryID: deliveryID,
 			AgentID: state.agentID, SessionGeneration: generation, ConfigurationRevision: configurationRevision,
-			LeaseID: item.LeaseID, AgentCreatedAt: timestamp(item.CreatedAt), RecordedAt: timestamp(now),
+			LeaseID: nullableString(item.LeaseID), AgentCreatedAt: timestamp(item.CreatedAt), RecordedAt: timestamp(now),
 			IngestionGeneration: sourceGeneration,
 		}); err != nil {
 			return result, operationError(ctx, "storage: SLI observation insert failed", err)
@@ -244,9 +234,13 @@ func IngestAgentObservation(ctx context.Context, databaseURL, credentialID strin
 }
 
 func prepareSliPartitions(ctx context.Context, tx pgx.Tx, now time.Time) error {
-	months := map[string]time.Time{}
 	month := time.Date(now.UTC().Year(), now.UTC().Month(), 1, 0, 0, 0, 0, time.UTC)
-	for _, value := range []time.Time{now.Add(-sli.ObservationReplayWindow), now, month.AddDate(0, 1, 0)} {
+	return ensureSliPartitions(ctx, tx, now.Add(-sli.ObservationReplayWindow), now, month.AddDate(0, 1, 0))
+}
+
+func ensureSliPartitions(ctx context.Context, tx pgx.Tx, dates ...time.Time) error {
+	months := make(map[string]time.Time, len(dates))
+	for _, value := range dates {
 		start := time.Date(value.UTC().Year(), value.UTC().Month(), 1, 0, 0, 0, 0, time.UTC)
 		months[start.Format("200601")] = start
 	}
@@ -327,4 +321,22 @@ func mustPGUUID(value string) pgtype.UUID {
 // The canonical key survives receipt expiry without a second stored identifier.
 func canonicalObservationID(sliID string, revision int64, start time.Time) uuid.UUID {
 	return uuid.NewSHA1(uuid.NameSpaceOID, fmt.Appendf(nil, "%s:%d:%d", sliID, revision, start.UnixMicro()))
+}
+
+func canonicalSliResultDigest(item sli.ObservationItem) ([32]byte, error) {
+	canonical := struct {
+		Version             int                  `json:"version"`
+		SLIID               string               `json:"sli_id"`
+		MeasurementRevision string               `json:"measurement_revision"`
+		IntervalStart       time.Time            `json:"interval_start"`
+		IntervalEnd         time.Time            `json:"interval_end"`
+		Outcome             sli.ExecutionOutcome `json:"outcome"`
+	}{1, item.SLIID, item.MeasurementRevision, item.IntervalStart.UTC(), item.IntervalEnd.UTC(), sli.CanonicalOutcome(item.Outcome)}
+	canonicalBytes, err := json.Marshal(canonical)
+	if err != nil {
+		return [32]byte{}, err
+	}
+	resultDigest := sha256.Sum256(canonicalBytes)
+	clear(canonicalBytes)
+	return resultDigest, nil
 }

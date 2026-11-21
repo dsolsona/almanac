@@ -7,6 +7,10 @@ export type SliObservation = components['schemas']['SliObservation'];
 export type SliObservationPage = components['schemas']['SliObservationPage'];
 export type SliCreateRequest = components['schemas']['SliCreateRequest'];
 
+export type SliBackfillAdmission = components['schemas']['SliBackfillAdmission'];
+export type SliBackfillJob = components['schemas']['SliBackfillJob'];
+type SliBackfillRequest = components['schemas']['SliBackfillRequest'];
+
 export class SliFailure extends Error {
   constructor(readonly code: string, message: string, readonly status = 0, readonly uncertain = false) {
     super(message);
@@ -30,6 +34,8 @@ const messages: Record<string, string> = {
   measurement_conflict: 'The datasource cadence or agent assignment cannot change while this SLI uses it.',
   agent_unavailable: 'The assigned agent cannot currently accept this SLI configuration.',
   source_secret_unavailable: 'The datasource credential is unavailable. Update its credentials before collecting.',
+  backfill_range: 'Choose a settled range within the SLI’s measurement history. Both dates must align to its collection cadence.',
+  backfill_overlap: 'A job already covers part of this range. Check its progress before requesting overlapping dates.',
   sli_unavailable: 'SLI management is temporarily unavailable.',
 };
 
@@ -210,6 +216,19 @@ function validETag(value: string, id: string): boolean {
   return Boolean(match && match[1] === id && revision(match[2]));
 }
 
+function validBackfillJob(value: unknown): value is SliBackfillJob {
+  return object(value) && typeof value.id === 'string' && UUID.test(value.id) && validBackfillAdmission({ start: value.start, end: value.end, chunk_count: value.chunks })
+    && typeof value.state === 'string' && ['queued', 'running', 'completed', 'completed-with-gaps', 'cancelled'].includes(value.state)
+    && typeof value.automatic === 'boolean' && Number.isSafeInteger(value.committed) && Number.isSafeInteger(value.gaps);
+}
+
+function validBackfillAdmission(value: unknown): value is SliBackfillAdmission {
+  return object(value) && typeof value.start === 'string' && typeof value.end === 'string'
+    && Date.parse(value.start) < Date.parse(value.end) && typeof value.chunk_count === 'number'
+    && Number.isSafeInteger(value.chunk_count) && value.chunk_count > 0
+    && (value.id === undefined || typeof value.id === 'string' && UUID.test(value.id));
+}
+
 export function createSliClient() {
   return {
     async list(limit = 50, cursor = '', signal?: AbortSignal, search = '', datasourceID = ''): Promise<{ items: Sli[]; next_cursor: string }> {
@@ -251,6 +270,19 @@ export function createSliClient() {
         if (error instanceof SliFailure && (error.status === 0 || error.status >= 500) && !error.uncertain) throw new SliFailure('outcome_unknown', 'The update may have succeeded. Refresh the SLI to confirm its current name.', error.status, true);
         throw error;
       }
+    },
+    async backfills(id: string, signal?: AbortSignal): Promise<SliBackfillJob[]> {
+      return (await request(`/api/v1/slis/${safeID(id)}/backfills`, { method: 'GET', signal }, 200,
+        (value): value is SliBackfillJob[] => Array.isArray(value) && value.length <= 20 && value.every(validBackfillJob))).value;
+    },
+    async requestBackfill(id: string, input: SliBackfillRequest, context: AuthContext, key: string): Promise<SliBackfillAdmission> {
+      const headers = { 'Content-Type': 'application/json', 'X-CSRF-Token': context.csrf_token, 'Idempotency-Key': key };
+      return (await request(`/api/v1/slis/${safeID(id)}/backfills`, { method: 'POST', headers, body: JSON.stringify(input) }, input.preview ? 200 : 202, validBackfillAdmission)).value;
+    },
+    async cancelBackfill(id: string, jobID: string, context: AuthContext): Promise<void> {
+      const path = `/api/v1/slis/${safeID(id)}/backfills/${safeID(jobID)}`;
+      const response = await fetch(path, { method: 'DELETE', credentials: 'same-origin', mode: 'same-origin', redirect: 'error', headers: { 'X-CSRF-Token': context.csrf_token } });
+      if (response.status !== 204) throw new SliFailure('sli_unavailable', 'Could not confirm cancellation. Refresh the jobs and try again.', response.status);
     },
     async observations(id: string, limit = 50, cursor = '', signal?: AbortSignal): Promise<SliObservationPage> {
       safeID(id);

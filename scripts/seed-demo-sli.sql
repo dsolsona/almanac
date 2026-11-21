@@ -26,7 +26,7 @@ SELECT agent_id AS fixture_agent, lease_id AS fixture_lease,
        session_generation AS fixture_session, configuration_revision AS fixture_config
 FROM public.almanac_sli_observations
 WHERE sli_id = :'fixture_id' AND measurement_revision = :'fixture_revision'
-  AND outcome = 'observed'
+  AND outcome = 'observed' AND lease_id IS NOT NULL
 ORDER BY interval_start DESC LIMIT 1
 \gset
 

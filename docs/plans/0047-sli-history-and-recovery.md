@@ -1,6 +1,6 @@
 # 0047 · SLI history and recovery
 
-Status: fixture in review. Manual and automatic recovery are pending.
+Status: fixture and single-SLI Prometheus recovery in PR review.
 Base revision `8649d32`.
 
 Deliver a local synthetic history command, operator-requested historical collection,
@@ -14,8 +14,8 @@ SPEC-0005 governs historical measurement and evaluation validity.
 
 Take an existing demo SLI identifier and one of `1d`, `7d`, `14d`, and `30d`.
 Accept constant event-count demo definitions and generate complete settled
-intervals on the recorded collection grid. Preserve recorded observations and
-report the requested range, inserted intervals, and enqueue linked SLO recalculation. Limit invocation to the local development stack.
+intervals on the recorded collection grid. Preserve recorded observations, report the requested and eligible ranges and
+inserted intervals, and enqueue linked SLO recalculation. Limit invocation to the local development stack.
 
 The existing smoke seeder bulk inserts fixture history and marks affected derived
 data. It advances the fixture SLI's historical validity before creating SLOs with
@@ -29,6 +29,8 @@ one-day range has 1,440 points before subtracting existing observations. An
 unexcluded 99/100 population with a 99.5% objective consumes 200% of its budget.
 
 ## Manual historical collection
+
+[Prometheus implementation and evidence](../tasks/F4-T64.md).
 
 - [ ] Implement durable preview, admission, aligned range and revision planning,
   leases, cancellation, and progress in accordance with SPEC-0008 AC-01, AC-02,

@@ -959,6 +959,43 @@ export interface paths {
         patch: operations["patchSliMetadata"];
         trace?: never;
     };
+    "/api/v1/slis/{sli_id}/backfills": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sli_id: components["parameters"]["SliId"];
+            };
+            cookie?: never;
+        };
+        /** Read the twenty most recent historical collection jobs */
+        get: operations["listSliBackfills"];
+        put?: never;
+        /** Preview or request historical collection for one SLI */
+        post: operations["requestSliBackfill"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/slis/{sli_id}/backfills/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Cancel outstanding chunks for a historical collection job */
+        delete: operations["cancelSliBackfill"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/slis/{sli_id}/observations": {
         parameters: {
             query?: never;
@@ -2662,6 +2699,36 @@ export interface components {
         };
         SliMetadataWrite: {
             display_name: string;
+        };
+        SliBackfillRequest: {
+            /** Format: date-time */
+            start: string;
+            /** Format: date-time */
+            end: string;
+            preview: boolean;
+        };
+        SliBackfillAdmission: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: date-time */
+            start: string;
+            /** Format: date-time */
+            end: string;
+            chunk_count: number;
+        };
+        SliBackfillJob: {
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            start: string;
+            /** Format: date-time */
+            end: string;
+            /** @enum {string} */
+            state: "queued" | "running" | "completed" | "completed-with-gaps" | "cancelled";
+            automatic: boolean;
+            chunks: number;
+            committed: number;
+            gaps: number;
         };
         SliObservationPage: {
             items: components["schemas"]["SliObservation"][];
@@ -5719,6 +5786,113 @@ export interface operations {
                 content: {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
+            };
+            /** @description Request rejected */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listSliBackfills: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sli_id: components["parameters"]["SliId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Historical work */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SliBackfillJob"][];
+                };
+            };
+            /** @description Request rejected */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    requestSliBackfill: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                sli_id: components["parameters"]["SliId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SliBackfillRequest"];
+            };
+        };
+        responses: {
+            /** @description Preview */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SliBackfillAdmission"];
+                };
+            };
+            /** @description Accepted historical job */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SliBackfillAdmission"];
+                };
+            };
+            /** @description Request rejected */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    cancelSliBackfill: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sli_id: components["parameters"]["SliId"];
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Outstanding chunks cancelled */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Request rejected */
             default: {

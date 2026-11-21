@@ -168,3 +168,8 @@
   .sli-list-table > tbody > tr > td.sli-list-name, .sli-list-table > tbody > tr > td.sli-col-health, .sli-list-table > tbody > tr > td.sli-col-slos { grid-column: 1 / -1; }
   .sli-list-table > tbody > tr > td.sli-col-recent .sli-recent-strip__plot { width: 7rem; }
 }
+
+.sli-backfill-body { display: grid; gap: var(--space-4); padding: var(--space-4); }
+.sli-backfill-body p { margin: 0; }
+.sli-backfill-jobs { display: grid; list-style: none; margin: 0; padding: 0; }
+.sli-backfill-jobs li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-3) 0; border-top: 1px solid var(--border); }

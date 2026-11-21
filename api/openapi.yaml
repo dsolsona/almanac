@@ -866,6 +866,42 @@ paths:
         '404': {description: SLI not found, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
         '409': {description: Stale SLI version, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
         'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/slis/{sli_id}/backfills:
+    parameters:
+      - {$ref: '#/components/parameters/SliId'}
+    get:
+      operationId: listSliBackfills
+      summary: Read the twenty most recent historical collection jobs
+      security: [{SessionCookie: []}]
+      responses:
+        '200': {description: Historical work, content: {application/json: {schema: {type: array, maxItems: 20, items: {$ref: '#/components/schemas/SliBackfillJob'}}}}}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+    post:
+      operationId: requestSliBackfill
+      summary: Preview or request historical collection for one SLI
+      security: [{SessionCookie: []}]
+      parameters:
+        - {name: Idempotency-Key, in: header, required: true, schema: {type: string, maxLength: 128}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SliBackfillRequest'}
+      responses:
+        '200': {description: Preview, content: {application/json: {schema: {$ref: '#/components/schemas/SliBackfillAdmission'}}}}
+        '202': {description: Accepted historical job, content: {application/json: {schema: {$ref: '#/components/schemas/SliBackfillAdmission'}}}}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/slis/{sli_id}/backfills/{job_id}:
+    delete:
+      operationId: cancelSliBackfill
+      summary: Cancel outstanding chunks for a historical collection job
+      security: [{SessionCookie: []}]
+      parameters:
+        - {$ref: '#/components/parameters/SliId'}
+        - {name: job_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '204': {description: Outstanding chunks cancelled}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
   /api/v1/slis/{sli_id}/observations:
     get:
       operationId: listSliObservations
@@ -2839,6 +2875,33 @@ components:
       required: [display_name]
       properties:
         display_name: {type: string, minLength: 1, maxLength: 128}
+    SliBackfillRequest:
+      type: object
+      required: [start, end, preview]
+      properties:
+        start: {type: string, format: date-time}
+        end: {type: string, format: date-time}
+        preview: {type: boolean}
+    SliBackfillAdmission:
+      type: object
+      required: [start, end, chunk_count]
+      properties:
+        id: {type: string, format: uuid}
+        start: {type: string, format: date-time}
+        end: {type: string, format: date-time}
+        chunk_count: {type: integer, minimum: 1}
+    SliBackfillJob:
+      type: object
+      required: [id, start, end, state, automatic, chunks, committed, gaps]
+      properties:
+        id: {type: string, format: uuid}
+        start: {type: string, format: date-time}
+        end: {type: string, format: date-time}
+        state: {type: string, enum: [queued, running, completed, completed-with-gaps, cancelled]}
+        automatic: {type: boolean}
+        chunks: {type: integer, minimum: 1}
+        committed: {type: integer, minimum: 0}
+        gaps: {type: integer, minimum: 0}
     SliObservationPage:
       type: object
       required: [items, next_cursor, earliest_queryable_interval_start, inspected_start, inspected_end, missing_intervals]

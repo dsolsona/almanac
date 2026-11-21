@@ -522,6 +522,14 @@ func (r *collectionRunner) collectionClientLocked(definition collectionDefinitio
 	if source := r.sources[definition.assignment.DatasourceID]; source != nil {
 		return source, nil
 	}
+	source, err := newCollectionSource(definition)
+	if err == nil {
+		r.sources[definition.assignment.DatasourceID] = source
+	}
+	return source, err
+}
+
+func newCollectionSource(definition collectionDefinition) (*prometheus.Client, error) {
 	settings := datasource.Settings{Name: definition.assignment.Name, DisplayName: definition.assignment.Name,
 		Provider: definition.assignment.Provider, ConfigurationFormat: definition.assignment.ConfigurationFormat,
 		Endpoint:           definition.assignment.Endpoint,
@@ -542,7 +550,6 @@ func (r *collectionRunner) collectionClientLocked(definition collectionDefinitio
 	if err != nil {
 		return nil, err
 	}
-	r.sources[definition.assignment.DatasourceID] = source
 	return source, nil
 }
 

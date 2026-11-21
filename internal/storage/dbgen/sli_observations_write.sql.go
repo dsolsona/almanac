@@ -62,7 +62,7 @@ type InsertSliObservationParams struct {
 	AgentID               pgtype.UUID        `json:"agent_id"`
 	SessionGeneration     int64              `json:"session_generation"`
 	ConfigurationRevision int64              `json:"configuration_revision"`
-	LeaseID               string             `json:"lease_id"`
+	LeaseID               pgtype.Text        `json:"lease_id"`
 	AgentCreatedAt        pgtype.Timestamptz `json:"agent_created_at"`
 	RecordedAt            pgtype.Timestamptz `json:"recorded_at"`
 	IngestionGeneration   int64              `json:"ingestion_generation"`

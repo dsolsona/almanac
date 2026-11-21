@@ -245,6 +245,43 @@ type AlmanacAuditEvent struct {
 	RequestID  string             `json:"request_id"`
 }
 
+type AlmanacBackfillChunk struct {
+	ID                  pgtype.UUID        `json:"id"`
+	JobID               pgtype.UUID        `json:"job_id"`
+	SliID               pgtype.UUID        `json:"sli_id"`
+	MeasurementRevision int64              `json:"measurement_revision"`
+	AgentID             pgtype.UUID        `json:"agent_id"`
+	SourceVersion       int64              `json:"source_version"`
+	RangeStart          pgtype.Timestamptz `json:"range_start"`
+	RangeEnd            pgtype.Timestamptz `json:"range_end"`
+	CadenceSeconds      int32              `json:"cadence_seconds"`
+	State               string             `json:"state"`
+	Attempts            int32              `json:"attempts"`
+	Generation          int64              `json:"generation"`
+	NextAttemptAt       pgtype.Timestamptz `json:"next_attempt_at"`
+	LeaseUntil          pgtype.Timestamptz `json:"lease_until"`
+	LeaseSession        pgtype.Int8        `json:"lease_session"`
+	FinishedAt          pgtype.Timestamptz `json:"finished_at"`
+	Reason              pgtype.Text        `json:"reason"`
+}
+
+type AlmanacBackfillJob struct {
+	ID             pgtype.UUID        `json:"id"`
+	SliID          pgtype.UUID        `json:"sli_id"`
+	RequestedStart pgtype.Timestamptz `json:"requested_start"`
+	RequestedEnd   pgtype.Timestamptz `json:"requested_end"`
+	RequestKey     string             `json:"request_key"`
+	RequestedBy    pgtype.UUID        `json:"requested_by"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	CancelledAt    pgtype.Timestamptz `json:"cancelled_at"`
+}
+
+type AlmanacBackfillScanCursor struct {
+	Sweep        string             `json:"sweep"`
+	SliID        pgtype.UUID        `json:"sli_id"`
+	NextInterval pgtype.Timestamptz `json:"next_interval"`
+}
+
 type AlmanacDatasource struct {
 	ID                              pgtype.UUID        `json:"id"`
 	Name                            string             `json:"name"`
@@ -703,10 +740,11 @@ type AlmanacSliObservation struct {
 	AgentID               pgtype.UUID        `json:"agent_id"`
 	SessionGeneration     int64              `json:"session_generation"`
 	ConfigurationRevision int64              `json:"configuration_revision"`
-	LeaseID               string             `json:"lease_id"`
+	LeaseID               pgtype.Text        `json:"lease_id"`
 	AgentCreatedAt        pgtype.Timestamptz `json:"agent_created_at"`
 	RecordedAt            pgtype.Timestamptz `json:"recorded_at"`
 	IngestionGeneration   int64              `json:"ingestion_generation"`
+	BackfillChunkID       pgtype.UUID        `json:"backfill_chunk_id"`
 }
 
 type AlmanacSliOwnershipEpoch struct {

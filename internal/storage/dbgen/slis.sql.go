@@ -683,7 +683,7 @@ SELECT receipt.observation_id, coverage.measurement_revision,
        COALESCE(coverage.good_count::text, '')::text AS good_count, COALESCE(coverage.total_count::text, '')::text AS total_count,
        coverage.error_code, coverage.missing_components, coverage.recorded_at
 FROM (
-    SELECT coverage.sli_id, coverage.measurement_revision, coverage.interval_start, coverage.outcome, coverage.good_count, coverage.total_count, coverage.result_digest, coverage.error_code, coverage.missing_components, coverage.execution_id, coverage.delivery_id, coverage.agent_id, coverage.session_generation, coverage.configuration_revision, coverage.lease_id, coverage.agent_created_at, coverage.recorded_at, coverage.ingestion_generation FROM public.almanac_sli_observations AS coverage
+    SELECT coverage.sli_id, coverage.measurement_revision, coverage.interval_start, coverage.outcome, coverage.good_count, coverage.total_count, coverage.result_digest, coverage.error_code, coverage.missing_components, coverage.execution_id, coverage.delivery_id, coverage.agent_id, coverage.session_generation, coverage.configuration_revision, coverage.lease_id, coverage.agent_created_at, coverage.recorded_at, coverage.ingestion_generation, coverage.backfill_chunk_id FROM public.almanac_sli_observations AS coverage
     WHERE coverage.sli_id = $1 AND
       coverage.interval_start >= $4::timestamptz AND
       coverage.interval_start >= $5::timestamptz AND
@@ -845,7 +845,7 @@ LEFT JOIN LATERAL (
            COALESCE(coverage.total_count::text, '')::text AS total_count, coverage.error_code,
            coverage.missing_components, coverage.recorded_at
     FROM (
-        SELECT c.sli_id, c.measurement_revision, c.interval_start, c.outcome, c.good_count, c.total_count, c.result_digest, c.error_code, c.missing_components, c.execution_id, c.delivery_id, c.agent_id, c.session_generation, c.configuration_revision, c.lease_id, c.agent_created_at, c.recorded_at, c.ingestion_generation FROM public.almanac_sli_observations AS c
+        SELECT c.sli_id, c.measurement_revision, c.interval_start, c.outcome, c.good_count, c.total_count, c.result_digest, c.error_code, c.missing_components, c.execution_id, c.delivery_id, c.agent_id, c.session_generation, c.configuration_revision, c.lease_id, c.agent_created_at, c.recorded_at, c.ingestion_generation, c.backfill_chunk_id FROM public.almanac_sli_observations AS c
         WHERE c.sli_id = sli.id AND c.interval_start >= $1::timestamptz
         ORDER BY c.interval_start DESC, c.recorded_at DESC
         LIMIT 1

@@ -339,7 +339,15 @@ func (c *client) runSession(ctx context.Context) error {
 	}
 	reads := make(chan readResult, 1)
 	sessionCtx, cancelSession := context.WithCancel(ctx)
-	defer cancelSession()
+	var historical sync.WaitGroup
+	if c.collections != nil {
+		generation := c.generation
+		historical.Go(func() { c.runBackfill(sessionCtx, generation) })
+	}
+	defer func() {
+		cancelSession()
+		historical.Wait()
+	}()
 	go func() {
 		for {
 			var raw jsontext.Value
