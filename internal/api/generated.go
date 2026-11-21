@@ -7626,6 +7626,8 @@ type ClientInterface interface {
 
 	// RequestSliBackfillWithBody Preview or request historical collection for one SLI
 	//
+	// Requires an Origin matching the configured public origin.
+	//
 	// Takes any type of body and a specified content type.
 	//
 	// Corresponds with POST /api/v1/slis/{sli_id}/backfills (the `RequestSliBackfill` operationId).
@@ -7633,12 +7635,16 @@ type ClientInterface interface {
 
 	// RequestSliBackfill Preview or request historical collection for one SLI
 	//
+	// Requires an Origin matching the configured public origin.
+	//
 	// Takes a body of the `application/json` content type.
 	//
 	// Corresponds with POST /api/v1/slis/{sli_id}/backfills (the `RequestSliBackfill` operationId).
 	RequestSliBackfill(ctx context.Context, sliId SliId, params *RequestSliBackfillParams, body RequestSliBackfillJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// CancelSliBackfill Cancel outstanding chunks for a historical collection job
+	//
+	// Requires an Origin matching the configured public origin.
 	//
 	// Corresponds with DELETE /api/v1/slis/{sli_id}/backfills/{job_id} (the `CancelSliBackfill` operationId).
 	CancelSliBackfill(ctx context.Context, sliId SliId, jobId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -9902,6 +9908,8 @@ func (c *Client) ListSliBackfills(ctx context.Context, sliId SliId, reqEditors .
 
 // RequestSliBackfillWithBody Preview or request historical collection for one SLI
 //
+// Requires an Origin matching the configured public origin.
+//
 // Takes any type of body and a specified content type.
 //
 // Corresponds with POST /api/v1/slis/{sli_id}/backfills (the `RequestSliBackfill` operationId).
@@ -9919,6 +9927,8 @@ func (c *Client) RequestSliBackfillWithBody(ctx context.Context, sliId SliId, pa
 
 // RequestSliBackfill Preview or request historical collection for one SLI
 //
+// Requires an Origin matching the configured public origin.
+//
 // Takes a body of the `application/json` content type.
 //
 // Corresponds with POST /api/v1/slis/{sli_id}/backfills (the `RequestSliBackfill` operationId).
@@ -9935,6 +9945,8 @@ func (c *Client) RequestSliBackfill(ctx context.Context, sliId SliId, params *Re
 }
 
 // CancelSliBackfill Cancel outstanding chunks for a historical collection job
+//
+// Requires an Origin matching the configured public origin.
 //
 // Corresponds with DELETE /api/v1/slis/{sli_id}/backfills/{job_id} (the `CancelSliBackfill` operationId).
 func (c *Client) CancelSliBackfill(ctx context.Context, sliId SliId, jobId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -17695,6 +17707,8 @@ type ClientWithResponsesInterface interface {
 
 	// RequestSliBackfillWithBodyWithResponse Preview or request historical collection for one SLI
 	//
+	// Requires an Origin matching the configured public origin.
+	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/v1/slis/{sli_id}/backfills (the `RequestSliBackfill` operationId).
@@ -17702,12 +17716,16 @@ type ClientWithResponsesInterface interface {
 
 	// RequestSliBackfillWithResponse Preview or request historical collection for one SLI
 	//
+	// Requires an Origin matching the configured public origin.
+	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
 	// Corresponds with POST /api/v1/slis/{sli_id}/backfills (the `RequestSliBackfill` operationId).
 	RequestSliBackfillWithResponse(ctx context.Context, sliId SliId, params *RequestSliBackfillParams, body RequestSliBackfillJSONRequestBody, reqEditors ...RequestEditorFn) (*RequestSliBackfillResponse, error)
 
 	// CancelSliBackfillWithResponse Cancel outstanding chunks for a historical collection job
+	//
+	// Requires an Origin matching the configured public origin.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -25302,6 +25320,8 @@ func (c *ClientWithResponses) ListSliBackfillsWithResponse(ctx context.Context, 
 
 // RequestSliBackfillWithBodyWithResponse Preview or request historical collection for one SLI
 //
+// Requires an Origin matching the configured public origin.
+//
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/v1/slis/{sli_id}/backfills (the `RequestSliBackfill` operationId).
@@ -25315,6 +25335,8 @@ func (c *ClientWithResponses) RequestSliBackfillWithBodyWithResponse(ctx context
 
 // RequestSliBackfillWithResponse Preview or request historical collection for one SLI
 //
+// Requires an Origin matching the configured public origin.
+//
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
 // Corresponds with POST /api/v1/slis/{sli_id}/backfills (the `RequestSliBackfill` operationId).
@@ -25327,6 +25349,8 @@ func (c *ClientWithResponses) RequestSliBackfillWithResponse(ctx context.Context
 }
 
 // CancelSliBackfillWithResponse Cancel outstanding chunks for a historical collection job
+//
+// Requires an Origin matching the configured public origin.
 //
 // Returns a wrapper object for the known response body format(s).
 //

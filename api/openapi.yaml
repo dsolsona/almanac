@@ -879,7 +879,8 @@ paths:
     post:
       operationId: requestSliBackfill
       summary: Preview or request historical collection for one SLI
-      security: [{SessionCookie: []}]
+      description: Requires an Origin matching the configured public origin.
+      security: [{SessionCookie: [], CsrfToken: []}]
       parameters:
         - {name: Idempotency-Key, in: header, required: true, schema: {type: string, maxLength: 128}}
       requestBody:
@@ -895,7 +896,8 @@ paths:
     delete:
       operationId: cancelSliBackfill
       summary: Cancel outstanding chunks for a historical collection job
-      security: [{SessionCookie: []}]
+      description: Requires an Origin matching the configured public origin.
+      security: [{SessionCookie: [], CsrfToken: []}]
       parameters:
         - {$ref: '#/components/parameters/SliId'}
         - {name: job_id, in: path, required: true, schema: {type: string, format: uuid}}

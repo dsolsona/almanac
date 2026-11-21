@@ -1,6 +1,3 @@
-ALTER TABLE public.almanac_datasources
-    ADD COLUMN historical_configuration_version bigint NOT NULL DEFAULT 1;
-
 CREATE TABLE public.almanac_backfill_jobs (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     sli_id uuid NOT NULL REFERENCES public.almanac_slis(id),

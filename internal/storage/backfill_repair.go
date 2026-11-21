@@ -27,35 +27,44 @@ func (r *Runtime) SweepBackfill(ctx context.Context, now time.Time) error {
 		return operationError(ctx, "storage: reap historical leases", err)
 	}
 	for _, sweep := range []string{"recent", "retained"} {
-		tx, err := conn.Begin(ctx)
-		if err != nil {
-			return err
-		}
-		err = sweepBackfillPage(ctx, tx, now.UTC(), sweep)
-		if err == nil {
-			err = tx.Commit(ctx)
-		}
-		rollbackTransaction(tx)
-		if err != nil {
-			return operationError(ctx, "storage: discover historical gaps", err)
+		// Share a 1,000-interval budget across both scans. Limit empty pages
+		// too, so a large fleet cannot keep a sweep or its connection busy.
+		remaining := 500
+		for pages := 0; remaining > 0 && pages < 32; pages++ {
+			tx, err := conn.Begin(ctx)
+			if err != nil {
+				return err
+			}
+			examined, wrapped, err := sweepBackfillPage(ctx, tx, now.UTC(), sweep, remaining)
+			if err == nil {
+				err = tx.Commit(ctx)
+			}
+			rollbackTransaction(tx)
+			if err != nil {
+				return operationError(ctx, "storage: discover historical gaps", err)
+			}
+			if wrapped {
+				break
+			}
+			remaining -= examined
 		}
 	}
 	return nil
 }
 
-func sweepBackfillPage(ctx context.Context, tx pgx.Tx, now time.Time, sweep string) error {
+func sweepBackfillPage(ctx context.Context, tx pgx.Tx, now time.Time, sweep string, budget int) (examined int, wrapped bool, err error) {
 	var cursorID pgtype.UUID
 	var next pgtype.Timestamptz
 	if err := tx.QueryRow(ctx, `
 SELECT sli_id,next_interval FROM public.almanac_backfill_scan_cursor
 WHERE sweep=$1 FOR UPDATE`, sweep).Scan(&cursorID, &next); err != nil {
-		return err
+		return 0, false, err
 	}
 	var id, agentID string
 	var revision int64
 	var validFrom time.Time
 	var cadenceSeconds, delaySeconds, retentionDays int
-	err := tx.QueryRow(ctx, `
+	err = tx.QueryRow(ctx, `
 SELECT s.id,m.revision,m.effective_from,d.agent_id,d.polling_interval_seconds,d.settling_delay_seconds,d.historical_retention_days
 FROM public.almanac_slis s
 JOIN public.almanac_sli_measurements m ON m.sli_id=s.id AND m.revision=s.measurement_revision
@@ -73,10 +82,10 @@ FOR NO KEY UPDATE OF m
 FOR UPDATE OF s,d`, cursorID, next, now).Scan(&id, &revision, &validFrom, &agentID, &cadenceSeconds, &delaySeconds, &retentionDays)
 	if errors.Is(err, pgx.ErrNoRows) {
 		_, err = tx.Exec(ctx, `UPDATE public.almanac_backfill_scan_cursor SET sli_id=NULL,next_interval=NULL WHERE sweep=$1`, sweep)
-		return err
+		return 0, true, err
 	}
 	if err != nil {
-		return err
+		return 0, false, err
 	}
 	cadence := time.Duration(cadenceSeconds) * time.Second
 	since := now.Add(-24 * time.Hour)
@@ -96,14 +105,15 @@ FOR UPDATE OF s,d`, cursorID, next, now).Scan(&id, &revision, &validFrom, &agent
 	if cursorID.String() == id && next.Valid && next.Time.Before(end) {
 		end = next.Time
 	}
-	// Scan newest gaps first. The two sweeps share a combined 1,000-interval budget.
-	start := end.Add(-500 * cadence)
+	// Scan newest gaps first and carry unused interval budget to the next SLI.
+	start := end.Add(-time.Duration(budget) * cadence)
 	if start.Before(lower) {
 		start = lower
 	}
 	if start.Before(end) {
+		examined = int(end.Sub(start) / cadence)
 		if err := enqueueDiscoveredGaps(ctx, tx, id, revision, agentID, start, end, now, cadenceSeconds); err != nil {
-			return err
+			return 0, false, err
 		}
 	}
 	var continuation *time.Time
@@ -111,7 +121,7 @@ FOR UPDATE OF s,d`, cursorID, next, now).Scan(&id, &revision, &validFrom, &agent
 		continuation = &start
 	}
 	_, err = tx.Exec(ctx, `UPDATE public.almanac_backfill_scan_cursor SET sli_id=$2,next_interval=$3 WHERE sweep=$1`, sweep, id, continuation)
-	return err
+	return examined, false, err
 }
 
 func enqueueDiscoveredGaps(ctx context.Context, tx pgx.Tx, id string, revision int64, agentID string, start, end, now time.Time, cadenceSeconds int) error {
@@ -127,7 +137,7 @@ WITH source AS (
                       WHERE c.sli_id=$1 AND c.measurement_revision=$2 AND c.range_start<=point AND c.range_end>point
                         AND (c.state IN ('queued','leased','retry-wait') OR
                              (c.source_version=(SELECT version FROM source) AND
-                               (c.state IN ('failed','unavailable') OR (c.state='cancelled' AND EXISTS (
+                               (c.state IN ('failed','unavailable') OR (c.state IN ('cancelled','committed') AND EXISTS (
                                  SELECT 1 FROM public.almanac_backfill_jobs j WHERE j.id=c.job_id AND j.requested_by IS NULL))))))
 ), islands AS (
     SELECT point, point-row_number() OVER (ORDER BY point)*make_interval(secs=>$5) AS key FROM points

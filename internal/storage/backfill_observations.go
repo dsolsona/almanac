@@ -14,12 +14,12 @@ import (
 )
 
 func validateBackfillResult(result sli.BackfillChunkResult) error {
-	if !canonicalUUIDCheck(result.ChunkID) || result.Generation < 1 {
+	if !canonicalUUIDCheck(result.ChunkID) || result.Generation < 1 || result.RetryAfterSeconds < 0 || result.RetryAfterSeconds > 86400 {
 		return ErrObservationInvalid
 	}
 	if result.Failure != "" {
 		failure := sli.ExecutionOutcome{State: sli.OutcomeFailed, ErrorCode: result.Failure}
-		if len(result.Outcomes) != 0 || failure.Validate() != nil {
+		if len(result.Outcomes) != 0 || failure.Validate() != nil || (result.RetryAfterSeconds > 0 && result.Failure != "rate_limited") {
 			return ErrObservationInvalid
 		}
 		return nil
@@ -27,7 +27,9 @@ func validateBackfillResult(result sli.BackfillChunkResult) error {
 	if len(result.Outcomes) == 0 || len(result.Outcomes) > 256 {
 		return ErrObservationInvalid
 	}
+	rateLimited := false
 	for _, outcome := range result.Outcomes {
+		rateLimited = rateLimited || outcome.ErrorCode == "rate_limited"
 		switch outcome.State {
 		case "":
 			if outcome.GoodCount != "" || outcome.TotalCount != "" || outcome.ErrorCode != "" || len(outcome.MissingComponents) != 0 {
@@ -40,6 +42,9 @@ func validateBackfillResult(result sli.BackfillChunkResult) error {
 		default:
 			return ErrObservationInvalid
 		}
+	}
+	if result.RetryAfterSeconds > 0 && !rateLimited {
+		return ErrObservationInvalid
 	}
 	return nil
 }
@@ -151,6 +156,9 @@ FOR UPDATE OF c`, result.ChunkID, agentID, result.Generation).Scan(&sliID, &revi
 	if !accepted {
 		return ErrObservationDenied
 	}
+	if err := applyBackfillRetryAfter(ctx, tx, result, now); err != nil {
+		return err
+	}
 	if conflict {
 		if _, err := tx.Exec(ctx, `UPDATE public.almanac_backfill_chunks SET canonical_conflict=true WHERE id=$1`, result.ChunkID); err != nil {
 			return operationError(ctx, "storage: record historical observation conflict", err)
@@ -212,4 +220,20 @@ WHERE sli_id=$1 AND measurement_revision=$2 AND interval_start >= $3 AND interva
 		coverage[point.UnixMicro()] = digest
 	}
 	return coverage, rows.Err()
+}
+
+func applyBackfillRetryAfter(ctx context.Context, tx pgx.Tx, result sli.BackfillChunkResult, now time.Time) error {
+	if result.RetryAfterSeconds == 0 {
+		return nil
+	}
+	_, err := tx.Exec(ctx, `
+UPDATE public.almanac_backfill_chunks c
+SET next_attempt_at=LEAST(j.created_at+interval '24 hours',GREATEST(c.next_attempt_at,$2::timestamptz))
+FROM public.almanac_backfill_jobs j
+WHERE c.id=$1 AND c.job_id=j.id AND c.state='retry-wait' AND c.reason='rate_limited'`,
+		result.ChunkID, now.Add(time.Duration(result.RetryAfterSeconds)*time.Second))
+	if err != nil {
+		return operationError(ctx, "storage: record historical retry guidance", err)
+	}
+	return nil
 }

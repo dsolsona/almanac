@@ -68,7 +68,8 @@ audit record; ordinary resume cannot reset failed attempts invisibly.
 
 Every 60s the backend scans a bounded page of overdue expected intervals, beginning
 after a five-minute delivery allowance. Check at most 1,000 intervals per pass by
-default and persist the scan cursor. Look back at most 24h per routine scan; a separate
+default and persist the scan cursor. A sweep can spend unused interval budget
+on later SLIs, with at most 32 pages per scan. Look back at most 24h per routine scan; a separate
 bounded historical sweep traverses older retained gaps over time so long outages do
 not leave unexamined holes. Both scans share admission and active-range exclusion.
 

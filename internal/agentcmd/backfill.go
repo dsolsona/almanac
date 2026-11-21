@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json/v2"
+	"errors"
 	"io"
 	"net/http"
 	"net/url"
@@ -124,7 +125,8 @@ func (c *client) executeBackfill(parent context.Context, claim sli.BackfillClaim
 			outcomes = append(outcomes, sli.ExecutionOutcome{})
 			continue
 		}
-		outcome := c.backfillInterval(ctx, definition, source, end)
+		outcome, retryAfter := c.backfillInterval(ctx, definition, source, end)
+		result.RetryAfterSeconds = max(result.RetryAfterSeconds, retryAfter)
 		outcomes = append(outcomes, outcome)
 		if outcome.State == sli.OutcomeFailed && outcome.ErrorCode != "incomplete" {
 			for len(outcomes) < int(count) {
@@ -153,23 +155,30 @@ func (r *collectionRunner) backfillDefinition(claim sli.BackfillClaim) (collecti
 	return collectionDefinition{}, false
 }
 
-func (c *client) backfillInterval(ctx context.Context, definition collectionDefinition, source *prometheus.Client, end time.Time) sli.ExecutionOutcome {
+func (c *client) backfillInterval(ctx context.Context, definition collectionDefinition, source *prometheus.Client, end time.Time) (sli.ExecutionOutcome, int) {
 	failed := func(code string) sli.ExecutionOutcome {
 		return sli.ExecutionOutcome{State: sli.OutcomeFailed, ErrorCode: code}
 	}
 	good, err := c.collections.queryBackfill(ctx, definition, source, definition.sli.GoodQuery, end)
 	if err != nil {
-		return failed(collectionErrorCode(err))
+		return failed(collectionErrorCode(err)), historicalRetryAfter(err)
 	}
 	total, err := c.collections.queryBackfill(ctx, definition, source, definition.sli.TotalQuery, end)
 	if err != nil {
-		return failed(collectionErrorCode(err))
+		return failed(collectionErrorCode(err)), historicalRetryAfter(err)
 	}
 	outcome := collectedOutcomeAt(good, true, good.Class == "incomplete", total, true, total.Class == "incomplete", end)
-	if outcome == nil || outcome.State != sli.OutcomeObserved {
-		return failed("incomplete")
+	if outcome == nil || (outcome.State != sli.OutcomeObserved && outcome.State != sli.OutcomeFailed) {
+		return failed("incomplete"), 0
 	}
-	return *outcome
+	return *outcome, 0
+}
+
+func historicalRetryAfter(err error) int {
+	if source, ok := errors.AsType[*prometheus.SourceError](err); ok {
+		return source.RetryAfterSeconds
+	}
+	return 0
 }
 
 func (r *collectionRunner) queryBackfill(ctx context.Context, definition collectionDefinition, source *prometheus.Client, query string, at time.Time) (prometheus.QueryResult, error) {
@@ -187,6 +196,7 @@ func (r *collectionRunner) queryBackfill(ctx context.Context, definition collect
 			r.mu.Lock()
 			r.historicalSource, r.cancelHistorical = "", nil
 			r.mu.Unlock()
+			r.signalSchedule()
 			return result, err
 		}
 		r.mu.Unlock()

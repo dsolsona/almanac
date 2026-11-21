@@ -111,6 +111,10 @@ func TestIntegrationBackfillAdmissionIsAlignedAndIdempotent(t *testing.T) {
 	if err != nil || replay != first {
 		t.Fatalf("replay = %+v, %v; want %+v", replay, err, first)
 	}
+	planned, err = RequestBackfill(t.Context(), s.f.databaseURL, preview)
+	if err != nil || planned.Plan == nil || planned.Plan.Manual != 1 {
+		t.Fatalf("preview with an existing admission key = %+v, %v", planned, err)
+	}
 	input.RequestKey = "overlap"
 	if _, err := RequestBackfill(t.Context(), s.f.databaseURL, input); !errors.Is(err, ErrBackfillNoGaps) {
 		t.Fatalf("overlap = %v", err)
@@ -187,7 +191,7 @@ UPDATE public.almanac_sli_measurements SET activated_at=$2 WHERE sli_id=$1`, s.s
 	if _, err := s.conn.Exec(ctx, `
 UPDATE public.almanac_agent_runtime_status
 SET last_heartbeat_at=$2, applied_configuration_revision=desired_configuration_revision,
-    capabilities='[{"provider":"prometheus","operations":["backfill"]}]'
+    capabilities='[{"provider":"prometheus","configuration_formats":["prometheus-http-v1"],"operations":["collect","backfill"]}]'
 WHERE agent_id=(SELECT agent_id FROM public.almanac_sli_measurements WHERE sli_id=$1 AND revision=1)`, s.sliID, s.at); err != nil {
 		t.Fatal(err)
 	}
@@ -200,9 +204,31 @@ UPDATE public.almanac_sli_observations SET outcome='complete_empty',good_count=N
 WHERE sli_id=$1 AND interval_start=$2`, s.sliID, knownEmpty); err != nil {
 		t.Fatal(err)
 	}
+	var datasourceID string
+	if err := s.conn.QueryRow(ctx, `SELECT datasource_id FROM almanac_sli_measurements WHERE sli_id=$1`, s.sliID).Scan(&datasourceID); err != nil {
+		t.Fatal(err)
+	}
+	second, err := CreateSli(ctx, s.f.databaseURL, CreateSliInput{
+		Proof: DatasourceProof{SessionVerifier: s.f.verifier}, Name: "second-sweep", DisplayName: "Second SLI",
+		DatasourceID: datasourceID, MeasurementKind: sli.MeasurementKindEventCounts, ComponentMode: sli.ComponentModeIntervalCount,
+		GoodQuery: "good", TotalQuery: "total", IdempotencyKey: "second-sweep", RequestID: "second-sweep", Now: s.clock,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.conn.Exec(ctx, `UPDATE almanac_sli_measurements SET effective_from=$2, activated_at=$2 WHERE sli_id=$1`, second.ID, s.at.Add(-12*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.conn.Exec(ctx, `UPDATE almanac_agent_runtime_status SET applied_configuration_revision=desired_configuration_revision`); err != nil {
+		t.Fatal(err)
+	}
 	for i := range 3 {
 		if err := s.runtime.SweepBackfill(ctx, s.at.Add(time.Duration(i)*time.Second)); err != nil {
 			t.Fatal(err)
+		}
+		var discovered int
+		if err := s.conn.QueryRow(ctx, `SELECT count(DISTINCT sli_id) FROM almanac_backfill_jobs WHERE requested_by IS NULL`).Scan(&discovered); err != nil || discovered != 2 {
+			t.Fatalf("sweep did not reach both SLIs within the interval budget: %d, %v", discovered, err)
 		}
 	}
 	var jobs int
@@ -280,6 +306,8 @@ func TestIntegrationBackfillKeepsPartialResultsAndRetryBudget(t *testing.T) {
 		result.Outcomes = []sli.ExecutionOutcome{{}, missing, {}}
 		if attempt == 0 {
 			result.Outcomes[0], result.Outcomes[2] = observed, observed
+			result.Outcomes[1].ErrorCode = "rate_limited"
+			result.RetryAfterSeconds = 120
 		}
 		tx, err := s.conn.Begin(ctx)
 		if err != nil {
@@ -291,6 +319,12 @@ func TestIntegrationBackfillKeepsPartialResultsAndRetryBudget(t *testing.T) {
 		}
 		if err := tx.Commit(ctx); err != nil {
 			t.Fatal(err)
+		}
+		if attempt == 0 {
+			var next time.Time
+			if err := s.conn.QueryRow(ctx, `SELECT next_attempt_at FROM almanac_backfill_chunks WHERE id=$1`, result.ChunkID).Scan(&next); err != nil || !next.Equal(now.Add(2*time.Minute)) {
+				t.Fatalf("provider Retry-After was not persisted: %s, %v", next, err)
+			}
 		}
 	}
 	jobs, err := ListBackfills(ctx, s.f.databaseURL, input.Proof, s.sliID, s.clock)

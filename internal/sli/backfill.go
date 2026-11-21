@@ -18,8 +18,9 @@ type BackfillClaim struct {
 
 // BackfillChunkResult uses the claim's cadence and order for complete outcomes.
 type BackfillChunkResult struct {
-	ChunkID    string             `json:"chunk_id"`
-	Generation int64              `json:"generation"`
-	Outcomes   []ExecutionOutcome `json:"outcomes,omitempty"`
-	Failure    string             `json:"failure,omitempty"`
+	ChunkID           string             `json:"chunk_id"`
+	Generation        int64              `json:"generation"`
+	Outcomes          []ExecutionOutcome `json:"outcomes,omitempty"`
+	Failure           string             `json:"failure,omitempty"`
+	RetryAfterSeconds int                `json:"retry_after_seconds,omitempty"`
 }

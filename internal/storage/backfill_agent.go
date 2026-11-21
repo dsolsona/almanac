@@ -25,8 +25,9 @@ func ClaimBackfill(ctx context.Context, databaseURL string, proof BackfillAgentP
 	}
 	defer closeAgentOwnershipTransaction(state)
 	var claim sli.BackfillClaim
-	var retentionDays int
-	err = state.tx.QueryRow(ctx, `
+	for range 8 {
+		var retentionDays int
+		err = state.tx.QueryRow(ctx, `
 SELECT c.id, c.sli_id, m.datasource_id, c.generation, c.measurement_revision, c.range_start, c.range_end,
        c.cadence_seconds, c.lease_until,d.historical_retention_days,
        ARRAY(SELECT o.interval_start FROM public.almanac_sli_observations o
@@ -36,24 +37,34 @@ SELECT c.id, c.sli_id, m.datasource_id, c.generation, c.measurement_revision, c.
 FROM public.almanac_claim_backfill_chunk($1,$2,$3) c
 JOIN public.almanac_sli_measurements m ON m.sli_id=c.sli_id AND m.revision=c.measurement_revision
 JOIN public.almanac_datasources d ON d.id=m.datasource_id`, state.agentID, now, proof.Generation).
-		Scan(&claim.ID, &claim.SLIID, &claim.DatasourceID, &claim.Generation, &claim.Revision, &claim.Start, &claim.End, &claim.Cadence, &claim.LeaseUntil, &retentionDays, &claim.CoveredStarts)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return sli.BackfillClaim{}, nil
-	}
-	if err != nil {
-		return sli.BackfillClaim{}, operationError(ctx, "storage: claim historical chunk", err)
-	}
-	cadence := time.Duration(claim.Cadence) * time.Second
-	cutoff := ceilSliBoundary(now.Add(-backfillRecoveryLookback(retentionDays)), cadence)
-	if !cutoff.Before(claim.End) {
-		if _, err := state.tx.Exec(ctx, `SELECT public.almanac_finish_backfill_chunk($1,$2,$3,$4,'unavailable','expired',$5)`,
-			claim.ID, state.agentID, claim.Generation, now, proof.Generation); err != nil {
-			return sli.BackfillClaim{}, operationError(ctx, "storage: expire historical claim", err)
+			Scan(&claim.ID, &claim.SLIID, &claim.DatasourceID, &claim.Generation, &claim.Revision, &claim.Start, &claim.End, &claim.Cadence, &claim.LeaseUntil, &retentionDays, &claim.CoveredStarts)
+		if errors.Is(err, pgx.ErrNoRows) {
+			break
 		}
-		claim = sli.BackfillClaim{}
-	} else if claim.Start.Before(cutoff) {
-		// Keep the leased suffix and its original fence and attempt budget.
-		if _, err := state.tx.Exec(ctx, `
+		if err != nil {
+			return sli.BackfillClaim{}, operationError(ctx, "storage: claim historical chunk", err)
+		}
+		cadence := time.Duration(claim.Cadence) * time.Second
+		cutoff := ceilSliBoundary(now.Add(-backfillRecoveryLookback(retentionDays)), cadence)
+		if !cutoff.Before(claim.End) {
+			status, reason := expiredBackfillState(len(claim.CoveredStarts), int(claim.End.Sub(claim.Start)/cadence))
+			if _, err := state.tx.Exec(ctx, `SELECT public.almanac_finish_backfill_chunk($1,$2,$3,$4,$6,$7,$5)`,
+				claim.ID, state.agentID, claim.Generation, now, proof.Generation, status, nullableString(reason)); err != nil {
+				return sli.BackfillClaim{}, operationError(ctx, "storage: expire historical claim", err)
+			}
+			claim = sli.BackfillClaim{}
+			continue
+		}
+		if claim.Start.Before(cutoff) {
+			// Keep the leased suffix and its original fence and attempt budget.
+			covered := 0
+			for _, point := range claim.CoveredStarts {
+				if point.Before(cutoff) {
+					covered++
+				}
+			}
+			status, reason := expiredBackfillState(covered, int(cutoff.Sub(claim.Start)/cadence))
+			if _, err := state.tx.Exec(ctx, `
 WITH suffix AS (
   UPDATE public.almanac_backfill_chunks SET range_start=$2 WHERE id=$1
   RETURNING job_id,sli_id,measurement_revision,agent_id,source_version,cadence_seconds,attempts,generation
@@ -62,16 +73,25 @@ INSERT INTO public.almanac_backfill_chunks
   (job_id,sli_id,measurement_revision,agent_id,source_version,cadence_seconds,attempts,generation,
    range_start,range_end,state,reason,finished_at,next_attempt_at)
 SELECT job_id,sli_id,measurement_revision,agent_id,source_version,cadence_seconds,attempts,generation,
-       $3,$2,'unavailable','expired',$4,$4 FROM suffix`, claim.ID, cutoff, claim.Start, now); err != nil {
-			return sli.BackfillClaim{}, operationError(ctx, "storage: expire historical claim prefix", err)
+       $3,$2,$5,$6,$4,$4 FROM suffix`, claim.ID, cutoff, claim.Start, now, status, nullableString(reason)); err != nil {
+				return sli.BackfillClaim{}, operationError(ctx, "storage: expire historical claim prefix", err)
+			}
+			claim.Start = cutoff
+			claim.CoveredStarts = slices.DeleteFunc(claim.CoveredStarts, func(point time.Time) bool { return point.Before(cutoff) })
 		}
-		claim.Start = cutoff
-		claim.CoveredStarts = slices.DeleteFunc(claim.CoveredStarts, func(point time.Time) bool { return point.Before(cutoff) })
+		break
 	}
 	if err := state.tx.Commit(ctx); err != nil {
 		return sli.BackfillClaim{}, operationError(ctx, "storage: commit historical claim", err)
 	}
 	return claim, nil
+}
+
+func expiredBackfillState(covered, intervals int) (state, reason string) {
+	if covered == intervals {
+		return "committed", ""
+	}
+	return "unavailable", "expired"
 }
 
 func SubmitBackfill(ctx context.Context, databaseURL string, proof BackfillAgentProof, clock func() time.Time, result sli.BackfillChunkResult, runtimes ...*Runtime) error {
@@ -101,6 +121,9 @@ func SubmitBackfill(ctx context.Context, databaseURL string, proof BackfillAgent
 		}
 		if !accepted {
 			return ErrObservationDenied
+		}
+		if err := applyBackfillRetryAfter(ctx, state.tx, result, now); err != nil {
+			return err
 		}
 	}
 	if err := state.tx.Commit(ctx); err != nil {

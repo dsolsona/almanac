@@ -971,7 +971,10 @@ export interface paths {
         /** Read the twenty most recent historical collection jobs */
         get: operations["listSliBackfills"];
         put?: never;
-        /** Preview or request historical collection for one SLI */
+        /**
+         * Preview or request historical collection for one SLI
+         * @description Requires an Origin matching the configured public origin.
+         */
         post: operations["requestSliBackfill"];
         delete?: never;
         options?: never;
@@ -989,7 +992,10 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Cancel outstanding chunks for a historical collection job */
+        /**
+         * Cancel outstanding chunks for a historical collection job
+         * @description Requires an Origin matching the configured public origin.
+         */
         delete: operations["cancelSliBackfill"];
         options?: never;
         head?: never;
