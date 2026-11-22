@@ -7,15 +7,6 @@ import { maintenanceClient, type MaintenanceWindow } from '../src/maintenance/cl
 import { SloFailure, sloClient, type OperationalOverview } from '../src/slos/client.ts';
 import { serviceClient } from '../src/services/client.ts';
 
-vi.mock('../src/components/ui/index.ts', async importActual => {
-  const controls = await importActual<typeof import('../src/components/ui/index.ts')>();
-  return {
-    ...controls,
-    DatePicker: ({ label, value, onValueChange }: { label: string; value: string; onValueChange: (value: string) => void }) =>
-      <input aria-label={label} type="date" value={value} onChange={event => onValueChange(event.target.value)} />,
-  };
-});
-
 const id = '60000000-0000-4000-8000-000000000001';
 const sloId = '70000000-0000-4000-8000-000000000001';
 const context: AuthContext = {
@@ -29,8 +20,15 @@ const record: MaintenanceWindow = {
   created_at: now, updated_at: now, creator_id: id, actor_id: id, audit_id: id,
 };
 const dialogMethod = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, 'showModal');
+const closeMethod = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, 'close');
 
 beforeEach(() => {
+  if (!dialogMethod) Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {
+    configurable: true, value(this: HTMLDialogElement) { this.setAttribute('open', ''); },
+  });
+  if (!closeMethod) Object.defineProperty(HTMLDialogElement.prototype, 'close', {
+    configurable: true, value(this: HTMLDialogElement) { this.removeAttribute('open'); },
+  });
   const empty = { inventory_at: now, ready: true, total: '0', items: [] };
   vi.spyOn(maintenanceClient, 'impact').mockResolvedValue(empty);
   vi.spyOn(maintenanceClient, 'preview').mockResolvedValue(empty);
@@ -41,6 +39,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   if (!dialogMethod) Reflect.deleteProperty(HTMLDialogElement.prototype, 'showModal');
+  if (!closeMethod) Reflect.deleteProperty(HTMLDialogElement.prototype, 'close');
   vi.useRealTimers();
   history.replaceState({}, '', '/');
 });
@@ -48,9 +47,6 @@ afterEach(() => {
 async function showDetail(window: MaintenanceWindow) {
   vi.useFakeTimers({ toFake: ['Date', 'performance', 'setTimeout', 'clearTimeout'] });
   vi.setSystemTime(new Date(now));
-  if (!dialogMethod) Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {
-    configurable: true, value(this: HTMLDialogElement) { this.setAttribute('open', ''); },
-  });
   const serverClock = { time: Date.parse(now), receivedAt: performance.now() };
   const get = vi.spyOn(maintenanceClient, 'get').mockResolvedValue({
     value: window, etag: `"maintenance:${id}:1"`, serverClock,
@@ -202,6 +198,8 @@ it('updates the list and detail at the server-time window boundaries', async () 
 });
 
 it('keeps the current route when a save completes after leaving the form', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date(now));
   history.replaceState({}, '', '/maintenance/new');
   vi.spyOn(sloClient, 'overview').mockResolvedValue({
     items: [{ slo: { id: sloId, display_name: 'Checkout availability', service_display_name: 'Checkout' } }],
@@ -213,17 +211,46 @@ it('keeps the current route when a save completes after leaving the form', async
   fireEvent.change(screen.getByLabelText('Reason'), { target: { value: record.reason } });
   fireEvent.focus(screen.getByRole('combobox', { name: 'Search SLOs' }));
   fireEvent.mouseDown(await screen.findByRole('option', { name: /Checkout availability/ }));
-  fireEvent.change(screen.getByLabelText('Start date'), { target: { value: '2026-11-20' } });
-  fireEvent.change(screen.getByLabelText('Start time (UTC)'), { target: { value: '02:00' } });
+  const start = screen.getByRole('button', { name: /^Maintenance window/ });
+  fireEvent.click(start);
+  const picker = within(screen.getByRole('dialog', { name: 'Choose maintenance window' }));
+  fireEvent.click(picker.getByRole('button', { name: 'Friday, November 20, 2026' }));
+  fireEvent.click(picker.getByRole('button', { name: 'Saturday, November 21, 2026' }));
+  const clock = picker.getByRole('textbox', { name: 'Start time (UTC)' });
+  fireEvent.change(clock, { target: { value: '25:30' } });
+  expect(picker.getByRole('button', { name: 'Set window' })).toBeDisabled();
+  fireEvent.change(clock, { target: { value: '23:30' } });
+  fireEvent.change(picker.getByRole('textbox', { name: 'End time (UTC)' }), { target: { value: '00:30' } });
+  fireEvent.click(picker.getByRole('button', { name: 'Set window' }));
+  expect(start).toHaveFocus();
+  expect(start).toHaveTextContent('Sat, Nov 21, 2026 · 00:30 UTC');
   const save = screen.getByRole('button', { name: 'Schedule maintenance' });
   await waitFor(() => expect(save).toBeEnabled());
   fireEvent.click(save);
-  expect(create).toHaveBeenCalledOnce();
+  expect(create).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
+    start: '2026-11-20T23:30:00.000Z', end: '2026-11-21T00:30:00.000Z',
+  }), context, expect.any(String));
 
   form.unmount();
   history.replaceState({}, '', '/alerts');
   await act(async () => { finish?.({ value: record, etag: '' }); });
   expect(location.pathname).toBe('/alerts');
+});
+
+it('associates an invalid window order with the end time', () => {
+  render(<ScheduleMaintenance context={context} />);
+  fireEvent.click(screen.getByRole('button', { name: /^Maintenance window/ }));
+  const picker = within(screen.getByRole('dialog', { name: 'Choose maintenance window' }));
+  fireEvent.click(picker.getByRole('button', { name: 'Today' }));
+  const start = picker.getByRole('textbox', { name: 'Start time (UTC)' });
+  const end = picker.getByRole('textbox', { name: 'End time (UTC)' });
+  fireEvent.change(start, { target: { value: '12:00' } });
+  fireEvent.change(end, { target: { value: '11:00' } });
+  expect(end).toHaveAccessibleDescription(/End must be after start/);
+  expect(picker.getByRole('button', { name: 'Set window' })).toBeDisabled();
+  fireEvent.change(end, { target: { value: '13:00' } });
+  expect(end).not.toHaveAccessibleDescription(/End must be after start/);
+  expect(picker.getByRole('button', { name: 'Set window' })).toBeEnabled();
 });
 
 it('preserves the exact bounds of an API-created window when editing its reason', async () => {
@@ -236,6 +263,7 @@ it('preserves the exact bounds of an API-created window when editing its reason'
 
   render(<ScheduleMaintenance context={context} existing={{ value: record, etag }} />);
   expect(screen.getByRole('heading', { name: 'Edit maintenance schedule' })).toHaveFocus();
+  expect(screen.getByRole('button', { name: /^Maintenance window/ })).toHaveTextContent('02:00:01 → 02:00:02 UTC');
   fireEvent.change(screen.getByLabelText('Reason'), { target: { value: 'Updated reason' } });
   const save = screen.getByRole('button', { name: 'Save schedule' });
   await waitFor(() => expect(save).toBeEnabled());
@@ -396,13 +424,18 @@ it('shows scheduled scope before displaying recorded participation at activation
   });
   await showDetail({ ...record, scope: { kind: 'services', service_ids: [serviceID] } });
 
-  expect(screen.getByRole('link', { name: 'Checkout' })).toHaveAttribute('href', `/services/${serviceID}`);
+  const schedule = within(screen.getByRole('region', { name: 'Schedule' }));
+  expect(schedule.getByText('02:00:01').closest('time')).toHaveAttribute('datetime', record.start);
+  expect(schedule.getByText('02:00:02').closest('time')).toHaveAttribute('datetime', record.end);
+  expect(schedule.getByText(record.reason)).toBeVisible();
+  const scope = within(screen.getByRole('region', { name: 'Scope' }));
+  expect(scope.getByRole('link', { name: 'Checkout' })).toHaveAttribute('href', `/services/${serviceID}`);
   expect(screen.getByText('Recorded SLO participation will appear when the window starts.')).toBeVisible();
   expect(impact).not.toHaveBeenCalled();
 
   await act(async () => { vi.advanceTimersByTime(1000); });
   expect(screen.getByRole('link', { name: 'Checkout availability' })).toHaveAttribute('href', `/slos/${sloId}`);
-  expect(screen.getByText('2026-11-18 02:00:01 UTC')).toBeVisible();
+  expect(within(screen.getByRole('region', { name: 'Affected SLOs' })).getByText('2026-11-18 02:00:01')).toHaveAttribute('datetime', record.start);
 });
 
 it('shows one affected SLO with two recorded participation periods', async () => {
@@ -422,9 +455,10 @@ it('shows one affected SLO with two recorded participation periods', async () =>
   await showDetail({ ...record, start: '2026-11-18T01:00:00Z', end: '2026-11-18T03:00:00Z', scope: { kind: 'all_services' } });
   const impact = within(screen.getByRole('region', { name: 'Affected SLOs' }));
   expect(impact.getByText(/^1 affected SLO ·/)).toBeVisible();
-  expect(impact.getAllByRole('link', { name: 'Checkout availability' })).toHaveLength(2);
-  expect(impact.getByText('2026-11-18 01:05:00 UTC')).toBeVisible();
-  expect(impact.getByText('2026-11-18 01:40:00 UTC')).toBeVisible();
+  const periods = within(impact.getByRole('table'));
+  expect(periods.getAllByRole('link', { name: 'Checkout availability' })).toHaveLength(2);
+  expect(periods.getByText('2026-11-18 01:05:00')).toHaveAttribute('datetime', '2026-11-18T01:05:00Z');
+  expect(periods.getByText('2026-11-18 01:40:00')).toHaveAttribute('datetime', '2026-11-18T01:40:00Z');
 });
 
 it('rejects an inventory preview with more rows than the reported total', async () => {
@@ -496,6 +530,25 @@ it('refreshes pending participation from page one even when the revision is unch
     [id, '1', ''], [id, '1', ''],
   ]);
   expect(screen.getByText(/0 affected SLOs/)).toBeVisible();
+});
+
+it('retains the current participation page when refreshing fails', async () => {
+  const impact = vi.mocked(maintenanceClient.impact);
+  const member = { slo_id: sloId, slo_name: 'Checkout availability', service_id: id, service_name: 'Checkout', start: record.start, end: record.end };
+  impact.mockResolvedValueOnce({ inventory_at: now, ready: true, total: '11', items: [], next_cursor: 'next' });
+  impact.mockResolvedValueOnce({ inventory_at: now, ready: true, total: '11', items: [member] });
+  impact.mockRejectedValueOnce(new Error('Refresh unavailable'));
+  await showDetail({ ...record, start: '2026-11-18T01:00:00Z', end: '2026-11-18T03:00:00Z' });
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Next/ })); });
+  const affected = within(screen.getByRole('region', { name: 'Affected SLOs' }));
+  expect(affected.getByText('Page 2')).toBeVisible();
+  expect(affected.getByRole('link', { name: member.slo_name })).toBeVisible();
+
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Refresh maintenance window' })); });
+  expect(impact.mock.calls.map(args => args[3])).toEqual(['', 'next', 'next']);
+  expect(affected.getByRole('alert')).toHaveTextContent('Affected SLOs could not be loaded.');
+  expect(affected.getByText('Page 2')).toBeVisible();
+  expect(affected.getByRole('link', { name: member.slo_name })).toBeVisible();
 });
 
 it('rejects malformed operation values through uncertain-write recovery', async () => {

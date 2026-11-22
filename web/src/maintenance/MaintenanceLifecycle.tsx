@@ -69,7 +69,7 @@ export function MaintenanceLifecycle({ context, record, etag, now, readNow, onUp
         requestAnimationFrame(() => (trigger.current?.isConnected ? trigger.current : fallbackFocus.current)?.focus());
       }} onUpdated={result => { setAction(undefined); onUpdated(result); }} />}
   </>;
-  return historical ? <details className="maintenance-panel maintenance-detail maintenance-correction">
+  return historical ? <details className="maintenance-disclosure">
     <summary>Change historical SLO calculations</summary>
     <p>Administrators can remove this window’s exclusion from future calculations.</p>
     {controls}

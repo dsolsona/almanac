@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 
 test('calendar supports focused keyboard navigation, commit, clear, cancel and Escape', async ({ page }, testInfo) => {
   await page.goto('/design-system');
-  const trigger = page.getByRole('button', { name: /Start date/ });
+  const trigger = page.locator('.feedback-controls').getByRole('button', { name: /Start date/ });
   await trigger.click();
   const dialog = page.getByRole('dialog', { name: 'Choose Start date' });
   await expect(dialog).toBeVisible();
@@ -34,6 +34,39 @@ test('calendar supports focused keyboard navigation, commit, clear, cancel and E
   await page.getByRole('button', { name: 'Clear' }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Calendar selection cleared.' })).toBeVisible();
   await expect(trigger).toContainText('Choose date');
+});
+
+test('maintenance time can be replaced by typing after Tab or a click', async ({ page }, testInfo) => {
+  await page.clock.setFixedTime(new Date('2026-10-25T12:00:00Z'));
+  await page.goto('/design-system');
+  const trigger = page.getByRole('button', { name: /^Maintenance window/ });
+  const dialog = page.getByRole('dialog', { name: 'Choose maintenance window' });
+  const time = dialog.getByRole('textbox', { name: 'Start time (UTC)' });
+
+  await trigger.press('Enter');
+  await page.keyboard.press('Tab');
+  await expect(time).toBeFocused();
+  await time.pressSequentially('15:45');
+  await expect(time).toHaveValue('15:45');
+  await time.press('Enter');
+  await expect(trigger).toContainText('15:45 → 16:00 UTC');
+
+  await trigger.click();
+  await dialog.getByRole('button', { name: 'Tomorrow' }).click();
+  await expect(dialog.getByRole('button', { name: 'Monday, October 26, 2026, selected' })).toBeFocused();
+  await dialog.getByRole('button', { name: 'Today', exact: true }).click();
+  await expect(dialog.getByRole('button', { name: 'Sunday, October 25, 2026, selected, today' })).toBeFocused();
+  await dialog.getByRole('button', { name: /October 27, 2026/ }).click();
+  await expect(dialog.getByRole('gridcell', { selected: true })).toHaveCount(3);
+  await time.click();
+  await time.pressSequentially('09:15');
+  await expect(time).toHaveValue('09:15');
+  const end = dialog.getByRole('textbox', { name: 'End time (UTC)' });
+  await end.click();
+  await end.pressSequentially('17:30');
+  await dialog.screenshot({ path: testInfo.outputPath('maintenance-window-range.png') });
+  await dialog.getByRole('button', { name: 'Set window' }).click();
+  await expect(trigger).toContainText('09:15 → Tue, Oct 27, 2026 · 17:30 UTC');
 });
 
 test('switches retain native keyboard and disabled behavior, with visible checked state', async ({ page }, testInfo) => {

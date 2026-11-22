@@ -110,8 +110,10 @@ Import controls from `src/components/ui/` and prefer native semantics:
 - `Switch` uses a native checkbox with switch semantics, persistent label, hint,
   checked state text and visible thumb position.
 - `DatePicker` validates `YYYY-MM-DD` calendar dates and opens a shared native
-  dialog containing a Monday-first, keyboard-navigable month grid. Maintenance
-  scheduling and custom backfill ranges pair it with a shared time field for UTC input.
+  dialog containing a Monday-first, keyboard-navigable month grid.
+  Maintenance scheduling uses the same calendar with a highlighted date range
+  and 24-hour UTC time fields for both endpoints. Custom backfill ranges use
+  the calendar for each endpoint and separate UTC time fields.
 - `LoadingIndicator` announces an indeterminate status with a transform-only
   moving segment and a static reduced-motion state in the component catalogue.
   Product pages use stable content and accessible pending state instead of visible

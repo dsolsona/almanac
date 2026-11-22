@@ -24,9 +24,25 @@ async function chooseCalendarDay(dialog: Locator, date: Date) {
     .getByRole('button', { name: new RegExp(`^${day}(, selected)?(, today)?$`) }).click();
 }
 
-async function chooseStartDay(page: Page, date: Date) {
-  await page.getByRole('button', { name: /^Start date/ }).click();
-  await chooseCalendarDay(page.getByRole('dialog', { name: /Choose Start date/ }), date);
+async function fillWindow(page: Page, date: Date, minutes = 60, info?: TestInfo) {
+  const trigger = page.getByRole('button', { name: /^Maintenance window/ });
+  await trigger.press('Enter');
+  const picker = page.getByRole('dialog', { name: 'Choose maintenance window' });
+  await chooseCalendarDay(picker, date);
+  const clock = picker.getByRole('textbox', { name: 'Start time (UTC)' });
+  await page.keyboard.press('Tab');
+  await expect(clock).toBeFocused();
+  const time = date.toISOString().slice(11, 16);
+  await clock.pressSequentially(time);
+  await expect(clock).toHaveValue(time);
+  const end = picker.getByRole('textbox', { name: 'End time (UTC)' });
+  await clock.press('Tab');
+  await expect(end).toBeFocused();
+  await end.pressSequentially(new Date(date.getTime() + minutes * 60_000).toISOString().slice(11, 16));
+  if (info) await captureMaintenanceDesign(page, info, 'maintenance-start-picker');
+  await end.press('Enter');
+  await expect(picker).toBeHidden();
+  await expect(trigger).toBeFocused();
 }
 
 test('schedule and inspect explicit SLO and service maintenance in the deployed app', async ({ page }, testInfo) => {
@@ -70,14 +86,8 @@ test('schedule and inspect explicit SLO and service maintenance in the deployed 
 
     const start = new Date(Date.now() + 86400_000);
     start.setUTCHours(12, 0, 0, 0);
-    await chooseStartDay(page, start);
-    await page.getByLabel('Start time (UTC)', { exact: true }).fill('12:00');
-    const preset = page.getByRole('radio', { name: '2 hours', exact: true });
-    await page.getByRole('radio', { name: 'Custom…', exact: true }).click();
-    const minutes = page.getByRole('textbox', { name: 'Custom duration', exact: true });
-    await expect(minutes).toBeFocused();
-    await minutes.fill('75');
-    expect(Math.abs((await preset.boundingBox())!.y - (await minutes.boundingBox())!.y)).toBeLessThan(4);
+    await fillWindow(page, start, 75, testInfo);
+    await expect(page.getByRole('button', { name: /^Maintenance window/ })).toContainText('12:00 → 13:15 UTC');
     await page.evaluate(() => window.scrollTo(0, 0));
     await page.screenshot({ path: testInfo.outputPath('maintenance-schedule-light.png'), fullPage: true });
     await testInfo.attach('maintenance-schedule-light', { path: testInfo.outputPath('maintenance-schedule-light.png'), contentType: 'image/png' });
@@ -89,10 +99,24 @@ test('schedule and inspect explicit SLO and service maintenance in the deployed 
     expect(saved.body.slo_ids).toEqual([slo.body.id]);
     expect(Date.parse(saved.body.start)).toBe(start.getTime());
     expect(Date.parse(saved.body.end) - Date.parse(saved.body.start)).toBe(75 * 60_000);
-    await expect(page.getByRole('link', { name: 'Checkout availability', exact: true })).toHaveAttribute('href', `/slos/${slo.body.id}`);
+    await expect(page.getByRole('region', { name: 'Scope', exact: true }).getByRole('link', { name: 'Checkout availability', exact: true })).toHaveAttribute('href', `/slos/${slo.body.id}`);
+    const schedule = page.getByRole('region', { name: 'Schedule', exact: true });
+    await expect(schedule.locator(`time[datetime="${saved.body.start}"]`)).toContainText('12:00');
+    await expect(schedule.getByText('Apply the scheduled database update.', { exact: true })).toBeVisible();
     await expect(page.getByText('Scheduled', { exact: true })).toBeVisible();
     await page.getByRole('link', { name: 'Edit schedule', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Edit maintenance schedule', exact: true })).toBeFocused();
+    const startTrigger = page.getByRole('button', { name: /^Maintenance window/ });
+    await expect(startTrigger).toContainText('12:00 → 13:15 UTC');
+    await startTrigger.press('Enter');
+    const startDialog = page.getByRole('dialog', { name: 'Choose maintenance window' });
+    const editTime = startDialog.getByRole('textbox', { name: 'Start time (UTC)' });
+    await editTime.click();
+    await editTime.pressSequentially('19:45');
+    await expect(editTime).toHaveValue('19:45');
+    await page.keyboard.press('Escape');
+    await expect(startTrigger).toBeFocused();
+    await expect(startTrigger).toContainText('12:00 → 13:15 UTC');
     await expect(page.getByRole('button', { name: 'Remove Checkout availability', exact: true })).toBeVisible();
     await page.getByRole('textbox', { name: 'Reason', exact: true }).fill('Apply the approved database update.');
     await page.getByRole('button', { name: 'Save schedule', exact: true }).click();
@@ -223,8 +247,16 @@ test('schedule and inspect explicit SLO and service maintenance in the deployed 
     const withdrawn = await expectOk(api(page, 'GET', `/api/v1/maintenance/${active.body.id}`));
     expect(withdrawn.body.operation).toBe('withdraw');
     expect(withdrawn.body.revision).toBe('3');
-    await page.getByRole('link', { name: 'Previous revision', exact: true }).click();
-    await expect(page.getByText(/Revision 2 ·/)).toBeVisible();
+    const revisionHistory = page.getByText('Revision history', { exact: true });
+    const previousRevision = page.getByRole('link', { name: 'Previous revision', exact: true });
+    await expect(previousRevision).toBeHidden();
+    await revisionHistory.press('Enter');
+    await revisionHistory.press('Tab');
+    await expect(previousRevision).toBeFocused();
+    await previousRevision.press('Enter');
+    await expect(page.getByText('Viewing revision 2', { exact: true })).toBeVisible();
+    await page.getByRole('link', { name: 'Latest revision', exact: true }).click();
+    await expect(page.getByText('Withdrawn', { exact: true })).toBeVisible();
 
     await page.goto(pathname);
     await page.getByRole('button', { name: 'Cancel scheduled maintenance', exact: true }).click();
@@ -252,8 +284,7 @@ test('schedule and inspect explicit SLO and service maintenance in the deployed 
     await expect(preview).toContainText('2 affected SLOs');
     await expect(preview).toContainText('Checkout availability');
     await expect(preview).toContainText('Checkout latency');
-    await chooseStartDay(page, start);
-    await page.getByLabel('Start time (UTC)', { exact: true }).fill('12:00');
+    await fillWindow(page, start);
     await captureMaintenanceDesign(page, testInfo, 'maintenance-selected-service-preview');
     await page.getByRole('button', { name: 'Schedule maintenance', exact: true }).click();
     await expect(page.getByRole('heading', { name: serviceTitle, level: 1 })).toBeVisible();
@@ -274,9 +305,16 @@ test('schedule and inspect explicit SLO and service maintenance in the deployed 
     }).toBeTruthy();
     await page.goto(`/maintenance/${currentService.body.id}`);
     const affected = page.getByRole('region', { name: 'Affected SLOs' });
-    const objective = affected.getByRole('link', { name: 'Checkout availability', exact: true });
+    const participation = affected.getByRole('table', { name: 'Recorded SLO participation' });
+    const objective = participation.getByRole('link', { name: 'Checkout availability', exact: true });
     await expect(objective).toHaveAttribute('href', `/slos/${slo.body.id}`);
     await captureMaintenanceDesign(page, testInfo, 'maintenance-recorded-service-impact');
+    await page.setViewportSize({ width: 360, height: 820 });
+    await expect(objective).toBeVisible();
+    expect(await participation.evaluate(table => table.scrollWidth)).toBe(await participation.evaluate(table => table.clientWidth));
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(360);
+    await captureMaintenanceDesign(page, testInfo, 'maintenance-recorded-service-impact-dark-mobile');
+    await page.setViewportSize({ width: 1440, height: 1000 });
     await objective.press('Enter');
     await expect(page.getByRole('heading', { name: 'Checkout availability', level: 1 })).toBeVisible();
     const timelineRange = new URLSearchParams({ start: historicalStart.toISOString(), end: historicalEnd.toISOString() });
@@ -303,6 +341,20 @@ test('schedule and inspect explicit SLO and service maintenance in the deployed 
     await expect(row.locator('time').nth(1)).toHaveAttribute('datetime', interval!.end);
     await expect(row.locator('time').nth(0)).toBeVisible();
     await expect(row.locator('time').nth(1)).toBeVisible();
+
+    const ended = await expectOk(api(page, 'POST', '/api/v1/maintenance', {
+      title: 'Completed Checkout maintenance',
+      reason: 'Inspect a finished window.',
+      start: historicalStart.toISOString(),
+      end: new Date(historicalStart.getTime() + 15 * 60_000).toISOString(),
+      slo_ids: [slo.body.id],
+    }));
+    await page.setViewportSize({ width: 360, height: 820 });
+    await page.goto(`/maintenance/${ended.body.id}`);
+    const endedStatus = page.getByText('Ended', { exact: true });
+    await expect(endedStatus).toBeInViewport();
+    await expect(endedStatus).toHaveCSS('font-size', '16px');
+    await captureMaintenanceDesign(page, testInfo, 'maintenance-ended-dark-mobile');
   } finally {
     stopAgent(agent);
   }
@@ -323,8 +375,7 @@ test('schedule empty service scopes and all services from the full catalogue', a
   async function fillSchedule(title: string) {
     await page.getByRole('textbox', { name: 'Name', exact: true }).fill(title);
     await page.getByRole('textbox', { name: 'Reason', exact: true }).fill('Exercise fleet maintenance scheduling.');
-    await chooseStartDay(page, start);
-    await page.getByLabel('Start time (UTC)', { exact: true }).fill('12:00');
+    await fillWindow(page, start);
   }
 
   await page.goto('/maintenance/new');
@@ -367,4 +418,8 @@ test('schedule empty service scopes and all services from the full catalogue', a
   id = new URL(page.url()).pathname.split('/').at(-1);
   saved = await expectOk(api(page, 'GET', `/api/v1/scoped-maintenance/${id}`));
   expect(saved.body.scope).toEqual({ kind: 'all_services' });
+  await expect(page.getByRole('region', { name: 'Scope', exact: true })).toContainText('All services');
+  await expect(page.getByRole('region', { name: 'Schedule', exact: true })).toContainText('Exercise fleet maintenance scheduling.');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(360);
+  await captureMaintenanceDesign(page, testInfo, 'maintenance-detail-dark-mobile');
 });
