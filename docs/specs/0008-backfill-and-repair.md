@@ -121,7 +121,11 @@ independently of agent limits.
 An Editor or Administrator opens Historical backfill on the SLI detail page.
 The operator can choose one, seven, fourteen or thirty days, or supply a UTC
 range. Preview shows the aligned, eligible bounds and chunk count before the
-operator confirms a request. Viewers can read the job list. The
+operator confirms a request. The gap table puts eligible gaps first. Active
+jobs remain visible below the gaps, and finished jobs are available in a
+collapsed history. The review dialog shows the eligible count, chunk count,
+selected range and recoverable gaps, with skipped interval counts available on
+demand. Viewers can read job progress and history. The
 `almanac backfills` CLI has preview, request, list and cancel commands.
 Administrators can include previously failed intervals in a custom range or pass
 `--retry-exhausted` to the CLI preview and request. Admission records the actor
