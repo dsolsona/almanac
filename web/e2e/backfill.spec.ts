@@ -50,6 +50,29 @@ test('request historical collection and see the recalculated SLO', async ({ page
     await expect(panel).toContainText('Datasource retention is 7 days.');
     await panel.getByRole('button', { name: 'Custom range' }).click();
     const dialog = page.getByRole('dialog', { name: 'Custom backfill range' });
+    async function setBound(label: 'Start' | 'End', value: string, capture = false) {
+      const button = dialog.getByRole('button', { name: new RegExp(`^${label} date`) });
+      await button.click();
+      const picker = page.getByRole('dialog', { name: `Choose ${label} date`, exact: true });
+      const selected = new Date(value);
+      const month = new Intl.DateTimeFormat('en', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(selected);
+      const grid = picker.getByRole('grid');
+      const currentMonth = await grid.getAttribute('aria-label');
+      if (currentMonth !== month) {
+        const direction = Date.parse(`1 ${currentMonth} UTC`) > selected.getTime() ? 'Previous' : 'Next';
+        await picker.getByRole('button', { name: `${direction} month` }).click();
+      }
+      await expect(grid).toHaveAccessibleName(month);
+      if (capture) {
+        const path = info.outputPath('earlier-history-calendar-light.png');
+        await picker.screenshot({ path });
+        await info.attach('Shared calendar, desktop light', { path, contentType: 'image/png' });
+      }
+      const day = new Intl.DateTimeFormat('en', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(selected);
+      await grid.getByRole('button', { name: new RegExp(`^${day}(,|$)`) }).click();
+      await expect(button).toBeFocused();
+      await dialog.getByLabel(`${label} time (UTC)`).fill(value.slice(11, 16));
+    }
     const backfillRoute = `**/api/v1/slis/${id}/backfills`;
     let intercepted!: () => void;
     let release!: () => void;
@@ -64,8 +87,8 @@ test('request historical collection and see the recalculated SLO', async ({ page
       await unblockRoute;
       await route.abort().catch(() => {});
     });
-    await dialog.getByLabel('Start (UTC)').fill(from.slice(0, 16));
-    await dialog.getByLabel('End (UTC)').fill(to.slice(0, 16));
+    await setBound('Start', from);
+    await setBound('End', to);
     await dialog.getByRole('button', { name: 'Preview range' }).click();
     try {
       await requestStarted;
@@ -77,10 +100,9 @@ test('request historical collection and see the recalculated SLO', async ({ page
       await page.unroute(backfillRoute);
     }
     await panel.getByRole('button', { name: 'Custom range' }).click();
-    await dialog.getByLabel('Start (UTC)').fill(from.slice(0, 16));
-    await dialog.getByLabel('End (UTC)').fill(to.slice(0, 16));
+    await setBound('Start', from);
+    await setBound('End', to);
     await dialog.getByRole('button', { name: 'Preview range' }).click();
-    await expect(dialog.getByRole('status')).toContainText('1 chunk');
     await expect(dialog.getByRole('status')).toContainText('Intervals to recover');
     const light = info.outputPath('backfill-preview-desktop-light.png');
     await dialog.screenshot({ path: light });
@@ -97,28 +119,36 @@ test('request historical collection and see the recalculated SLO', async ({ page
     }, { timeout: 60_000 }).toEqual([-1, true]);
 
     const earlier = new Date(Date.parse(from) - 120_000).toISOString();
-    async function previewEarlierHistory() {
+    async function previewEarlierHistory(capture = false) {
       await panel.getByRole('button', { name: 'Custom range' }).click();
-      await dialog.getByLabel('Start (UTC)').fill(earlier.slice(0, 16));
-      await dialog.getByLabel('End (UTC)').fill(from.slice(0, 16));
+      await setBound('Start', earlier, capture);
+      await setBound('End', from);
       const include = dialog.getByRole('switch', { name: 'Include earlier history' });
       await expect(include).not.toBeChecked();
       await include.focus();
       await page.keyboard.press('Space');
       await expect(include).toBeChecked();
       await dialog.getByRole('button', { name: 'Preview range' }).click();
-      await expect(dialog.getByRole('status')).toContainText('Apply the original query');
-      await expect(dialog.getByRole('status')).toContainText('Checkout metrics');
-      await expect(dialog.getByRole('status')).toContainText('vector(99)');
+      await expect(dialog.getByRole('status')).toContainText('Earlier history');
+      const queries = dialog.getByText('Original queries · Checkout metrics', { exact: true });
+      await expect(dialog.getByText('vector(99)', { exact: true })).toBeHidden();
+      await queries.click();
+      await expect(dialog.getByText('vector(99)', { exact: true })).toBeVisible();
+      await queries.click();
+      await expect(dialog.getByRole('button', { name: /^Start date/ })).toHaveCount(0);
       await expect(dialog.getByText('Intervals to recover', { exact: true }).locator('..').locator('dd')).toHaveText('2');
       await expect(dialog.getByRole('button', { name: 'Queue backfill' })).toBeEnabled();
       await expect(dialog.getByRole('button', { name: 'Queue backfill' })).toBeInViewport();
     }
 
-    await previewEarlierHistory();
+    await previewEarlierHistory(true);
     const desktop = info.outputPath('earlier-history-desktop-light.png');
     await dialog.screenshot({ path: desktop });
     await info.attach('Earlier history preview, desktop light', { path: desktop, contentType: 'image/png' });
+    await dialog.getByRole('button', { name: 'Edit range' }).click();
+    await expect(dialog.getByRole('button', { name: /^Start date/ })).toBeFocused();
+    await expect(dialog.getByLabel('Start time (UTC)')).toHaveValue(earlier.slice(11, 16));
+    await expect(dialog.getByRole('switch', { name: 'Include earlier history' })).toBeChecked();
 
     await page.evaluate(() => localStorage.setItem('almanac-theme', 'dark'));
     await page.setViewportSize({ width: 360, height: 800 });

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AuthContext } from '../auth/client.ts';
+import { DatePicker } from '../components/ui/DatePicker.tsx';
 import { Dialog } from '../components/ui/Dialog.tsx';
 import { Button } from '../components/ui/Button.tsx';
 import { SelectField } from '../components/ui/SelectField.tsx';
@@ -8,6 +9,16 @@ import { TextField } from '../components/ui/TextField.tsx';
 import { createSliClient, SliFailure, type Sli, type SliBackfillAdmission, type SliBackfillJob, type SliBackfillPlan } from './client.ts';
 
 const client = createSliClient();
+const rangeFormat = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric',
+  hour: '2-digit', minute: '2-digit', timeZone: 'UTC' });
+const secondsRangeFormat = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric',
+  hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'UTC' });
+
+function utcRange(start: string, end: string) {
+  const from = new Date(start), to = new Date(end);
+  const format = from.getUTCSeconds() || to.getUTCSeconds() ? secondsRangeFormat : rangeFormat;
+  return `${format.formatRange(from, to)} UTC`;
+}
 const presets = [
   { value: '1', label: 'Last 1 day' },
   { value: '7', label: 'Last 7 days' },
@@ -38,6 +49,19 @@ function elapsed(seconds: number) {
   return [hours && `${hours}h`, minutes && `${minutes}m`, seconds % 60 && `${seconds % 60}s`].filter(Boolean).join(' ') || '0m';
 }
 
+
+function RangeEndpoint({ label, value, today, disabled, onChange }: {
+  label: 'Start' | 'End'; value: string; today: string; disabled: boolean; onChange: (value: string) => void;
+}) {
+  const [day = '', clock = ''] = value.split('T');
+  return <div className="sli-backfill-endpoint">
+    <DatePicker label={`${label} date`} value={day} today={today} disabled={disabled} onValueChange={date => onChange(`${date}T${clock}`)} />
+    <TextField id={`sli-backfill-${label.toLowerCase()}-time`} label={`${label} time (UTC)`} value={clock}
+      required disabled={disabled} pattern="([01][0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?" placeholder="HH:MM"
+      maxLength={8} autoComplete="off" onChange={event => onChange(`${day}T${event.target.value}`)} />
+  </div>;
+}
+
 export function SliBackfills({ sli, datasourceName, context, canWrite, onMeasurementsChanged }: { sli: Sli; datasourceName: string; context: AuthContext; canWrite: boolean; onMeasurementsChanged: (earlierFrom?: string) => void }) {
   const [open, setOpen] = useState(false);
   const [preset, setPreset] = useState('30');
@@ -49,6 +73,9 @@ export function SliBackfills({ sli, datasourceName, context, canWrite, onMeasure
   const [retryExhausted, setRetryExhausted] = useState(false);
   const [includeEarlierHistory, setIncludeEarlierHistory] = useState(false);
   const [preview, setPreview] = useState<SliBackfillAdmission | null>(null);
+  const rangeFields = useRef<HTMLDivElement>(null);
+  const today = new Date().toISOString().slice(0, 10);
+  const eligibleGaps = preview?.plan?.gaps.filter(gap => gap.state === 'eligible') ?? [];
   const selectedStart = dialog === 'custom' ? Date.parse(`${start}Z`) : Date.parse(preview?.start ?? rangeFor(sli, preset).start);
   const startsBeforeHistory = selectedStart < Date.parse(sli.effective_from);
   const canCollectEarlier = sli.measurement_revision === '1' && sli.activated_at !== null;
@@ -207,28 +234,34 @@ export function SliBackfills({ sli, datasourceName, context, canWrite, onMeasure
     <Dialog open={dialog !== null} onClose={closeDialog} title={dialog === 'custom' ? 'Custom backfill range' : 'Review backfill'} triggerRef={trigger}>
       <form className="sli-backfill-form" onSubmit={event => { event.preventDefault(); void requestRange(false); }}>
         <div className="sli-backfill-fields">
-          {dialog === 'custom' && <div className="ui-form-grid">
-            <TextField id="sli-backfill-start" type="datetime-local" step={1} label="Start (UTC)" required value={start} disabled={!!working} onChange={event => { setStart(event.target.value); setIncludeEarlierHistory(false); edit(); }} />
-            <TextField id="sli-backfill-end" type="datetime-local" step={1} label="End (UTC)" required value={end} disabled={!!working} onChange={event => { setEnd(event.target.value); setIncludeEarlierHistory(false); edit(); }} />
+          {dialog === 'custom' && !preview && <div className="sli-backfill-dates" ref={rangeFields}>
+            <RangeEndpoint label="Start" value={start} today={today} disabled={!!working}
+              onChange={value => { setStart(value); setIncludeEarlierHistory(false); edit(); }} />
+            <RangeEndpoint label="End" value={end} today={today} disabled={!!working}
+              onChange={value => { setEnd(value); setIncludeEarlierHistory(false); edit(); }} />
+            {context.session?.role === 'administrator' &&
+              <Switch label="Include previously failed intervals" checked={retryExhausted} disabled={!!working}
+                onChange={event => { setRetryExhausted(event.target.checked); edit(); }} />}
           </div>}
-          {dialog === 'custom' && context.session?.role === 'administrator' &&
-            <Switch label="Include previously failed intervals" checked={retryExhausted} disabled={!!working}
-              onChange={event => { setRetryExhausted(event.target.checked); edit(); }} />}
-          {startsBeforeHistory && <div>
-            <p>Measurement history starts {utc(sli.effective_from)}.</p>
+          {startsBeforeHistory && (!preview || dialog === 'preset' && !preview.earlier_history_from) && <div>
             {canCollectEarlier ? <Switch label="Include earlier history" checked={includeEarlierHistory} disabled={!!working}
+              hint={`Measurement history starts ${utc(sli.effective_from)}.`}
               onChange={event => { setIncludeEarlierHistory(event.target.checked); edit(); }} />
               : <p>Earlier history requires an active original measurement definition.</p>}
           </div>}
           {preview && <div role="status">
-            <p>{utc(preview.start)} to {utc(preview.end)} · {preview.chunk_count} {preview.chunk_count === 1 ? 'chunk' : 'chunks'}</p>
+            {(!preview.earlier_history_until || Date.parse(preview.earlier_history_until) < Date.parse(preview.end)) &&
+              <p>{utcRange(preview.start, preview.end)}</p>}
             {preview.earlier_history_from && preview.earlier_history_until && <>
-              <p>Apply the original query to {utc(preview.earlier_history_from)} – {utc(preview.earlier_history_until)} using {datasourceName}.</p>
-              <dl className="sli-backfill-query">
-                <div><dt>Good events</dt><dd><code>{sli.good_query}</code></dd></div>
-                <div><dt>Total events</dt><dd><code>{sli.total_query}</code></dd></div>
-              </dl>
-              {preview.plan?.datasource_retention_days === 0 && <p>Datasource retention is unknown. The job will report what it recovers.</p>}
+              <p><strong>Earlier history</strong><br />{utcRange(preview.earlier_history_from, preview.earlier_history_until)}</p>
+              <details className="sli-backfill-query">
+                <summary>Original queries · {datasourceName}</summary>
+                <dl>
+                  <div><dt>Good events</dt><dd><code>{sli.good_query}</code></dd></div>
+                  <div><dt>Total events</dt><dd><code>{sli.total_query}</code></dd></div>
+                </dl>
+              </details>
+              {preview.plan?.datasource_retention_days === 0 && <p>Datasource retention is unknown.</p>}
             </>}
             {preview.plan && <dl className="sli-backfill-preview-facts">
               <div><dt>Intervals to recover</dt><dd>{preview.plan.eligible_intervals}</dd></div>
@@ -241,14 +274,20 @@ export function SliBackfills({ sli, datasourceName, context, canWrite, onMeasure
               ] as const).filter(([, count]) => count > 0).map(([label, count]) =>
                 <div key={label}><dt>{label}</dt><dd>{count}</dd></div>)}
             </dl>}
-            {preview.plan?.gaps.some(gap => gap.state === 'eligible') && <ul>
-              {preview.plan.gaps.filter(gap => gap.state === 'eligible').map(gap => <li key={gap.start}>{utc(gap.start)} – {utc(gap.end)} · {gap.intervals} {gap.intervals === 1 ? 'interval' : 'intervals'}</li>)}
-            </ul>}
+            {eligibleGaps.length > 0 && (eligibleGaps.length > 1 || !preview.earlier_history_from &&
+              (eligibleGaps[0]!.start !== preview.start || eligibleGaps[0]!.end !== preview.end)) && <details>
+              <summary>Recoverable ranges</summary>
+              <ul>{eligibleGaps.map(gap => <li key={gap.start}>{utcRange(gap.start, gap.end)} · {gap.intervals}</li>)}</ul>
+            </details>}
           </div>}
           {working === 'preview' && <p role="status">Checking which intervals can be recovered…</p>}
           {error && <p className="sli-error" role="alert">{error}</p>}
         </div>
         <div className="sli-actions">
+          {preview && dialog === 'custom' && <Button variant="outline" disabled={!!working} onClick={() => {
+            edit();
+            requestAnimationFrame(() => rangeFields.current?.querySelector('button')?.focus());
+          }}>Edit range</Button>}
           {!preview
             ? <Button type="submit" pending={working === 'preview'}>Preview range</Button>
             : <Button disabled={preview.chunk_count === 0 || !!working} pending={working === 'confirm'} onClick={() => void requestRange(true)}>Queue backfill</Button>}
