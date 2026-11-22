@@ -31,8 +31,8 @@ export function Dialog({ open, onClose, title, children, triggerRef, initialFocu
   }
 
   function containFocus(event:KeyboardEvent<HTMLDialogElement>) {
-    if(event.key!=='Tab')return;
-    const controls=[...event.currentTarget.querySelectorAll<HTMLElement>('a[href],button,input,select,textarea,[tabindex]')].filter(node=>node.tabIndex>=0&&!node.matches(':disabled')&&node.getClientRects().length>0&&getComputedStyle(node).visibility!=='hidden');
+    if(event.key!=='Tab'||!(event.target instanceof Element)||event.target.closest('dialog')!==event.currentTarget)return;
+    const controls=[...event.currentTarget.querySelectorAll<HTMLElement>('a[href],button,input,select,textarea,[tabindex]')].filter(node=>node.closest('dialog')===event.currentTarget&&node.tabIndex>=0&&!node.matches(':disabled')&&node.getClientRects().length>0&&getComputedStyle(node).visibility!=='hidden');
     const first=controls[0],last=controls.at(-1);
     if(event.shiftKey&&document.activeElement===first){event.preventDefault();last?.focus();}
     else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first?.focus();}
