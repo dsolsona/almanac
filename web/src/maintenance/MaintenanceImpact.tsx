@@ -32,13 +32,13 @@ export function MaintenanceImpactPreview({ scope, context, onReady }: {
   return <MaintenanceImpact preview read={read} />;
 }
 
-export function MaintenanceWindowImpact({ id, revision }: { id: string; revision: string }) {
+export function MaintenanceWindowImpact({ id, revision, refreshVersion }: { id: string; revision: string; refreshVersion: number }) {
   const read = useCallback<ReadImpact>((limit, cursor, signal) =>
     maintenanceClient.impact(id, revision, limit, cursor, signal), [id, revision]);
-  return <MaintenanceImpact read={read} />;
+  return <MaintenanceImpact read={read} refreshVersion={refreshVersion} />;
 }
 
-function MaintenanceImpact({ read, preview = false }: { read: ReadImpact; preview?: boolean }) {
+function MaintenanceImpact({ read, preview = false, refreshVersion }: { read: ReadImpact; preview?: boolean; refreshVersion?: number }) {
   const headingId = useId();
   const [size, setSize] = useState(10);
   const [cursors, setCursors] = useState(['']);
@@ -70,7 +70,7 @@ function MaintenanceImpact({ read, preview = false }: { read: ReadImpact; previe
       window.clearTimeout(deadline);
       controller.abort();
     };
-  }, [read, size, cursor, refresh]);
+  }, [read, size, cursor, refresh, refreshVersion]);
 
   function changePage(next: string[], nextSize = size) {
     setPage(undefined);
@@ -92,7 +92,7 @@ function MaintenanceImpact({ read, preview = false }: { read: ReadImpact; previe
       {error === 'changed' ? 'Reload affected SLOs' : error ? 'Retry affected SLOs' : 'Refresh affected SLOs'}
     </Button>}
     {!error && page?.ready === false && <p role="status" className="ui-hint">Affected SLOs are being prepared.</p>}
-    {!error && page?.ready && <>
+    {(!error || (!preview && error === 'load')) && page?.ready && <>
       <p role="status" className="ui-hint">
         {new Intl.NumberFormat().format(BigInt(page.total))} {page.total === '1' ? 'affected SLO' : 'affected SLOs'} · Inventory as of <MaintenanceTime value={page.inventory_at} />
       </p>

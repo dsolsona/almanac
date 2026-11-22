@@ -33,6 +33,7 @@ export function MaintenanceWindowPicker({ bounds: { start, end }, onChange, seco
   const endUTC = `${endDay}T${endClock}`;
   const clocksValid = clockPattern.test(startClock) && clockPattern.test(endClock);
   const ordered = Date.parse(`${endUTC}Z`) > Date.parse(`${startUTC}Z`);
+  const orderErrorId = clocksValid && !ordered ? `${id}-order-error` : undefined;
   const valid = clocksValid && ordered && startDay >= '1970-01-01';
 
   function begin() {
@@ -98,9 +99,9 @@ export function MaintenanceWindowPicker({ bounds: { start, end }, onChange, seco
         </div>
         <div className="maintenance-window-clocks">
           <ClockField label="Start time (UTC)" day={startDay} value={startClock} seconds={seconds} onChange={setStartClock} onEnter={apply} />
-          <ClockField label="End time (UTC)" day={endDay} value={endClock} seconds={seconds} onChange={setEndClock} onEnter={apply} />
+          <ClockField label="End time (UTC)" day={endDay} value={endClock} seconds={seconds} errorId={orderErrorId} onChange={setEndClock} onEnter={apply} />
         </div>
-        {clocksValid && !ordered && <p className="ui-error" role="status">End must be after start.</p>}
+        {orderErrorId && <p id={orderErrorId} className="ui-error" role="status">End must be after start.</p>}
         {startDay < '1970-01-01' && <p className="ui-error" role="status">Choose a start on or after January 1, 1970.</p>}
         <div className="maintenance-start-actions">
           <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
@@ -111,13 +112,14 @@ export function MaintenanceWindowPicker({ bounds: { start, end }, onChange, seco
   </div>;
 }
 
-function ClockField({ label, day, value, seconds, onChange, onEnter }: {
-  label: string; day: string; value: string; seconds: boolean; onChange: (value: string) => void; onEnter: () => void;
+function ClockField({ label, day, value, seconds, errorId, onChange, onEnter }: {
+  label: string; day: string; value: string; seconds: boolean; errorId?: string; onChange: (value: string) => void; onEnter: () => void;
 }) {
   const id = useId();
 
   return <TextField id={id} label={label} value={value} onChange={event => onChange(event.target.value)}
-    hint={shortDate(day)} placeholder={seconds ? 'HH:MM:SS' : 'HH:MM'} autoComplete="off" spellCheck={false} maxLength={seconds ? 8 : 5}
+    hint={shortDate(day)} aria-describedby={errorId} aria-invalid={errorId ? true : undefined}
+    placeholder={seconds ? 'HH:MM:SS' : 'HH:MM'} autoComplete="off" spellCheck={false} maxLength={seconds ? 8 : 5}
     onFocus={event => event.currentTarget.select()}
     onMouseDown={event => {
       if (event.button !== 0 || event.currentTarget === document.activeElement) return;

@@ -201,7 +201,7 @@ function WindowDetail({ id, revision, editing, context }: { id: string; revision
           <h2 id="maintenance-pending-impact">Affected SLOs</h2>
           <p className="ui-hint">Recorded SLO participation will appear when the window starts.</p>
         </section>
-        : <MaintenanceWindowImpact key={`${window.revision}:${refresh}`} id={window.id} revision={window.revision} />}
+        : <MaintenanceWindowImpact key={window.revision} id={window.id} revision={window.revision} refreshVersion={refresh} />}
       <footer className="maintenance-window-footer">
         <details className="maintenance-disclosure">
           <summary>Revision history</summary>

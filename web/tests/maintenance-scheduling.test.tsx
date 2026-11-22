@@ -237,6 +237,22 @@ it('keeps the current route when a save completes after leaving the form', async
   expect(location.pathname).toBe('/alerts');
 });
 
+it('associates an invalid window order with the end time', () => {
+  render(<ScheduleMaintenance context={context} />);
+  fireEvent.click(screen.getByRole('button', { name: /^Maintenance window/ }));
+  const picker = within(screen.getByRole('dialog', { name: 'Choose maintenance window' }));
+  fireEvent.click(picker.getByRole('button', { name: 'Today' }));
+  const start = picker.getByRole('textbox', { name: 'Start time (UTC)' });
+  const end = picker.getByRole('textbox', { name: 'End time (UTC)' });
+  fireEvent.change(start, { target: { value: '12:00' } });
+  fireEvent.change(end, { target: { value: '11:00' } });
+  expect(end).toHaveAccessibleDescription(/End must be after start/);
+  expect(picker.getByRole('button', { name: 'Set window' })).toBeDisabled();
+  fireEvent.change(end, { target: { value: '13:00' } });
+  expect(end).not.toHaveAccessibleDescription(/End must be after start/);
+  expect(picker.getByRole('button', { name: 'Set window' })).toBeEnabled();
+});
+
 it('preserves the exact bounds of an API-created window when editing its reason', async () => {
   const route = `/maintenance/${id}?edit=1`;
   history.replaceState({}, '', route);
@@ -514,6 +530,25 @@ it('refreshes pending participation from page one even when the revision is unch
     [id, '1', ''], [id, '1', ''],
   ]);
   expect(screen.getByText(/0 affected SLOs/)).toBeVisible();
+});
+
+it('retains the current participation page when refreshing fails', async () => {
+  const impact = vi.mocked(maintenanceClient.impact);
+  const member = { slo_id: sloId, slo_name: 'Checkout availability', service_id: id, service_name: 'Checkout', start: record.start, end: record.end };
+  impact.mockResolvedValueOnce({ inventory_at: now, ready: true, total: '11', items: [], next_cursor: 'next' });
+  impact.mockResolvedValueOnce({ inventory_at: now, ready: true, total: '11', items: [member] });
+  impact.mockRejectedValueOnce(new Error('Refresh unavailable'));
+  await showDetail({ ...record, start: '2026-11-18T01:00:00Z', end: '2026-11-18T03:00:00Z' });
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Next/ })); });
+  const affected = within(screen.getByRole('region', { name: 'Affected SLOs' }));
+  expect(affected.getByText('Page 2')).toBeVisible();
+  expect(affected.getByRole('link', { name: member.slo_name })).toBeVisible();
+
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Refresh maintenance window' })); });
+  expect(impact.mock.calls.map(args => args[3])).toEqual(['', 'next', 'next']);
+  expect(affected.getByRole('alert')).toHaveTextContent('Affected SLOs could not be loaded.');
+  expect(affected.getByText('Page 2')).toBeVisible();
+  expect(affected.getByRole('link', { name: member.slo_name })).toBeVisible();
 });
 
 it('rejects malformed operation values through uncertain-write recovery', async () => {
