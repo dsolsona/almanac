@@ -58,7 +58,7 @@ test('request historical collection and see the recalculated SLO', async ({ page
     async function setBound(label: 'Start' | 'End', value: string, capture = false) {
       const button = dialog.getByRole('button', { name: new RegExp(`^${label} date`) });
       await button.click();
-      const picker = page.getByRole('dialog', { name: `Choose ${label} date`, exact: true });
+      const picker = page.getByRole('dialog', { name: `Choose ${label} date (UTC)`, exact: true });
       const selected = new Date(value);
       const month = new Intl.DateTimeFormat('en', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(selected);
       const grid = picker.getByRole('grid');
@@ -78,6 +78,13 @@ test('request historical collection and see the recalculated SLO', async ({ page
       await expect(button).toBeFocused();
       await dialog.getByLabel(`${label} time (UTC)`).fill(value.slice(11, 16));
     }
+    const startDate = dialog.getByRole('button', {name: /^Start date/});
+    await startDate.click();
+    const startCalendar = page.getByRole('dialog', {name: 'Choose Start date (UTC)'});
+    await expect(startCalendar).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(startCalendar).toBeHidden();
+    await expect(startDate).toBeFocused();
     const backfillRoute = `**/api/v1/slis/${id}/backfills`;
     let intercepted!: () => void;
     let release!: () => void;
@@ -109,11 +116,19 @@ test('request historical collection and see the recalculated SLO', async ({ page
     await setBound('End', to);
     await dialog.getByRole('button', { name: 'Preview range' }).click();
     await expect(dialog.getByRole('status')).toContainText('Intervals to recover');
+    await expect(dialog.getByRole('status')).toContainText('1 chunk');
+    await dialog.getByText('Recoverable gaps', {exact: true}).click();
+    await expect(dialog.getByRole('list', {name: 'Recoverable gap ranges'})).toContainText('1 interval');
     const light = info.outputPath('backfill-preview-desktop-light.png');
     await dialog.screenshot({ path: light });
     await info.attach('Backfill range preview, desktop light', { path: light, contentType: 'image/png' });
     await dialog.getByRole('button', { name: 'Queue backfill' }).click();
-    await expect(panel.getByRole('list', { name: 'Backfill jobs' })).toContainText('1 / 1 chunks committed', { timeout: 60_000 });
+    const jobHistory = panel.locator('details.sli-backfill-history');
+    const finishedJobs = jobHistory.getByRole('list', {name: 'Backfill job history'});
+    await expect(jobHistory.locator('summary')).toBeVisible({timeout: 60_000});
+    await expect(finishedJobs).toBeHidden();
+    await jobHistory.locator('summary').click();
+    await expect(finishedJobs).toContainText('1 / 1 chunks committed');
     await expect(recoveredRow).toContainText('99.00%');
 
     const row = psql(`SELECT good_count::int,total_count::int FROM public.almanac_sli_observations
@@ -142,7 +157,7 @@ test('request historical collection and see the recalculated SLO', async ({ page
       await expect(dialog.getByText('vector(99)', { exact: true })).toBeVisible();
       await queries.click();
       await expect(dialog.getByRole('button', { name: /^Start date/ })).toHaveCount(0);
-      await expect(dialog.getByText('Intervals to recover', { exact: true }).locator('..').locator('dd')).toHaveText('2');
+      await expect(dialog.getByRole('status')).toContainText('Intervals to recover 2');
       await expect(dialog.getByRole('button', { name: 'Queue backfill' })).toBeEnabled();
       await expect(dialog.getByRole('button', { name: 'Queue backfill' })).toBeInViewport();
     }
@@ -159,14 +174,15 @@ test('request historical collection and see the recalculated SLO', async ({ page
     await page.evaluate(() => localStorage.setItem('almanac-theme', 'dark'));
     await page.setViewportSize({ width: 360, height: 800 });
     await page.reload();
-    await panel.locator('summary').click();
+    await panel.locator(':scope > summary').click();
     await previewEarlierHistory();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     const mobile = info.outputPath('earlier-history-mobile-dark.png');
     await dialog.screenshot({ path: mobile });
     await info.attach('Earlier history preview, mobile dark', { path: mobile, contentType: 'image/png' });
     await dialog.getByRole('button', { name: 'Queue backfill' }).click();
-    await expect(panel.getByRole('list', { name: 'Backfill jobs' })).toContainText('2 / 2 intervals recovered', { timeout: 60_000 });
+    await jobHistory.locator('summary').click();
+    await expect(finishedJobs).toContainText('2 / 2 intervals recovered', {timeout: 60_000});
     const collectedEarlier = psql(`SELECT count(*) FROM public.almanac_sli_observations
       WHERE sli_id='${id}' AND interval_start >= '${earlier}' AND interval_start < '${from}'
         AND backfill_chunk_id IS NOT NULL AND good_count=99 AND total_count=100;`);

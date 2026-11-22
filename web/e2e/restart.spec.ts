@@ -89,8 +89,10 @@ test('repair overdue measurements after the backend and agent restart', async ({
     await page.goto(`/slis/${id}`);
     const disclosure = page.locator('summary').filter({ hasText: 'Historical backfill' });
     await disclosure.click();
-    await expect(page.getByRole('list', { name: 'Backfill jobs' })).toContainText('Automatic repair', { timeout: 120_000 });
     await expect.poll(repaired, { timeout: 120_000, intervals: [1000, 5000] }).toBeGreaterThanOrEqual(7);
+    const history = page.locator('#sli-backfills .sli-backfill-history');
+    await history.locator('summary').click({ timeout: 120_000 });
+    await expect(history.getByRole('list', { name: 'Backfill job history' })).toContainText('Automatic repair', { timeout: 120_000 });
     await expect.poll(async () => {
       const current = (await api(page, 'GET', `/api/v1/slos/${slo.body.id}/status`)).body.current;
       return [Number(current?.performance?.remaining_fraction), Number(current?.performance?.total) >= 800];

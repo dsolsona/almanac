@@ -50,15 +50,38 @@ function elapsed(seconds: number) {
 }
 
 
+function isActive(job: SliBackfillJob) {
+  return job.state === 'queued' || job.state === 'running';
+}
+
+function BackfillJobs({ jobs, label, canWrite, working, onCancel }: {
+  jobs: SliBackfillJob[];
+  label: string;
+  canWrite: boolean;
+  working: string;
+  onCancel: (id: string) => void;
+}) {
+  return <ul className="sli-backfill-jobs" aria-label={label}>
+    {jobs.map(job => <li key={job.id}>
+      <div>
+        <strong>{states[job.state]}</strong>{job.automatic && <span> · Automatic repair</span>}
+        <p>{utc(job.start)} to {utc(job.end)}</p>
+        <p>{job.recovered_intervals ?? 0} / {job.requested_intervals ?? 0} intervals recovered · {job.committed} / {job.chunks} chunks committed{job.gaps > 0 && ` · ${job.gaps} with gaps`}</p>
+        {job.canonical_conflict && <p>Historical counts differed. Almanac kept the existing observations.</p>}
+      </div>
+      {canWrite && isActive(job) && <Button variant="outline" disabled={!!working} pending={working === job.id} onClick={() => onCancel(job.id)}>Cancel job</Button>}
+    </li>)}
+  </ul>;
+}
+
 function RangeEndpoint({ label, value, today, disabled, onChange }: {
   label: 'Start' | 'End'; value: string; today: string; disabled: boolean; onChange: (value: string) => void;
 }) {
   const [day = '', clock = ''] = value.split('T');
   return <div className="sli-backfill-endpoint">
-    <DatePicker label={`${label} date`} value={day} today={today} disabled={disabled} onValueChange={date => onChange(`${date}T${clock}`)} />
+    <DatePicker label={`${label} date (UTC)`} value={day} today={today} disabled={disabled} onValueChange={date => onChange(`${date}T${clock}`)} />
     <TextField id={`sli-backfill-${label.toLowerCase()}-time`} label={`${label} time (UTC)`} value={clock}
-      required disabled={disabled} pattern="([01][0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?" placeholder="HH:MM"
-      maxLength={8} autoComplete="off" onChange={event => onChange(`${day}T${event.target.value}`)} />
+      type="time" step={1} required disabled={disabled} onChange={event => onChange(`${day}T${event.target.value}`)} />
   </div>;
 }
 
@@ -102,7 +125,7 @@ export function SliBackfills({ sli, datasourceName, context, canWrite, onMeasure
         if (controller.signal.aborted) return;
         setJobs(jobs);
         const progress = JSON.stringify(jobs.map(job => [job.id, job.state, job.committed, job.recovered_intervals]));
-        const settled = jobs.every(job => job.state !== 'queued' && job.state !== 'running');
+        const settled = jobs.every(job => !isActive(job));
         if (lastProgress === undefined || Date.now() - lastCoverage >= 30_000 || settled && progress !== lastProgress) {
           const recovered = jobs.filter(job => (job.recovered_intervals ?? 0) > 0)
             .map(job => `${job.id}:${job.recovered_intervals}`).join(',');
@@ -139,7 +162,7 @@ export function SliBackfills({ sli, datasourceName, context, canWrite, onMeasure
     setWorking('');
     setDialog(null);
     edit();
-    if (working === 'confirm') setError('The request may have reached Almanac. Check Backfill jobs for its status.');
+    if (working === 'confirm') setError('The request may have reached Almanac. Check Active backfills or Backfill job history for its status.');
   }
 
   async function requestRange(confirmed: boolean, includeEarlier = includeEarlierHistory) {
@@ -178,7 +201,7 @@ export function SliBackfills({ sli, datasourceName, context, canWrite, onMeasure
         uncertainRequest.current = null;
         setPreview(null);
       }
-      setError(failure instanceof RangeError ? 'Enter both UTC dates.' : failure instanceof Error ? failure.message : 'Could not request historical collection.');
+      setError(failure instanceof RangeError ? 'Choose a start and end date and enter both UTC times.' : failure instanceof Error ? failure.message : 'Could not request historical collection.');
     } finally {
       if (pendingRequest.current === controller) {
         pendingRequest.current = null;
@@ -200,7 +223,24 @@ export function SliBackfills({ sli, datasourceName, context, canWrite, onMeasure
     }
   }
 
-  return <details id="sli-backfills" className="sli-detail-disclosure" onToggle={event => setOpen(event.currentTarget.open)}>
+  const activeJobs = jobs.filter(isActive);
+  const finishedJobs = jobs.filter(job => !isActive(job));
+  const historicalGaps = history?.gaps ?? [];
+  const orderedGaps = [
+    ...historicalGaps.filter(gap => gap.state === 'eligible'),
+    ...historicalGaps.filter(gap => gap.state !== 'eligible'),
+  ];
+  const listedRecoverableIntervals = eligibleGaps.reduce((sum, gap) => sum + gap.intervals, 0);
+  const skippedCounts = preview?.plan ? [
+    ['Already covered', preview.plan.covered_intervals],
+    ['Scheduled by automatic repair', preview.plan.automatic_intervals],
+    ['Queued in manual jobs', preview.plan.manual_intervals],
+    ['Outside recovery window', preview.plan.outside_retention_intervals],
+    ['Previous attempt failed', preview.plan.previous_failure_intervals],
+  ] as const : [];
+  const visibleSkippedCounts = skippedCounts.filter(([, count]) => count > 0);
+
+  return <details id="sli-backfills" className="sli-detail-disclosure" onToggle={event => { if (event.target === event.currentTarget) setOpen(event.currentTarget.open); }}>
     <summary>Historical backfill<span>{history ? `${history.gap_count} gaps · ${elapsed(history.missing_intervals * history.cadence_seconds)} missing` : 'Gap history and recovery'}</span></summary>
     <div className="sli-backfill-body">
       <div className="sli-backfill-toolbar">
@@ -219,23 +259,23 @@ export function SliBackfills({ sli, datasourceName, context, canWrite, onMeasure
       {dialog === null && error && <p role="alert" className="sli-error">{error}</p>}
       {loadError && <p className="sli-error" role="alert">{loadError}</p>}
       {history && <p className="sli-muted">{history.datasource_retention_days ? `Datasource retention is ${history.datasource_retention_days} days.` : 'Datasource retention is unknown. Recovery is best effort.'} Almanac requests at most 30 days. Gap repair starts at {utc(history.recovery_start)}.</p>}
-      {loaded && jobs.length === 0 && <p className="sli-muted">No backfill jobs yet.</p>}
-      {jobs.length > 0 && <ul className="sli-backfill-jobs" aria-label="Backfill jobs">
-        {jobs.map(job => <li key={job.id}>
-          <div><strong>{states[job.state]}</strong>{job.automatic && <span> · Automatic repair</span>}<p>{utc(job.start)} to {utc(job.end)}</p>
-            <p>{job.recovered_intervals ?? 0} / {job.requested_intervals ?? 0} intervals recovered · {job.committed} / {job.chunks} chunks committed{job.gaps > 0 && ` · ${job.gaps} with gaps`}</p>
-            {job.canonical_conflict && <p>Historical counts differed. Almanac kept the existing observations.</p>}</div>
-          {canWrite && ['queued', 'running'].includes(job.state) && <Button variant="outline" disabled={!!working} pending={working === job.id} onClick={() => void cancel(job.id)}>Cancel job</Button>}
-        </li>)}
-      </ul>}
       {history && <>
         {history.gaps.length ? <div className="sli-detail-table-wrap" role="region" aria-label="Historical gaps" tabIndex={0}>
           <table className="sli-intervals-table"><thead><tr><th scope="col">Gap (UTC)</th><th scope="col">Missing data</th><th scope="col">Recovery</th></tr></thead>
-            <tbody>{history.gaps.map(gap => <tr key={gap.start}><td>{utc(gap.start)} – {utc(gap.end)}</td><td>{elapsed(gap.intervals * history.cadence_seconds)} · {gap.intervals} intervals</td><td>{gapStates[gap.state]}</td></tr>)}</tbody>
+            <tbody>{orderedGaps.map(gap => <tr key={gap.start}><td>{utc(gap.start)} – {utc(gap.end)}</td><td>{elapsed(gap.intervals * history.cadence_seconds)} · {gap.intervals} intervals</td><td>{gapStates[gap.state]}</td></tr>)}</tbody>
           </table>
         </div> : <p>No settled intervals are missing in this period.</p>}
-        {history.gap_count > history.gaps.length && <p className="sli-muted">Showing the newest {history.gaps.length} of {history.gap_count} gaps. Choose a shorter range to inspect older gaps.</p>}
+        {history.gap_count > history.gaps.length && <p className="sli-muted">Showing {history.gaps.length} of {history.gap_count} gaps from the most recent part of this period.</p>}
       </>}
+      {activeJobs.length > 0 && <section className="sli-backfill-active">
+        <h3>Active backfills</h3>
+        <BackfillJobs jobs={activeJobs} label="Active backfills" canWrite={canWrite} working={working} onCancel={id => void cancel(id)} />
+      </section>}
+      {finishedJobs.length > 0 && <details className="sli-backfill-history">
+        <summary>Backfill job history <span>({finishedJobs.length})</span></summary>
+        <BackfillJobs jobs={finishedJobs} label="Backfill job history" canWrite={canWrite} working={working} onCancel={id => void cancel(id)} />
+      </details>}
+      {loaded && jobs.length === 0 && <p className="sli-muted">No backfill jobs yet.</p>}
     </div>
     <Dialog open={dialog !== null} onClose={closeDialog} title={dialog === 'custom' ? 'Custom backfill range' : 'Review backfill'} triggerRef={trigger}>
       <form className="sli-backfill-form" onSubmit={event => { event.preventDefault(); void requestRange(false); }}>
@@ -255,7 +295,7 @@ export function SliBackfills({ sli, datasourceName, context, canWrite, onMeasure
               onChange={event => { setIncludeEarlierHistory(event.target.checked); edit(); }} />
               : <p>Earlier history requires an active original measurement definition.</p>}
           </div>}
-          {preview && <div role="status">
+          {preview && <div className="sli-backfill-preview" role="status">
             {(!preview.earlier_history_until || Date.parse(preview.earlier_history_until) < Date.parse(preview.end)) &&
               <p>{utcRange(preview.start, preview.end)}</p>}
             {preview.earlier_history_from && preview.earlier_history_until && <>
@@ -269,21 +309,25 @@ export function SliBackfills({ sli, datasourceName, context, canWrite, onMeasure
               </details>
               {preview.plan?.datasource_retention_days === 0 && <p>Datasource retention is unknown.</p>}
             </>}
-            {preview.plan && <dl className="sli-backfill-preview-facts">
-              <div><dt>Intervals to recover</dt><dd>{preview.plan.eligible_intervals}</dd></div>
-              {([
-                ['Already covered', preview.plan.covered_intervals],
-                ['Scheduled by automatic repair', preview.plan.automatic_intervals],
-                ['Queued in manual jobs', preview.plan.manual_intervals],
-                ['Outside recovery window', preview.plan.outside_retention_intervals],
-                ['Previous attempt failed', preview.plan.previous_failure_intervals],
-              ] as const).filter(([, count]) => count > 0).map(([label, count]) =>
-                <div key={label}><dt>{label}</dt><dd>{count}</dd></div>)}
-            </dl>}
-            {eligibleGaps.length > 0 && (eligibleGaps.length > 1 || !preview.earlier_history_from &&
-              (eligibleGaps[0]!.start !== preview.start || eligibleGaps[0]!.end !== preview.end)) && <details>
-              <summary>Recoverable ranges</summary>
-              <ul>{eligibleGaps.map(gap => <li key={gap.start}>{utcRange(gap.start, gap.end)} · {gap.intervals}</li>)}</ul>
+            <div className="sli-backfill-preview-summary">
+              {preview.plan && <p>Intervals to recover <strong>{preview.plan.eligible_intervals}</strong></p>}
+              <p>{preview.chunk_count} {preview.chunk_count === 1 ? 'chunk' : 'chunks'}</p>
+            </div>
+            {eligibleGaps.length > 0 && (eligibleGaps.length > 1 || !preview.earlier_history_from ||
+              listedRecoverableIntervals < (preview.plan?.eligible_intervals ?? 0)) && <details className="sli-backfill-history sli-backfill-preview-gaps">
+              <summary>Recoverable gaps</summary>
+              <ul aria-label="Recoverable gap ranges" tabIndex={0}>
+                {eligibleGaps.map(gap => <li key={gap.start}><time dateTime={gap.start}>{utcRange(gap.start, gap.end)}</time>
+                  <span>{gap.intervals} {gap.intervals === 1 ? 'interval' : 'intervals'}</span></li>)}
+              </ul>
+              {listedRecoverableIntervals < (preview.plan?.eligible_intervals ?? 0) &&
+                <p className="sli-muted">The totals include additional recoverable gaps in the selected range.</p>}
+            </details>}
+            {visibleSkippedCounts.length > 0 && <details className="sli-backfill-history">
+              <summary>Intervals skipped</summary>
+              <dl className="sli-backfill-preview-facts">
+                {visibleSkippedCounts.map(([label, count]) => <div key={label}><dt>{label}</dt><dd>{count}</dd></div>)}
+              </dl>
             </details>}
           </div>}
           {working === 'preview' && <p role="status">Checking which intervals can be recovered…</p>}
