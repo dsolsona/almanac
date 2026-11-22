@@ -33,10 +33,12 @@ func (h *Handler) backfillJobs(w http.ResponseWriter, r *http.Request, requestID
 			return
 		}
 		var input struct {
-			Start          time.Time `json:"start"`
-			End            time.Time `json:"end"`
-			Preview        *bool     `json:"preview"`
-			RetryExhausted bool      `json:"retry_exhausted"`
+			Start                 time.Time `json:"start"`
+			End                   time.Time `json:"end"`
+			Preview               *bool     `json:"preview"`
+			RetryExhausted        bool      `json:"retry_exhausted"`
+			IncludeEarlierHistory bool      `json:"include_earlier_history"`
+			EarlierHistoryContext string    `json:"earlier_history_context"`
 		}
 		if json.Unmarshal(body, &input, json.RejectUnknownMembers(true)) != nil || input.Preview == nil {
 			h.writeProblem(w, http.StatusBadRequest, "invalid_request", requestID)
@@ -44,9 +46,15 @@ func (h *Handler) backfillJobs(w http.ResponseWriter, r *http.Request, requestID
 		}
 		admitted, err := storage.RequestBackfill(r.Context(), h.databaseURL, storage.BackfillRequest{
 			Proof: proof, SLIID: parts[0], Start: input.Start, End: input.End,
-			Preview: *input.Preview, RetryExhausted: input.RetryExhausted, RequestKey: r.Header.Get("Idempotency-Key"), Now: h.now,
+			Preview: *input.Preview, RetryExhausted: input.RetryExhausted, IncludeEarlierHistory: input.IncludeEarlierHistory, EarlierHistoryContext: input.EarlierHistoryContext, RequestKey: r.Header.Get("Idempotency-Key"), Now: h.now,
 		})
 		switch {
+		case errors.Is(err, storage.ErrBackfillEarlierUnavailable):
+			h.writeProblem(w, http.StatusUnprocessableEntity, "backfill_earlier_unavailable", requestID)
+		case errors.Is(err, storage.ErrBackfillEarlierChanged):
+			h.writeProblem(w, http.StatusConflict, "backfill_earlier_changed", requestID)
+		case errors.Is(err, storage.ErrBackfillEarlierRange):
+			h.writeProblem(w, http.StatusUnprocessableEntity, "backfill_earlier_range", requestID)
 		case errors.Is(err, storage.ErrBackfillNoGaps):
 			h.writeProblem(w, http.StatusConflict, "backfill_no_gaps", requestID)
 		case errors.Is(err, storage.ErrBackfillRange):

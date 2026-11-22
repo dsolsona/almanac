@@ -149,6 +149,21 @@ validity. Gap inspection can include older intervals in its selected period
 and identifies them as outside the recovery window. Queue confirmation creates
 the job and the assigned agent starts it when capacity is available.
 
+An editor can select **Include earlier history** when a range starts before the
+active original definition. The date range must reach existing measurement
+history. Preview shows the original query, datasource and retention-adjusted
+start. Confirmation requires a fresh preview if that context changes. It
+records who authorized the earlier interpretation and
+extends the initial measurement boundary together with queue admission.
+The original live collection boundary and existing SLO evaluation dates remain
+fixed. Earlier history is collected by explicitly queued jobs. Automatic gap
+repair starts at the original collection boundary. If the agent cannot replay
+the original definition, ordinary gap repair
+remains available.
+
+A provider's rate-limit delay applies to all historical chunks for the same
+datasource configuration. It does not postpone live collection.
+
 Preview counts covered, eligible, automatic repair, manual work, outside
 retention and previous failures. Admission rechecks canonical coverage and
 active work under the SLI lock. Covered intervals and intervals already owned

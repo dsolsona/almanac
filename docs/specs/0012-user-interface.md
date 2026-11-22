@@ -75,7 +75,9 @@ No hosted billing, organization switching, or public marketing site is included.
 The Measurements chart offers 1h, 3h, 6h, 24h, 7d and 30d ranges. The first
 hour shows exact intervals. Longer ranges render up to 240 cadence-aligned
 buckets of the current measurement revision, ending at the latest due interval
-and clipped to eligibility. A bucket shows the ratio of exact summed good and
+and clipped to eligibility. When the requested dates precede those buckets, the
+axis still shows the selected span and indicates the period outside available
+measurement history. A bucket shows the ratio of exact summed good and
 total counts when traffic is present and exposes its coverage and outcomes.
 The trace connects consecutive values with straight segments. Markers appear
 for isolated values and the active sample. Empty buckets have no ratio.

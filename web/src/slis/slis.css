@@ -177,6 +177,13 @@
 .sli-backfill-toolbar { display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between; gap:var(--space-3); }
 .sli-backfill-toolbar .sli-actions { margin-top:0; }
 
+.ui-dialog[open]:has(.sli-backfill-form) { display: flex; flex-direction: column; }
+.ui-dialog:has(.sli-backfill-form) .ui-dialog__header { flex-shrink: 0; }
+.ui-dialog:has(.sli-backfill-form) .ui-dialog__content { display: flex; min-height: 0; overflow: hidden; padding: 0; }
+.sli-backfill-form { display: flex; flex: 1; flex-direction: column; min-width: 0; }
+.sli-backfill-fields { display: grid; gap: var(--space-4); overflow: auto; padding: var(--space-4); }
+.sli-backfill-form .sli-actions { flex-shrink: 0; margin: 0; padding: var(--space-3) var(--space-4); border-top: 1px solid var(--border); }
+.sli-backfill-query dd { margin: 0; overflow-wrap: anywhere; }
 .sli-backfill-preview-facts { margin:var(--space-3) 0; }
 .sli-backfill-preview-facts > div { display:flex; justify-content:space-between; gap:var(--space-3); padding:var(--space-2) 0; border-bottom:1px solid var(--border); }
 .sli-backfill-preview-facts dd { margin:0; text-align:right; font-variant-numeric:tabular-nums; }

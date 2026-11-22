@@ -31,13 +31,15 @@ func backfillCommand(parent context.Context, args []string, stdout, stderr io.Wr
 	sliID := fs.String("sli-id", "", "SLI UUID")
 	output := fs.String("output", "text", "text or json")
 	timeout := fs.Duration("timeout", 30*time.Second, "request deadline")
-	var start, end, key, job string
-	var retryExhausted bool
+	var start, end, key, job, earlierHistoryContext string
+	var retryExhausted, includeEarlierHistory bool
 	switch action {
 	case "list":
 	case "preview", "request":
 		fs.StringVar(&start, "start", "", "inclusive UTC RFC3339 bound")
 		fs.StringVar(&end, "end", "", "exclusive UTC RFC3339 bound")
+		fs.StringVar(&earlierHistoryContext, "earlier-history-context", "", "context returned by the earlier-history preview")
+		fs.BoolVar(&includeEarlierHistory, "include-earlier-history", false, "apply the original SLI definition to earlier eligible intervals")
 		fs.BoolVar(&retryExhausted, "retry-exhausted", false, "include previously failed intervals (administrator only)")
 		fs.StringVar(&key, "idempotency-key", "", "caller-owned request key")
 	case "cancel":
@@ -52,6 +54,15 @@ func backfillCommand(parent context.Context, args []string, stdout, stderr io.Wr
 	var input api.SliBackfillRequest
 	if action == "preview" || action == "request" {
 		input.RetryExhausted = new(retryExhausted)
+		if includeEarlierHistory {
+			input.IncludeEarlierHistory = new(true)
+		}
+		if action == "request" && includeEarlierHistory {
+			if len(earlierHistoryContext) != 64 {
+				return fail(datasourceInvalid("provide the earlier-history context from a fresh preview"))
+			}
+			input.EarlierHistoryContext = new(earlierHistoryContext)
+		}
 		var startErr, endErr error
 		input.Start, startErr = time.Parse(time.RFC3339, start)
 		input.End, endErr = time.Parse(time.RFC3339, end)

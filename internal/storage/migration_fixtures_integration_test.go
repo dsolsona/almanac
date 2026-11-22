@@ -221,6 +221,12 @@ CREATE CONSTRAINT TRIGGER almanac_slo_grid_changed
 			// The following rewinds remove these constraints. Validation
 			// changed their status but left their definitions intact.
 			continue
+		case 82:
+			statement = serviceMaintenanceFixtureFunctions(t, "0080_backfill_queue.sql", "almanac_claim_backfill_chunk") + `
+DROP TABLE public.almanac_backfill_source_cooldowns;
+ALTER TABLE public.almanac_backfill_jobs
+    DROP COLUMN earlier_history_from, DROP COLUMN previous_valid_from, DROP COLUMN earlier_history_context;
+ALTER TABLE public.almanac_sli_measurements DROP COLUMN initial_live_from;`
 		case 79:
 			statement = `ALTER TABLE public.almanac_datasources DROP COLUMN historical_retention_days;`
 		case 80:

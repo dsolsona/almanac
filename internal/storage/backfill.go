@@ -2,7 +2,10 @@ package storage
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -10,27 +13,35 @@ import (
 )
 
 var (
-	ErrBackfillRange   = errors.New("backfill requires an aligned, settled range within retained measurement history")
-	ErrBackfillOverlap = errors.New("a historical job already owns part of the requested range")
-	ErrBackfillNoGaps  = errors.New("the requested range contains no recoverable gaps")
+	ErrBackfillRange              = errors.New("backfill requires an aligned, settled range within retained measurement history")
+	ErrBackfillOverlap            = errors.New("a historical job already owns part of the requested range")
+	ErrBackfillNoGaps             = errors.New("the requested range contains no recoverable gaps")
+	ErrBackfillEarlierUnavailable = errors.New("earlier history requires the original active measurement definition")
+	ErrBackfillEarlierChanged     = errors.New("earlier history changed; preview the range again")
+	ErrBackfillEarlierRange       = errors.New("choose an earlier range within retention that reaches the start of existing measurement history")
 )
 
 type BackfillRequest struct {
-	Proof          DatasourceProof
-	SLIID          string
-	Start, End     time.Time
-	RequestKey     string
-	Preview        bool
-	RetryExhausted bool
-	Now            func() time.Time
+	Proof                 DatasourceProof
+	SLIID                 string
+	Start, End            time.Time
+	RequestKey            string
+	Preview               bool
+	RetryExhausted        bool
+	IncludeEarlierHistory bool
+	EarlierHistoryContext string
+	Now                   func() time.Time
 }
 
 type BackfillAdmission struct {
-	ID         string        `json:"id,omitempty"`
-	Start      time.Time     `json:"start"`
-	End        time.Time     `json:"end"`
-	ChunkCount int           `json:"chunk_count"`
-	Plan       *BackfillPlan `json:"plan,omitempty"`
+	ID                    string        `json:"id,omitempty"`
+	Start                 time.Time     `json:"start"`
+	End                   time.Time     `json:"end"`
+	ChunkCount            int           `json:"chunk_count"`
+	EarlierHistoryContext string        `json:"earlier_history_context,omitempty"`
+	EarlierHistoryFrom    time.Time     `json:"earlier_history_from,omitzero"`
+	EarlierHistoryUntil   time.Time     `json:"earlier_history_until,omitzero"`
+	Plan                  *BackfillPlan `json:"plan,omitempty"`
 }
 
 // RequestBackfill admits historical work under the locked SLI definition and user session.
@@ -45,22 +56,26 @@ func RequestBackfill(ctx context.Context, databaseURL string, input BackfillRequ
 	}
 	defer closeInitialOwnerConnection(conn)
 	defer rollbackTransaction(tx)
-	if (user.Role == "viewer" && !input.Preview) || (input.RetryExhausted && user.Role != "administrator") {
+	if (user.Role == "viewer" && (!input.Preview || input.IncludeEarlierHistory)) || (input.RetryExhausted && user.Role != "administrator") {
 		return BackfillAdmission{}, ErrAgentForbidden
 	}
 
 	var revision, sourceVersion int64
 	var validFrom time.Time
+	var active, canBackfill bool
 	var cadenceSeconds, delaySeconds, retentionDays int
-	var agentID, provider string
+	var agentID, provider, datasourceID string
 	measurementQuery := `
-SELECT m.revision, m.effective_from, d.polling_interval_seconds, d.settling_delay_seconds,
-       d.agent_id, d.provider, d.historical_retention_days, d.historical_configuration_version
+SELECT m.revision, m.effective_from, m.activated_at IS NOT NULL, d.polling_interval_seconds, d.settling_delay_seconds,
+       d.agent_id, d.provider, d.historical_retention_days, d.historical_configuration_version, d.id,
+       EXISTS (SELECT 1 FROM public.almanac_agent_runtime_status runtime
+               CROSS JOIN LATERAL jsonb_array_elements(runtime.capabilities) item
+               WHERE runtime.agent_id=d.agent_id AND item->>'provider'=d.provider AND item->'operations' ? 'backfill')
 FROM public.almanac_slis s
 JOIN public.almanac_sli_measurements m ON m.sli_id=s.id AND m.revision=s.measurement_revision
 JOIN public.almanac_datasources d ON d.id=m.datasource_id
 WHERE s.id=$1`
-	err = tx.QueryRow(ctx, measurementQuery, sliID).Scan(&revision, &validFrom, &cadenceSeconds, &delaySeconds, &agentID, &provider, &retentionDays, &sourceVersion)
+	err = tx.QueryRow(ctx, measurementQuery, sliID).Scan(&revision, &validFrom, &active, &cadenceSeconds, &delaySeconds, &agentID, &provider, &retentionDays, &sourceVersion, &datasourceID, &canBackfill)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return BackfillAdmission{}, ErrSliNotFound
 	}
@@ -91,6 +106,24 @@ WHERE s.id=$1`
 	}
 	expectedStart := ceilSliBoundary(validFrom, cadence)
 	recoveryStart := ceilSliBoundary(now.Add(-backfillRecoveryLookback(retentionDays)), cadence)
+	var earlierFrom, earlierUntil time.Time
+	var earlierContext string
+	if input.IncludeEarlierHistory {
+		if revision != 1 || !active || !canBackfill {
+			return BackfillAdmission{}, ErrBackfillEarlierUnavailable
+		}
+		earlierFrom, earlierUntil = maxTime(start, recoveryStart), validFrom.UTC()
+		if !earlierFrom.Before(expectedStart) || end.Before(expectedStart) {
+			return BackfillAdmission{}, ErrBackfillEarlierRange
+		}
+		contextDigest := sha256.Sum256(fmt.Appendf(nil, "%s/%s/%d/%s/%s/%s/%s", sliID, datasourceID, sourceVersion,
+			validFrom.UTC().Format(time.RFC3339Nano), start.Format(time.RFC3339Nano), end.Format(time.RFC3339Nano), earlierFrom.Format(time.RFC3339Nano)))
+		earlierContext = hex.EncodeToString(contextDigest[:])
+		if !input.Preview && input.EarlierHistoryContext != earlierContext {
+			return BackfillAdmission{}, ErrBackfillEarlierChanged
+		}
+		expectedStart = start
+	}
 	plan, eligible, err := planBackfillGaps(ctx, tx, sliID.String(), revision, start, end, expectedStart, recoveryStart, cadenceSeconds, retentionDays, input.RetryExhausted)
 	if err != nil {
 		return BackfillAdmission{}, operationError(ctx, "storage: plan historical gaps", err)
@@ -99,7 +132,7 @@ WHERE s.id=$1`
 		if err := finishAgentRead(ctx, tx, input.Now, started, user, installation, session); err != nil {
 			return BackfillAdmission{}, err
 		}
-		return BackfillAdmission{Start: start, End: end, ChunkCount: plan.Chunks, Plan: &plan}, nil
+		return BackfillAdmission{Start: start, End: end, ChunkCount: plan.Chunks, Plan: &plan, EarlierHistoryFrom: earlierFrom, EarlierHistoryUntil: earlierUntil, EarlierHistoryContext: earlierContext}, nil
 	}
 	// The wide discovery scan finished before these live-ingestion locks.
 	// Check the authority and selected ranges again before admitting work.
@@ -138,6 +171,23 @@ FOR NO KEY UPDATE OF m FOR UPDATE OF s,d`, sliID).Scan(&lockedRevision, &lockedV
 	if err != nil {
 		return BackfillAdmission{}, err
 	}
+	if input.IncludeEarlierHistory {
+		if _, err := tx.Exec(ctx, `
+UPDATE public.almanac_sli_measurements
+SET initial_live_from=coalesce(initial_live_from,effective_from), effective_from=$3
+WHERE sli_id=$1 AND revision=$2`, sliID, revision, earlierFrom); err != nil {
+			return BackfillAdmission{}, operationError(ctx, "storage: extend initial measurement history", err)
+		}
+		if _, err := tx.Exec(ctx, `
+UPDATE public.almanac_backfill_jobs
+SET earlier_history_from=$2, previous_valid_from=$3, earlier_history_context=$4
+WHERE id=$1`, admission.ID, earlierFrom, validFrom, earlierContext); err != nil {
+			return BackfillAdmission{}, operationError(ctx, "storage: record earlier measurement authorization", err)
+		}
+		admission.EarlierHistoryFrom = earlierFrom
+		admission.EarlierHistoryUntil = earlierUntil
+		admission.EarlierHistoryContext = earlierContext
+	}
 	if err := finishAgentRead(ctx, tx, input.Now, started, user, installation, session); err != nil {
 		return BackfillAdmission{}, err
 	}
@@ -147,22 +197,28 @@ FOR NO KEY UPDATE OF m FOR UPDATE OF s,d`, sliID).Scan(&lockedRevision, &lockedV
 func readBackfillReceipt(ctx context.Context, tx pgx.Tx, sliID, userID pgtype.UUID, input BackfillRequest) (BackfillAdmission, error) {
 	var admission BackfillAdmission
 	var retried bool
+	var earlierFrom, earlierUntil pgtype.Timestamptz
 	err := tx.QueryRow(ctx, `
-SELECT j.id,j.requested_start,j.requested_end,j.retry_exhausted,
+SELECT j.id,j.requested_start,j.requested_end,j.retry_exhausted,j.earlier_history_from,j.previous_valid_from,COALESCE(j.earlier_history_context,''),
        (SELECT count(*) FROM public.almanac_backfill_chunks c WHERE c.job_id=j.id)
 FROM public.almanac_backfill_jobs j
 WHERE j.sli_id=$1 AND j.requested_by=$2 AND j.request_key=$3`, sliID, userID, input.RequestKey).
-		Scan(&admission.ID, &admission.Start, &admission.End, &retried, &admission.ChunkCount)
+		Scan(&admission.ID, &admission.Start, &admission.End, &retried, &earlierFrom, &earlierUntil, &admission.EarlierHistoryContext, &admission.ChunkCount)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return BackfillAdmission{}, nil
 	}
 	if err != nil {
 		return BackfillAdmission{}, operationError(ctx, "storage: read historical request receipt", err)
 	}
-	if !admission.Start.Equal(input.Start) || !admission.End.Equal(input.End) || retried != input.RetryExhausted {
+	if !admission.Start.Equal(input.Start) || !admission.End.Equal(input.End) || retried != input.RetryExhausted || earlierFrom.Valid != input.IncludeEarlierHistory ||
+		admission.EarlierHistoryContext != input.EarlierHistoryContext {
 		return BackfillAdmission{}, ErrSliConflict
 	}
 	admission.Start, admission.End = admission.Start.UTC(), admission.End.UTC()
+	if earlierFrom.Valid {
+		admission.EarlierHistoryFrom = earlierFrom.Time.UTC()
+		admission.EarlierHistoryUntil = earlierUntil.Time.UTC()
+	}
 	return admission, nil
 }
 

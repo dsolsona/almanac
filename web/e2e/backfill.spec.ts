@@ -96,14 +96,62 @@ test('request historical collection and see the recalculated SLO', async ({ page
       return [Number(current?.performance?.remaining_fraction), Number(current?.performance?.total) >= 200];
     }, { timeout: 60_000 }).toEqual([-1, true]);
 
+    const earlier = new Date(Date.parse(from) - 120_000).toISOString();
+    async function previewEarlierHistory() {
+      await panel.getByRole('button', { name: 'Custom range' }).click();
+      await dialog.getByLabel('Start (UTC)').fill(earlier.slice(0, 16));
+      await dialog.getByLabel('End (UTC)').fill(from.slice(0, 16));
+      const include = dialog.getByRole('switch', { name: 'Include earlier history' });
+      await expect(include).not.toBeChecked();
+      await include.focus();
+      await page.keyboard.press('Space');
+      await expect(include).toBeChecked();
+      await dialog.getByRole('button', { name: 'Preview range' }).click();
+      await expect(dialog.getByRole('status')).toContainText('Apply the original query');
+      await expect(dialog.getByRole('status')).toContainText('Checkout metrics');
+      await expect(dialog.getByRole('status')).toContainText('vector(99)');
+      await expect(dialog.getByText('Intervals to recover', { exact: true }).locator('..').locator('dd')).toHaveText('2');
+      await expect(dialog.getByRole('button', { name: 'Queue backfill' })).toBeEnabled();
+      await expect(dialog.getByRole('button', { name: 'Queue backfill' })).toBeInViewport();
+    }
+
+    await previewEarlierHistory();
+    const desktop = info.outputPath('earlier-history-desktop-light.png');
+    await dialog.screenshot({ path: desktop });
+    await info.attach('Earlier history preview, desktop light', { path: desktop, contentType: 'image/png' });
+
     await page.evaluate(() => localStorage.setItem('almanac-theme', 'dark'));
     await page.setViewportSize({ width: 360, height: 800 });
     await page.reload();
     await panel.locator('summary').click();
-    await expect(panel.getByRole('list', { name: 'Backfill jobs' })).toContainText('1 / 1 chunks committed');
-    const mobile = info.outputPath('backfill-completed-mobile-dark.png');
-    await panel.screenshot({ path: mobile });
-    await info.attach('Backfill committed, mobile dark', { path: mobile, contentType: 'image/png' });
+    await previewEarlierHistory();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    const mobile = info.outputPath('earlier-history-mobile-dark.png');
+    await dialog.screenshot({ path: mobile });
+    await info.attach('Earlier history preview, mobile dark', { path: mobile, contentType: 'image/png' });
+    await dialog.getByRole('button', { name: 'Queue backfill' }).click();
+    await expect(panel.getByRole('list', { name: 'Backfill jobs' })).toContainText('2 / 2 intervals recovered', { timeout: 60_000 });
+    const collectedEarlier = psql(`SELECT count(*) FROM public.almanac_sli_observations
+      WHERE sli_id='${id}' AND interval_start >= '${earlier}' AND interval_start < '${from}'
+        AND backfill_chunk_id IS NOT NULL AND good_count=99 AND total_count=100;`);
+    expect(collectedEarlier).toBe('2');
+    const latest = await expectOk(api(page, 'GET', `/api/v1/slis/${id}`));
+    expect(Date.parse(latest.body.effective_from)).toBe(Date.parse(earlier));
+    await page.getByRole('radio', { name: '30d', exact: true }).click();
+    await expect(page.getByText('Shaded area is outside available measurement history.', { exact: false })).toBeVisible();
+    const chart = page.getByRole('img', { name: /Good-to-total ratio/ });
+    const measurements = await expectOk(api(page, 'GET', `/api/v1/slis/${id}/measurements?period=30d`));
+    const buckets = measurements.body.buckets;
+    const chartStart = new Date(Date.parse(buckets.at(-1).end) - 30 * 86_400_000);
+    await expect(chart.getByText(chartStart.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }), { exact: true })).toBeVisible();
+    const chartImage = info.outputPath('earlier-history-30d-mobile-dark.png');
+    await expect(chart.locator('.chart-point')).toBeVisible();
+    const chartPanel = page.locator('.sli-measurements-panel .sli-measurements-body');
+    await chartPanel.evaluate(element => element.scrollIntoView({block: 'center'}));
+    await chartPanel.screenshot({ path: chartImage });
+    await info.attach('30-day chart with earlier history, mobile dark', { path: chartImage, contentType: 'image/png' });
+    const objective = await expectOk(api(page, 'GET', `/api/v1/slos/${slo.body.id}`));
+    expect(Date.parse(objective.body.evaluation_valid_from)).toBe(Date.parse(from));
   } finally {
     stopAgent(agent);
   }

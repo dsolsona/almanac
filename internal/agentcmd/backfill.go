@@ -175,8 +175,8 @@ func (c *client) backfillInterval(ctx context.Context, definition collectionDefi
 }
 
 func historicalRetryAfter(err error) int {
-	if source, ok := errors.AsType[*prometheus.SourceError](err); ok {
-		return source.RetryAfterSeconds
+	if source, ok := errors.AsType[*prometheus.SourceError](err); ok && source.Code == "rate_limited" {
+		return max(30, source.RetryAfterSeconds)
 	}
 	return 0
 }

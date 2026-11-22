@@ -2914,6 +2914,8 @@ components:
         end: {type: string, format: date-time}
         preview: {type: boolean}
         retry_exhausted: {type: boolean, description: Administrator-only explicit retry of previously failed intervals in the requested range.}
+        include_earlier_history: {type: boolean, description: Explicitly apply the active initial measurement definition to eligible earlier intervals.}
+        earlier_history_context: {type: string, pattern: '^[0-9a-f]{64}$', description: Required when confirming an earlier-history request. Copy from the preview.}
     SliBackfillAdmission:
       type: object
       required: [start, end, chunk_count]
@@ -2923,6 +2925,9 @@ components:
         end: {type: string, format: date-time}
         chunk_count: {type: integer, minimum: 0}
         plan: {$ref: '#/components/schemas/SliBackfillPlan'}
+        earlier_history_from: {type: string, format: date-time, description: Retention-adjusted new measurement start for an explicitly requested earlier backfill.}
+        earlier_history_until: {type: string, format: date-time, description: Exclusive end of the newly authorized interval before existing measurement history.}
+        earlier_history_context: {type: string, pattern: '^[0-9a-f]{64}$', description: Identifies the datasource configuration and bounds used for an earlier-history preview.}
     SliBackfillJob:
       type: object
       required: [id, start, end, state, automatic, chunks, committed, gaps]

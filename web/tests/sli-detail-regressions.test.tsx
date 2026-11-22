@@ -82,11 +82,23 @@ it('loads a bounded 30-day measurements series independently of exact intervals'
   await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url]) =>
     String(url).endsWith('/measurements?period=30d'))).toBe(true));
   await screen.findByText('98.18%');
+  expect(screen.getByRole('img', { name: /Good-to-total ratio/ })).toHaveTextContent('12 Oct');
+  expect(screen.getByText(/outside available measurement history/)).toBeVisible();
   expect(document.querySelectorAll('.interval-state')).toHaveLength(3);
   expect(document.querySelectorAll('.interval-state.partial')).toHaveLength(1);
   expect(document.querySelectorAll('.gap')).toHaveLength(1);
   await userEvent.click(screen.getByRole('radio', {name: '1h'}));
   expect(document.querySelectorAll('.interval-state')).toHaveLength(60);
+});
+
+it('does not show unavailable history for the remainder of a non-dividing cadence', async () => {
+  const end='2026-11-11T10:00:00Z';
+  const start=new Date(Date.parse(end) - 635 * 17_000).toISOString();
+  const buckets=[{start, end, good:'99', total:'100', observed:635, missing:0, zero_traffic:0, known_empty:0, failed:0, incomplete:0}];
+  vi.stubGlobal('fetch',vi.fn().mockResolvedValue(json({bucket_seconds:51,buckets})));
+  render(<SliMeasurementHistory id={sliID} period="3h" cadence={17} refresh={0} latest={null}/>);
+  await screen.findByText('99.00%');
+  expect(screen.queryByText(/outside available measurement history/)).not.toBeInTheDocument();
 });
 
 it('keeps a loaded chart through a pending and failed same-range refresh', async () => {
@@ -95,10 +107,10 @@ it('keeps a loaded chart through a pending and failed same-range refresh', async
   let finish!: (response: Response) => void;
   fetchMock.mockImplementationOnce(() => new Promise<Response>(resolve => {finish = resolve;}));
   vi.stubGlobal('fetch',fetchMock);
-  const view=render(<SliMeasurementHistory id={sliID} period="30d" refresh={0} latest={null}/>);
+  const view=render(<SliMeasurementHistory id={sliID} period="30d" cadence={60} refresh={0} latest={null}/>);
   await screen.findByText('99.00%');
   expect(view.container.querySelector('.chart-point.partial')).toBeInTheDocument();
-  view.rerender(<SliMeasurementHistory id={sliID} period="30d" refresh={1} latest={null}/>);
+  view.rerender(<SliMeasurementHistory id={sliID} period="30d" cadence={60} refresh={1} latest={null}/>);
   expect(screen.getByRole('status')).toHaveTextContent('Loading measurements');
   expect(screen.getByText('99.00%')).toBeInTheDocument();
   finish(new Response('{}',{status:503}));

@@ -4769,11 +4769,20 @@ type SliFreshness string
 
 // SliBackfillAdmission defines model for SliBackfillAdmission.
 type SliBackfillAdmission struct {
-	ChunkCount int                 `json:"chunk_count"`
-	End        time.Time           `json:"end"`
-	Id         *openapi_types.UUID `json:"id,omitempty"`
-	Plan       *SliBackfillPlan    `json:"plan,omitempty"`
-	Start      time.Time           `json:"start"`
+	ChunkCount int `json:"chunk_count"`
+
+	// EarlierHistoryContext Identifies the datasource configuration and bounds used for an earlier-history preview.
+	EarlierHistoryContext *string `json:"earlier_history_context,omitempty"`
+
+	// EarlierHistoryFrom Retention-adjusted new measurement start for an explicitly requested earlier backfill.
+	EarlierHistoryFrom *time.Time `json:"earlier_history_from,omitempty"`
+
+	// EarlierHistoryUntil Exclusive end of the newly authorized interval before existing measurement history.
+	EarlierHistoryUntil *time.Time          `json:"earlier_history_until,omitempty"`
+	End                 time.Time           `json:"end"`
+	Id                  *openapi_types.UUID `json:"id,omitempty"`
+	Plan                *SliBackfillPlan    `json:"plan,omitempty"`
+	Start               time.Time           `json:"start"`
 }
 
 // SliBackfillJob defines model for SliBackfillJob.
@@ -4823,8 +4832,13 @@ type SliBackfillPlanGapsState string
 
 // SliBackfillRequest defines model for SliBackfillRequest.
 type SliBackfillRequest struct {
-	End     time.Time `json:"end"`
-	Preview bool      `json:"preview"`
+	// EarlierHistoryContext Required when confirming an earlier-history request. Copy from the preview.
+	EarlierHistoryContext *string   `json:"earlier_history_context,omitempty"`
+	End                   time.Time `json:"end"`
+
+	// IncludeEarlierHistory Explicitly apply the active initial measurement definition to eligible earlier intervals.
+	IncludeEarlierHistory *bool `json:"include_earlier_history,omitempty"`
+	Preview               bool  `json:"preview"`
 
 	// RetryExhausted Administrator-only explicit retry of previously failed intervals in the requested range.
 	RetryExhausted *bool     `json:"retry_exhausted,omitempty"`

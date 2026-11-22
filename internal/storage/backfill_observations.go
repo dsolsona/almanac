@@ -227,10 +227,23 @@ func applyBackfillRetryAfter(ctx context.Context, tx pgx.Tx, result sli.Backfill
 		return nil
 	}
 	_, err := tx.Exec(ctx, `
-UPDATE public.almanac_backfill_chunks c
-SET next_attempt_at=LEAST(j.created_at+interval '24 hours',GREATEST(c.next_attempt_at,$2::timestamptz))
-FROM public.almanac_backfill_jobs j
-WHERE c.id=$1 AND c.job_id=j.id AND c.state='retry-wait' AND c.reason='rate_limited'`,
+WITH delayed AS (
+    UPDATE public.almanac_backfill_chunks c
+    SET next_attempt_at=LEAST(j.created_at+interval '24 hours',GREATEST(c.next_attempt_at,$2::timestamptz))
+    FROM public.almanac_backfill_jobs j
+    WHERE c.id=$1 AND c.job_id=j.id AND c.state='retry-wait' AND c.reason='rate_limited'
+)
+INSERT INTO public.almanac_backfill_source_cooldowns (datasource_id,source_version,retry_at)
+SELECT m.datasource_id,c.source_version,$2
+FROM public.almanac_backfill_chunks c
+JOIN public.almanac_sli_measurements m ON m.sli_id=c.sli_id AND m.revision=c.measurement_revision
+WHERE c.id=$1
+ON CONFLICT(datasource_id) DO UPDATE
+SET retry_at=CASE WHEN almanac_backfill_source_cooldowns.source_version=excluded.source_version
+                  THEN greatest(almanac_backfill_source_cooldowns.retry_at,excluded.retry_at)
+                  ELSE excluded.retry_at END,
+    source_version=excluded.source_version
+WHERE almanac_backfill_source_cooldowns.source_version<=excluded.source_version`,
 		result.ChunkID, now.Add(time.Duration(result.RetryAfterSeconds)*time.Second))
 	if err != nil {
 		return operationError(ctx, "storage: record historical retry guidance", err)

@@ -6,7 +6,7 @@ import { providerInfo } from '../datasources/providers.ts';
 import { SliMeasurementsChart, intervalTime } from '../components/charts/SliMeasurementsChart.tsx';
 import { buildMeasurements, countText, measurementLabels, measurementInterval } from './measurements.ts';
 import { SliObjectives } from './SliObjectives.tsx';
-import { useEffect, useMemo, useRef, useState, type FormEvent, type RefObject } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type RefObject } from 'react';
 import type { AuthContext } from '../auth/client.ts';
 import { createAgentClient, type Agent } from '../agents/client.ts';
 import { SliRecentStrip, type SliRecentSample } from '../components/charts/SliRecentStrip.tsx';
@@ -162,6 +162,10 @@ export function SlisPage({ context }: { context: AuthContext }) {
   const [measurementSelection, setMeasurementSelection] = useState<{id: string; period: '1h' | SliMeasurementPeriod} | null>(null);
   const measurementPeriod = measurementSelection && measurementSelection.id === route.id ? measurementSelection.period : '1h';
   const [measurementRefresh, setMeasurementRefresh] = useState(0);
+  const refreshBackfilledMeasurements = useCallback((earlierFrom?: string) => {
+    if (earlierFrom) setSli(current => current && { ...current, effective_from: earlierFrom });
+    setMeasurementRefresh(value => value + 1);
+  }, []);
   const [history, setHistory] = useState<SliObservation[]>([]);
   const [missing, setMissing] = useState<SliObservationPage['missing_intervals']>([]);
   const [earliest, setEarliest] = useState('');
@@ -594,7 +598,7 @@ export function SlisPage({ context }: { context: AuthContext }) {
       <section className="sli-detail-card sli-measurements-panel" aria-labelledby="sli-measurements-title" aria-busy={historyBusy}>
         <header><h2 id="sli-measurements-title">Measurements</h2><span className="hint">{measurementPeriod!=='1h'?null:date&&measurements.intervals.length?`${date} · ${intervalTime({start:historyWindow.start!,end:historyWindow.end!})}`:'No inspected intervals yet'}</span><div className="tools"><Button variant="ghost" onClick={()=>openDetails('sli-intervals')}>{measurementPeriod==='1h'?'Exact values ↓':'Recent intervals ↓'}</Button></div></header>
         {measurementPeriod !== '1h'
-          ? <div className="sli-measurements-body"><SliMeasurementHistory key={`${sli.id}:${measurementPeriod}`} id={sli.id} period={measurementPeriod} refresh={measurementRefresh} latest={latestMeasurement}/></div>
+          ? <div className="sli-measurements-body"><SliMeasurementHistory key={`${sli.id}:${measurementPeriod}`} id={sli.id} period={measurementPeriod} cadence={sli.polling_interval_seconds} refresh={measurementRefresh} latest={latestMeasurement}/></div>
           : <>
         <div className="sli-measurements-body">
           <dl className="sli-measurement-summary">{latestMeasurement}<div><dt>{`Observed requests · ${wholeHour?'this hour':'shown period'}`}</dt><dd>{measurements.ratio!==null?`${measurements.ratio}%`:'—'}</dd><p>{measurements.total!=='0'?`${countText(measurements.bad)} unsuccessful / ${countText(measurements.total)} total`:'No observed traffic in this period.'}</p></div><div><dt>{`Data coverage · ${wholeHour?'this hour':'shown period'}`}</dt><dd className={measurements.counts.failed+measurements.counts.missing+measurements.counts.partial?'is-warning':''}>{measurements.counts.observed+measurements.counts.zero+measurements.counts.empty} <small>/ {measurements.intervals.length} {sli.polling_interval_seconds===60?'min':'intervals'}</small></dd><p>{measurements.counts.failed} query errors · {measurements.counts.missing} missing{measurements.counts.partial?` · ${measurements.counts.partial} partial`:''}{measurements.counts.empty?` · ${measurements.counts.empty} known empty`:''}{measurements.counts.zero?` · ${measurements.counts.zero} zero traffic`:''}</p></div></dl>
@@ -607,7 +611,7 @@ export function SlisPage({ context }: { context: AuthContext }) {
         <div className="sli-detail-inline-note"><span>{measurements.minimum?<>{sli.polling_interval_seconds===60?'Lowest minute':'Lowest interval'} <strong className="mono">{measurements.minimum.ratio}%</strong>{` · ${intervalTime(measurements.minimum)}. Ratios use observed requests only.`}</>:'Ratios use observed requests only.'}</span><Button variant="ghost" onClick={()=>{setHistoryFilter('problems');openDetails('sli-intervals');}}>Inspect gaps ↓</Button></div>
           </>}
       </section>
-      {datasource?.provider === 'prometheus' && <SliBackfills sli={sli} context={context} canWrite={canWrite} />}
+      {datasource?.provider === 'prometheus' && <SliBackfills key={sli.id} sli={sli} datasourceName={datasource.display_name} context={context} canWrite={canWrite} onMeasurementsChanged={refreshBackfilledMeasurements} />}
       <SliObjectives projection={projection} unavailable={projectionMissing}/>
       <details className="sli-detail-disclosure" id="sli-intervals"><summary>Recent intervals<span>{exactRows.length} inspected · {withoutRatio} without a ratio · exact values</span></summary>
         {measurementPeriod !== '1h' && historyError && <p className="sli-error" role="alert">{historyError}</p>}
