@@ -97,6 +97,14 @@ func TestIntegrationBackfillAdmissionIsAlignedAndIdempotent(t *testing.T) {
 	if _, err := s.conn.Exec(t.Context(), `DELETE FROM public.almanac_sli_observations WHERE sli_id=$1 AND interval_start=$2`, s.sliID, input.Start); err != nil {
 		t.Fatal(err)
 	}
+	unexpectedContext := input
+	unexpectedContext.EarlierHistoryContext = "unused"
+	for _, preview := range []bool{true, false} {
+		unexpectedContext.Preview = preview
+		if _, err := RequestBackfill(t.Context(), s.f.databaseURL, unexpectedContext); !errors.Is(err, ErrSliInvalid) {
+			t.Fatalf("ordinary request with context (preview=%t) returned %v", preview, err)
+		}
+	}
 	preview := input
 	preview.Preview = true
 	planned, err := RequestBackfill(t.Context(), s.f.databaseURL, preview)

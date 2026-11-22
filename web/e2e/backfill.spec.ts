@@ -48,6 +48,11 @@ test('request historical collection and see the recalculated SLO', async ({ page
     await page.getByRole('button', { name: 'Review backfill', exact: true }).click();
     await expect(panel).toHaveAttribute('open', '');
     await expect(panel).toContainText('Datasource retention is 7 days.');
+    await page.getByRole('radio', { name: '1h', exact: true }).click();
+    await page.getByRole('button', { name: 'Exact values ↓' }).click();
+    const recoveredRow = page.getByRole('region', { name: 'Observation history' }).getByRole('row')
+      .filter({ has: page.locator(`td[title^="${from.slice(0, 19)}"]`) });
+    await expect(recoveredRow).toContainText('Missing');
     await panel.getByRole('button', { name: 'Custom range' }).click();
     const dialog = page.getByRole('dialog', { name: 'Custom backfill range' });
     async function setBound(label: 'Start' | 'End', value: string, capture = false) {
@@ -109,6 +114,7 @@ test('request historical collection and see the recalculated SLO', async ({ page
     await info.attach('Backfill range preview, desktop light', { path: light, contentType: 'image/png' });
     await dialog.getByRole('button', { name: 'Queue backfill' }).click();
     await expect(panel.getByRole('list', { name: 'Backfill jobs' })).toContainText('1 / 1 chunks committed', { timeout: 60_000 });
+    await expect(recoveredRow).toContainText('99.00%');
 
     const row = psql(`SELECT good_count::int,total_count::int FROM public.almanac_sli_observations
       WHERE sli_id='${id}' AND interval_start='${from}' AND backfill_chunk_id IS NOT NULL;`);

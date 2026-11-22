@@ -87,6 +87,7 @@ export function SliBackfills({ sli, datasourceName, context, canWrite, onMeasure
   const requestKey = useRef('');
   const uncertainRequest = useRef<{ selection: string; key: string } | null>(null);
   const pendingRequest = useRef<AbortController | null>(null);
+  const lastRecovered = useRef('');
   useEffect(() => () => pendingRequest.current?.abort(), []);
 
   useEffect(() => {
@@ -103,7 +104,12 @@ export function SliBackfills({ sli, datasourceName, context, canWrite, onMeasure
         const progress = JSON.stringify(jobs.map(job => [job.id, job.state, job.committed, job.recovered_intervals]));
         const settled = jobs.every(job => job.state !== 'queued' && job.state !== 'running');
         if (lastProgress === undefined || Date.now() - lastCoverage >= 30_000 || settled && progress !== lastProgress) {
-          if (lastProgress !== undefined && progress !== lastProgress) onMeasurementsChanged();
+          const recovered = jobs.filter(job => (job.recovered_intervals ?? 0) > 0)
+            .map(job => `${job.id}:${job.recovered_intervals}`).join(',');
+          if (recovered !== lastRecovered.current) {
+            lastRecovered.current = recovered;
+            if (recovered) onMeasurementsChanged();
+          }
           const range = rangeFor(sli, preset);
           const coverage = await client.requestBackfill(sli.id, { start: range.start, end: range.end, preview: true }, context, crypto.randomUUID(), controller.signal);
           if (controller.signal.aborted) return;

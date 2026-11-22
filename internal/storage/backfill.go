@@ -47,7 +47,8 @@ type BackfillAdmission struct {
 // RequestBackfill admits historical work under the locked SLI definition and user session.
 func RequestBackfill(ctx context.Context, databaseURL string, input BackfillRequest) (BackfillAdmission, error) {
 	sliID, valid := canonicalUUID(input.SLIID)
-	if !valid || input.Now == nil || !validPrintableASCII(input.RequestKey, 1, 128) {
+	if !valid || input.Now == nil || !validPrintableASCII(input.RequestKey, 1, 128) ||
+		(!input.IncludeEarlierHistory && input.EarlierHistoryContext != "") {
 		return BackfillAdmission{}, ErrSliInvalid
 	}
 	conn, _, tx, user, installation, session, started, err := beginAgentReadWithRoles(ctx, databaseURL, input.Proof.SessionVerifier, input.Now, "administrator", "editor", "viewer")

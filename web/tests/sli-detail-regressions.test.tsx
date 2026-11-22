@@ -38,6 +38,32 @@ it('includes known-empty outcomes in collection coverage without inventing a rat
   expect(document.querySelector('.sli-measurement-summary')).toHaveTextContent('60 / 60 min');
   expect(document.querySelectorAll('.chart-point')).toHaveLength(0);
 });
+it('refreshes the one-hour chart when the first backfill snapshot already has recovered points', async () => {
+  setup(complete.slice(1), {older: true});
+  const summary = () => document.querySelector('.sli-measurement-summary');
+  await waitFor(() => expect(summary()).toHaveTextContent('59 / 60 min'));
+  await userEvent.click(screen.getByRole('button', { name: 'Exact values ↓' }));
+  await userEvent.click(await screen.findByRole('button', { name: 'Load more intervals' }));
+  await waitFor(() => expect(document.querySelectorAll('.sli-intervals-table tbody tr')).toHaveLength(110));
+  const fetchMock = vi.mocked(fetch);
+  const fixture = fetchMock.getMockImplementation()!;
+  fetchMock.mockImplementation((input, init) => {
+    const url = String(input);
+    if (url.endsWith('/backfills')) {
+      const bounds = {start:complete[0]!.interval_start, end:complete[0]!.interval_end};
+      return Promise.resolve(json(init?.method === 'POST' ? {...bounds, chunk_count:0}
+        : [{...bounds, id:'70000000-0000-4000-8000-000000000001', state:'completed',
+            automatic:false, chunks:1, committed:1, gaps:0, requested_intervals:1, recovered_intervals:1}]));
+    }
+    if (url.includes('/observations')) return Promise.resolve(json({...fixtureHistory,items:complete}));
+    return fixture(input, init);
+  });
+  await userEvent.click(screen.getByText('Historical backfill', {exact: true}));
+  await screen.findByText(/1 \/ 1 intervals recovered/);
+  await waitFor(() => expect(summary()).toHaveTextContent('60 / 60 min'));
+  expect(document.querySelectorAll('.sli-intervals-table tbody tr')).toHaveLength(110);
+});
+
 it('reconstructs older missing intervals in exact values while retaining the original graph',async()=>{
   setup(fixtureHistory.items,{older:true});
   await screen.findByRole('heading',{name:'Measurements'});
