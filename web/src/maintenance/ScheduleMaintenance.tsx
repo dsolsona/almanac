@@ -1,27 +1,16 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import type { AuthContext } from '../auth/client.ts';
-import { Button, ChoiceChips, DatePicker, FormActions, FormSection, PageHeader, Panel, TextareaField, TextField, type ComboboxOption } from '../components/ui/index.ts';
+import { Button, FormActions, FormSection, PageHeader, Panel, TextareaField, TextField, type ComboboxOption } from '../components/ui/index.ts';
 import { SloFailure } from '../slos/client.ts';
 import { maintenanceClient, type MaintenanceSelector, type MaintenanceWindow, type MaintenanceWrite } from './client.ts';
 import { MaintenanceImpactPreview } from './MaintenanceImpact.tsx';
+import { MaintenanceWindowPicker } from './MaintenanceWindowPicker.tsx';
 import { maxScope, scopeIDs, scopeLabels, scopeOption, scopeSelector, ScopeMode, ScopePicker, type SelectedKind } from './ScopePicker.tsx';
 
 const emptySelection: ComboboxOption[] = [];
 
-const durations = [
-  { value: '15', label: '15 min' },
-  { value: '30', label: '30 min' },
-  { value: '60', label: '1 hour' },
-  { value: '120', label: '2 hours' },
-];
-
 export function ScheduleMaintenance({ context, existing }: { context: AuthContext; existing?: { value: MaintenanceWindow; etag: string } }) {
   const windowRecord = existing?.value;
-  const originalDuration = windowRecord ? Date.parse(windowRecord.end) - Date.parse(windowRecord.start) : 0;
-  const initialDuration = windowRecord ? String(originalDuration / 60_000) : '60';
-  const displayDurations = windowRecord && !Number.isInteger(originalDuration / 60_000)
-    ? [...durations, { value: initialDuration, label: `${originalDuration / 1000} seconds` }]
-    : durations;
   const returnTo = windowRecord ? `/maintenance/${windowRecord.id}` : '/maintenance';
   const [title, setTitle] = useState(windowRecord?.title ?? '');
   const [reason, setReason] = useState(windowRecord?.reason ?? '');
@@ -35,9 +24,10 @@ export function ScheduleMaintenance({ context, existing }: { context: AuthContex
   const scope = useMemo(() => scopeSelector(kind, selected.map(option => option.id).sort()), [kind, selected]);
   const [reviewedScope, setReviewedScope] = useState<MaintenanceSelector>();
   const scopeValid = kind === 'all_services' || selected.length > 0 && selected.length <= maxScope;
-  const [day, setDay] = useState(windowRecord?.start.slice(0, 10) ?? '');
-  const [time, setTime] = useState(windowRecord?.start.slice(11, 19) ?? '');
-  const [duration, setDuration] = useState(initialDuration);
+  const [bounds, setBounds] = useState({
+    start: windowRecord?.start.slice(0, 19) ?? '',
+    end: windowRecord?.end.slice(0, 19) ?? '',
+  });
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [etag, setETag] = useState(existing?.etag ?? '');
@@ -83,15 +73,6 @@ export function ScheduleMaintenance({ context, existing }: { context: AuthContex
   const editing = Boolean(windowRecord);
   useEffect(() => { if (editing) heading.current?.focus(); }, [editing]);
 
-  const minutes = Number(duration);
-  const start = Date.parse(`${day}T${time}Z`);
-  const retainedDuration = windowRecord && duration === initialDuration;
-  const durationMs = retainedDuration ? originalDuration : minutes * 60_000;
-  const end = start + durationMs;
-  const validDuration = retainedDuration || /^[0-9]+$/.test(duration) && Number.isSafeInteger(minutes) && minutes > 0;
-  const validSchedule = day && time && Number.isFinite(start) && new Date(start).getUTCFullYear() >= 1970 && validDuration &&
-    Number.isFinite(new Date(end).getTime()) && new Date(end).getUTCFullYear() <= 9999;
-
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (saving || conflict) return;
@@ -108,11 +89,16 @@ export function ScheduleMaintenance({ context, existing }: { context: AuthContex
       setError('Wait for the affected SLO preview before saving.');
       return;
     }
-    if (!validSchedule) { setError('Choose a valid start time and duration.'); return; }
+    const start = new Date(`${bounds.start}Z`);
+    const end = new Date(`${bounds.end}Z`);
+    if (!(end.getTime() > start.getTime() && start.getUTCFullYear() >= 1970 && end.getUTCFullYear() <= 9999)) {
+      setError('Choose a valid maintenance window.');
+      return;
+    }
 
     const body: MaintenanceWrite = {
       title: title.trim(), reason: reason.trim(), scope,
-      start: new Date(start).toISOString(), end: new Date(end).toISOString(),
+      start: start.toISOString(), end: end.toISOString(),
     };
     const serialized = JSON.stringify([etag, body]);
     if (attempt.current?.body !== serialized) attempt.current = { body: serialized, key: crypto.randomUUID() };
@@ -192,17 +178,8 @@ export function ScheduleMaintenance({ context, existing }: { context: AuthContex
             onChange={options => setSelections(current => ({ ...current, [kind]: options }))} disabled={saving} />}
         {scopeValid && <MaintenanceImpactPreview key={JSON.stringify(scope)} scope={scope} context={context} onReady={setReviewedScope} />}
       </FormSection>
-      <FormSection title="Schedule" hint="UTC">
-        <div className="maintenance-schedule-row">
-          <DatePicker label="Start date" value={day} onValueChange={setDay} disabled={saving} today={new Date().toISOString().slice(0, 10)} />
-          <TextField id="maintenance-time" label="Start time (UTC)" type="time" step={windowRecord ? 1 : 60} value={time} onChange={event => setTime(event.target.value)} required disabled={saving} />
-        </div>
-        <div className="maintenance-duration">
-          <ChoiceChips id="maintenance-duration" label="Duration" options={displayDurations} value={duration} onChange={setDuration} disabled={saving}
-            custom={{ unit: 'minutes', placeholder: 'Minutes', inputMode: 'numeric', format: value => `${value} min`,
-              validate: value => /^[0-9]+$/.test(value) && Number.isSafeInteger(Number(value)) && Number(value) > 0 ? undefined : 'Enter a positive whole number of minutes.' }} />
-        </div>
-        {validSchedule && <p className="ui-hint">Ends <time dateTime={new Date(end).toISOString()}>{new Date(end).toISOString().slice(0, windowRecord ? 19 : 16).replace('T', ' ')} UTC</time></p>}
+      <FormSection title="Schedule">
+        <MaintenanceWindowPicker bounds={bounds} onChange={setBounds} seconds={editing} disabled={saving} />
       </FormSection>
       {error && <p ref={notice} tabIndex={-1} role="alert" className="ui-error">{error}</p>}
       {latest && <Panel heading={`Current revision ${latest.value.revision}`} className="maintenance-detail">

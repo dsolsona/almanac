@@ -111,6 +111,8 @@ Import controls from `src/components/ui/` and prefer native semantics:
   checked state text and visible thumb position.
 - `DatePicker` validates `YYYY-MM-DD` calendar dates and opens a shared native
   dialog containing a Monday-first, keyboard-navigable month grid.
+  Maintenance scheduling uses the same calendar with a highlighted date range
+  and 24-hour UTC time fields for both endpoints.
 - `LoadingIndicator` announces an indeterminate status with a transform-only
   moving segment and a static reduced-motion state in the component catalogue.
   Product pages use stable content and accessible pending state instead of visible

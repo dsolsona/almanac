@@ -10,7 +10,9 @@ const snapshotChanged = (error: unknown) => error instanceof SloFailure && error
 
 type ReadImpact = (limit: number, cursor: string, signal: AbortSignal) => Promise<ImpactPage>;
 
-const utc = (instant: string) => instant.replace('T', ' ').replace(/(\.0+)?Z$/, ' UTC');
+export function MaintenanceTime({ value, showZone = true }: { value: string; showZone?: boolean }) {
+  return <time dateTime={value}>{value.replace('T', ' ').replace(/(\.0+)?Z$/, showZone ? ' UTC' : '')}</time>;
+}
 
 export function MaintenanceImpactPreview({ scope, context, onReady }: {
   scope: MaintenanceSelector;
@@ -30,13 +32,13 @@ export function MaintenanceImpactPreview({ scope, context, onReady }: {
   return <MaintenanceImpact preview read={read} />;
 }
 
-export function MaintenanceWindowImpact({ id, revision }: { id: string; revision: string }) {
+export function MaintenanceWindowImpact({ id, revision, refreshVersion }: { id: string; revision: string; refreshVersion: number }) {
   const read = useCallback<ReadImpact>((limit, cursor, signal) =>
     maintenanceClient.impact(id, revision, limit, cursor, signal), [id, revision]);
-  return <MaintenanceImpact read={read} />;
+  return <MaintenanceImpact read={read} refreshVersion={refreshVersion} />;
 }
 
-function MaintenanceImpact({ read, preview = false }: { read: ReadImpact; preview?: boolean }) {
+function MaintenanceImpact({ read, preview = false, refreshVersion }: { read: ReadImpact; preview?: boolean; refreshVersion?: number }) {
   const headingId = useId();
   const [size, setSize] = useState(10);
   const [cursors, setCursors] = useState(['']);
@@ -68,7 +70,7 @@ function MaintenanceImpact({ read, preview = false }: { read: ReadImpact; previe
       window.clearTimeout(deadline);
       controller.abort();
     };
-  }, [read, size, cursor, refresh]);
+  }, [read, size, cursor, refresh, refreshVersion]);
 
   function changePage(next: string[], nextSize = size) {
     setPage(undefined);
@@ -79,7 +81,7 @@ function MaintenanceImpact({ read, preview = false }: { read: ReadImpact; previe
     setSize(nextSize);
   }
 
-  return <section className="maintenance-impact" aria-labelledby={headingId} aria-busy={busy || undefined}>
+  return <section className={preview ? 'maintenance-impact' : 'maintenance-impact maintenance-window-impact'} aria-labelledby={headingId} aria-busy={busy || undefined}>
     {preview ? <h3 id={headingId}>Affected SLO preview</h3> : <h2 id={headingId}>Affected SLOs</h2>}
     {busy && !page && <span role="status" className="sr-only">Loading affected SLOs</span>}
     {error && <p role="alert" className="ui-error">{error === 'changed' ? 'Maintenance inventory changed. Reload from the first page.' : 'Affected SLOs could not be loaded.'}</p>}
@@ -90,16 +92,25 @@ function MaintenanceImpact({ read, preview = false }: { read: ReadImpact; previe
       {error === 'changed' ? 'Reload affected SLOs' : error ? 'Retry affected SLOs' : 'Refresh affected SLOs'}
     </Button>}
     {!error && page?.ready === false && <p role="status" className="ui-hint">Affected SLOs are being prepared.</p>}
-    {!error && page?.ready && <>
+    {(!error || (!preview && error === 'load')) && page?.ready && <>
       <p role="status" className="ui-hint">
-        {new Intl.NumberFormat().format(BigInt(page.total))} {page.total === '1' ? 'affected SLO' : 'affected SLOs'} · Inventory as of <time dateTime={page.inventory_at}>{utc(page.inventory_at)}</time>
+        {new Intl.NumberFormat().format(BigInt(page.total))} {page.total === '1' ? 'affected SLO' : 'affected SLOs'} · Inventory as of <MaintenanceTime value={page.inventory_at} />
       </p>
-      {!preview && page.items.length > 0 && <p className="ui-hint">Each SLO is counted once and can appear in more than one participation period.</p>}
-      {page.items.length > 0 && <ul className="maintenance-impact-list" role="list">{page.items.map(item => <li key={`${item.slo_id}:${item.start ?? ''}`}>
-        {preview ? item.slo_name : <a href={`/slos/${item.slo_id}`} data-app-route>{item.slo_name}</a>}
-        <div className="ui-hint">{item.service_name}</div>
-        {item.start && item.end && <div className="ui-hint"><time dateTime={item.start}>{utc(item.start)}</time> to <time dateTime={item.end}>{utc(item.end)}</time></div>}
-      </li>)}</ul>}
+      {!preview && page.items.length > 0 && <p className="ui-hint">An SLO can have multiple participation periods.</p>}
+      {page.items.length > 0 && (preview
+        ? <ul className="maintenance-impact-list" role="list">{page.items.map(item => <li key={item.slo_id}>
+          {item.slo_name}<div className="ui-hint">{item.service_name}</div>
+        </li>)}</ul>
+        : <div className="ui-resource-panel">
+          <table className="ui-list-table ui-resource-table" aria-label="Recorded SLO participation">
+            <thead><tr><th scope="col">SLO</th><th scope="col">From (UTC)</th><th scope="col">Until (UTC)</th></tr></thead>
+            <tbody>{page.items.map(item => <tr key={`${item.slo_id}:${item.start}`}>
+              <td data-label="SLO"><a href={`/slos/${item.slo_id}`} data-app-route>{item.slo_name}</a><span className="ui-list-table__sub">{item.service_name}</span></td>
+              <td data-label="From (UTC)">{item.start && <MaintenanceTime value={item.start} showZone={false} />}</td>
+              <td data-label="Until (UTC)">{item.end && <MaintenanceTime value={item.end} showZone={false} />}</td>
+            </tr>)}</tbody>
+          </table>
+        </div>)}
     </>}
     {(usedPager || page?.next_cursor || (page?.ready && BigInt(page.total) > 10n)) &&
       <Pager id={`${headingId}-size`} label="Affected SLO pages" position={`Page ${cursors.length}`} pageSize={size} pageSizes={[10, 20]}
