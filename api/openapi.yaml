@@ -866,6 +866,44 @@ paths:
         '404': {description: SLI not found, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
         '409': {description: Stale SLI version, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
         'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/slis/{sli_id}/backfills:
+    parameters:
+      - {$ref: '#/components/parameters/SliId'}
+    get:
+      operationId: listSliBackfills
+      summary: Read the twenty most recent historical collection jobs
+      security: [{SessionCookie: []}]
+      responses:
+        '200': {description: Historical work, content: {application/json: {schema: {type: array, maxItems: 20, items: {$ref: '#/components/schemas/SliBackfillJob'}}}}}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+    post:
+      operationId: requestSliBackfill
+      summary: Preview or request historical collection for one SLI
+      description: Requires an Origin matching the configured public origin.
+      security: [{SessionCookie: [], CsrfToken: []}]
+      parameters:
+        - {name: Idempotency-Key, in: header, required: true, schema: {type: string, maxLength: 128}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SliBackfillRequest'}
+      responses:
+        '200': {description: Preview, content: {application/json: {schema: {$ref: '#/components/schemas/SliBackfillAdmission'}}}}
+        '202': {description: Accepted historical job, content: {application/json: {schema: {$ref: '#/components/schemas/SliBackfillAdmission'}}}}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
+  /api/v1/slis/{sli_id}/backfills/{job_id}:
+    delete:
+      operationId: cancelSliBackfill
+      summary: Cancel outstanding chunks for a historical collection job
+      description: Requires an Origin matching the configured public origin.
+      security: [{SessionCookie: [], CsrfToken: []}]
+      parameters:
+        - {$ref: '#/components/parameters/SliId'}
+        - {name: job_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '204': {description: Outstanding chunks cancelled}
+        'default': {description: Request rejected, content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}}
   /api/v1/slis/{sli_id}/observations:
     get:
       operationId: listSliObservations
@@ -2867,6 +2905,66 @@ components:
       required: [display_name]
       properties:
         display_name: {type: string, minLength: 1, maxLength: 128}
+    SliBackfillRequest:
+      type: object
+      additionalProperties: false
+      required: [start, end, preview]
+      properties:
+        start: {type: string, format: date-time}
+        end: {type: string, format: date-time}
+        preview: {type: boolean}
+        retry_exhausted: {type: boolean, description: Administrator-only explicit retry of previously failed intervals in the requested range.}
+    SliBackfillAdmission:
+      type: object
+      required: [start, end, chunk_count]
+      properties:
+        id: {type: string, format: uuid}
+        start: {type: string, format: date-time}
+        end: {type: string, format: date-time}
+        chunk_count: {type: integer, minimum: 0}
+        plan: {$ref: '#/components/schemas/SliBackfillPlan'}
+    SliBackfillJob:
+      type: object
+      required: [id, start, end, state, automatic, chunks, committed, gaps]
+      properties:
+        id: {type: string, format: uuid}
+        start: {type: string, format: date-time}
+        end: {type: string, format: date-time}
+        state: {type: string, enum: [queued, running, completed, completed-with-gaps, cancelled]}
+        automatic: {type: boolean}
+        chunks: {type: integer, minimum: 1}
+        committed: {type: integer, minimum: 0}
+        gaps: {type: integer, minimum: 0}
+        requested_intervals: {type: integer, minimum: 0}
+        recovered_intervals: {type: integer, minimum: 0}
+        canonical_conflict: {type: boolean, description: Historical counts differed from an existing canonical observation.}
+    SliBackfillPlan:
+      type: object
+      required: [recovery_start, datasource_retention_days, cadence_seconds, covered_intervals, eligible_intervals, automatic_intervals, manual_intervals, outside_retention_intervals, previous_failure_intervals, missing_intervals, gap_count, chunk_count, gaps]
+      properties:
+        recovery_start: {type: string, format: date-time}
+        datasource_retention_days: {type: integer, minimum: 0}
+        cadence_seconds: {type: integer, minimum: 15}
+        covered_intervals: {type: integer, minimum: 0}
+        eligible_intervals: {type: integer, minimum: 0}
+        automatic_intervals: {type: integer, minimum: 0}
+        manual_intervals: {type: integer, minimum: 0}
+        outside_retention_intervals: {type: integer, minimum: 0}
+        previous_failure_intervals: {type: integer, minimum: 0}
+        missing_intervals: {type: integer, minimum: 0}
+        gap_count: {type: integer, minimum: 0}
+        chunk_count: {type: integer, minimum: 0}
+        gaps:
+          type: array
+          maxItems: 200
+          items:
+            type: object
+            required: [start, end, intervals, state]
+            properties:
+              start: {type: string, format: date-time}
+              end: {type: string, format: date-time}
+              intervals: {type: integer, minimum: 1}
+              state: {type: string, enum: [eligible, automatic, manual, outside-retention, previous-failure]}
     SliMeasurementBucket:
       type: object
       required: [start, end, good, total, observed, zero_traffic, known_empty, failed, incomplete, missing]
@@ -3026,6 +3124,7 @@ components:
         endpoint: {type: string, format: uri}
         tls: {$ref: '#/components/schemas/DatasourceTLS'}
         authentication: {$ref: '#/components/schemas/DatasourceAuthentication'}
+        historical_retention_days: {type: integer, minimum: 0, maximum: 36500, description: Source lookback in whole days. Zero clears the configured value.}
         polling_interval_seconds: {type: integer, minimum: 15, maximum: 86400}
         settling_delay_seconds: {type: integer, enum: [60]}
         agent_id: {type: string, format: uuid}
@@ -3077,6 +3176,7 @@ components:
             username: {type: string, nullable: true}
             password_secret: {$ref: '#/components/schemas/SecretAction'}
             token_secret: {$ref: '#/components/schemas/SecretAction'}
+        historical_retention_days: {type: integer, minimum: 0, maximum: 36500, description: Source lookback in whole days. Zero clears the configured value.}
         polling_interval_seconds: {type: integer, minimum: 15, maximum: 86400}
         agent_id: {type: string, format: uuid}
         cancel_reassignment: {type: boolean, description: Update-only cancellation intent. Requires a matching pending reassignment to the requested source agent; returns 409 if it already completed.}

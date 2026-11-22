@@ -664,7 +664,7 @@ func mapWrite(write api.DatasourceWrite) (datasource.Settings, datasource.Secret
 	settings := datasource.Settings{Name: write.Name, DisplayName: write.DisplayName,
 		Provider: string(write.Provider), ConfigurationFormat: string(write.ConfigurationFormat), Endpoint: write.Endpoint,
 		TLS:                datasource.TLSSettings{InsecureSkipVerify: write.Tls.InsecureSkipVerify, CAPEM: optionalString(write.Tls.CaPem)},
-		AuthenticationMode: string(write.Authentication.Mode), PollingIntervalSeconds: write.PollingIntervalSeconds,
+		AuthenticationMode: string(write.Authentication.Mode), PollingIntervalSeconds: write.PollingIntervalSeconds, HistoricalRetentionDays: write.HistoricalRetentionDays,
 		SettlingDelaySeconds: datasource.PrometheusSettlingDelay, AgentID: write.AgentId.String()}
 	if write.Authentication.Username != nil {
 		settings.AuthenticationUser = *write.Authentication.Username
@@ -705,7 +705,7 @@ func datasourceDTO(record storage.DatasourceRecord) api.Datasource {
 		Tls: api.DatasourceTLS{CaPem: &caPEM, InsecureSkipVerify: record.Settings.TLS.InsecureSkipVerify},
 		Authentication: api.DatasourceAuthentication{Mode: api.DatasourceAuthenticationMode(record.Settings.AuthenticationMode), Username: username,
 			PasswordConfigured: record.PasswordConfigured, TokenConfigured: record.TokenConfigured},
-		PollingIntervalSeconds: record.Settings.PollingIntervalSeconds, SettlingDelaySeconds: api.DatasourceSettlingDelaySeconds(record.Settings.SettlingDelaySeconds),
+		PollingIntervalSeconds: record.Settings.PollingIntervalSeconds, HistoricalRetentionDays: record.Settings.HistoricalRetentionDays, SettlingDelaySeconds: api.DatasourceSettlingDelaySeconds(record.Settings.SettlingDelaySeconds),
 		CreatedAt: record.CreatedAt, UpdatedAt: record.UpdatedAt}
 }
 

@@ -24,7 +24,7 @@ const CADENCE_PRESETS = [['15', '15 s'], ['30', '30 s'], ['60', '60 s'], ['300',
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const DATASOURCE_NAME = /^[a-z][a-z0-9-]{0,62}$/;
 const object = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
-const emptyDraft = (): Draft => ({ name: '', display_name: '', provider: 'prometheus', configuration_format: 'prometheus-http-v1', endpoint: '', tls: { insecure_skip_verify: false, ca_pem: null }, polling_interval_seconds: 60, agent_id: '', authMode: 'none', username: '', password: '', token: '', passwordAction: 'retain', tokenAction: 'retain', passwordConfigured: false, tokenConfigured: false, nameEdited: false });
+const emptyDraft = (): Draft => ({ name: '', display_name: '', provider: 'prometheus', configuration_format: 'prometheus-http-v1', endpoint: '', tls: { insecure_skip_verify: false, ca_pem: null }, polling_interval_seconds: 60, historical_retention_days: 0, agent_id: '', authMode: 'none', username: '', password: '', token: '', passwordAction: 'retain', tokenAction: 'retain', passwordConfigured: false, tokenConfigured: false, nameEdited: false });
 function suggestDatasourceName(displayName: string): string {
   let suggestion = displayName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 63).replace(/-+$/g, '');
   if (!suggestion) return '';
@@ -149,6 +149,8 @@ function validateDraft(draft: Draft): { field: string; message: string } | null 
   if (endpoint.username || endpoint.password) return { field: 'datasource-endpoint', message: 'Remove credentials from the endpoint URL; use the authentication settings instead.' };
   const cadence = Number(draft.polling_interval_seconds);
   if (!Number.isInteger(cadence) || cadence < 15 || cadence > 86400) return { field: 'datasource-polling', message: 'Query every must be a whole number of seconds from 15 to 86400.' };
+  const retention = draft.historical_retention_days ?? 0;
+  if (!Number.isInteger(retention) || retention < 0 || retention > 36500) return { field: 'datasource-retention', message: 'Enter whole days from 1 to 36500, or leave it blank.' };
   if (draft.authMode === 'basic' && !draft.username.trim()) return { field: 'datasource-username', message: 'Enter the username for basic authentication.' };
   if (draft.authMode === 'basic' && draft.passwordAction === 'replace' && !draft.password) return { field: 'datasource-password', message: 'Enter the password, or keep the saved one.' };
   if (draft.authMode === 'bearer' && draft.tokenAction === 'replace' && !draft.token) return { field: 'datasource-token', message: 'Enter the bearer token, or keep the saved one.' };
@@ -244,12 +246,12 @@ function asWrite(draft: Draft, isNew: boolean): DatasourceWrite {
   const tokenAction = draft.authMode === 'bearer' ? (isNew && draft.tokenAction === 'retain' ? 'clear' : draft.tokenAction) : 'clear';
   return { name: draft.name.trim(), display_name: draft.display_name.trim(), provider: draft.provider, configuration_format: draft.configuration_format, endpoint: draft.endpoint.trim(), tls: normalizeTls(draft.tls),
       authentication: { mode: draft.authMode, username: draft.authMode === 'basic' ? draft.username : null, password_secret: secret(passwordAction, draft.password), token_secret: secret(tokenAction, draft.token) },
-    polling_interval_seconds: Number(draft.polling_interval_seconds), agent_id: draft.agent_id };
+    polling_interval_seconds: Number(draft.polling_interval_seconds), historical_retention_days: draft.historical_retention_days ?? 0, agent_id: draft.agent_id };
 }
 
 /** Restore editable fields without exposing saved credentials. */
 function fromDatasource(source: Datasource): Draft {
-  return { ...emptyDraft(), provider: source.provider, configuration_format: source.configuration_format, name: source.name, display_name: source.display_name, endpoint: source.endpoint, tls: source.tls, polling_interval_seconds: source.polling_interval_seconds, agent_id: source.agent_id,
+  return { ...emptyDraft(), provider: source.provider, configuration_format: source.configuration_format, name: source.name, display_name: source.display_name, endpoint: source.endpoint, tls: source.tls, polling_interval_seconds: source.polling_interval_seconds, historical_retention_days: source.historical_retention_days ?? 0, agent_id: source.agent_id,
     authMode: source.authentication.mode, username: source.authentication.username ?? '', passwordConfigured: source.authentication.password_configured, tokenConfigured: source.authentication.token_configured };
 }
 
@@ -751,7 +753,7 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
   const vocabulary = source && canPreview ? datasourceVocabulary(source, agents, forCollection) : null;
   const sourceAgent = source ? agents.find((agent) => agent.id === source.agent_id) : undefined;
   const selectedProvider = providers.find((provider) => provider.provider === draft.provider && provider.configuration_format === draft.configuration_format);
-  const dirty = source ? draft.agent_id !== source.agent_id || connectionDraftChanged(draft, source) || draft.display_name !== source.display_name || Number(draft.polling_interval_seconds) !== source.polling_interval_seconds : false;
+  const dirty = source ? draft.agent_id !== source.agent_id || connectionDraftChanged(draft, source) || draft.display_name !== source.display_name || Number(draft.polling_interval_seconds) !== source.polling_interval_seconds || (draft.historical_retention_days ?? 0) !== (source.historical_retention_days ?? 0) : false;
   const agentOptions = agents.map((agent) => agentOption(agent, forCollection, draft.provider));
   const agentPicker = <Combobox id="datasource-agent" label="Assigned agent" options={agentOptions} value={draft.agent_id || null} onChange={(id) => selectAgent(id ?? '')} disabled={!canPreview || pending || currentUncertainSave || reassignmentStale} placeholder="Type an agent name…" hint={source ? 'Saving immediately assigns this datasource to the new agent. Results from the previous agent are no longer accepted.' : 'The agent runs every query for this datasource, so it must have network access to the endpoint.'} />;
   const secretField = (kind: 'password' | 'token') => {
@@ -794,6 +796,7 @@ export function DatasourcesPage({ context }: { context: AuthContext }) {
     </div></div>
     <div className="ui-form-grid">
       <ChoiceChips id="datasource-polling" label="Query every" value={String(draft.polling_interval_seconds)} disabled={formDisabled} onChange={(value) => setDraft({ ...draft, polling_interval_seconds: Number(value) })} options={CADENCE_PRESETS.map(([value, label]) => ({ value, label }))} custom={{ unit: 'seconds', placeholder: 'e.g. 45', inputMode: 'numeric', format: (value) => `${value} s`, validate: (value) => /^\d+$/.test(value) && Number(value) >= 15 && Number(value) <= 86400 ? undefined : 'Enter whole seconds from 15 to 86400.' }} hint={source && selectedUsage?.count ? `Every SLI on this datasource measures one interval of this length; ${selectedUsage.count} SLI${selectedUsage.count === 1 ? '' : 's'} use it.` : 'Every SLI on this datasource measures one interval of this length.'} />
+      <TextField id="datasource-retention" label="Historical retention (days)" type="number" min={1} max={36500} step={1} value={draft.historical_retention_days || ''} disabled={formDisabled} onChange={event => setDraft({ ...draft, historical_retention_days: Number(event.target.value) })} hint="How long the source keeps history. Leave blank if unknown. Almanac requests at most 30 days." />
       <div className="ui-field"><span className="ui-label">TLS</span><SegmentedControl label="TLS" value={tlsMode(draft.tls)} onChange={(mode) => { if (formDisabled) return; setDraft({ ...draft, tls: mode === 'skip' ? { ...draft.tls, insecure_skip_verify: true } : mode === 'ca' ? { insecure_skip_verify: false, ca_pem: draft.tls.ca_pem ?? '' } : { insecure_skip_verify: false, ca_pem: null } }); }} options={[{ value: 'verify', label: 'Verify certificate', disabled: formDisabled }, { value: 'ca', label: 'Custom CA', disabled: formDisabled }, { value: 'skip', label: 'Skip verification', disabled: formDisabled }]} /><p className="ui-hint">{draft.endpoint.trim().toLowerCase().startsWith('http:') ? 'HTTP does not use TLS or verify a certificate.' : tlsMode(draft.tls) === 'skip' ? 'Insecure: the certificate is not checked and the datasource is marked in lists.' : tlsMode(draft.tls) === 'ca' ? 'Paste the PEM bundle that signs the endpoint’s certificate.' : 'Verifying against the system roots.'}</p></div>
     </div>
     {tlsMode(draft.tls) === 'ca' && <TextareaField id="datasource-ca" label="Custom CA PEM" rows={4} value={draft.tls.ca_pem ?? ''} disabled={formDisabled} className="mono" onChange={(event) => setDraft({ ...draft, tls: { ...draft.tls, ca_pem: event.target.value } })} />}

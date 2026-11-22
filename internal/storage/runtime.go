@@ -21,12 +21,13 @@ const (
 	LiveTraffic TrafficClass = iota
 	InteractiveTraffic
 	DerivedTraffic
+	HistoricalTraffic
 )
 
 // Runtime owns the backend's pools. Callers release every acquired connection;
 // the backend closes the runtime after stopping admission and draining requests.
 type Runtime struct {
-	pools                [3]*pgxpool.Pool
+	pools                [HistoricalTraffic + 1]*pgxpool.Pool
 	databaseURL          string
 	compatible           atomic.Bool
 	metrics              runtimeMetrics
@@ -60,7 +61,7 @@ func OpenRuntime(ctx context.Context, databaseURL string) (*Runtime, error) {
 	}
 	runtime := &Runtime{databaseURL: databaseURL}
 	runtime.compatible.Store(true)
-	for class := LiveTraffic; class <= DerivedTraffic; class++ {
+	for class := LiveTraffic; class <= HistoricalTraffic; class++ {
 		config, err := runtimePoolConfig(databaseURL, class)
 		if err != nil {
 			runtime.Close()
@@ -142,7 +143,7 @@ func (r *Runtime) Acquire(ctx context.Context, class TrafficClass) (*pgxpool.Con
 	if !r.compatible.Load() {
 		return nil, errors.New("storage: runtime schema is unavailable")
 	}
-	if class > DerivedTraffic || r.pools[class] == nil {
+	if class > HistoricalTraffic || r.pools[class] == nil {
 		return nil, errors.New("storage: invalid traffic class")
 	}
 	bounded, cancel := context.WithTimeout(ctx, 250*time.Millisecond)
@@ -156,10 +157,10 @@ func (r *Runtime) Acquire(ctx context.Context, class TrafficClass) (*pgxpool.Con
 }
 
 func trafficClassName(class TrafficClass) string {
-	if class > DerivedTraffic {
+	if class > HistoricalTraffic {
 		return "invalid"
 	}
-	return [...]string{"live", "interactive", "derived"}[class]
+	return [...]string{"live", "interactive", "derived", "historical"}[class]
 }
 
 // CheckReady refreshes the schema gate on health checks, rather than every read.
@@ -198,7 +199,7 @@ func (r *Runtime) Close() {
 }
 
 func runtimePoolConfig(databaseURL string, class TrafficClass) (*pgxpool.Config, error) {
-	if class > DerivedTraffic {
+	if class > HistoricalTraffic {
 		return nil, errors.New("storage: invalid traffic class")
 	}
 	connConfig, err := ParseDatabaseURL(databaseURL)
@@ -214,8 +215,8 @@ func runtimePoolConfig(databaseURL string, class TrafficClass) (*pgxpool.Config,
 	config.ConnConfig.RuntimeParams["timezone"] = connConfig.RuntimeParams["timezone"]
 	config.ConnConfig.ConnectTimeout = connConfig.ConnectTimeout
 	config.MinConns = 0
-	config.MaxConns = [...]int32{4, 8, 2}[class]
-	config.ConnConfig.RuntimeParams["application_name"] = [...]string{"almanac-live", "almanac-interactive", "almanac-derived"}[class]
+	config.MaxConns = [...]int32{4, 8, 2, 1}[class]
+	config.ConnConfig.RuntimeParams["application_name"] = [...]string{"almanac-live", "almanac-interactive", "almanac-derived", "almanac-historical"}[class]
 	config.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
 		if err := setSessionBounds(ctx, conn); err != nil {
 			return err
@@ -224,7 +225,7 @@ func runtimePoolConfig(databaseURL string, class TrafficClass) (*pgxpool.Config,
 		case InteractiveTraffic:
 			_, err := conn.Exec(ctx, "SET statement_timeout='2s'; SET lock_timeout='250ms'")
 			return err
-		case DerivedTraffic:
+		case DerivedTraffic, HistoricalTraffic:
 			_, err := conn.Exec(ctx, "SET statement_timeout='5s'; SET lock_timeout='250ms'")
 			return err
 		default:

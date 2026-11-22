@@ -50,7 +50,7 @@ function exactKeys(value: Record<string, unknown>, keys: readonly string[]): boo
 
 /** Validate the response shape and canonical provider-format pair before caching source settings. */
 function validDatasource(value: unknown): value is Datasource {
-  if (!object(value) || !exactKeys(value, ['id', 'name', 'display_name', 'version', 'provider', 'configuration_format', 'endpoint', 'tls', 'authentication', 'polling_interval_seconds', 'settling_delay_seconds', 'agent_id', 'created_at', 'updated_at', ...(Object.hasOwn(value, 'reassignment') ? ['reassignment'] : [])])) return false;
+  if (!object(value) || !exactKeys(value, ['id', 'name', 'display_name', 'version', 'provider', 'configuration_format', 'endpoint', 'tls', 'authentication', 'polling_interval_seconds', 'settling_delay_seconds', 'agent_id', 'created_at', 'updated_at', ...(Object.hasOwn(value, 'historical_retention_days') ? ['historical_retention_days'] : []), ...(Object.hasOwn(value, 'reassignment') ? ['reassignment'] : [])])) return false;
   if (Object.hasOwn(value, 'reassignment')) {
     const move = value.reassignment;
     if (!object(move) || !exactKeys(move, ['source_agent_id', 'target_agent_id', 'requested_at', 'authority_expires_at', 'state'])
@@ -74,6 +74,7 @@ function validDatasource(value: unknown): value is Datasource {
     && ['none', 'basic', 'bearer'].includes(String(value.authentication.mode))
     && (value.authentication.username === null || typeof value.authentication.username === 'string')
     && typeof value.authentication.password_configured === 'boolean' && typeof value.authentication.token_configured === 'boolean'
+    && (value.historical_retention_days === undefined || typeof value.historical_retention_days === 'number' && Number.isInteger(value.historical_retention_days) && value.historical_retention_days >= 1 && value.historical_retention_days <= 36500)
     && typeof value.polling_interval_seconds === 'number' && Number.isInteger(value.polling_interval_seconds) && value.polling_interval_seconds >= 15 && value.settling_delay_seconds === 60 && typeof value.agent_id === 'string' && UUID.test(value.agent_id)
     && typeof value.created_at === 'string' && Number.isFinite(Date.parse(value.created_at)) && typeof value.updated_at === 'string' && Number.isFinite(Date.parse(value.updated_at));
 }

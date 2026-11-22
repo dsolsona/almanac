@@ -65,10 +65,22 @@ type QueryResult struct {
 }
 
 type SourceError struct {
-	Code string
+	Code              string
+	RetryAfterSeconds int
 }
 
 func (e *SourceError) Error() string { return "prometheus: " + e.Code }
+
+func retryAfterSeconds(value string, now time.Time) int {
+	value = strings.TrimSpace(value)
+	if seconds, err := strconv.ParseUint(value, 10, 64); err == nil {
+		return int(min(seconds, 86400))
+	}
+	if at, err := http.ParseTime(value); err == nil && at.After(now) {
+		return int(min(math.Ceil(at.Sub(now).Seconds()), 86400))
+	}
+	return 0
+}
 
 // NewClient constructs a provider-aware HTTP client with bounded requests, TLS and destination checks.
 func NewClient(config Config) (*Client, error) {
@@ -217,7 +229,7 @@ func (c *Client) query(ctx context.Context, query string, at time.Time) (QueryRe
 		return QueryResult{}, &SourceError{Code: "authentication"}
 	}
 	if response.StatusCode == http.StatusTooManyRequests {
-		return QueryResult{}, &SourceError{Code: "rate_limited"}
+		return QueryResult{}, &SourceError{Code: "rate_limited", RetryAfterSeconds: retryAfterSeconds(response.Header.Get("Retry-After"), time.Now())}
 	}
 	if response.StatusCode == http.StatusBadRequest || response.StatusCode == http.StatusUnprocessableEntity {
 		return QueryResult{}, &SourceError{Code: "query"}

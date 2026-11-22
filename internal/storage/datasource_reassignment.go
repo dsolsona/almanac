@@ -22,8 +22,10 @@ func datasourceAssignmentOnly(current dbgen.AlmanacDatasource, input UpdateDatas
 	stored := datasourceRecord(current).Settings
 	requested := input.Settings
 	requested.AgentID = stored.AgentID
+	retentionUnchanged := datasourceRetentionValue(requested.HistoricalRetentionDays, current.HistoricalRetentionDays) == current.HistoricalRetentionDays
+	requested.HistoricalRetentionDays, stored.HistoricalRetentionDays = nil, nil
 	actions, err := datasource.ResolveSecretActions(current.AuthenticationMode, input.Settings.AuthenticationMode, len(current.PasswordEnvelope) > 0, len(current.TokenEnvelope) > 0, input.Password, input.Token)
-	return err == nil && requested == stored && actions.Password.RevisionDelta == 0 && actions.Token.RevisionDelta == 0
+	return err == nil && retentionUnchanged && requested == stored && actions.Password.RevisionDelta == 0 && actions.Token.RevisionDelta == 0
 }
 
 // The caller holds the installation, session, participant and datasource locks.

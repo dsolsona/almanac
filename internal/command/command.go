@@ -85,6 +85,8 @@ func Run(ctx context.Context, args []string, stdout, stderr io.Writer, info Buil
 		return datasourceCommand(ctx, args, stdout, stderr)
 	case "alert-policies", "alerts":
 		return alertsCommand(ctx, args[0], args[1:], stdout, stderr)
+	case "backfills":
+		return backfillCommand(ctx, args[1:], stdout, stderr)
 	case "maintenance":
 		return maintenanceCommand(ctx, args[1:], stdout, stderr)
 	case "services", "slos":
@@ -103,6 +105,9 @@ func printHelp(w io.Writer) {
   almanac serve [--config=FILE] [--components=LIST] [--listen=ADDR] [--metrics-listen=INTERNAL_ADDR] [--backend-url=ORIGIN] [--database-url-file=FILE] [--initial-admin-login=LOGIN] [--initial-admin-password-file=FILE] [--public-origin=ORIGIN] [--tls-cert-file=FILE] [--tls-key-file=FILE] [--trusted-proxy-cidrs=LIST] [--shutdown-timeout=DURATION]
   almanac db upgrade [--database-url-file=FILE] [--timeout=30s] [--output=json]
   almanac setup --backend-url=ORIGIN --initial-admin-login=LOGIN --initial-admin-password-file=FILE --new-password-file=FILE [--ca-file=PEM] [--timeout=30s] [--output=json]
+  almanac backfills list --profile-file=FILE --sli-id=UUID
+  almanac backfills {preview|request} --profile-file=FILE --sli-id=UUID --start=UTC --end=UTC --idempotency-key=KEY
+  almanac backfills cancel --profile-file=FILE --sli-id=UUID --job-id=UUID
   almanac maintenance list --profile-file=FILE [--limit=50] [--cursor=CURSOR]
   almanac maintenance get --profile-file=FILE --maintenance-id=UUID [--revision=N]
   almanac maintenance timeline --profile-file=FILE --slo-id=UUID --start=UTC --end=UTC [--limit=50] [--cursor=CURSOR]

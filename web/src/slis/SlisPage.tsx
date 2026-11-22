@@ -1,3 +1,4 @@
+import { SliBackfills } from './SliBackfills.tsx';
 import { SliMeasurementHistory } from './SliMeasurementHistory.tsx';
 import type { SliMeasurementPeriod } from './client.ts';
 import {useResourceTable, ResourceTableHead, ResourceTableMobileSort, resourceRowClick, type ResourceColumn} from '../components/ui/ResourceTable.tsx';
@@ -588,6 +589,7 @@ export function SlisPage({ context }: { context: AuthContext }) {
       <div className="sli-measurement-ranges">
         <SegmentedControl size="sm" label="Measurement history range" options={measurementPeriods} value={measurementPeriod}
           onChange={period => setMeasurementSelection({id: sli.id, period})}/>
+        {datasource?.provider==='prometheus'&&<Button variant="ghost" onClick={()=>openDetails('sli-backfills')}>Review backfill</Button>}
       </div>
       <section className="sli-detail-card sli-measurements-panel" aria-labelledby="sli-measurements-title" aria-busy={historyBusy}>
         <header><h2 id="sli-measurements-title">Measurements</h2><span className="hint">{measurementPeriod!=='1h'?null:date&&measurements.intervals.length?`${date} · ${intervalTime({start:historyWindow.start!,end:historyWindow.end!})}`:'No inspected intervals yet'}</span><div className="tools"><Button variant="ghost" onClick={()=>openDetails('sli-intervals')}>{measurementPeriod==='1h'?'Exact values ↓':'Recent intervals ↓'}</Button></div></header>
@@ -605,6 +607,7 @@ export function SlisPage({ context }: { context: AuthContext }) {
         <div className="sli-detail-inline-note"><span>{measurements.minimum?<>{sli.polling_interval_seconds===60?'Lowest minute':'Lowest interval'} <strong className="mono">{measurements.minimum.ratio}%</strong>{` · ${intervalTime(measurements.minimum)}. Ratios use observed requests only.`}</>:'Ratios use observed requests only.'}</span><Button variant="ghost" onClick={()=>{setHistoryFilter('problems');openDetails('sli-intervals');}}>Inspect gaps ↓</Button></div>
           </>}
       </section>
+      {datasource?.provider === 'prometheus' && <SliBackfills sli={sli} context={context} canWrite={canWrite} />}
       <SliObjectives projection={projection} unavailable={projectionMissing}/>
       <details className="sli-detail-disclosure" id="sli-intervals"><summary>Recent intervals<span>{exactRows.length} inspected · {withoutRatio} without a ratio · exact values</span></summary>
         {measurementPeriod !== '1h' && historyError && <p className="sli-error" role="alert">{historyError}</p>}

@@ -1046,3 +1046,57 @@ func TestTransitionDefersAddedCursorUntilDelayedGrant(t *testing.T) {
 		})
 	}
 }
+
+func TestDispatchDuePreemptsHistoryAndPreservesDatasourceCap(t *testing.T) {
+	now := time.Date(2026, 10, 27, 12, 5, 0, 0, time.UTC)
+	runner := newCollectionRunner(testClient(now, testNonce(81)))
+	ctx, cancel := context.WithCancel(t.Context())
+	var workers sync.WaitGroup
+	t.Cleanup(func() { cancel(); workers.Wait() })
+	historicalCtx, stopHistory := context.WithCancel(ctx)
+	defer stopHistory()
+
+	assignment := agentprotocol.DatasourceAssignment{DatasourceID: "00000000-0000-4000-8000-000000000001",
+		DatasourceVersion: "1", Provider: "prometheus", ConfigurationFormat: "prometheus-http-v1",
+		Endpoint: "http://127.0.0.1:8428", PollingIntervalSeconds: 15, SettlingDelaySeconds: 60}
+	lease := testLease(now.Add(-time.Hour), "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef", now.Add(time.Hour))
+	lease.AgentID = testAgentID
+	measurements := make([]agentprotocol.SLICollection, 0, maxCollectionPerSource)
+	for index := range maxCollectionPerSource {
+		id := fmt.Sprintf("00000000-0000-4000-8000-%012d", index+100)
+		measurements = append(measurements, agentprotocol.SLICollection{SLIID: id, MeasurementRevision: "1", DatasourceID: assignment.DatasourceID,
+			DatasourceVersion: "1", MeasurementKind: agentprotocol.MeasurementKindEventCounts, ComponentMode: agentprotocol.ComponentModeIntervalCount,
+			GoodQuery: "vector(1)", TotalQuery: "vector(2)", EffectiveFrom: now.Add(-2 * time.Minute)})
+		lease.AllowedMeasurements = append(lease.AllowedMeasurements, agentprotocol.MeasurementGrant{SLIID: id, MeasurementRevision: "1"})
+	}
+	runner.SetLease(lease)
+	runner.SetConfiguration(agentprotocol.ConfigurationSnapshot{Assignments: []agentprotocol.DatasourceAssignment{assignment}, SLIs: measurements})
+	runner.mu.Lock()
+	runner.root, runner.workers = ctx, &workers
+	runner.launchCollection = func(ctx context.Context, _ collectionDefinition) { <-ctx.Done() }
+	runner.historicalSource, runner.cancelHistorical = assignment.DatasourceID, stopHistory
+	for _, measurement := range measurements {
+		runner.nextIntervalEnd[collectionKey(measurement)] = now.Add(-61 * time.Second)
+		runner.initialPending[collectionKey(measurement)] = true
+	}
+	runner.mu.Unlock()
+
+	runner.dispatchDue(ctx)
+	if !errors.Is(historicalCtx.Err(), context.Canceled) {
+		t.Fatal("live dispatch did not cancel historical collection")
+	}
+	runner.mu.Lock()
+	active := runner.activeSources[assignment.DatasourceID]
+	runner.historicalSource, runner.cancelHistorical = "", nil
+	runner.mu.Unlock()
+	if active != maxCollectionPerSource-1 {
+		t.Fatalf("live queries while historical query exits = %d", active)
+	}
+	runner.dispatchDue(ctx)
+	runner.mu.Lock()
+	active = runner.activeSources[assignment.DatasourceID]
+	runner.mu.Unlock()
+	if active != maxCollectionPerSource {
+		t.Fatalf("live queries after historical query exits = %d", active)
+	}
+}

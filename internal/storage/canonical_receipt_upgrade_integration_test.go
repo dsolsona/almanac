@@ -35,7 +35,7 @@ func TestIntegrationCanonicalReceiptPopulatedUpgrade(t *testing.T) {
 		if err := s.conn.QueryRow(t.Context(), `SELECT jsonb_build_object(
    'hours',(SELECT jsonb_agg(to_jsonb(h)-'receipt_source_generation'-'certified_receipt_at' ORDER BY hour_start) FROM almanac_sli_hourly_aggregates h),
    'generations',(SELECT jsonb_agg(to_jsonb(g) ORDER BY sli_id,measurement_revision) FROM almanac_sli_source_generations g),
-   'observations',(SELECT jsonb_agg(to_jsonb(o) ORDER BY interval_start) FROM almanac_sli_observations o),
+   'observations',(SELECT jsonb_agg(to_jsonb(o)-'backfill_chunk_id' ORDER BY interval_start) FROM almanac_sli_observations o),
    'ledger',(SELECT jsonb_agg(to_jsonb(m) ORDER BY version) FROM almanac_schema_migrations m WHERE version<61))::text`).Scan(&result); err != nil {
 			t.Fatal(err)
 		}
@@ -45,6 +45,10 @@ func TestIntegrationCanonicalReceiptPopulatedUpgrade(t *testing.T) {
 	result, err := Upgrade(t.Context(), s.f.databaseURL)
 	if err != nil || result.Applied != latest-60 || result.DatabaseSchemaVersion != latest {
 		t.Fatalf("upgrade %+v %v", result, err)
+	}
+	var historical int
+	if err := s.conn.QueryRow(t.Context(), `SELECT count(*) FROM almanac_sli_observations WHERE backfill_chunk_id IS NOT NULL`).Scan(&historical); err != nil || historical != 0 {
+		t.Fatalf("legacy observations acquired historical provenance: count %d, error %v", historical, err)
 	}
 	if snapshot() != before {
 		t.Fatal("receipt migration changed measurements, stored data or prior ledger")

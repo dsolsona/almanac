@@ -284,7 +284,8 @@ func CreateDatasource(ctx context.Context, databaseURL string, secrets *sourcese
 		AuthenticationUsername: username, PasswordEnvelope: passwordEnvelope, PasswordRevision: passwordRevision,
 		TokenEnvelope: tokenEnvelope, TokenRevision: tokenRevision,
 		PollingIntervalSeconds: int32(input.Settings.PollingIntervalSeconds), SettlingDelaySeconds: int32(input.Settings.SettlingDelaySeconds),
-		AgentID: agentID, CreatedAt: timestamp(now), UpdatedAt: timestamp(now),
+		HistoricalRetentionDays: datasourceRetentionValue(input.Settings.HistoricalRetentionDays, 0),
+		AgentID:                 agentID, CreatedAt: timestamp(now), UpdatedAt: timestamp(now),
 	})
 	if err != nil {
 		if isUniqueViolation(err) {
@@ -583,7 +584,8 @@ func UpdateDatasource(ctx context.Context, databaseURL string, secrets *sourcese
 		AuthenticationMode: input.Settings.AuthenticationMode, AuthenticationUsername: username,
 		PasswordEnvelope: passwordEnvelope, PasswordRevision: passwordRevision, TokenEnvelope: tokenEnvelope, TokenRevision: tokenRevision,
 		PollingIntervalSeconds: int32(input.Settings.PollingIntervalSeconds), SettlingDelaySeconds: int32(input.Settings.SettlingDelaySeconds),
-		AgentID: newAgentID, UpdatedAt: timestamp(now), ID: id, ExpectedVersion: input.ExpectedVersion,
+		HistoricalRetentionDays: datasourceRetentionValue(input.Settings.HistoricalRetentionDays, current.HistoricalRetentionDays),
+		AgentID:                 newAgentID, UpdatedAt: timestamp(now), ID: id, ExpectedVersion: input.ExpectedVersion,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return DatasourceRecord{}, ErrDatasourceConflict
@@ -755,11 +757,21 @@ func datasourceRecordWithReassignment(ctx context.Context, queries *dbgen.Querie
 	return record, nil
 }
 
+func datasourceRetentionValue(value *int, existing int32) int32 {
+	if value == nil {
+		return existing
+	}
+	return int32(*value)
+}
+
 func datasourceRecord(row dbgen.AlmanacDatasource) DatasourceRecord {
 	settings := datasource.Settings{Name: row.Name, DisplayName: row.DisplayName, Provider: row.Provider,
 		ConfigurationFormat: row.ConfigurationFormat, Endpoint: row.Endpoint,
 		AuthenticationMode: row.AuthenticationMode, PollingIntervalSeconds: int(row.PollingIntervalSeconds),
 		SettlingDelaySeconds: int(row.SettlingDelaySeconds), AgentID: uuidFromPG(row.AgentID)}
+	if row.HistoricalRetentionDays > 0 {
+		settings.HistoricalRetentionDays = new(int(row.HistoricalRetentionDays))
+	}
 	_ = json.Unmarshal(row.Tls, &settings.TLS)
 	if row.AuthenticationUsername.Valid {
 		settings.AuthenticationUser = row.AuthenticationUsername.String
