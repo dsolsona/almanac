@@ -1,3 +1,9 @@
+Earlier SLI history, 2026-11-22. [F4-T66](tasks/F4-T66.md) is in review.
+Editors can authorize earlier collection under an active original Prometheus
+definition. The chart preserves the selected span, and provider rate-limit delays
+apply to historical work across the datasource. Focused verification and browser
+screenshots are recorded in the task.
+
 Single-SLI history, 2026-11-21. [PR #160](https://github.com/dsolsona/almanac/pull/160)
 includes the local demo fixture and the Prometheus backfill and repair workflow.
 [F4-T64](tasks/F4-T64.md) records the isolated browser evidence, restart recovery,

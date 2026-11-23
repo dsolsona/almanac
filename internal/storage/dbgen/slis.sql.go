@@ -709,7 +709,7 @@ const listSliConfigurationForAgent = `-- name: ListSliConfigurationForAgent :man
 SELECT sli.id AS sli_id, sli.measurement_revision, measurement.datasource_id,
        COALESCE(pending.source_config_version, datasource.version)::bigint AS datasource_version, measurement.measurement_kind,
        measurement.component_mode, measurement.good_query, measurement.total_query,
-       GREATEST(measurement.effective_from, COALESCE(epoch.starts_at, measurement.effective_from))::timestamptz AS effective_from
+       GREATEST(COALESCE(measurement.initial_live_from, measurement.effective_from), epoch.starts_at)::timestamptz AS effective_from
 FROM public.almanac_slis AS sli
 JOIN public.almanac_sli_measurements AS measurement
   ON measurement.sli_id = sli.id AND measurement.revision = sli.measurement_revision
@@ -1211,7 +1211,9 @@ SELECT measurement.sli_id, measurement.revision, measurement.datasource_id,
              AND (epoch.ends_at IS NULL OR epoch.ends_at > $3::timestamptz)),
          CASE WHEN NOT EXISTS (SELECT 1 FROM public.almanac_sli_ownership_epochs epoch WHERE epoch.sli_id = measurement.sli_id AND epoch.measurement_revision = measurement.revision) THEN measurement.agent_id END)::uuid AS interval_agent_id,
        measurement.measurement_kind, measurement.component_mode,
-       measurement.effective_from, datasource.agent_id AS current_agent_id,
+       measurement.effective_from,
+       COALESCE(measurement.initial_live_from, measurement.effective_from)::timestamptz AS live_effective_from,
+       datasource.agent_id AS current_agent_id,
        datasource.polling_interval_seconds, datasource.settling_delay_seconds,
        sli.measurement_revision AS current_revision
 FROM public.almanac_sli_measurements AS measurement
@@ -1238,6 +1240,7 @@ type LockSliMeasurementForObservationRow struct {
 	MeasurementKind                 string             `json:"measurement_kind"`
 	ComponentMode                   string             `json:"component_mode"`
 	EffectiveFrom                   pgtype.Timestamptz `json:"effective_from"`
+	LiveEffectiveFrom               pgtype.Timestamptz `json:"live_effective_from"`
 	CurrentAgentID                  pgtype.UUID        `json:"current_agent_id"`
 	PollingIntervalSeconds          int32              `json:"polling_interval_seconds"`
 	SettlingDelaySeconds            int32              `json:"settling_delay_seconds"`
@@ -1257,6 +1260,7 @@ func (q *Queries) LockSliMeasurementForObservation(ctx context.Context, arg Lock
 		&i.MeasurementKind,
 		&i.ComponentMode,
 		&i.EffectiveFrom,
+		&i.LiveEffectiveFrom,
 		&i.CurrentAgentID,
 		&i.PollingIntervalSeconds,
 		&i.SettlingDelaySeconds,

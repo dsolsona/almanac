@@ -2734,6 +2734,10 @@ export interface components {
             preview: boolean;
             /** @description Administrator-only explicit retry of previously failed intervals in the requested range. */
             retry_exhausted?: boolean;
+            /** @description Explicitly apply the active initial measurement definition to eligible earlier intervals. */
+            include_earlier_history?: boolean;
+            /** @description Required when confirming an earlier-history request. Copy from the preview. */
+            earlier_history_context?: string;
         };
         SliBackfillAdmission: {
             /** Format: uuid */
@@ -2744,6 +2748,18 @@ export interface components {
             end: string;
             chunk_count: number;
             plan?: components["schemas"]["SliBackfillPlan"];
+            /**
+             * Format: date-time
+             * @description Retention-adjusted new measurement start for an explicitly requested earlier backfill.
+             */
+            earlier_history_from?: string;
+            /**
+             * Format: date-time
+             * @description Exclusive end of the newly authorized interval before existing measurement history.
+             */
+            earlier_history_until?: string;
+            /** @description Identifies the datasource configuration and bounds used for an earlier-history preview. */
+            earlier_history_context?: string;
         };
         SliBackfillJob: {
             /** Format: uuid */

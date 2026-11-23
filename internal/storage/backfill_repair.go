@@ -65,7 +65,8 @@ WHERE sweep=$1 FOR UPDATE`, sweep).Scan(&cursorID, &next); err != nil {
 	var validFrom time.Time
 	var cadenceSeconds, delaySeconds, retentionDays int
 	err = tx.QueryRow(ctx, `
-SELECT s.id,m.revision,m.effective_from,d.agent_id,d.polling_interval_seconds,d.settling_delay_seconds,d.historical_retention_days
+SELECT s.id,m.revision,coalesce(m.initial_live_from,m.effective_from),d.agent_id,
+       d.polling_interval_seconds,d.settling_delay_seconds,d.historical_retention_days
 FROM public.almanac_slis s
 JOIN public.almanac_sli_measurements m ON m.sli_id=s.id AND m.revision=s.measurement_revision
 JOIN public.almanac_datasources d ON d.id=m.datasource_id

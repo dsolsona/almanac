@@ -94,7 +94,7 @@ func IngestAgentObservation(ctx context.Context, databaseURL, credentialID strin
 		measurement.MeasurementKind != string(sli.MeasurementKindEventCounts) || measurement.ComponentMode != string(sli.ComponentModeIntervalCount) {
 		return result, ErrObservationDenied
 	}
-	if err := item.Validate(int(measurement.PollingIntervalSeconds), measurement.EffectiveFrom.Time.UTC(),
+	if err := item.Validate(int(measurement.PollingIntervalSeconds), measurement.LiveEffectiveFrom.Time.UTC(),
 		time.Duration(measurement.SettlingDelaySeconds)*time.Second, now); err != nil {
 		result.ErrorCode = observationValidationCode(err)
 		return result, nil

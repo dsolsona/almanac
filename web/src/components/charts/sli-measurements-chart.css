@@ -5,6 +5,7 @@
 .sli-measurement-svg .grid { stroke:var(--grid); stroke-width:1; }
 .sli-measurement-svg .line { stroke:var(--s1); stroke-width:2; stroke-linejoin:round; fill:none; vector-effect:non-scaling-stroke; }
 .sli-measurement-svg .area { fill:var(--good-wash); opacity:.12; }
+.sli-measurement-svg .outside-history { fill:var(--neutral-wash); }
 .sli-measurement-svg .gap { fill:var(--neutral-wash); stroke:var(--neutral); stroke-width:2; stroke-dasharray:2 4; }
 .sli-measurement-svg .chart-point { fill:var(--s1); }
 .sli-measurement-svg .interval-state.observed { fill:var(--good); }

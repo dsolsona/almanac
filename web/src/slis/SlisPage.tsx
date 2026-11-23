@@ -6,7 +6,7 @@ import { providerInfo } from '../datasources/providers.ts';
 import { SliMeasurementsChart, intervalTime } from '../components/charts/SliMeasurementsChart.tsx';
 import { buildMeasurements, countText, measurementLabels, measurementInterval } from './measurements.ts';
 import { SliObjectives } from './SliObjectives.tsx';
-import { useEffect, useMemo, useRef, useState, type FormEvent, type RefObject } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type RefObject } from 'react';
 import type { AuthContext } from '../auth/client.ts';
 import { createAgentClient, type Agent } from '../agents/client.ts';
 import { SliRecentStrip, type SliRecentSample } from '../components/charts/SliRecentStrip.tsx';
@@ -204,6 +204,8 @@ export function SlisPage({ context }: { context: AuthContext }) {
   const previousSource = useRef<Datasource | undefined>(undefined);
   const routeGeneration = useRef(0);
   const historyRequest = useRef(0);
+  const detailSignal = useRef<AbortSignal | undefined>(undefined);
+  const loadedHistory = useRef<{ start: string | null; end: string | null; paginated: boolean } | null>(null);
   const listRequest = useRef(0);
   const listAbort = useRef<AbortController | null>(null);
   const createIntent = useRef<CreateIntent | null>(null);
@@ -230,6 +232,8 @@ export function SlisPage({ context }: { context: AuthContext }) {
 
   useEffect(() => {
     const request = new AbortController();
+    detailSignal.current = request.signal;
+    loadedHistory.current = null;
     let active = true;
     const generation = routeGeneration.current;
     const current = () => active && generation === routeGeneration.current;
@@ -343,7 +347,8 @@ export function SlisPage({ context }: { context: AuthContext }) {
     setFieldErrors((current) => (current[key] ? { ...current, [key]: undefined } : current));
   }
 
-  async function fetchHistory(id: string, requestID: number, generation: number, cursor = '', signal?: AbortSignal, cadence = sli?.polling_interval_seconds ?? 60) {
+  const fetchHistory = useCallback(async (id: string, requestID: number, generation: number, cursor: string,
+    signal: AbortSignal | undefined, cadence: number, preserveOlder = false) => {
     const current = () => generation === routeGeneration.current && requestID === historyRequest.current && !signal?.aborted;
     try {
       const requested=cursor?50:Math.max(1,Math.ceil(3600/cadence));
@@ -357,19 +362,42 @@ export function SlisPage({ context }: { context: AuthContext }) {
         if(Date.parse(older.inspected_end??'')!==Date.parse(start))throw new Error('Observation history did not continue its inspected range.');
         items=[...items,...older.items];missingIntervals=[...missingIntervals,...older.missing_intervals];next=older.next_cursor;start=older.inspected_start??start;
       }
-      setHistory((previous) => cursor ? [...previous, ...items] : items);
-      setMissing((previous) => cursor ? [...previous, ...missingIntervals] : missingIntervals);
-      if(!cursor)setHistoryWindow({start,end:page.inspected_end});
-      if(start)setHistoryStart(previous=>cursor&&previous&&Date.parse(previous)<Date.parse(start)?previous:start);
+      const loaded = loadedHistory.current;
+      const first = Date.parse(start ?? '');
+      const keepOlder = preserveOlder && loaded?.paginated && Date.parse(loaded.start ?? '') < first &&
+        Date.parse(loaded.end ?? '') >= first;
+      setHistory(previous => cursor ? [...previous, ...items] :
+        keepOlder ? [...items, ...previous.filter(row => Date.parse(row.interval_end) <= first)] : items);
+      setMissing(previous => cursor ? [...previous, ...missingIntervals] : keepOlder ? [...missingIntervals, ...previous
+        .filter(range => Date.parse(range.interval_start) < first)
+        .map(range => Date.parse(range.interval_end) > first ? { ...range, interval_end: start! } : range)] : missingIntervals);
+      if (!cursor) setHistoryWindow({start, end:page.inspected_end});
+      const oldest = keepOlder || (cursor && loaded?.start && (!start || Date.parse(loaded.start) < first))
+        ? loaded!.start : start;
+      setHistoryStart(oldest);
+      loadedHistory.current = { start: oldest, end: cursor ? loaded?.end ?? page.inspected_end : page.inspected_end,
+        paginated: Boolean(cursor || keepOlder) };
       setEarliest(page.earliest_queryable_interval_start);
-      setNextCursor(next);
+      if (!keepOlder) setNextCursor(next);
       setHistoryLoaded(true);
     } catch (failure) {
       if (current()) setHistoryError(safeError(failure));
     } finally {
       if (current()) setHistoryBusy(false);
     }
-  }
+  }, []);
+
+  const cadence = sli?.polling_interval_seconds ?? 60;
+  const refreshBackfilledMeasurements = useCallback((earlierFrom?: string) => {
+    setMeasurementRefresh(value => value + 1);
+    if (earlierFrom) {
+      setSli(current => current && { ...current, effective_from: earlierFrom });
+    } else if (route.id) {
+      setHistoryBusy(true);
+      setHistoryError('');
+      void fetchHistory(route.id, ++historyRequest.current, routeGeneration.current, '', detailSignal.current, cadence, true);
+    }
+  }, [route.id, cadence, fetchHistory]);
 
   async function submitCreate(event: FormEvent<HTMLFormElement> | undefined, thenSlo = false) {
     event?.preventDefault();
@@ -447,7 +475,7 @@ export function SlisPage({ context }: { context: AuthContext }) {
     const historyID = ++historyRequest.current;
     setHistoryBusy(true);
     setHistoryError('');
-    await fetchHistory(route.id, historyID, generation, nextCursor);
+    await fetchHistory(route.id, historyID, generation, nextCursor, undefined, cadence);
   }
 
   async function updateListPage(search: string, datasourceID: string, pageSize: number, cursor: string, previous: string[], push = false) {
@@ -594,7 +622,7 @@ export function SlisPage({ context }: { context: AuthContext }) {
       <section className="sli-detail-card sli-measurements-panel" aria-labelledby="sli-measurements-title" aria-busy={historyBusy}>
         <header><h2 id="sli-measurements-title">Measurements</h2><span className="hint">{measurementPeriod!=='1h'?null:date&&measurements.intervals.length?`${date} · ${intervalTime({start:historyWindow.start!,end:historyWindow.end!})}`:'No inspected intervals yet'}</span><div className="tools"><Button variant="ghost" onClick={()=>openDetails('sli-intervals')}>{measurementPeriod==='1h'?'Exact values ↓':'Recent intervals ↓'}</Button></div></header>
         {measurementPeriod !== '1h'
-          ? <div className="sli-measurements-body"><SliMeasurementHistory key={`${sli.id}:${measurementPeriod}`} id={sli.id} period={measurementPeriod} refresh={measurementRefresh} latest={latestMeasurement}/></div>
+          ? <div className="sli-measurements-body"><SliMeasurementHistory key={`${sli.id}:${measurementPeriod}`} id={sli.id} period={measurementPeriod} cadence={sli.polling_interval_seconds} refresh={measurementRefresh} latest={latestMeasurement}/></div>
           : <>
         <div className="sli-measurements-body">
           <dl className="sli-measurement-summary">{latestMeasurement}<div><dt>{`Observed requests · ${wholeHour?'this hour':'shown period'}`}</dt><dd>{measurements.ratio!==null?`${measurements.ratio}%`:'—'}</dd><p>{measurements.total!=='0'?`${countText(measurements.bad)} unsuccessful / ${countText(measurements.total)} total`:'No observed traffic in this period.'}</p></div><div><dt>{`Data coverage · ${wholeHour?'this hour':'shown period'}`}</dt><dd className={measurements.counts.failed+measurements.counts.missing+measurements.counts.partial?'is-warning':''}>{measurements.counts.observed+measurements.counts.zero+measurements.counts.empty} <small>/ {measurements.intervals.length} {sli.polling_interval_seconds===60?'min':'intervals'}</small></dd><p>{measurements.counts.failed} query errors · {measurements.counts.missing} missing{measurements.counts.partial?` · ${measurements.counts.partial} partial`:''}{measurements.counts.empty?` · ${measurements.counts.empty} known empty`:''}{measurements.counts.zero?` · ${measurements.counts.zero} zero traffic`:''}</p></div></dl>
@@ -607,7 +635,7 @@ export function SlisPage({ context }: { context: AuthContext }) {
         <div className="sli-detail-inline-note"><span>{measurements.minimum?<>{sli.polling_interval_seconds===60?'Lowest minute':'Lowest interval'} <strong className="mono">{measurements.minimum.ratio}%</strong>{` · ${intervalTime(measurements.minimum)}. Ratios use observed requests only.`}</>:'Ratios use observed requests only.'}</span><Button variant="ghost" onClick={()=>{setHistoryFilter('problems');openDetails('sli-intervals');}}>Inspect gaps ↓</Button></div>
           </>}
       </section>
-      {datasource?.provider === 'prometheus' && <SliBackfills sli={sli} context={context} canWrite={canWrite} />}
+      {datasource?.provider === 'prometheus' && <SliBackfills key={sli.id} sli={sli} datasourceName={datasource.display_name} context={context} canWrite={canWrite} onMeasurementsChanged={refreshBackfilledMeasurements} />}
       <SliObjectives projection={projection} unavailable={projectionMissing}/>
       <details className="sli-detail-disclosure" id="sli-intervals"><summary>Recent intervals<span>{exactRows.length} inspected · {withoutRatio} without a ratio · exact values</span></summary>
         {measurementPeriod !== '1h' && historyError && <p className="sli-error" role="alert">{historyError}</p>}

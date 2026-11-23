@@ -97,6 +97,14 @@ func TestIntegrationBackfillAdmissionIsAlignedAndIdempotent(t *testing.T) {
 	if _, err := s.conn.Exec(t.Context(), `DELETE FROM public.almanac_sli_observations WHERE sli_id=$1 AND interval_start=$2`, s.sliID, input.Start); err != nil {
 		t.Fatal(err)
 	}
+	unexpectedContext := input
+	unexpectedContext.EarlierHistoryContext = "unused"
+	for _, preview := range []bool{true, false} {
+		unexpectedContext.Preview = preview
+		if _, err := RequestBackfill(t.Context(), s.f.databaseURL, unexpectedContext); !errors.Is(err, ErrSliInvalid) {
+			t.Fatalf("ordinary request with context (preview=%t) returned %v", preview, err)
+		}
+	}
 	preview := input
 	preview.Preview = true
 	planned, err := RequestBackfill(t.Context(), s.f.databaseURL, preview)
@@ -522,5 +530,168 @@ JOIN almanac_sli_measurements m ON m.agent_id=c.agent_id WHERE m.sli_id=$1`, s.s
 	if err := s.conn.QueryRow(ctx, `SELECT count(*) FROM almanac_sli_observations
  WHERE backfill_chunk_id=$1 OR delivery_id=$2`, claim.ID, item.DeliveryID).Scan(&rows); err != nil || rows != 65 {
 		t.Fatalf("committed rows = %d, %v", rows, err)
+	}
+}
+
+func TestIntegrationSetupBackfillExtendsOnlyConfirmedInitialHistory(t *testing.T) {
+	t.Parallel()
+	s := newSelfHealFixture(t, "backfill-setup", true)
+	ctx := t.Context()
+	input := BackfillRequest{
+		Proof: DatasourceProof{SessionVerifier: s.f.verifier},
+		SLIID: s.sliID, Start: s.historyStart.Add(-28 * 24 * time.Hour), End: s.historyStart,
+		RequestKey: "earlier-history", Now: s.clock, Preview: true,
+	}
+	if ordinary, err := RequestBackfill(ctx, s.f.databaseURL, input); err != nil || ordinary.ChunkCount != 0 {
+		t.Fatalf("ordinary preview = %+v, %v", ordinary, err)
+	}
+	input.IncludeEarlierHistory = true
+	if _, err := RequestBackfill(ctx, s.f.databaseURL, input); !errors.Is(err, ErrBackfillEarlierUnavailable) {
+		t.Fatalf("unactivated original definition returned %v", err)
+	}
+	if _, err := s.conn.Exec(ctx, `UPDATE public.almanac_sli_measurements SET activated_at=$2 WHERE sli_id=$1 AND revision=1`, s.sliID, s.historyStart); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := RequestBackfill(ctx, s.f.databaseURL, input); !errors.Is(err, ErrBackfillEarlierUnavailable) {
+		t.Fatalf("agent without historical capability returned %v", err)
+	}
+	if _, err := s.conn.Exec(ctx, `
+UPDATE public.almanac_agent_runtime_status
+SET capabilities=jsonb_set(capabilities,'{0,operations}',(capabilities#>'{0,operations}')||'["backfill"]'::jsonb)
+WHERE agent_id=(SELECT agent_id FROM public.almanac_sli_measurements WHERE sli_id=$1 AND revision=1)`, s.sliID); err != nil {
+		t.Fatal(err)
+	}
+	disjoint := input
+	disjoint.End = s.historyStart.Add(-time.Minute)
+	if _, err := RequestBackfill(ctx, s.f.databaseURL, disjoint); !errors.Is(err, ErrBackfillEarlierRange) {
+		t.Fatalf("disjoint earlier selection returned %v", err)
+	}
+	setRetention := func(days int) {
+		t.Helper()
+		if _, err := s.conn.Exec(ctx, `
+UPDATE public.almanac_datasources SET historical_retention_days=$2
+WHERE id=(SELECT datasource_id FROM public.almanac_sli_measurements WHERE sli_id=$1 AND revision=1)`, s.sliID, days); err != nil {
+			t.Fatal(err)
+		}
+	}
+	setRetention(7)
+	clipped, err := RequestBackfill(ctx, s.f.databaseURL, input)
+	if err != nil || clipped.Plan == nil || clipped.Plan.Eligible != 9900 || clipped.Plan.OutsideRetention != 30420 ||
+		!clipped.EarlierHistoryFrom.Equal(s.at.Add(-7*24*time.Hour)) {
+		t.Fatalf("retention-clipped setup preview = %+v, plan %+v, %v", clipped, clipped.Plan, err)
+	}
+	setRetention(0)
+	preview, err := RequestBackfill(ctx, s.f.databaseURL, input)
+	if err != nil || preview.Plan == nil || preview.Plan.Eligible != 28*1440 || preview.ChunkCount != 630 {
+		t.Fatalf("setup preview = %+v, plan %+v, %v", preview, preview.Plan, err)
+	}
+	var before, after time.Time
+	readValidity := func(value *time.Time) {
+		t.Helper()
+		if err := s.conn.QueryRow(ctx, `SELECT effective_from FROM public.almanac_sli_measurements WHERE sli_id=$1 AND revision=1`, s.sliID).Scan(value); err != nil {
+			t.Fatal(err)
+		}
+	}
+	readValidity(&before)
+	if !before.Equal(s.historyStart) {
+		t.Fatalf("preview changed validity to %s", before)
+	}
+	input.Preview = false
+	input.EarlierHistoryContext = preview.EarlierHistoryContext
+	if _, err := s.conn.Exec(ctx, `
+UPDATE public.almanac_datasources SET historical_configuration_version=historical_configuration_version+1
+WHERE id=(SELECT datasource_id FROM public.almanac_sli_measurements WHERE sli_id=$1 AND revision=1)`, s.sliID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := RequestBackfill(ctx, s.f.databaseURL, input); !errors.Is(err, ErrBackfillEarlierChanged) {
+		t.Fatalf("confirmation with stale datasource configuration returned %v", err)
+	}
+	input.Preview = true
+	input.EarlierHistoryContext = ""
+	preview, err = RequestBackfill(ctx, s.f.databaseURL, input)
+	if err != nil || preview.EarlierHistoryContext == "" {
+		t.Fatalf("fresh preview = %+v, %v", preview, err)
+	}
+	input.Preview = false
+	input.EarlierHistoryContext = preview.EarlierHistoryContext
+	admitted, err := RequestBackfill(ctx, s.f.databaseURL, input)
+	if err != nil || admitted.ID == "" || admitted.ChunkCount != 630 {
+		t.Fatalf("setup admission = %+v, %v", admitted, err)
+	}
+	readValidity(&after)
+	if !after.Equal(input.Start) {
+		t.Fatalf("validity = %s, want %s", after, input.Start)
+	}
+	var liveFrom, authorizedFrom, authorizedBefore time.Time
+	if err := s.conn.QueryRow(ctx, `
+SELECT m.initial_live_from,j.earlier_history_from,j.previous_valid_from
+FROM public.almanac_backfill_jobs j
+JOIN public.almanac_sli_measurements m ON m.sli_id=j.sli_id AND m.revision=1
+WHERE j.id=$1 AND j.requested_by IS NOT NULL`, admitted.ID).Scan(&liveFrom, &authorizedFrom, &authorizedBefore); err != nil {
+		t.Fatal(err)
+	}
+	if !liveFrom.Equal(s.historyStart) || !authorizedBefore.Equal(s.historyStart) || !authorizedFrom.Equal(input.Start) {
+		t.Fatalf("live boundary %s, authorized range %s to %s", liveFrom, authorizedFrom, authorizedBefore)
+	}
+	replay, err := RequestBackfill(ctx, s.f.databaseURL, input)
+	if err != nil || replay != admitted {
+		t.Fatalf("setup replay = %+v, %v", replay, err)
+	}
+	input.IncludeEarlierHistory = false
+	input.EarlierHistoryContext = ""
+	if _, err := RequestBackfill(ctx, s.f.databaseURL, input); !errors.Is(err, ErrSliConflict) {
+		t.Fatalf("changed request keyed as earlier history returned %v", err)
+	}
+}
+
+func TestIntegrationBackfillRetryAfterPausesOtherDatasourceChunks(t *testing.T) {
+	t.Parallel()
+	s := newSelfHealFixture(t, "backfill-cooldown", true)
+	ctx := t.Context()
+	if _, err := s.conn.Exec(ctx, `DELETE FROM public.almanac_sli_observations WHERE sli_id=$1 AND interval_start < $2`, s.sliID, s.historyStart.Add(65*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	admission, err := RequestBackfill(ctx, s.f.databaseURL, BackfillRequest{
+		Proof: DatasourceProof{SessionVerifier: s.f.verifier}, SLIID: s.sliID,
+		Start: s.historyStart, End: s.historyStart.Add(65 * time.Minute), RequestKey: "cooldown", Now: s.clock,
+	})
+	if err != nil || admission.ChunkCount != 2 {
+		t.Fatalf("admission = %+v, %v", admission, err)
+	}
+	var agentID string
+	if err := s.conn.QueryRow(ctx, `SELECT agent_id FROM public.almanac_backfill_chunks WHERE job_id=$1 LIMIT 1`, admission.ID).Scan(&agentID); err != nil {
+		t.Fatal(err)
+	}
+	claim := func(at time.Time) (sli.BackfillChunkResult, error) {
+		var result sli.BackfillChunkResult
+		err := s.conn.QueryRow(ctx, `SELECT id,generation FROM public.almanac_claim_backfill_chunk($1,$2)`, agentID, at).Scan(&result.ChunkID, &result.Generation)
+		return result, err
+	}
+	first, err := claim(s.at)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first.RetryAfterSeconds = 120
+	first.Outcomes = make([]sli.ExecutionOutcome, 64)
+	for i := range first.Outcomes {
+		first.Outcomes[i] = sli.ExecutionOutcome{State: sli.OutcomeFailed, ErrorCode: "rate_limited"}
+	}
+	tx, err := s.conn.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rollbackTransaction(tx)
+	if err := commitBackfillChunk(ctx, tx, agentID, 1, 1, s.at, first); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := claim(s.at.Add(time.Minute)); !errors.Is(err, pgx.ErrNoRows) {
+		t.Fatalf("another chunk ignored the datasource cooldown: %v", err)
+	}
+	second, err := claim(s.at.Add(2 * time.Minute))
+	if err != nil || second.ChunkID == first.ChunkID {
+		t.Fatalf("queued chunk did not resume after cooldown: %+v, %v", second, err)
 	}
 }

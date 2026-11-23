@@ -51,6 +51,11 @@ retention policy. Passes use the canonical measurements and durable job state.
 The operator inspects gaps, previews eligible work, then confirms a queued job.
 No separate start action is required.
 
+## Earlier history
+
+[F4-T66](../tasks/F4-T66.md) tracks the explicitly authorized extension of
+initial measurement history and datasource-wide backfill cooldown.
+
 ## Automatic recovery
 
 - [ ] Admit overdue gaps through the same historical job path, with the delivery

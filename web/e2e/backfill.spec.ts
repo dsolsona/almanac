@@ -43,31 +43,48 @@ test('request historical collection and see the recalculated SLO', async ({ page
 
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.goto(`/slis/${id}`);
-    const panel = page.locator('#sli-backfills');
+    const panel = page.locator('details').filter({ has: page.locator('summary', { hasText: 'Historical backfill' }) });
     await page.getByRole('radio', { name: '30d', exact: true }).click();
     await page.getByRole('button', { name: 'Review backfill', exact: true }).click();
     await expect(panel).toHaveAttribute('open', '');
     await expect(panel).toContainText('Datasource retention is 7 days.');
+    await page.getByRole('radio', { name: '1h', exact: true }).click();
+    await page.getByRole('button', { name: 'Exact values ↓' }).click();
+    const recoveredRow = page.getByRole('region', { name: 'Observation history' }).getByRole('row')
+      .filter({ has: page.locator(`td[title^="${from.slice(0, 19)}"]`) });
+    await expect(recoveredRow).toContainText('Missing');
     await panel.getByRole('button', { name: 'Custom range' }).click();
     const dialog = page.getByRole('dialog', { name: 'Custom backfill range' });
-    const monthLabel = new Intl.DateTimeFormat('en', { month: 'long', year: 'numeric', timeZone: 'UTC' });
-    const dayLabel = new Intl.DateTimeFormat('en', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
-    async function chooseDate(label: string, value: string) {
-      await dialog.getByRole('button', { name: new RegExp(label) }).click();
-      const calendar = page.getByRole('dialog', { name: `Choose ${label} (UTC)` });
-      const date = new Date(value);
-      const month = calendar.getByRole('grid', { name: monthLabel.format(date) });
-      if (!await month.isVisible()) await calendar.getByRole('button', { name: 'Previous month' }).click();
-      await month.getByRole('button', { name: dayLabel.format(date) }).click();
-      await expect(calendar).toBeHidden();
+    async function setBound(label: 'Start' | 'End', value: string, capture = false) {
+      const button = dialog.getByRole('button', { name: new RegExp(`^${label} date`) });
+      await button.click();
+      const picker = page.getByRole('dialog', { name: `Choose ${label} date (UTC)`, exact: true });
+      const selected = new Date(value);
+      const month = new Intl.DateTimeFormat('en', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(selected);
+      const grid = picker.getByRole('grid');
+      const currentMonth = await grid.getAttribute('aria-label');
+      if (currentMonth !== month) {
+        const direction = Date.parse(`1 ${currentMonth} UTC`) > selected.getTime() ? 'Previous' : 'Next';
+        await picker.getByRole('button', { name: `${direction} month` }).click();
+      }
+      await expect(grid).toHaveAccessibleName(month);
+      if (capture) {
+        const path = info.outputPath('earlier-history-calendar-light.png');
+        await picker.screenshot({ path });
+        await info.attach('Shared calendar, desktop light', { path, contentType: 'image/png' });
+      }
+      const day = new Intl.DateTimeFormat('en', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(selected);
+      await grid.getByRole('button', { name: new RegExp(`^${day}(,|$)`) }).click();
+      await expect(button).toBeFocused();
+      await dialog.getByLabel(`${label} time (UTC)`).fill(value.slice(11, 16));
     }
-    const startDate = dialog.getByRole('button', { name: /Start date/ });
+    const startDate = dialog.getByRole('button', {name: /^Start date/});
     await startDate.click();
-    await expect(page.getByRole('dialog', { name: 'Choose Start date (UTC)' })).toBeVisible();
+    const startCalendar = page.getByRole('dialog', {name: 'Choose Start date (UTC)'});
+    await expect(startCalendar).toBeVisible();
     await page.keyboard.press('Escape');
+    await expect(startCalendar).toBeHidden();
     await expect(startDate).toBeFocused();
-    await chooseDate('Start date', from);
-    await chooseDate('End date', to);
     const backfillRoute = `**/api/v1/slis/${id}/backfills`;
     let intercepted!: () => void;
     let release!: () => void;
@@ -82,8 +99,8 @@ test('request historical collection and see the recalculated SLO', async ({ page
       await unblockRoute;
       await route.abort().catch(() => {});
     });
-    await dialog.getByLabel('Start time (UTC)').fill(from.slice(11, 19));
-    await dialog.getByLabel('End time (UTC)').fill(to.slice(11, 19));
+    await setBound('Start', from);
+    await setBound('End', to);
     await dialog.getByRole('button', { name: 'Preview range' }).click();
     try {
       await requestStarted;
@@ -95,20 +112,24 @@ test('request historical collection and see the recalculated SLO', async ({ page
       await page.unroute(backfillRoute);
     }
     await panel.getByRole('button', { name: 'Custom range' }).click();
+    await setBound('Start', from);
+    await setBound('End', to);
     await dialog.getByRole('button', { name: 'Preview range' }).click();
-    await expect(dialog.getByRole('status')).toContainText('1 chunk');
     await expect(dialog.getByRole('status')).toContainText('Intervals to recover');
+    await expect(dialog.getByRole('status')).toContainText('1 chunk');
+    await dialog.getByText('Recoverable gaps', {exact: true}).click();
+    await expect(dialog.getByRole('list', {name: 'Recoverable gap ranges'})).toContainText('1 interval');
     const light = info.outputPath('backfill-preview-desktop-light.png');
     await dialog.screenshot({ path: light });
     await info.attach('Backfill range preview, desktop light', { path: light, contentType: 'image/png' });
     await dialog.getByRole('button', { name: 'Queue backfill' }).click();
-    const history = panel.locator('.sli-backfill-history');
-    const historySummary = history.locator('summary');
-    const finishedJobs = history.getByRole('list', { name: 'Backfill job history' });
-    await expect(historySummary).toBeVisible({ timeout: 60_000 });
+    const jobHistory = panel.locator('details.sli-backfill-history');
+    const finishedJobs = jobHistory.getByRole('list', {name: 'Backfill job history'});
+    await expect(jobHistory.locator('summary')).toBeVisible({timeout: 60_000});
     await expect(finishedJobs).toBeHidden();
-    await historySummary.click();
-    await expect(finishedJobs).toContainText('1 / 1 chunks committed', { timeout: 60_000 });
+    await jobHistory.locator('summary').click();
+    await expect(finishedJobs).toContainText('1 / 1 chunks committed');
+    await expect(recoveredRow).toContainText('99.00%');
 
     const row = psql(`SELECT good_count::int,total_count::int FROM public.almanac_sli_observations
       WHERE sli_id='${id}' AND interval_start='${from}' AND backfill_chunk_id IS NOT NULL;`);
@@ -118,15 +139,71 @@ test('request historical collection and see the recalculated SLO', async ({ page
       return [Number(current?.performance?.remaining_fraction), Number(current?.performance?.total) >= 200];
     }, { timeout: 60_000 }).toEqual([-1, true]);
 
+    const earlier = new Date(Date.parse(from) - 120_000).toISOString();
+    async function previewEarlierHistory(capture = false) {
+      await panel.getByRole('button', { name: 'Custom range' }).click();
+      await setBound('Start', earlier, capture);
+      await setBound('End', from);
+      const include = dialog.getByRole('switch', { name: 'Include earlier history' });
+      await expect(include).not.toBeChecked();
+      await include.focus();
+      await page.keyboard.press('Space');
+      await expect(include).toBeChecked();
+      await dialog.getByRole('button', { name: 'Preview range' }).click();
+      await expect(dialog.getByRole('status')).toContainText('Earlier history');
+      const queries = dialog.getByText('Original queries · Checkout metrics', { exact: true });
+      await expect(dialog.getByText('vector(99)', { exact: true })).toBeHidden();
+      await queries.click();
+      await expect(dialog.getByText('vector(99)', { exact: true })).toBeVisible();
+      await queries.click();
+      await expect(dialog.getByRole('button', { name: /^Start date/ })).toHaveCount(0);
+      await expect(dialog.getByRole('status')).toContainText('Intervals to recover 2');
+      await expect(dialog.getByRole('button', { name: 'Queue backfill' })).toBeEnabled();
+      await expect(dialog.getByRole('button', { name: 'Queue backfill' })).toBeInViewport();
+    }
+
+    await previewEarlierHistory(true);
+    const desktop = info.outputPath('earlier-history-desktop-light.png');
+    await dialog.screenshot({ path: desktop });
+    await info.attach('Earlier history preview, desktop light', { path: desktop, contentType: 'image/png' });
+    await dialog.getByRole('button', { name: 'Edit range' }).click();
+    await expect(dialog.getByRole('button', { name: /^Start date/ })).toBeFocused();
+    await expect(dialog.getByLabel('Start time (UTC)')).toHaveValue(earlier.slice(11, 16));
+    await expect(dialog.getByRole('switch', { name: 'Include earlier history' })).toBeChecked();
+
     await page.evaluate(() => localStorage.setItem('almanac-theme', 'dark'));
     await page.setViewportSize({ width: 360, height: 800 });
     await page.reload();
     await panel.locator(':scope > summary').click();
-    await historySummary.click();
-    await expect(finishedJobs).toContainText('1 / 1 chunks committed');
-    const mobile = info.outputPath('backfill-completed-mobile-dark.png');
-    await panel.screenshot({ path: mobile });
-    await info.attach('Backfill committed, mobile dark', { path: mobile, contentType: 'image/png' });
+    await previewEarlierHistory();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    const mobile = info.outputPath('earlier-history-mobile-dark.png');
+    await dialog.screenshot({ path: mobile });
+    await info.attach('Earlier history preview, mobile dark', { path: mobile, contentType: 'image/png' });
+    await dialog.getByRole('button', { name: 'Queue backfill' }).click();
+    await jobHistory.locator('summary').click();
+    await expect(finishedJobs).toContainText('2 / 2 intervals recovered', {timeout: 60_000});
+    const collectedEarlier = psql(`SELECT count(*) FROM public.almanac_sli_observations
+      WHERE sli_id='${id}' AND interval_start >= '${earlier}' AND interval_start < '${from}'
+        AND backfill_chunk_id IS NOT NULL AND good_count=99 AND total_count=100;`);
+    expect(collectedEarlier).toBe('2');
+    const latest = await expectOk(api(page, 'GET', `/api/v1/slis/${id}`));
+    expect(Date.parse(latest.body.effective_from)).toBe(Date.parse(earlier));
+    await page.getByRole('radio', { name: '30d', exact: true }).click();
+    await expect(page.getByText('Shaded area is outside available measurement history.', { exact: false })).toBeVisible();
+    const chart = page.getByRole('img', { name: /Good-to-total ratio/ });
+    const measurements = await expectOk(api(page, 'GET', `/api/v1/slis/${id}/measurements?period=30d`));
+    const buckets = measurements.body.buckets;
+    const chartStart = new Date(Date.parse(buckets.at(-1).end) - 30 * 86_400_000);
+    await expect(chart.getByText(chartStart.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }), { exact: true })).toBeVisible();
+    const chartImage = info.outputPath('earlier-history-30d-mobile-dark.png');
+    await expect(chart.locator('.chart-point')).toBeVisible();
+    const chartPanel = page.locator('.sli-measurements-panel .sli-measurements-body');
+    await chartPanel.evaluate(element => element.scrollIntoView({block: 'center'}));
+    await chartPanel.screenshot({ path: chartImage });
+    await info.attach('30-day chart with earlier history, mobile dark', { path: chartImage, contentType: 'image/png' });
+    const objective = await expectOk(api(page, 'GET', `/api/v1/slos/${slo.body.id}`));
+    expect(Date.parse(objective.body.evaluation_valid_from)).toBe(Date.parse(from));
   } finally {
     stopAgent(agent);
   }

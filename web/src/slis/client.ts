@@ -53,7 +53,10 @@ const messages: Record<string, string> = {
   measurement_conflict: 'The datasource cadence or agent assignment cannot change while this SLI uses it.',
   agent_unavailable: 'The assigned agent cannot currently accept this SLI configuration.',
   source_secret_unavailable: 'The datasource credential is unavailable. Update its credentials before collecting.',
-  backfill_range: 'Choose a settled range within the SLI’s measurement history. Both dates must align to its collection cadence.',
+  backfill_range: 'Choose a settled range of up to 30 days. Both dates must align to the collection cadence.',
+  backfill_earlier_changed: 'The datasource or available dates changed. Preview the range again before queueing.',
+  backfill_earlier_range: 'Choose earlier dates within datasource retention and set the end to the start of existing history or later.',
+  backfill_earlier_unavailable: 'Earlier history requires the active original SLI query and an assigned agent that supports historical backfill.',
   backfill_no_gaps: 'There are no recoverable gaps left in that range. Refresh the gap history.',
   backfill_overlap: 'A job already covers part of this range. Check its progress before requesting overlapping dates.',
   sli_unavailable: 'SLI management is temporarily unavailable.',
@@ -246,6 +249,9 @@ function validBackfillAdmission(value: unknown): value is SliBackfillAdmission {
   return object(value) && typeof value.start === 'string' && typeof value.end === 'string'
     && Date.parse(value.start) < Date.parse(value.end) && typeof value.chunk_count === 'number'
     && Number.isSafeInteger(value.chunk_count) && value.chunk_count >= 0
+    && (value.earlier_history_from === undefined
+      ? value.earlier_history_context === undefined && value.earlier_history_until === undefined
+      : timestamp(value.earlier_history_from) && timestamp(value.earlier_history_until) && Date.parse(value.earlier_history_from) < Date.parse(value.earlier_history_until) && typeof value.earlier_history_context === 'string' && /^[0-9a-f]{64}$/.test(value.earlier_history_context))
     && (value.id === undefined || typeof value.id === 'string' && UUID.test(value.id));
 }
 
